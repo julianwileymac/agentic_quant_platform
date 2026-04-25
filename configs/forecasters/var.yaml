@@ -1,0 +1,5 @@
+forecaster:
+  class: VARForecaster
+  module_path: aqp.ml.applications.forecaster.statsmodels_adapter
+  kwargs:
+    lags: 5

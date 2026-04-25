@@ -1,0 +1,11 @@
+model:
+  class: AttentionAllModel
+  module_path: aqp.ml.models.torch.attention_all
+  kwargs:
+    d_model: 64
+    nhead: 4
+    num_layers: 2
+    dim_feedforward: 128
+    dropout: 0.1
+    step_len: 20
+    n_epochs: 20

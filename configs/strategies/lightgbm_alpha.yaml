@@ -1,0 +1,49 @@
+name: "LightGBM Alpha"
+description: >
+  Gradient-boosted alpha on a feature panel (RSI, MACD, z-score, log
+  return). The `model_path` must point at a pickled LGBMRegressor; call
+  `LightGBMAlpha(...).train(bars)` first to produce it.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: FundamentalUniverse
+      module_path: aqp.strategies.fundamental_universe
+      kwargs:
+        top_n: 50
+        sort_by: dollar_volume
+        lookback_days: 20
+    alpha_model:
+      class: LightGBMAlpha
+      module_path: aqp.strategies.ml_alphas
+      kwargs:
+        feature_specs: ["SMA:20", "EMA:12", "EMA:26", "RSI:14", "MACD", "BBands:20", "ATR:14", "Z:20", "LogReturn:1"]
+        model_path: ./data/models/lightgbm_alpha.pkl
+        long_threshold: 0.001
+        short_threshold: -0.001
+        allow_short: true
+    portfolio_model:
+      class: HierarchicalRiskParity
+      module_path: aqp.strategies.hrp
+      kwargs: {max_positions: 20, lookback_bars: 120}
+    risk_model:
+      class: TrailingStopRisk
+      module_path: aqp.strategies.trailing_stop
+      kwargs: {trail_pct: 0.08}
+    execution_model:
+      class: TwapExecution
+      module_path: aqp.strategies.twap_execution
+      kwargs: {horizon_bars: 3, min_order_value: 100}
+    rebalance_every: 1
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 250000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2023-01-01"
+    end: "2024-12-31"

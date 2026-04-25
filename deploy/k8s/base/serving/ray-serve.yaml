@@ -1,0 +1,99 @@
+---
+# Ray Serve single-node Deployment. For a real multi-node cluster, point the
+# ``AQP_RAY_ADDRESS`` at a KubeRay-managed head / worker set. The supplied
+# ``aqp serve ray <model-uri>`` command calls ``serve.start`` and ``serve.run``
+# so operators can swap in any MLflow registry URI.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ray-serve
+  labels:
+    app.kubernetes.io/name: aqp-ray-serve
+    app.kubernetes.io/part-of: agentic-quant-platform
+    app.kubernetes.io/component: serving
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aqp-ray-serve
+  template:
+    metadata:
+      labels:
+        app: aqp-ray-serve
+    spec:
+      containers:
+        - name: ray-serve
+          image: aqp-serving:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - "aqp"
+            - "serve"
+            - "ray"
+            - "$(AQP_MODEL_URI)"
+            - "--name"
+            - "$(AQP_RAY_SERVE_NAME)"
+            - "--route-prefix"
+            - "/aqp"
+            - "--num-replicas"
+            - "2"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8000"
+          envFrom:
+            - configMapRef:
+                name: aqp-env
+            - configMapRef:
+                name: aqp-serving-env
+                optional: true
+          env:
+            - name: AQP_RAY_ADDRESS
+              value: "auto"
+            - name: AQP_OTEL_ENDPOINT
+              value: http://otel-collector:4317
+            - name: AQP_MODEL_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: aqp-serving-env
+                  key: model_uri
+            - name: AQP_RAY_SERVE_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: aqp-serving-env
+                  key: ray_serve_name
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: dashboard
+              containerPort: 8265
+          readinessProbe:
+            httpGet:
+              path: /-/routes
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ray-serve
+  labels:
+    app.kubernetes.io/name: aqp-ray-serve
+spec:
+  selector:
+    app: aqp-ray-serve
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+    - name: dashboard
+      port: 8265
+      targetPort: 8265

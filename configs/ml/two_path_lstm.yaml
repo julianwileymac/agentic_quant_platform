@@ -1,0 +1,12 @@
+model:
+  class: TwoPathLSTMModel
+  module_path: aqp.ml.models.torch.two_path
+  kwargs:
+    hidden_size: 64
+    num_layers: 2
+    dropout: 0.2
+    step_len: 20
+    tail_k: 5
+    n_epochs: 20
+    batch_size: 256
+    lr: 1e-3

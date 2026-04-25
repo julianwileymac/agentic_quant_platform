@@ -1,0 +1,10 @@
+agent:
+  class: EvolutionStrategyAgent
+  module_path: aqp.rl.agents.evolutionary.es
+  kwargs:
+    state_dim: 32
+    n_actions: 3
+    hidden: 32
+    population: 32
+    sigma: 0.1
+    lr: 0.01

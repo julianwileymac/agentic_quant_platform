@@ -1,0 +1,54 @@
+name: "Tradier Sandbox — Mean Reversion"
+description: >
+  Tradier REST variant. Uses the generic RestPollingFeed (5 s cadence)
+  because Tradier's free tier doesn't expose a WebSocket. Credentials
+  come from AQP_TRADIER_TOKEN and AQP_TRADIER_ACCOUNT_ID.
+
+session:
+  run_name: tradier-mr-paper
+  heartbeat_seconds: 15
+  initial_cash: 50000.0
+  dry_run: false
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [AAPL, MSFT, SPY]
+    alpha_model:
+      class: MeanReversionAlpha
+      module_path: aqp.strategies.mean_reversion
+      kwargs: {lookback: 20, z_threshold: 2.0}
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 3}
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: {max_position_pct: 0.33, max_drawdown_pct: 0.15}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+brokerage:
+  class: TradierBrokerage
+  module_path: aqp.trading.brokerages.tradier
+
+feed:
+  class: RestPollingFeed
+  module_path: aqp.trading.feeds.rest_poll
+  kwargs:
+    base_url: https://sandbox.tradier.com/v1
+    poll_seconds: 5.0
+    quote_path: /markets/quotes
+
+risk:
+  max_position_pct: 0.33
+  max_daily_loss_pct: 0.02
+  max_drawdown_pct: 0.15

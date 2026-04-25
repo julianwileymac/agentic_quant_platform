@@ -1,0 +1,12 @@
+agent:
+  crew: tradingagents
+  provider: ollama
+  model: nemotron:latest
+  max_debate_rounds: 2
+  cache_decisions: true
+  cache_ttl_hours: 24
+  analysts:
+    - fundamentals
+    - sentiment
+    - news
+    - technical

@@ -1,0 +1,37 @@
+name: "SMA Cross (backtesting.py reference)"
+description: >
+  Canonical fast/slow SMA crossover — ported from backtesting.py's Quick
+  Start guide.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs: {symbols: [SPY]}
+    alpha_model:
+      class: SmaCross
+      module_path: aqp.strategies.examples.sma_cross
+      kwargs: {fast: 10, slow: 20, allow_short: true}
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 1}
+    risk_model:
+      class: NoOpRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: {}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: backtesting
+  kwargs:
+    cash: 100000.0
+    commission: 0.002
+    start: "2023-01-01"
+    end: "2024-12-31"

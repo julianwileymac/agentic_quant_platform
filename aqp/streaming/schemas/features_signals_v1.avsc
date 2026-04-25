@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "FeaturesSignalsV1",
+  "namespace": "aqp.streaming.features",
+  "doc": "Strategy-ready trading signal. Maps to aqp.core.types.Signal on consumption.",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "vt_symbol", "type": "string"},
+    {"name": "strength", "type": "double", "doc": "Signal magnitude in [-1, 1] or [0, 1] depending on source"},
+    {"name": "direction", "type": {"type": "enum", "name": "SignalDirection", "symbols": ["long", "short", "neutral"]}},
+    {"name": "confidence", "type": "double", "default": 1.0},
+    {"name": "horizon_sec", "type": "int", "default": 86400},
+    {"name": "source_job", "type": "string", "doc": "e.g. normalize_sink, scanner_alert, custom_job_id"},
+    {"name": "rationale", "type": ["null", "string"], "default": null},
+    {"name": "features_ref", "type": ["null", "string"], "default": null, "doc": "Optional pointer to features_normalized_v1 offset"}
+  ]
+}

@@ -1,0 +1,15 @@
+agent:
+  class: DoubleQAgent
+  module_path: aqp.rl.agents.q_family.double_q
+  kwargs:
+    state_dim: 32
+    n_actions: 3
+    hidden_size: 64
+    lr: 1e-3
+    gamma: 0.99
+    buffer_size: 10000
+    batch_size: 32
+    epsilon_start: 1.0
+    epsilon_end: 0.05
+    epsilon_decay: 2000
+    target_update: 500

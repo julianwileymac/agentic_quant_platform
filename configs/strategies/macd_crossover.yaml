@@ -1,0 +1,46 @@
+name: "MACD Crossover"
+description: >
+  Lean-style MACD alpha with equal-weight portfolio and basic risk. A
+  sanity-check baseline that generates long/short signals on MACD
+  histogram zero-crossings.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [SPY, AAPL, MSFT, GOOGL, AMZN]
+    alpha_model:
+      class: MacdAlphaModel
+      module_path: aqp.strategies.macd_alpha
+      kwargs:
+        fast: 12
+        slow: 26
+        signal: 9
+        allow_short: false
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 5}
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: {max_position_pct: 0.20, max_drawdown_pct: 0.15}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+    rebalance_every: 5
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2023-01-01"
+    end: "2024-12-31"

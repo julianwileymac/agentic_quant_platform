@@ -1,0 +1,6 @@
+class: RiskParityPortfolio
+module_path: aqp.strategies.risk_parity
+kwargs:
+  max_positions: 20
+  long_only: true
+  lookback_bars: 252

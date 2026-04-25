@@ -1,0 +1,8 @@
+portfolio_construction:
+  class: CLAPortfolio
+  module_path: aqp.strategies.portfolio_opt.cla
+  kwargs:
+    max_positions: 15
+    long_only: true
+    lookback_bars: 252
+    objective: max_sharpe

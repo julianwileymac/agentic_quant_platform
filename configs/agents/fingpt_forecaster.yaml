@@ -1,0 +1,9 @@
+alpha:
+  class: ForecasterAlpha
+  module_path: aqp.ml.applications.forecaster.alpha
+  kwargs:
+    provider: null
+    model: null
+    n_past_weeks: 2
+    min_confidence: 0.5
+    strength: 0.15

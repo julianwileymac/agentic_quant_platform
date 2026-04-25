@@ -1,0 +1,38 @@
+name: "Dual Thrust Breakout"
+description: >
+  Dual-Thrust intraday-style range breakout at daily resolution.
+  Ref: quant-trading-master/Dual Thrust backtest.py.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs: {symbols: [SPY, QQQ, TLT, GLD]}
+    alpha_model:
+      class: DualThrustAlpha
+      module_path: aqp.strategies.dual_thrust_alpha
+      kwargs: {lookback: 4, k1: 0.5, k2: 0.5, allow_short: true}
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 4}
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: {max_position_pct: 0.25, max_drawdown_pct: 0.15}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: vectorbt
+  kwargs:
+    initial_cash: 100000.0
+    fees: 0.0005
+    slippage: 0.0002
+    start: "2023-01-01"
+    end: "2024-12-31"

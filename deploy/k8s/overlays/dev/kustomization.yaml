@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-dev
+
+resources:
+  - ../../base
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: aqp-env
+    patch: |-
+      - op: replace
+        path: /data/AQP_ENV
+        value: dev
+      - op: replace
+        path: /data/AQP_OTEL_SAMPLE_RATIO
+        value: "1.0"

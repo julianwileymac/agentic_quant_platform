@@ -1,0 +1,7 @@
+labels:
+  class: TripleBarrierLabels
+  module_path: aqp.ml.labeling.triple_barrier
+  kwargs:
+    pt_sl: [2.0, 1.5]
+    num_days: 5
+    min_ret: 0.002

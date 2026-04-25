@@ -1,0 +1,9 @@
+# Reference HRP portfolio recipe.
+# Use under `strategy.kwargs.portfolio_model` of any recipe.
+class: HierarchicalRiskParity
+module_path: aqp.strategies.hrp
+kwargs:
+  max_positions: 25
+  long_only: true
+  lookback_bars: 252
+  linkage_method: single

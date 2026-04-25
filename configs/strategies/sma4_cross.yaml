@@ -1,0 +1,35 @@
+name: "Sma4Cross (backtesting.py reference)"
+description: >
+  Two-trend-filter + entry/exit crossovers — ported from backtesting.py's
+  Parameter Heatmap example.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs: {symbols: [SPY]}
+    alpha_model:
+      class: Sma4Cross
+      module_path: aqp.strategies.examples.sma4_cross
+      kwargs: {n1: 50, n2: 100, n_enter: 20, n_exit: 10, allow_short: true}
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 1}
+    risk_model:
+      class: NoOpRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: {}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: backtesting
+  kwargs:
+    cash: 100000.0
+    commission: 0.002

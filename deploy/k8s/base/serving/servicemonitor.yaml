@@ -1,0 +1,47 @@
+---
+# Prometheus scrape configs for the three serving backends.
+# The ``rpi_kubernetes`` Prometheus Operator picks these up via namespace / label
+# selectors configured in rpi_kubernetes/kubernetes/observability/prometheus.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aqp-mlflow-serve
+  labels:
+    app.kubernetes.io/part-of: agentic-quant-platform
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aqp-mlflow-serve
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aqp-ray-serve
+  labels:
+    app.kubernetes.io/part-of: agentic-quant-platform
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aqp-ray-serve
+  endpoints:
+    - port: http
+      path: /-/metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aqp-torchserve
+  labels:
+    app.kubernetes.io/part-of: agentic-quant-platform
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aqp-torchserve
+  endpoints:
+    - port: metrics
+      interval: 30s

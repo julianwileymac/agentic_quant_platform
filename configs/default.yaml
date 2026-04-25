@@ -1,0 +1,70 @@
+# Default AQP workflow recipe (Qlib-style class/module_path/kwargs triples).
+#
+# Everything under a key with {class, module_path, kwargs} is instantiated by
+# aqp.core.registry.build_from_config(). Nest freely — nested configs are
+# resolved recursively.
+
+market: &market
+  universe:
+    class: StaticUniverse
+    module_path: aqp.strategies.universes
+    kwargs:
+      symbols: [SPY, AAPL, MSFT, GOOGL, AMZN, TSLA, NVDA, META, JPM, JNJ]
+  interval: "1d"
+  start: "2020-01-01"
+  end: "2024-12-31"
+
+data:
+  provider:
+    class: DuckDBHistoryProvider
+    module_path: aqp.data.duckdb_engine
+    kwargs:
+      parquet_dir: ./data/parquet
+
+features:
+  engineer:
+    class: FeatureEngineer
+    module_path: aqp.data.feature_engineer
+    kwargs:
+      indicators: [sma_20, sma_50, ema_12, ema_26, macd, rsi_14, bbands_20, atr_14]
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [SPY, AAPL, MSFT, GOOGL, AMZN, TSLA, NVDA, META, JPM, JNJ]
+    alpha_model:
+      class: MeanReversionAlpha
+      module_path: aqp.strategies.mean_reversion
+      kwargs:
+        lookback: 20
+        z_threshold: 2.0
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs:
+        max_positions: 5
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        max_position_pct: 0.20
+        max_drawdown_pct: 0.15
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2023-01-01"
+    end: "2024-12-31"

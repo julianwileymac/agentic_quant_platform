@@ -1,0 +1,11 @@
+# Reference factor-evaluation recipe.
+# Submit via ``POST /factors/evaluate`` or the Factor Evaluation UI.
+name: momentum_quantile
+universe:
+  symbols: [AAPL, MSFT, GOOGL, AMZN, TSLA, NVDA, META, JPM, JNJ, SPY]
+start: "2023-01-01"
+end: "2024-12-31"
+factor_name: momentum_rank
+lookback: 21
+n_quantiles: 5
+horizons: [1, 5, 10, 21]

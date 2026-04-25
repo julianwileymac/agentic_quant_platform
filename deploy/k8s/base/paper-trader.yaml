@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aqp-paper-config
+data:
+  paper.yaml: |
+    session:
+      run_name: k8s-alpaca-mr
+      heartbeat_seconds: 30
+      initial_cash: 100000
+      dry_run: true   # flip to false once secrets are in place
+    strategy:
+      class: FrameworkAlgorithm
+      module_path: aqp.strategies.framework
+      kwargs:
+        universe_model:
+          class: StaticUniverse
+          module_path: aqp.strategies.universes
+          kwargs: {symbols: [AAPL, MSFT, SPY]}
+        alpha_model:
+          class: MeanReversionAlpha
+          module_path: aqp.strategies.mean_reversion
+          kwargs: {lookback: 20, z_threshold: 2.0}
+        portfolio_model:
+          class: EqualWeightPortfolio
+          module_path: aqp.strategies.portfolio
+          kwargs: {max_positions: 10}
+        risk_model:
+          class: NoopRiskModel
+          module_path: aqp.strategies.risk_models
+        execution_model:
+          class: MarketOrderExecution
+          module_path: aqp.strategies.execution
+    brokerage:
+      class: AlpacaBrokerage
+      kwargs: {paper: true}
+    feed:
+      class: AlpacaDataFeed
+    risk:
+      max_position_pct: 0.2
+      max_daily_loss_pct: 0.02
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: paper-trader
+  labels:
+    app.kubernetes.io/name: aqp-paper-trader
+    app.kubernetes.io/part-of: agentic-quant-platform
+spec:
+  replicas: 1
+  # Paper sessions are stateful single-instance runners.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: aqp-paper-trader
+  template:
+    metadata:
+      labels:
+        app: aqp-paper-trader
+    spec:
+      containers:
+        - name: paper-trader
+          image: aqp-paper:latest
+          imagePullPolicy: IfNotPresent
+          command: ["aqp", "paper", "run", "--config", "/etc/aqp/paper.yaml"]
+          envFrom:
+            - configMapRef:
+                name: aqp-env
+            - secretRef:
+                name: aqp-broker-secrets
+                optional: true
+          env:
+            - name: AQP_REDIS_URL
+              value: redis://redis:6379/0
+            - name: AQP_POSTGRES_DSN
+              value: postgresql+psycopg2://aqp:aqp@postgres:5432/aqp
+            - name: AQP_OTEL_ENDPOINT
+              value: http://otel-collector:4317
+          volumeMounts:
+            - name: paper-config
+              mountPath: /etc/aqp
+              readOnly: true
+      volumes:
+        - name: paper-config
+          configMap:
+            name: aqp-paper-config

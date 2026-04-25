@@ -1,0 +1,5 @@
+discrete_allocation:
+  class: DiscreteAllocation
+  module_path: aqp.strategies.portfolio_opt.discrete_allocation
+  kwargs:
+    method: greedy   # or "lp" for the integer-LP solver

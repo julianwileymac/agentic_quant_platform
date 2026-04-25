@@ -1,0 +1,19 @@
+{
+  "type": "record",
+  "name": "MarketQuoteV1",
+  "namespace": "aqp.streaming.market",
+  "doc": "Tick-level NBBO quote from IBKR tickByTick(BidAsk) or Alpaca quotes WSS channel.",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "vt_symbol", "type": "string"},
+    {"name": "bid", "type": "double"},
+    {"name": "ask", "type": "double"},
+    {"name": "bid_size", "type": "double"},
+    {"name": "ask_size", "type": "double"},
+    {"name": "bid_exchange", "type": ["null", "string"], "default": null},
+    {"name": "ask_exchange", "type": ["null", "string"], "default": null},
+    {"name": "conditions", "type": {"type": "array", "items": "string"}, "default": []},
+    {"name": "venue_source", "type": {"type": "enum", "name": "VenueSource", "symbols": ["ibkr", "alpaca", "simulated"]}},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

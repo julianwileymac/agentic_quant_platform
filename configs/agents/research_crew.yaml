@@ -1,0 +1,95 @@
+name: "Quant Research Crew"
+description: >
+  Six-agent CrewAI team that takes a natural-language research prompt and
+  returns a validated trading strategy with backtest results.
+
+process: sequential   # sequential | hierarchical
+verbose: true
+
+agents:
+  data_scout:
+    role: "Data Scout"
+    goal: "Discover and validate the best local datasets for the research question."
+    backstory: >
+      You are a meticulous data librarian for a quant lab. You know every
+      Parquet file and every table in DuckDB by heart.
+    allow_delegation: false
+    tools: [directory_read, chroma_search, duckdb_query]
+    llm_tier: quick
+
+  hypothesis_designer:
+    role: "Hypothesis Designer"
+    goal: "Translate the user's idea into a formal, testable trading hypothesis with entry/exit rules."
+    backstory: >
+      You hold a PhD in financial econometrics and have read every JPM and
+      AQR paper on anomalies. You write precise, falsifiable hypotheses.
+    allow_delegation: true
+    tools: [chroma_search]
+    llm_tier: deep
+
+  strategy_backtester:
+    role: "Strategy Backtester"
+    goal: "Execute the hypothesis on historical data with realistic frictions and produce a performance report."
+    backstory: >
+      You are a battle-scarred systematic-trading engineer. You always include
+      transaction costs, slippage, and out-of-sample validation.
+    allow_delegation: false
+    tools: [backtest, walk_forward]
+    llm_tier: quick
+
+  risk_controller:
+    role: "Risk Controller"
+    goal: "Ensure the strategy respects position, drawdown, and concentration limits."
+    backstory: >
+      You are the last line of defence. You are skeptical of rosy backtests
+      and insist on stress tests.
+    allow_delegation: false
+    tools: [risk_check, ledger]
+    llm_tier: quick
+
+  performance_evaluator:
+    role: "Performance Evaluator"
+    goal: "Compute Sharpe/Sortino/MaxDD, benchmark vs buy-and-hold, and highlight regime sensitivities."
+    backstory: >
+      You speak in risk-adjusted returns. A strategy without a plot is just a claim.
+    allow_delegation: false
+    tools: [metrics, plotly]
+    llm_tier: quick
+
+  meta_agent:
+    role: "Meta-Agent"
+    goal: "Audit the entire research loop, decide whether to promote to paper trading, and enforce the kill switch if needed."
+    backstory: >
+      You are the chief risk officer. You trust process, not stories.
+    allow_delegation: true
+    tools: [ledger, kill_switch]
+    llm_tier: deep
+
+tasks:
+  - key: discover_data
+    agent: data_scout
+    description: >
+      Identify the most relevant datasets for the user's research prompt.
+      Return vt_symbols, date ranges, and file paths.
+  - key: design_hypothesis
+    agent: hypothesis_designer
+    description: >
+      Using the discovered data, write a formal strategy spec with:
+      universe, alpha formula, portfolio construction rule, risk limits, execution model.
+      Output in YAML matching configs/strategies/*.yaml.
+  - key: backtest
+    agent: strategy_backtester
+    description: >
+      Run the generated strategy through the event-driven backtester
+      and then the walk-forward optimiser. Return the run_id.
+  - key: risk_audit
+    agent: risk_controller
+    description: Audit the backtest ledger for limit breaches.
+  - key: evaluate
+    agent: performance_evaluator
+    description: Produce Sharpe/Sortino/MaxDD plus a Plotly equity-curve JSON.
+  - key: promote
+    agent: meta_agent
+    description: >
+      Decide whether to stage the strategy in the model registry. Justify the
+      decision. Trigger the kill switch if any limit was breached.

@@ -1,0 +1,87 @@
+# Agent Backtest Template — the new default for the Backtest Wizard.
+#
+# Uses ``FrameworkAlgorithm`` (the Lean-style 5-stage pipeline) with an
+# ``AgenticAlpha`` consuming the ``DecisionCache`` populated by the
+# TradingAgents-style trader crew. Designed to be edited by the wizard
+# step-by-step; every node is a registered alias the wizard can swap
+# via the ``/registry`` API.
+#
+# Run via ``POST /backtest/run`` with this YAML serialised under the
+# ``config`` field, or via ``POST /agentic/backtest`` to trigger the
+# precompute step before the backtest.
+
+name: agent_backtest_template
+description: >-
+  Default agent-backtest template. Universe selection by an LLM screener,
+  alpha by an AgenticAlpha pulling cached trader-crew decisions,
+  equal-weight portfolio, position-cap risk, immediate market-order
+  execution, and an optional LLM judge that critiques every decision
+  after the run completes.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    strategy_id: agent_backtest_default
+    rebalance_every: 1
+    universe_model:
+      class: LLMUniverseSelector
+      module_path: aqp.agents.screening.llm_screener
+      kwargs:
+        k: 10
+        tier: deep
+    alpha_model:
+      class: AgenticAlpha
+      module_path: aqp.strategies.agentic.agentic_alpha
+      kwargs:
+        strategy_id: agent_backtest_default
+        mode: precompute
+        min_confidence: 0.0
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        max_position_pct: 0.20
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2024-01-01"
+    end: "2024-06-30"
+
+agentic:
+  preset: trader_crew_quick
+  provider: ""
+  deep_model: ""
+  quick_model: ""
+  max_debate_rounds: 1
+  rebalance_frequency: weekly
+
+# Optional post-hoc HITL: configure an LLM-as-judge to critique every
+# decision after the run completes. Removing this block disables the
+# critique step. Setting ``replay_on_veto: true`` will queue an
+# automatic counterfactual rerun for any finding with verdict=veto.
+judge:
+  class: LLMJudge
+  module_path: aqp.backtest.llm_judge
+  kwargs:
+    tier: deep
+    rubric: default
+    cost_budget_usd: 1.0
+  replay_on_veto: false
+
+# Optional live HITL (Phase 2). Each rule is evaluated per-bar against
+# pending orders; matching orders pause the engine and surface in the
+# Interrupt Panel until the user resolves them. Empty / missing
+# disables the feature.
+interrupt_rules: []

@@ -1,0 +1,9 @@
+forecaster:
+  class: AutoARIMAForecaster
+  module_path: aqp.ml.applications.forecaster.auto_arima
+  kwargs:
+    seasonal: false
+    max_p: 5
+    max_q: 5
+    max_d: 2
+    information_criterion: aic

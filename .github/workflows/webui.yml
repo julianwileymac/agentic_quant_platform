@@ -1,0 +1,91 @@
+name: webui
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "webui/**"
+      - "scripts/export_openapi.py"
+      - "scripts/gen_webui_client.*"
+      - ".github/workflows/webui.yml"
+  pull_request:
+    paths:
+      - "webui/**"
+      - "scripts/export_openapi.py"
+      - "scripts/gen_webui_client.*"
+      - ".github/workflows/webui.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webui
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: webui/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+        run: pnpm build
+
+  openapi-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Python package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" || pip install fastapi pydantic pydantic-settings uvicorn
+
+      - name: Install webui deps
+        working-directory: webui
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Regenerate OpenAPI types
+        run: |
+          python -m scripts.export_openapi --out data/openapi.json
+          pnpm --dir webui exec openapi-typescript ../data/openapi.json -o lib/api/generated/schema.d.ts
+
+      - name: Fail if drift
+        run: |
+          if ! git diff --quiet -- webui/lib/api/generated/schema.d.ts; then
+            echo "::error ::OpenAPI types are out of date. Run 'make webui-gen-api'."
+            git --no-pager diff -- webui/lib/api/generated/schema.d.ts
+            exit 1
+          fi

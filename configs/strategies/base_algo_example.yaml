@@ -1,0 +1,36 @@
+name: "BaseAlgo Example (SAE)"
+description: >
+  Ported baseline BaseAlgo template from stock-analysis-engine's
+  example_algo_minute.py. Trend filter + RSI entry.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs: {symbols: [SPY, AAPL, MSFT]}
+    alpha_model:
+      class: BaseAlgoExample
+      module_path: aqp.strategies.base_algo_example
+      kwargs: {rsi_period: 14, trend_period: 50, rsi_buy: 35.0, rsi_sell: 65.0}
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 3}
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: {max_position_pct: 0.33, max_drawdown_pct: 0.15}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: event
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0

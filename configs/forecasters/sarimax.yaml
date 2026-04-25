@@ -1,0 +1,7 @@
+forecaster:
+  class: SARIMAXForecaster
+  module_path: aqp.ml.applications.forecaster.statsmodels_adapter
+  kwargs:
+    order: [1, 1, 1]
+    seasonal_order: [1, 0, 1, 5]
+    trend: c

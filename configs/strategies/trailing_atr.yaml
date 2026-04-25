@@ -1,0 +1,35 @@
+name: "Trailing ATR (backtesting.py reference)"
+description: >
+  SMA cross entry + ATR trailing stop. Ref: backtesting.py Strategies Library.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs: {symbols: [SPY, QQQ, IWM]}
+    alpha_model:
+      class: TrailingATRAlpha
+      module_path: aqp.strategies.examples.trailing_atr
+      kwargs: {fast: 10, slow: 20, atr_period: 14, atr_multiple: 6.0}
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 3}
+    risk_model:
+      class: TrailingStopRisk
+      module_path: aqp.strategies.trailing_stop
+      kwargs: {trail_pct: 0.08}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: event
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0

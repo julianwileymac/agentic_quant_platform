@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  labels:
+    app.kubernetes.io/name: aqp-worker
+    app.kubernetes.io/part-of: agentic-quant-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aqp-worker
+  template:
+    metadata:
+      labels:
+        app: aqp-worker
+    spec:
+      containers:
+        - name: worker
+          image: aqp:latest
+          imagePullPolicy: IfNotPresent
+          command: ["aqp", "worker", "--queues", "default,backtest,agents,ingestion,paper", "--concurrency", "4"]
+          envFrom:
+            - configMapRef:
+                name: aqp-env
+            - secretRef:
+                name: aqp-broker-secrets
+                optional: true
+          env:
+            - name: AQP_REDIS_URL
+              value: redis://redis:6379/0
+            - name: AQP_REDIS_PUBSUB_URL
+              value: redis://redis:6379/1
+            - name: AQP_POSTGRES_DSN
+              value: postgresql+psycopg2://aqp:aqp@postgres:5432/aqp
+            - name: AQP_OTEL_ENDPOINT
+              value: http://otel-collector:4317

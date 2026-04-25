@@ -1,0 +1,6 @@
+forecaster:
+  class: ARIMAForecaster
+  module_path: aqp.ml.applications.forecaster.statsmodels_adapter
+  kwargs:
+    order: [1, 1, 1]
+    trend: c

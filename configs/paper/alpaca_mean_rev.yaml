@@ -1,0 +1,67 @@
+name: "Alpaca Paper — Mean Reversion"
+description: >
+  Reference paper-trading recipe. Uses the same FrameworkAlgorithm the
+  backtest suite exercises, routes orders to Alpaca paper, and streams
+  live bars from Alpaca's IEX feed. Flip session.dry_run to false (or
+  drop the key) once credentials are populated in .env.
+
+session:
+  run_name: alpaca-mr-paper
+  heartbeat_seconds: 30
+  state_flush_every_bars: 10
+  initial_cash: 100000.0
+  history_window_bars: 500
+  stop_on_kill_switch: true
+  dry_run: true                # <-- set to false once creds are configured
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [SPY, AAPL, MSFT, GOOGL, AMZN, JPM]
+    alpha_model:
+      class: MeanReversionAlpha
+      module_path: aqp.strategies.mean_reversion
+      kwargs:
+        lookback: 20
+        z_threshold: 2.0
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs:
+        max_positions: 5
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        max_position_pct: 0.20
+        max_drawdown_pct: 0.15
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+brokerage:
+  class: AlpacaBrokerage
+  module_path: aqp.trading.brokerages.alpaca
+  kwargs:
+    paper: true
+    # api_key/secret_key pulled from AQP_ALPACA_API_KEY / AQP_ALPACA_SECRET_KEY
+    # (override here if you need per-config overrides)
+
+feed:
+  class: AlpacaDataFeed
+  module_path: aqp.trading.feeds.alpaca_feed
+  kwargs:
+    subscription: iex
+
+risk:
+  max_position_pct: 0.20
+  max_daily_loss_pct: 0.02
+  max_drawdown_pct: 0.15
+  max_concentration_pct: 0.30
+  max_gross_exposure: 1.0

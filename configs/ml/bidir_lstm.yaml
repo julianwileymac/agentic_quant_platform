@@ -1,0 +1,11 @@
+model:
+  class: BidirectionalLSTMModel
+  module_path: aqp.ml.models.torch.bidirectional
+  kwargs:
+    hidden_size: 64
+    num_layers: 2
+    dropout: 0.2
+    step_len: 20
+    n_epochs: 20
+    batch_size: 256
+    lr: 1e-3

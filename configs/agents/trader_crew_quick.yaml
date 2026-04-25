@@ -1,0 +1,26 @@
+# Wizard-default ("Quickstart") trader crew.
+#
+# Single debate round, quick-tier model for every analyst, and
+# technical-only context when news isn't available (cheap but still
+# useful for an intro run). Meant to complete a 1-month backtest
+# against 5 symbols in a few dozen dollars even on GPT-5.4.
+
+name: trader_crew_quick
+
+max_debate_rounds: 1
+
+provider: ""
+deep_model: ""
+quick_model: ""
+
+risk_max_position_pct: 0.15
+risk_max_daily_loss_pct: 0.03
+
+# Analysts (shallow default — user enables more in the wizard)
+include_fundamentals: true
+include_sentiment: false
+include_news: true
+include_technical: true
+
+news_lookback_days: 5
+technical_lookback_days: 90

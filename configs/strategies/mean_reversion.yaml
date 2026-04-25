@@ -1,0 +1,54 @@
+name: "Bollinger Mean Reversion"
+description: >
+  Classic mean-reversion on z-score of close vs rolling mean. Long when z < -threshold,
+  flat when z crosses zero. Designed as a sanity-check baseline for the research loop.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [SPY, AAPL, MSFT, GOOGL, AMZN, JPM, JNJ]
+    alpha_model:
+      class: MeanReversionAlpha
+      module_path: aqp.strategies.mean_reversion
+      kwargs:
+        lookback: 20
+        z_threshold: 2.0
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs:
+        max_positions: 5
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        max_position_pct: 0.20
+        max_drawdown_pct: 0.15
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2023-01-01"
+    end: "2024-12-31"
+
+validation:
+  walk_forward:
+    train_window_days: 252
+    test_window_days: 63
+    step_days: 63
+  monte_carlo:
+    n_runs: 500
+    resample: "bootstrap"

@@ -1,2 +1,8 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+inspiration
+
+# Keep shell scripts LF-eol and mark them executable so they run
+# directly on Linux/macOS after clone.
+*.sh text eol=lf
+scripts/*.sh text eol=lf

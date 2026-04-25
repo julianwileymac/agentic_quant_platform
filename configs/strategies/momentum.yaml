@@ -1,0 +1,47 @@
+name: "Cross-Sectional Momentum"
+description: >
+  Long the top-quantile of trailing returns, short the bottom quantile (or cash).
+  Rebalanced monthly. Reference implementation of a momentum alpha.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [SPY, AAPL, MSFT, GOOGL, AMZN, TSLA, NVDA, META, JPM, JNJ]
+    alpha_model:
+      class: MomentumAlpha
+      module_path: aqp.strategies.momentum
+      kwargs:
+        lookback: 90
+        top_quantile: 0.3
+        bottom_quantile: 0.3
+        allow_short: false
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs:
+        max_positions: 5
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        max_position_pct: 0.25
+        max_drawdown_pct: 0.20
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2022-01-01"
+    end: "2024-12-31"

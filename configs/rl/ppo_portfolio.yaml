@@ -1,0 +1,47 @@
+name: "PPO Portfolio Allocation"
+description: >
+  Proximal Policy Optimization over a continuous weight vector. Uses the
+  FinRL-style stock trading env with a turbulence + cost-penalised reward.
+
+env:
+  class: StockTradingEnv
+  module_path: aqp.rl.envs.stock_trading_env
+  kwargs:
+    symbols: [SPY, AAPL, MSFT, GOOGL, AMZN, JPM, JNJ, NVDA, META, TSLA]
+    start: "2020-01-01"
+    end: "2023-12-31"
+    initial_balance: 100000
+    transaction_cost_pct: 0.001
+    turbulence_threshold: 140
+    indicators: [macd, rsi_14, bbands_upper, bbands_lower, cci_30, dx_30]
+    reward_scaling: 0.0001
+
+agent:
+  class: SB3Adapter
+  module_path: aqp.rl.agents.sb3_adapter
+  kwargs:
+    algorithm: PPO
+    policy: MlpPolicy
+    learning_rate: 0.0003
+    n_steps: 2048
+    batch_size: 64
+    n_epochs: 10
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_range: 0.2
+    ent_coef: 0.01
+
+training:
+  total_timesteps: 200000
+  eval_freq: 10000
+  checkpoint_freq: 50000
+  verbose: 1
+
+mlflow:
+  experiment: aqp-ppo-portfolio
+  register_model_as: aqp.ppo_portfolio
+
+evaluation:
+  test_start: "2024-01-01"
+  test_end: "2024-12-31"
+  baselines: [equal_weight, spy_buy_hold]

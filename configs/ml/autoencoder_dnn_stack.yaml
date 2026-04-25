@@ -1,0 +1,11 @@
+model:
+  class: AutoEncoderDNNStack
+  module_path: aqp.ml.models.ensemble
+  kwargs:
+    bottleneck_dim: 16
+    hidden_dim: 64
+    epochs: 30
+    lr: 1e-3
+    lgb_kwargs:
+      n_estimators: 200
+      learning_rate: 0.05

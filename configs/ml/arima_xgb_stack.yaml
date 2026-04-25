@@ -1,0 +1,9 @@
+model:
+  class: ARIMAXGBStack
+  module_path: aqp.ml.models.ensemble
+  kwargs:
+    arima_order: [1, 1, 1]
+    xgb_kwargs:
+      n_estimators: 300
+      learning_rate: 0.05
+      max_depth: 5

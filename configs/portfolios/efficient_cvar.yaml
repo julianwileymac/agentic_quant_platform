@@ -1,0 +1,9 @@
+portfolio_construction:
+  class: EfficientCVaRPortfolio
+  module_path: aqp.strategies.portfolio_opt.efficient_cvar
+  kwargs:
+    max_positions: 15
+    long_only: true
+    lookback_bars: 252
+    beta: 0.95
+    objective: min_cvar

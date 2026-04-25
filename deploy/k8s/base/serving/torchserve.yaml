@@ -1,0 +1,94 @@
+---
+# TorchServe Deployment for PyTorch model inference.
+# The container image bundles AQP's auto-generated handler
+# (aqp.mlops.serving.torchserve.AqpBaseHandler) which picks up any
+# ``preprocessing_spec`` attached to the model via aqp.ml.processors.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: torchserve
+  labels:
+    app.kubernetes.io/name: aqp-torchserve
+    app.kubernetes.io/part-of: agentic-quant-platform
+    app.kubernetes.io/component: serving
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aqp-torchserve
+  template:
+    metadata:
+      labels:
+        app: aqp-torchserve
+    spec:
+      containers:
+        - name: torchserve
+          image: pytorch/torchserve:latest
+          command: ["torchserve"]
+          args:
+            - "--start"
+            - "--model-store"
+            - "/mnt/model-store"
+            - "--ncs"
+          envFrom:
+            - configMapRef:
+                name: aqp-env
+                optional: true
+          ports:
+            - name: inference
+              containerPort: 8080
+            - name: management
+              containerPort: 8081
+            - name: metrics
+              containerPort: 8082
+          volumeMounts:
+            - name: model-store
+              mountPath: /mnt/model-store
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "6Gi"
+      volumes:
+        - name: model-store
+          persistentVolumeClaim:
+            claimName: torchserve-model-store
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: torchserve-model-store
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: torchserve
+  labels:
+    app.kubernetes.io/name: aqp-torchserve
+spec:
+  selector:
+    app: aqp-torchserve
+  ports:
+    - name: inference
+      port: 8080
+      targetPort: 8080
+    - name: management
+      port: 8081
+      targetPort: 8081
+    - name: metrics
+      port: 8082
+      targetPort: 8082

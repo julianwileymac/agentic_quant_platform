@@ -1,0 +1,43 @@
+name: "Bollinger W Pattern"
+description: >
+  Double-bottom / double-top pattern inside Bollinger bands. Ref:
+  quant-trading-master/Bollinger Bands Pattern Recognition backtest.py.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs: {symbols: [SPY, QQQ, IWM]}
+    alpha_model:
+      class: BollingerWAlpha
+      module_path: aqp.strategies.bollinger_w_alpha
+      kwargs:
+        period: 20
+        num_std: 2.0
+        scan_window: 75
+        min_bottoms: 2
+        allow_short: true
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 3}
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: {max_position_pct: 0.33, max_drawdown_pct: 0.15}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: event
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2022-01-01"
+    end: "2024-12-31"

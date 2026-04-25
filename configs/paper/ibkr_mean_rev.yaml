@@ -1,0 +1,53 @@
+name: "IBKR Paper — Mean Reversion"
+description: >
+  IBKR variant of the reference paper recipe. Requires a running TWS or
+  IB Gateway at AQP_IBKR_HOST:AQP_IBKR_PORT (7497 = paper). The feed and
+  brokerage each open their own ib-async client id to avoid collisions.
+
+session:
+  run_name: ibkr-mr-paper
+  heartbeat_seconds: 30
+  initial_cash: 100000.0
+  dry_run: false
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [AAPL, MSFT, SPY]
+    alpha_model:
+      class: MeanReversionAlpha
+      module_path: aqp.strategies.mean_reversion
+      kwargs: {lookback: 20, z_threshold: 2.0}
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 3}
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: {max_position_pct: 0.33, max_drawdown_pct: 0.15}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+brokerage:
+  class: InteractiveBrokersBrokerage
+  module_path: aqp.trading.brokerages.ibkr
+  kwargs:
+    exchange: SMART
+    currency: USD
+
+feed:
+  class: IBKRDataFeed
+  module_path: aqp.trading.feeds.ibkr_feed
+
+risk:
+  max_position_pct: 0.33
+  max_daily_loss_pct: 0.02
+  max_drawdown_pct: 0.15

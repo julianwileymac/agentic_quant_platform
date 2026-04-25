@@ -1,0 +1,7 @@
+agent:
+  class: TurtleAgent
+  module_path: aqp.rl.agents.classical.turtle
+  kwargs:
+    entry_window: 20
+    exit_window: 10
+    initial_cash: 100_000.0

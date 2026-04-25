@@ -1,0 +1,15 @@
+universe:
+  class: LLMUniverseSelector
+  module_path: aqp.agents.screening.llm_screener
+  kwargs:
+    k: 10
+    tier: deep
+
+alpha:
+  class: LLMScreenerAlpha
+  module_path: aqp.agents.screening.llm_screener
+  kwargs:
+    k: 10
+    tier: deep
+    min_conviction: 0.55
+    strength: 0.15

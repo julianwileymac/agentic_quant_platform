@@ -1,0 +1,6 @@
+labels:
+  class: TailSetLabels
+  module_path: aqp.ml.labeling.tail_set
+  kwargs:
+    q: 0.1
+    by_date: true

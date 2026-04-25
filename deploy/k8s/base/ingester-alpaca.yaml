@@ -1,0 +1,82 @@
+# =============================================================================
+# AQP Alpaca Streaming Ingester
+# =============================================================================
+# Long-lived aqp-stream-ingest --venue alpaca pod. One replica only;
+# Alpaca allows a single websocket connection per API key.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aqp-ingester-alpaca
+  labels:
+    app.kubernetes.io/name: aqp-ingester-alpaca
+    app.kubernetes.io/component: streaming-ingester
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aqp-ingester-alpaca
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aqp-ingester-alpaca
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9300"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: ingester
+          image: aqp-ingester:latest
+          imagePullPolicy: IfNotPresent
+          args: ["aqp-stream-ingest", "--venue", "alpaca"]
+          envFrom:
+            - configMapRef:
+                name: aqp-env
+            - secretRef:
+                name: aqp-broker-secrets
+          ports:
+            - name: metrics
+              containerPort: 9300
+            - name: health
+              containerPort: 9301
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9301
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9301
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "768Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aqp-ingester-alpaca
+  labels:
+    app.kubernetes.io/name: aqp-ingester-alpaca
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: aqp-ingester-alpaca
+  ports:
+    - name: metrics
+      port: 9300
+      targetPort: 9300
+    - name: health
+      port: 9301
+      targetPort: 9301

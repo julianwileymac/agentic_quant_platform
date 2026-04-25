@@ -1,0 +1,47 @@
+name: "Deployed Model Alpha"
+description: >
+  Strategy recipe that consumes a model deployment profile produced by
+  /ml/deployments and routes predictions into the framework alpha stage.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [SPY, AAPL, MSFT, GOOGL, AMZN]
+    alpha_model:
+      class: DeployedModelAlpha
+      module_path: aqp.strategies.ml_alphas
+      kwargs:
+        deployment_id: "replace-with-model-deployment-id"
+        infer_segment: infer
+        long_threshold: 0.001
+        short_threshold: -0.001
+        allow_short: true
+        top_k: 10
+    portfolio_model:
+      class: SignalWeightedPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 10, long_only: false}
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: {max_position_pct: 0.1, max_drawdown_pct: 0.2}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+    rebalance_every: 1
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2023-01-01"
+    end: "2024-12-31"

@@ -1,0 +1,11 @@
+ensemble:
+  members:
+    - {name: a2c,  algo: A2C}
+    - {name: ppo,  algo: PPO}
+    - {name: ddpg, algo: DDPG}
+    - {name: td3,  algo: TD3}
+    - {name: sac,  algo: SAC}
+  total_timesteps: 100_000
+  validation_steps: 1_000
+  turbulence_gate: 150.0
+  rebalance_days: 63

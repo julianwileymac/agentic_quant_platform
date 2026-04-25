@@ -1,0 +1,73 @@
+---
+# MLflow Models serve — wraps `mlflow models serve -m <uri>` as a long-lived
+# Deployment. The model URI is passed in via env so operators can flip a single
+# ConfigMap key to promote a new model without re-rolling the image.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow-serve
+  labels:
+    app.kubernetes.io/name: aqp-mlflow-serve
+    app.kubernetes.io/part-of: agentic-quant-platform
+    app.kubernetes.io/component: serving
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aqp-mlflow-serve
+  template:
+    metadata:
+      labels:
+        app: aqp-mlflow-serve
+    spec:
+      containers:
+        - name: mlflow-serve
+          image: aqp-serving:latest
+          imagePullPolicy: IfNotPresent
+          command: ["aqp", "serve", "mlflow", "$(AQP_MODEL_URI)",
+                    "--host", "0.0.0.0", "--port", "5001",
+                    "--workers", "2", "--env-manager", "local"]
+          envFrom:
+            - configMapRef:
+                name: aqp-env
+            - configMapRef:
+                name: aqp-serving-env
+                optional: true
+          env:
+            - name: AQP_MODEL_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: aqp-serving-env
+                  key: model_uri
+            - name: AQP_OTEL_ENDPOINT
+              value: http://otel-collector:4317
+          ports:
+            - name: http
+              containerPort: 5001
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 5001
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-serve
+  labels:
+    app.kubernetes.io/name: aqp-mlflow-serve
+spec:
+  selector:
+    app: aqp-mlflow-serve
+  ports:
+    - name: http
+      port: 5001
+      targetPort: 5001

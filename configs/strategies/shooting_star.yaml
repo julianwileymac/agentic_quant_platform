@@ -1,0 +1,38 @@
+name: "Shooting Star Reversal"
+description: >
+  Short-biased candle pattern alpha. Ref:
+  quant-trading-master/Shooting Star backtest.py.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs: {symbols: [AAPL, MSFT, AMZN, GOOGL, META, NVDA]}
+    alpha_model:
+      class: ShootingStarAlpha
+      module_path: aqp.strategies.shooting_star_alpha
+      kwargs: {uptrend_lookback: 5, body_ratio: 0.3, upper_ratio: 2.0, allow_short: true}
+    portfolio_model:
+      class: SignalWeightedPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 6}
+    risk_model:
+      class: TrailingStopRisk
+      module_path: aqp.strategies.trailing_stop
+      kwargs: {trail_pct: 0.05}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: event
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2023-01-01"
+    end: "2024-12-31"

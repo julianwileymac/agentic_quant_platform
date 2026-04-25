@@ -1,0 +1,9 @@
+portfolio_construction:
+  class: EfficientSemivariancePortfolio
+  module_path: aqp.strategies.portfolio_opt.efficient_semivariance
+  kwargs:
+    max_positions: 15
+    long_only: true
+    lookback_bars: 252
+    benchmark: 0.0
+    objective: min_semivariance

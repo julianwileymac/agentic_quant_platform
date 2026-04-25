@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: aqp-api
+    app.kubernetes.io/part-of: agentic-quant-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aqp-api
+  template:
+    metadata:
+      labels:
+        app: aqp-api
+    spec:
+      containers:
+        - name: api
+          image: aqp:latest  # kustomize overlays should override
+          imagePullPolicy: IfNotPresent
+          command: ["aqp", "api", "--host", "0.0.0.0", "--port", "8000"]
+          envFrom:
+            - configMapRef:
+                name: aqp-env
+            - secretRef:
+                name: aqp-broker-secrets
+                optional: true
+          env:
+            - name: AQP_REDIS_URL
+              value: redis://redis:6379/0
+            - name: AQP_REDIS_PUBSUB_URL
+              value: redis://redis:6379/1
+            - name: AQP_POSTGRES_DSN
+              value: postgresql+psycopg2://aqp:aqp@postgres:5432/aqp
+            - name: AQP_POSTGRES_ASYNC_DSN
+              value: postgresql+asyncpg://aqp:aqp@postgres:5432/aqp
+            - name: AQP_OTEL_ENDPOINT
+              value: http://otel-collector:4317
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector:
+    app: aqp-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

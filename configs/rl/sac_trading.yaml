@@ -1,0 +1,38 @@
+name: "SAC Stock Trading"
+description: >
+  Soft Actor-Critic on a single-asset trading env. Entropy-regularised for
+  exploration in sparse-reward conditions.
+
+env:
+  class: StockTradingEnv
+  module_path: aqp.rl.envs.stock_trading_env
+  kwargs:
+    symbols: [SPY]
+    start: "2019-01-01"
+    end: "2023-12-31"
+    initial_balance: 100000
+    transaction_cost_pct: 0.001
+    indicators: [macd, rsi_14, sma_20, sma_50]
+    reward_scaling: 0.0001
+
+agent:
+  class: SB3Adapter
+  module_path: aqp.rl.agents.sb3_adapter
+  kwargs:
+    algorithm: SAC
+    policy: MlpPolicy
+    learning_rate: 0.0003
+    buffer_size: 1000000
+    batch_size: 256
+    tau: 0.005
+    gamma: 0.99
+    ent_coef: auto
+
+training:
+  total_timesteps: 150000
+  eval_freq: 10000
+  verbose: 1
+
+mlflow:
+  experiment: aqp-sac-trading
+  register_model_as: aqp.sac_trading

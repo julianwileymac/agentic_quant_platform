@@ -1,0 +1,5 @@
+crew:
+  class: EquityResearch
+  module_path: aqp.agents.financial.equity_research
+  kwargs:
+    tier: deep

@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aqp-env
+data:
+  AQP_ENV: "prod"
+  AQP_LOG_LEVEL: "INFO"
+  AQP_OTEL_SERVICE_NAME: "aqp"
+  AQP_OTEL_SAMPLE_RATIO: "1.0"
+  AQP_PAPER_DEFAULT_HEARTBEAT_SECONDS: "30"
+  AQP_ALPACA_PAPER: "true"
+  AQP_ALPACA_BASE_URL: ""
+  AQP_ALPACA_FEED: "iex"
+  # IB Gateway runs in-cluster via the ibgateway Deployment (paper port 4002).
+  AQP_IBKR_HOST: "ibgateway"
+  AQP_IBKR_PORT: "4002"
+  AQP_TRADIER_BASE_URL: "https://sandbox.tradier.com/v1"
+  # --- Kafka streaming (ingester + KafkaDataFeed) ---
+  AQP_KAFKA_BOOTSTRAP: "trading-kafka-kafka-bootstrap.data-services.svc.cluster.local:9092"
+  AQP_KAFKA_CLIENT_ID: "aqp"
+  AQP_KAFKA_COMPRESSION: "zstd"
+  AQP_KAFKA_ACKS: "all"
+  AQP_KAFKA_SECURITY_PROTOCOL: "PLAINTEXT"
+  AQP_KAFKA_TOPIC_PREFIX: ""
+  AQP_KAFKA_CONSUMER_GROUP: "aqp-live"
+  # --- Streaming ingester ---
+  AQP_STREAM_UNIVERSE: ""
+  AQP_STREAM_MARKET_DATA_TYPE: "3"
+  AQP_STREAM_SCANNER_INTERVAL_SEC: "300"
+  AQP_STREAM_SCANNER_ENABLED: "false"
+  AQP_STREAM_INCLUDE_QUOTES: "true"
+  AQP_STREAM_INCLUDE_TRADES: "true"
+  AQP_STREAM_INCLUDE_BARS: "true"
+  AQP_STREAM_METRICS_PORT: "9300"
+  AQP_STREAM_HEALTH_PORT: "9301"
+---
+# NB: populate real broker creds via `kubectl create secret generic aqp-broker-secrets
+# --from-literal=AQP_ALPACA_API_KEY=... --from-literal=AQP_ALPACA_SECRET_KEY=...
+# --from-literal=TWS_USERID=... --from-literal=TWS_PASSWORD=...`
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aqp-broker-secrets
+type: Opaque
+stringData:
+  AQP_ALPACA_API_KEY: ""
+  AQP_ALPACA_SECRET_KEY: ""
+  AQP_TRADIER_TOKEN: ""
+  AQP_TRADIER_ACCOUNT_ID: ""
+  AQP_KAFKA_SASL_USERNAME: ""
+  AQP_KAFKA_SASL_PASSWORD: ""
+  # IB Gateway (gnzsnz/ib-gateway) login. Required when running the in-cluster
+  # ibgateway Deployment. Leave empty to opt out.
+  TWS_USERID: ""
+  TWS_PASSWORD: ""

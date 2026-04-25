@@ -1,0 +1,114 @@
+# =============================================================================
+# IB Gateway (paper) Deployment
+# =============================================================================
+# Runs the gnzsnz/ib-gateway-docker image in the aqp namespace so the
+# streaming ingester (ingester-ibkr.yaml) can reach IBKR over a stable
+# in-cluster DNS name: ``ibgateway.aqp.svc.cluster.local:4002``.
+#
+# Requires credentials populated in the ``aqp-broker-secrets`` Secret:
+#   kubectl create secret generic aqp-broker-secrets \
+#     --from-literal=TWS_USERID=... \
+#     --from-literal=TWS_PASSWORD=... \
+#     -n aqp
+#
+# IB Gateway restarts nightly for its required daily reset. Set
+# ``TWOFA_TIMEOUT_ACTION=restart`` so 2FA prompts don't wedge the pod.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ibgateway
+  labels:
+    app.kubernetes.io/name: ibgateway
+    app.kubernetes.io/component: broker-gateway
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ibgateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ibgateway
+    spec:
+      containers:
+        - name: ibgateway
+          image: ghcr.io/gnzsnz/ib-gateway:stable
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: api-paper
+              containerPort: 4002
+              protocol: TCP
+            - name: api-live
+              containerPort: 4001
+              protocol: TCP
+          env:
+            - name: TRADING_MODE
+              value: "paper"
+            - name: TWOFA_TIMEOUT_ACTION
+              value: "restart"
+            - name: BYPASS_WARNING
+              value: "yes"
+            - name: TIME_ZONE
+              value: "Etc/UTC"
+            - name: TWS_USERID
+              valueFrom:
+                secretKeyRef:
+                  name: aqp-broker-secrets
+                  key: TWS_USERID
+                  optional: false
+            - name: TWS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aqp-broker-secrets
+                  key: TWS_PASSWORD
+                  optional: false
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1536Mi"
+          readinessProbe:
+            tcpSocket:
+              port: 4002
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 4002
+            initialDelaySeconds: 180
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+      # IB Gateway is x86_64-only upstream, schedule on the control plane.
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: "true"
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ibgateway
+  labels:
+    app.kubernetes.io/name: ibgateway
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ibgateway
+  ports:
+    - name: api-paper
+      port: 4002
+      targetPort: 4002
+      protocol: TCP
+    - name: api-live
+      port: 4001
+      targetPort: 4001
+      protocol: TCP

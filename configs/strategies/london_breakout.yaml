@@ -1,0 +1,37 @@
+name: "London Breakout"
+description: >
+  Range-breakout approximation at daily resolution. Ref:
+  quant-trading-master/London Breakout backtest.py.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs: {symbols: [SPY]}
+    alpha_model:
+      class: LondonBreakoutAlpha
+      module_path: aqp.strategies.london_breakout_alpha
+      kwargs: {risk_bps: 10, buffer_bps: 5, allow_short: true}
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 1}
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: {max_position_pct: 1.0, max_drawdown_pct: 0.15}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: backtesting
+  kwargs:
+    cash: 100000.0
+    commission: 0.0005
+    start: "2023-01-01"
+    end: "2024-12-31"

@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - mlflow-serve.yaml
+  - ray-serve.yaml
+  - torchserve.yaml
+  - servicemonitor.yaml
+
+configMapGenerator:
+  - name: aqp-serving-env
+    literals:
+      # Operators override these with `kustomize edit set ...` per environment.
+      - model_uri=models:/aqp-alpha/Production
+      - ray_serve_name=aqp-alpha
+
+commonLabels:
+  app.kubernetes.io/part-of: agentic-quant-platform
+  app.kubernetes.io/component: serving

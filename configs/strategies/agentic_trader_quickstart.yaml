@@ -1,0 +1,62 @@
+# Quickstart agentic trader strategy config.
+#
+# Wired into the ``FrameworkAlgorithm`` exactly like any other alpha.
+# The actual LLM trader crew runs in the ``precompute_decisions``
+# Celery task first; ``AgenticAlpha`` then reads the cache during the
+# backtest replay.
+#
+# Usage:
+#   POST /agentic/backtest with {
+#     "preset": "trader_crew_quick",
+#     "symbols": [...],
+#     "start": "2024-01-01",
+#     "end": "2024-06-30",
+#     "strategy_id": "quickstart-aapl-msft"
+#   }
+
+name: agentic_trader_quickstart
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    strategy_id: agentic-quickstart
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"]
+    alpha_model:
+      class: AgenticAlpha
+      module_path: aqp.strategies.agentic.agentic_alpha
+      kwargs:
+        strategy_id: agentic-quickstart
+        mode: precompute
+        min_confidence: 0.0
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+    risk_model:
+      class: NoOpRiskModel
+      module_path: aqp.strategies.risk_models
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    start: "2024-01-01"
+    end: "2024-06-30"
+    warmup_days: 30
+
+# Agentic-specific configuration. Picked up by
+# ``aqp/tasks/agentic_backtest_tasks.py`` before the backtest runs.
+agentic:
+  preset: trader_crew_quick
+  provider: ""
+  deep_model: ""
+  quick_model: ""
+  max_debate_rounds: 1
+  rebalance_frequency: weekly   # daily | weekly | monthly

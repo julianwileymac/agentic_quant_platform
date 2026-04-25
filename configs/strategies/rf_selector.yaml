@@ -1,0 +1,45 @@
+# FinRL-Trading style top-k Random Forest stock selector.
+#
+# Trains an sklearn RandomForestClassifier on a panel of returns and
+# technical features, then each rebalance longs the top-k stocks.
+# Good starter config for users exploring ML-based allocation.
+
+name: rf_selector
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    strategy_id: rf_selector
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: ["SPY", "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "JPM", "JNJ", "V"]
+    alpha_model:
+      class: MLSelectorAlpha
+      module_path: aqp.strategies.agentic.ml_selector_alpha
+      kwargs:
+        top_k: 5
+        bottom_k: 0
+        forward_days: 5
+        min_history_days: 120
+        long_short: false
+        strength: 0.20
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+    risk_model:
+      class: NoOpRiskModel
+      module_path: aqp.strategies.risk_models
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    start: "2024-01-01"
+    end: "2024-12-31"
+    warmup_days: 120

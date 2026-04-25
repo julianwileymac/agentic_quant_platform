@@ -1,0 +1,7 @@
+class: MeanVariancePortfolio
+module_path: aqp.strategies.mean_variance
+kwargs:
+  max_positions: 15
+  long_only: true
+  cov_method: sample
+  lookback_bars: 252

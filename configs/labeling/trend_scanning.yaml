@@ -1,0 +1,5 @@
+labels:
+  class: TrendScanningLabels
+  module_path: aqp.ml.labeling.trend_scanning
+  kwargs:
+    t_horizons: [5, 10, 21]

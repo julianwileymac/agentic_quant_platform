@@ -1,0 +1,87 @@
+# =============================================================================
+# AQP IBKR Streaming Ingester
+# =============================================================================
+# Long-lived aqp-stream-ingest --venue ibkr pod. Reserves a unique IBKR
+# client id (offset +200 over the brokerage) and publishes canonical Avro
+# records to the rpi_kubernetes Kafka cluster.
+#
+# Only one replica allowed -- IBKR enforces client id uniqueness per
+# gateway connection. Horizontal scaling requires additional IB Gateway
+# pods + alternate client ids (future work).
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aqp-ingester-ibkr
+  labels:
+    app.kubernetes.io/name: aqp-ingester-ibkr
+    app.kubernetes.io/component: streaming-ingester
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aqp-ingester-ibkr
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aqp-ingester-ibkr
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9300"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: ingester
+          image: aqp-ingester:latest
+          imagePullPolicy: IfNotPresent
+          args: ["aqp-stream-ingest", "--venue", "ibkr"]
+          envFrom:
+            - configMapRef:
+                name: aqp-env
+            - secretRef:
+                name: aqp-broker-secrets
+          ports:
+            - name: metrics
+              containerPort: 9300
+            - name: health
+              containerPort: 9301
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9301
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9301
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "384Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1024Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aqp-ingester-ibkr
+  labels:
+    app.kubernetes.io/name: aqp-ingester-ibkr
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: aqp-ingester-ibkr
+  ports:
+    - name: metrics
+      port: 9300
+      targetPort: 9300
+    - name: health
+      port: 9301
+      targetPort: 9301

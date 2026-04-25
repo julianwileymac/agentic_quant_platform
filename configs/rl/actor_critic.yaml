@@ -1,0 +1,11 @@
+agent:
+  class: ActorCriticDuelAgent
+  module_path: aqp.rl.agents.actor_critic.actor_critic_duel
+  kwargs:
+    state_dim: 32
+    n_actions: 3
+    hidden_size: 64
+    lr: 3e-4
+    gamma: 0.99
+    entropy_coef: 0.01
+    value_coef: 0.5
