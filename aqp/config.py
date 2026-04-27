@@ -46,6 +46,15 @@ class Settings(BaseSettings):
     llm_temperature_quick: float = Field(default=0.4)
     llm_context_window: int = Field(default=32768)
     llm_request_timeout: int = Field(default=120)
+    # --- Data-pipeline Director (Nemotron by default). The Director is
+    # invoked by ``aqp.data.pipelines.director.plan_ingestion`` to
+    # review the discovery brief and decide on namespaces, table names,
+    # row floors, and per-member skip lists before materialisation.
+    llm_director_provider: str = Field(default="ollama")
+    llm_director_model: str = Field(default="nemotron-3-nano:30b")
+    llm_director_temperature: float = Field(default=0.1)
+    llm_director_max_tokens: int = Field(default=4096)
+    llm_director_enabled: bool = Field(default=True)
     openai_api_key: str = Field(default="")
     openai_base_url: str = Field(default="")
     anthropic_api_key: str = Field(default="")
@@ -54,6 +63,13 @@ class Settings(BaseSettings):
     deepseek_api_key: str = Field(default="")
     groq_api_key: str = Field(default="")
     openrouter_api_key: str = Field(default="")
+    # vLLM — OpenAI-compatible HTTP API. Either a containerised service
+    # (the docker-compose ``vllm`` profile) or any external endpoint a
+    # user runs themselves. The ``vllm`` provider in the LLM router
+    # dispatches through LiteLLM's ``openai/`` adapter using these.
+    vllm_base_url: str = Field(default="")
+    vllm_api_key: str = Field(default="")
+    vllm_default_model: str = Field(default="nemotron")
 
     # --- Redis ---
     redis_url: str = Field(default="redis://localhost:6379/0")
@@ -240,6 +256,45 @@ class Settings(BaseSettings):
     sec_edgar_identity: str = Field(default="")
     sec_filing_cache_dir: Path = Field(default=Path("./data/sec_cache"))
 
+    # --- Iceberg data catalog ---
+    # The Iceberg-first generic catalog. When ``iceberg_rest_uri`` is set we
+    # use the Tabular/Lakekeeper-style REST catalog; otherwise we fall back
+    # to a local PyIceberg ``sql`` catalog (sqlite metadata, filesystem
+    # warehouse) so unit tests and ``make api`` work without Docker.
+    iceberg_rest_uri: str = Field(default="")
+    iceberg_catalog_name: str = Field(default="aqp")
+    # Filesystem path used when the SQL fallback catalog is active. When the
+    # REST catalog is configured this path is also where the SQLite metadata
+    # store lives (warehouse data goes to S3/MinIO instead).
+    #
+    # In Docker Compose this is overridden via ``AQP_ICEBERG_WAREHOUSE`` to
+    # point at ``/warehouse/iceberg``, which is the host bind mount of
+    # ``D:/aqp-warehouse``. The ``./data/iceberg`` Python default keeps
+    # native (non-container) workflows working without extra setup.
+    iceberg_warehouse: Path = Field(default=Path("./data/iceberg"))
+    # Scratch directory for unzipping / staging large archives during
+    # ingestion. Lives next to the warehouse so it benefits from the same
+    # host bind mount and isn't lost when the container restarts.
+    iceberg_staging_dir: Path = Field(default=Path("./data/iceberg-staging"))
+    iceberg_namespace_default: str = Field(default="aqp")
+    # When using the REST catalog with MinIO, surface the warehouse URI
+    # explicitly. ``s3a://aqp-iceberg`` is the typical bucket layout.
+    iceberg_s3_warehouse: str = Field(default="")
+    # Default cap on how many rows we materialize per logical dataset before
+    # flagging the table as "truncated" in lineage. 5M handles most regulatory
+    # CSVs; the harness can override to slice through 30 GB ZIPs in chunks.
+    iceberg_max_rows_per_dataset: int = Field(default=5_000_000)
+    # Cap on how many files we will pull from a single ZIP / folder when
+    # materializing one logical dataset. Protects against runaway extraction.
+    iceberg_max_files_per_dataset: int = Field(default=2000)
+
+    # --- S3 / MinIO credentials shared by Iceberg + general object storage ---
+    s3_endpoint_url: str = Field(default="")
+    s3_access_key: str = Field(default="")
+    s3_secret_key: str = Field(default="")
+    s3_region: str = Field(default="us-east-1")
+    s3_path_style_access: bool = Field(default=True)
+
     # --- GDelt (Global Knowledge Graph 2.0) ---
     gdelt_manifest_url: str = Field(default="http://data.gdeltproject.org/gkg/index.html")
     gdelt_parquet_subdir: str = Field(default="gdelt")  # under ``parquet_dir``
@@ -257,6 +312,8 @@ class Settings(BaseSettings):
         "torchserve_model_store",
         "sec_filing_cache_dir",
         "agentic_cache_dir",
+        "iceberg_warehouse",
+        "iceberg_staging_dir",
     )
     @classmethod
     def _coerce_path(cls, v: Path | str) -> Path:

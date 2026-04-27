@@ -1,11 +1,27 @@
 "use client";
 
-import { App, Button, Card, Col, Form, Input, InputNumber, Row, Select, Space, Tag, Typography } from "antd";
+import { ExportOutlined, PlayCircleOutlined } from "@ant-design/icons";
+import {
+  App,
+  Button,
+  Card,
+  Col,
+  Form,
+  Input,
+  Row,
+  Select,
+  Space,
+  Switch,
+  Tabs,
+  Tag,
+  Typography,
+} from "antd";
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { PageContainer } from "@/components/shell/PageContainer";
 import { apiFetch } from "@/lib/api/client";
+import { useApiQuery } from "@/lib/api/hooks";
 import { useChatStream } from "@/lib/ws";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react").then((m) => m.default), {
@@ -14,38 +30,156 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react").then((m) => m.
 
 const { Paragraph, Text } = Typography;
 
-const DEFAULT_CONFIG = `{
-  "model": "lightgbm",
-  "task": "regression",
-  "features": ["alpha158"],
-  "target": "next_5d_return",
-  "universe": ["SPY", "AAPL", "MSFT", "GOOGL"],
-  "train_start": "2018-01-01",
-  "train_end": "2022-12-31",
-  "test_start": "2023-01-01",
-  "test_end": "2024-12-31"
-}`;
+interface RecipeSummary {
+  id: string;
+  name: string;
+  description?: string;
+  group: string;
+  path: string;
+  model_class?: string | null;
+  dataset_class?: string | null;
+}
+
+interface RecipeBody {
+  id: string;
+  body: Record<string, unknown>;
+  dataset_cfg: Record<string, unknown>;
+  model_cfg: Record<string, unknown>;
+  records: unknown[];
+}
+
+interface SplitPlanSummary {
+  id: string;
+  name: string;
+}
+
+interface PipelineRecipeSummary {
+  id: string;
+  name: string;
+  version: number;
+}
+
+const DEFAULT_DATASET = JSON.stringify(
+  {
+    class: "DatasetH",
+    module_path: "aqp.ml.dataset",
+    kwargs: {
+      handler: {
+        class: "Alpha158",
+        module_path: "aqp.ml.features.alpha158",
+        kwargs: {
+          instruments: ["SPY", "AAPL", "MSFT", "GOOGL"],
+          start_time: "2018-01-01",
+          end_time: "2024-12-31",
+        },
+      },
+      segments: {
+        train: ["2018-01-01", "2021-12-31"],
+        valid: ["2022-01-01", "2022-12-31"],
+        test: ["2023-01-01", "2024-12-31"],
+      },
+    },
+  },
+  null,
+  2,
+);
+
+const DEFAULT_MODEL = JSON.stringify(
+  {
+    class: "LGBModel",
+    module_path: "aqp.ml.models.tree",
+    kwargs: {
+      num_leaves: 63,
+      learning_rate: 0.05,
+      n_estimators: 500,
+    },
+  },
+  null,
+  2,
+);
+
+const DEFAULT_RECORDS = JSON.stringify(
+  [
+    { class: "SignalRecord", module_path: "aqp.ml.recorder", kwargs: {} },
+    { class: "SigAnaRecord", module_path: "aqp.ml.recorder", kwargs: { horizons: [1, 5, 10] } },
+  ],
+  null,
+  2,
+);
 
 export function MlTrainingPage() {
   const { message } = App.useApp();
   const [form] = Form.useForm();
-  const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [datasetText, setDatasetText] = useState(DEFAULT_DATASET);
+  const [modelText, setModelText] = useState(DEFAULT_MODEL);
+  const [recordsText, setRecordsText] = useState(DEFAULT_RECORDS);
+  const [recipeId, setRecipeId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
   const stream = useChatStream(taskId);
 
+  const recipes = useApiQuery<RecipeSummary[]>({
+    queryKey: ["ml", "recipes"],
+    path: "/ml/recipes",
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const recipeBody = useApiQuery<RecipeBody>({
+    queryKey: ["ml", "recipe", recipeId ?? ""],
+    path: recipeId ? `/ml/recipes/${recipeId}` : "/ml/recipes",
+    enabled: Boolean(recipeId),
+  });
+
+  const splits = useApiQuery<SplitPlanSummary[]>({
+    queryKey: ["ml", "split-plans"],
+    path: "/ml/split-plans",
+  });
+  const pipelines = useApiQuery<PipelineRecipeSummary[]>({
+    queryKey: ["ml", "pipelines"],
+    path: "/ml/pipelines",
+  });
+
+  useEffect(() => {
+    if (!recipeBody.data) return;
+    setDatasetText(JSON.stringify(recipeBody.data.dataset_cfg, null, 2));
+    setModelText(JSON.stringify(recipeBody.data.model_cfg, null, 2));
+    setRecordsText(JSON.stringify(recipeBody.data.records ?? [], null, 2));
+  }, [recipeBody.data]);
+
   async function submit() {
     const v = await form.validateFields();
-    let parsed: unknown;
+    let dataset_cfg: unknown;
+    let model_cfg: unknown;
+    let records: unknown;
     try {
-      parsed = JSON.parse(config);
+      dataset_cfg = JSON.parse(datasetText);
     } catch (err) {
-      message.error(`Config not valid JSON: ${(err as Error).message}`);
+      message.error(`dataset_cfg not valid JSON: ${(err as Error).message}`);
+      return;
+    }
+    try {
+      model_cfg = JSON.parse(modelText);
+    } catch (err) {
+      message.error(`model_cfg not valid JSON: ${(err as Error).message}`);
+      return;
+    }
+    try {
+      records = JSON.parse(recordsText);
+    } catch (err) {
+      message.error(`records not valid JSON: ${(err as Error).message}`);
       return;
     }
     try {
       const res = await apiFetch<{ task_id: string }>("/ml/train", {
         method: "POST",
-        body: JSON.stringify({ config: parsed, run_name: v.run_name }),
+        body: JSON.stringify({
+          dataset_cfg,
+          model_cfg,
+          records: Array.isArray(records) ? records : [],
+          run_name: v.run_name,
+          register_alpha: Boolean(v.register_alpha),
+          split_plan_id: v.split_plan_id || null,
+          pipeline_recipe_id: v.pipeline_recipe_id || null,
+        }),
       });
       setTaskId(res.task_id);
       message.success(`Training queued (${res.task_id})`);
@@ -54,30 +188,101 @@ export function MlTrainingPage() {
     }
   }
 
+  async function exportToKafka() {
+    const v = await form.validateFields();
+    if (!v.pipeline_recipe_id) {
+      message.warning("Pick a saved pipeline first");
+      return;
+    }
+    try {
+      const res = await apiFetch<{ topic: string; submitted: boolean; error?: string }>(
+        `/ml/pipelines/${v.pipeline_recipe_id}/export`,
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      if (res.submitted) {
+        message.success(`Exported pipeline → ${res.topic}`);
+      } else {
+        message.warning(`Compiled but not submitted: ${res.error ?? "streaming runtime unavailable"}`);
+      }
+    } catch (err) {
+      message.error((err as Error).message);
+    }
+  }
+
   return (
-    <PageContainer title="ML Training" subtitle="Submit a Qlib-style ML pipeline and stream progress.">
+    <PageContainer
+      title="ML Training"
+      subtitle="Submit a Qlib-style ML pipeline and stream progress."
+    >
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <Space wrap>
+          <Text strong>Recipe</Text>
+          <Select
+            placeholder="Pick a recipe"
+            value={recipeId ?? undefined}
+            onChange={(v) => setRecipeId(v)}
+            style={{ minWidth: 380 }}
+            showSearch
+            filterOption={(input, option) =>
+              String(option?.label ?? "")
+                .toLowerCase()
+                .includes(input.toLowerCase())
+            }
+            options={(recipes.data ?? []).map((r) => ({
+              value: r.id,
+              label: `${r.group}/${r.name} ${r.model_class ? `· ${r.model_class}` : ""}`,
+            }))}
+          />
+          {recipeBody.data ? (
+            <Tag color="blue">loaded {recipeBody.data.id}</Tag>
+          ) : null}
+        </Space>
+      </Card>
       <Row gutter={16}>
         <Col xs={24} lg={8}>
           <Card title="Run" size="small">
-            <Form form={form} layout="vertical" initialValues={{ run_name: "lgbm_alpha158", n_seeds: 1 }}>
+            <Form
+              form={form}
+              layout="vertical"
+              initialValues={{
+                run_name: "lgbm_alpha158",
+                register_alpha: true,
+                split_plan_id: null,
+                pipeline_recipe_id: null,
+              }}
+            >
               <Form.Item label="Run name" name="run_name" rules={[{ required: true }]}>
                 <Input />
               </Form.Item>
-              <Form.Item label="Seeds" name="n_seeds">
-                <InputNumber min={1} max={10} style={{ width: "100%" }} />
+              <Form.Item label="Register as alpha" name="register_alpha" valuePropName="checked">
+                <Switch />
               </Form.Item>
-              <Form.Item label="Compute" name="compute">
+              <Form.Item label="Split plan (optional)" name="split_plan_id">
                 <Select
-                  defaultValue="cpu"
-                  options={[
-                    { value: "cpu", label: "CPU (default)" },
-                    { value: "gpu", label: "GPU (training queue)" },
-                  ]}
+                  allowClear
+                  options={(splits.data ?? []).map((s) => ({
+                    value: s.id,
+                    label: s.name,
+                  }))}
                 />
               </Form.Item>
-              <Button type="primary" onClick={submit}>
-                Train
-              </Button>
+              <Form.Item label="Pipeline recipe (optional)" name="pipeline_recipe_id">
+                <Select
+                  allowClear
+                  options={(pipelines.data ?? []).map((p) => ({
+                    value: p.id,
+                    label: `${p.name} v${p.version}`,
+                  }))}
+                />
+              </Form.Item>
+              <Space>
+                <Button type="primary" icon={<PlayCircleOutlined />} onClick={submit}>
+                  Train
+                </Button>
+                <Button icon={<ExportOutlined />} onClick={exportToKafka}>
+                  Export to Kafka
+                </Button>
+              </Space>
             </Form>
             {taskId ? (
               <div style={{ marginTop: 12 }}>
@@ -92,17 +297,59 @@ export function MlTrainingPage() {
           </Card>
         </Col>
         <Col xs={24} lg={16}>
-          <Card title="Pipeline config (JSON)" size="small">
-            <div style={{ height: 380 }}>
-              <MonacoEditor
-                height="100%"
-                defaultLanguage="json"
-                value={config}
-                onChange={(v) => setConfig(v ?? "")}
-                theme="vs-dark"
-                options={{ fontSize: 13, minimap: { enabled: false }, scrollBeyondLastLine: false }}
-              />
-            </div>
+          <Card size="small">
+            <Tabs
+              items={[
+                {
+                  key: "dataset",
+                  label: "dataset_cfg",
+                  children: (
+                    <div style={{ height: 360 }}>
+                      <MonacoEditor
+                        height="100%"
+                        defaultLanguage="json"
+                        value={datasetText}
+                        onChange={(v) => setDatasetText(v ?? "")}
+                        theme="vs-dark"
+                        options={{ fontSize: 13, minimap: { enabled: false } }}
+                      />
+                    </div>
+                  ),
+                },
+                {
+                  key: "model",
+                  label: "model_cfg",
+                  children: (
+                    <div style={{ height: 360 }}>
+                      <MonacoEditor
+                        height="100%"
+                        defaultLanguage="json"
+                        value={modelText}
+                        onChange={(v) => setModelText(v ?? "")}
+                        theme="vs-dark"
+                        options={{ fontSize: 13, minimap: { enabled: false } }}
+                      />
+                    </div>
+                  ),
+                },
+                {
+                  key: "records",
+                  label: "records",
+                  children: (
+                    <div style={{ height: 360 }}>
+                      <MonacoEditor
+                        height="100%"
+                        defaultLanguage="json"
+                        value={recordsText}
+                        onChange={(v) => setRecordsText(v ?? "")}
+                        theme="vs-dark"
+                        options={{ fontSize: 13, minimap: { enabled: false } }}
+                      />
+                    </div>
+                  ),
+                },
+              ]}
+            />
           </Card>
           {taskId ? (
             <Card title="Stream" size="small" style={{ marginTop: 16 }}>

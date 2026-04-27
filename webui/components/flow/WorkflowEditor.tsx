@@ -7,7 +7,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type { NodeProps, NodeTypes } from "@xyflow/react";
 
 import { AqpNodeCard } from "./AqpNodeCard";
-import { FlowCanvas } from "./FlowCanvas";
+import { CanvasContextMenu } from "./CanvasContextMenu";
+import { FlowCanvas, type FlowCanvasHandle } from "./FlowCanvas";
 import { Palette } from "./Palette";
 import type {
   AqpNode,
@@ -27,6 +28,12 @@ export interface WorkflowEditorProps {
   toolbarExtras?: React.ReactNode;
 }
 
+interface ContextMenuState {
+  open: boolean;
+  position: { x: number; y: number } | null;
+  nodeId: string | null;
+}
+
 export function WorkflowEditor(props: WorkflowEditorProps) {
   const {
     domain,
@@ -41,7 +48,13 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
     initialGraph ?? { domain, version: 1, nodes: [], edges: [] },
   );
   const [drawerNode, setDrawerNode] = useState<AqpNode | null>(null);
+  const [menu, setMenu] = useState<ContextMenuState>({
+    open: false,
+    position: null,
+    nodeId: null,
+  });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const canvasRef = useRef<FlowCanvasHandle | null>(null);
 
   const nodeTypes: NodeTypes = useMemo(() => {
     return {
@@ -96,15 +109,27 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
     }
   }
 
+  function closeMenu() {
+    setMenu({ open: false, position: null, nodeId: null });
+  }
+
   return (
     <div style={{ display: "flex", height: "calc(100vh - 100px)", overflow: "hidden", borderRadius: 8 }}>
       <Palette sections={paletteSections} />
       <div style={{ flex: 1, position: "relative" }}>
         <FlowCanvas
+          ref={canvasRef}
           domain={domain}
           initialGraph={graph}
           nodeTypes={nodeTypes}
           onGraphChange={onGraphChange}
+          onNodeClick={(node) => setDrawerNode(node)}
+          onNodeContextMenu={(node, position) =>
+            setMenu({ open: true, position, nodeId: node.id })
+          }
+          onPaneContextMenu={(position) =>
+            setMenu({ open: true, position, nodeId: null })
+          }
           toolbar={
             <Space>
               {toolbarExtras}
@@ -138,6 +163,20 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
       >
         {drawerNode ? <NodeEditor node={drawerNode} onChange={(d) => updateNode(drawerNode.id, d)} /> : null}
       </Drawer>
+      <CanvasContextMenu
+        open={menu.open}
+        position={menu.position}
+        nodeId={menu.nodeId}
+        paletteSections={paletteSections}
+        onClose={closeMenu}
+        onAddNode={(item) => {
+          if (!menu.position || !canvasRef.current) return;
+          canvasRef.current.addPaletteNodeAtPoint(item, menu.position.x, menu.position.y);
+        }}
+        onDuplicateNode={(id) => canvasRef.current?.duplicateNode(id)}
+        onDeleteNode={(id) => canvasRef.current?.removeNode(id)}
+        onDisconnectNode={(id) => canvasRef.current?.disconnectNode(id)}
+      />
     </div>
   );
 
@@ -146,6 +185,11 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
       ...g,
       nodes: g.nodes.map((n) => (n.id === id ? { ...n, data } : n)),
     }));
+    setDrawerNode((current) =>
+      current && current.id === id
+        ? { ...current, data }
+        : current,
+    );
   }
 }
 

@@ -1,5 +1,7 @@
 # Core Type System
 
+> Doc map: [docs/index.md](index.md) · Full `Symbol` class diagram: [docs/class-diagram.md#1-symbol--core-enums](class-diagram.md#1-symbol--core-enums).
+
 AQP 0.3 ports Lean's data model into Python with minimal surface area,
 full backward compatibility, and strict ``dataclass``-only value objects.
 
@@ -54,3 +56,33 @@ factor job) reads data through :class:`SubscriptionDataConfig` via
 :class:`aqp.data.subscription.SubscriptionManager`. That swap enables
 normalisation-aware queries and composite history providers without
 touching strategy code.
+
+## Type relationships
+
+```mermaid
+classDiagram
+    class Symbol {
+        +str ticker
+        +Exchange exchange
+        +AssetClass asset_class
+        +SecurityType security_type
+        +str vt_symbol
+        +parse(s) Symbol
+    }
+    class BarData
+    class TickData
+    class Signal
+    class OrderRequest
+    class OrderTicket
+    class OrderEvent
+    class SubscriptionDataConfig
+
+    Symbol <-- BarData
+    Symbol <-- TickData
+    Symbol <-- Signal
+    Symbol <-- OrderRequest
+    OrderRequest --> OrderTicket : submit_order
+    OrderTicket --> OrderEvent : "events stream"
+    SubscriptionDataConfig --> Symbol
+```
+

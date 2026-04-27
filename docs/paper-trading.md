@@ -1,5 +1,7 @@
 # Paper & live trading
 
+> Doc map: [docs/index.md](index.md) · Session state machine: [docs/flows.md#4-paper-trading-session](flows.md#4-paper-trading-session).
+
 AQP's paper trading engine is a Lean-inspired async runtime that shares
 100% of its strategy code with the backtester. Orders from the same
 `IStrategy` object flow through the **same ledger tables** regardless of

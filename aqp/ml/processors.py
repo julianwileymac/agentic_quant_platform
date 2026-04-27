@@ -234,6 +234,337 @@ class MinMaxNorm(Processor):
         return out_block
 
 
+class RobustScaler(Processor):
+    """Fit-stateful robust scaler — (x - median) / IQR per feature column.
+
+    Outlier-resistant alternative to :class:`MinMaxNorm` / standard z-score;
+    useful for return-based features that have heavy tails.
+    """
+
+    fit_required = True
+
+    def __init__(
+        self,
+        columns: list[str] | None = None,
+        fields_group: str = "feature",
+        quantile_range: tuple[float, float] = (0.25, 0.75),
+    ) -> None:
+        self.columns = list(columns or [])
+        self.fields_group = fields_group
+        self.quantile_range = (float(quantile_range[0]), float(quantile_range[1]))
+        self._center: pd.Series | None = None
+        self._scale: pd.Series | None = None
+
+    def _select_block(self, df: pd.DataFrame) -> pd.DataFrame:
+        if isinstance(df.columns, pd.MultiIndex):
+            try:
+                block = df[self.fields_group]
+            except KeyError:
+                return df
+        else:
+            block = df
+        if self.columns:
+            keep = [c for c in self.columns if c in block.columns]
+            return block[keep] if keep else block
+        return block
+
+    def fit(self, df: pd.DataFrame) -> None:
+        block = self._select_block(df)
+        if block.empty:
+            return
+        self._center = block.median()
+        q_lo, q_hi = block.quantile(self.quantile_range[0]), block.quantile(self.quantile_range[1])
+        self._scale = (q_hi - q_lo).replace(0.0, np.nan)
+
+    def __call__(self, df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty or self._center is None or self._scale is None:
+            return df
+        block = self._select_block(df)
+        scaled = ((block - self._center) / self._scale).fillna(0.0)
+        if isinstance(df.columns, pd.MultiIndex):
+            out = df.copy()
+            for col in scaled.columns:
+                out[(self.fields_group, col)] = scaled[col].values
+            return out
+        out = df.copy()
+        out[scaled.columns] = scaled.values
+        return out
+
+
+# ---------------------------------------------------------------------------
+# Categorical encoders.
+# ---------------------------------------------------------------------------
+
+
+def _flat_block(df: pd.DataFrame, fields_group: str) -> tuple[pd.DataFrame, bool]:
+    """Return (block, is_multi). Block is the ``feature`` slice when df has a
+    MultiIndex column layout, else the frame itself.
+    """
+    if isinstance(df.columns, pd.MultiIndex):
+        try:
+            return df[fields_group], True
+        except KeyError:
+            return df, False
+    return df, False
+
+
+def _restore_block(
+    df: pd.DataFrame,
+    new_block: pd.DataFrame,
+    fields_group: str,
+    is_multi: bool,
+    drop_cols: list[str] | None = None,
+) -> pd.DataFrame:
+    """Return a frame with ``new_block`` replacing the old feature slice."""
+    if is_multi:
+        out = df.copy()
+        if drop_cols:
+            existing = [(fields_group, c) for c in drop_cols if (fields_group, c) in out.columns]
+            if existing:
+                out = out.drop(columns=existing)
+        for col in new_block.columns:
+            out[(fields_group, col)] = new_block[col].values
+        return out
+    out = df.copy()
+    if drop_cols:
+        out = out.drop(columns=[c for c in drop_cols if c in out.columns])
+    for col in new_block.columns:
+        out[col] = new_block[col].values
+    return out
+
+
+class OneHotEncode(Processor):
+    """Fit-stateful one-hot encoder for low-cardinality categorical columns.
+
+    Falls back to keeping the original column unchanged when the cardinality
+    exceeds ``max_cardinality`` (use :class:`HashEncode` for those instead).
+    """
+
+    fit_required = True
+
+    def __init__(
+        self,
+        columns: list[str],
+        fields_group: str = "feature",
+        drop_first: bool = True,
+        max_cardinality: int = 64,
+    ) -> None:
+        self.columns = list(columns)
+        self.fields_group = fields_group
+        self.drop_first = bool(drop_first)
+        self.max_cardinality = int(max_cardinality)
+        self._categories: dict[str, list[Any]] = {}
+
+    def fit(self, df: pd.DataFrame) -> None:
+        block, _ = _flat_block(df, self.fields_group)
+        for col in self.columns:
+            if col not in block.columns:
+                continue
+            cats = sorted([c for c in block[col].dropna().unique()])
+            if len(cats) > self.max_cardinality:
+                logger.warning(
+                    "OneHotEncode: %s has %d categories > %d; skipped",
+                    col, len(cats), self.max_cardinality,
+                )
+                continue
+            self._categories[col] = cats
+
+    def __call__(self, df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty or not self._categories:
+            return df
+        block, is_multi = _flat_block(df, self.fields_group)
+        new_cols: dict[str, pd.Series] = {}
+        for col, cats in self._categories.items():
+            if col not in block.columns:
+                continue
+            iter_cats = cats[1:] if self.drop_first else cats
+            for cat in iter_cats:
+                new_cols[f"{col}__{cat}"] = (block[col] == cat).astype("float32")
+        if not new_cols:
+            return df
+        encoded = pd.DataFrame(new_cols, index=block.index)
+        return _restore_block(df, encoded, self.fields_group, is_multi, drop_cols=list(self._categories))
+
+
+class OrdinalEncode(Processor):
+    """Map categorical values to integer codes.
+
+    Accepts either an explicit ``mapping`` (dict-of-dicts keyed by column)
+    or fits one at fit time using the sorted unique values seen in the
+    training panel.
+    """
+
+    fit_required = True
+
+    def __init__(
+        self,
+        columns: list[str],
+        fields_group: str = "feature",
+        mapping: dict[str, dict[Any, int]] | None = None,
+        unknown_value: int = -1,
+    ) -> None:
+        self.columns = list(columns)
+        self.fields_group = fields_group
+        self.mapping = {k: dict(v) for k, v in (mapping or {}).items()}
+        self.unknown_value = int(unknown_value)
+        self._fitted: dict[str, dict[Any, int]] = dict(self.mapping)
+
+    def fit(self, df: pd.DataFrame) -> None:
+        block, _ = _flat_block(df, self.fields_group)
+        for col in self.columns:
+            if col in self.mapping or col not in block.columns:
+                continue
+            cats = sorted([c for c in block[col].dropna().unique()])
+            self._fitted[col] = {cat: i for i, cat in enumerate(cats)}
+
+    def __call__(self, df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty or not self._fitted:
+            return df
+        block, is_multi = _flat_block(df, self.fields_group)
+        new_block = pd.DataFrame(index=block.index)
+        for col, m in self._fitted.items():
+            if col not in block.columns:
+                continue
+            new_block[col] = block[col].map(m).fillna(self.unknown_value).astype("int32")
+        return _restore_block(df, new_block, self.fields_group, is_multi)
+
+
+class TargetEncode(Processor):
+    """Smoothed target (mean-of-y) encoding.
+
+    Replaces a categorical column with the smoothed conditional mean of
+    the label, computed at fit time. ``smoothing`` blends between the
+    category-specific mean and the global mean to reduce leakage on rare
+    categories.
+    """
+
+    fit_required = True
+
+    def __init__(
+        self,
+        columns: list[str],
+        fields_group: str = "feature",
+        label_column: str = "label",
+        smoothing: float = 10.0,
+    ) -> None:
+        self.columns = list(columns)
+        self.fields_group = fields_group
+        self.label_column = str(label_column)
+        self.smoothing = float(smoothing)
+        self._global_mean: float = 0.0
+        self._maps: dict[str, dict[Any, float]] = {}
+
+    def _label_series(self, df: pd.DataFrame) -> pd.Series | None:
+        if isinstance(df.columns, pd.MultiIndex):
+            for top in ("label", "labels"):
+                if top in df.columns.get_level_values(0):
+                    sub = df[top]
+                    if isinstance(sub, pd.DataFrame) and self.label_column in sub.columns:
+                        return sub[self.label_column]
+                    if isinstance(sub, pd.DataFrame) and not sub.empty:
+                        return sub.iloc[:, 0]
+                    if isinstance(sub, pd.Series):
+                        return sub
+        if self.label_column in df.columns:
+            return df[self.label_column]
+        return None
+
+    def fit(self, df: pd.DataFrame) -> None:
+        block, _ = _flat_block(df, self.fields_group)
+        y = self._label_series(df)
+        if y is None or block.empty:
+            return
+        self._global_mean = float(y.mean())
+        for col in self.columns:
+            if col not in block.columns:
+                continue
+            counts = block[col].value_counts()
+            sums = y.groupby(block[col]).sum()
+            means = sums / counts
+            smoothed = (counts * means + self.smoothing * self._global_mean) / (counts + self.smoothing)
+            self._maps[col] = smoothed.to_dict()
+
+    def __call__(self, df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty or not self._maps:
+            return df
+        block, is_multi = _flat_block(df, self.fields_group)
+        new_block = pd.DataFrame(index=block.index)
+        for col, m in self._maps.items():
+            if col not in block.columns:
+                continue
+            new_block[col] = block[col].map(m).fillna(self._global_mean).astype("float32")
+        return _restore_block(df, new_block, self.fields_group, is_multi)
+
+
+class HashEncode(Processor):
+    """Stateless feature hashing for high-cardinality categoricals.
+
+    Uses :func:`hash` modulo ``n_features`` so the encoding is stable
+    across processes. Each input column expands into ``n_features``
+    hashed indicator columns.
+    """
+
+    def __init__(
+        self,
+        columns: list[str],
+        fields_group: str = "feature",
+        n_features: int = 64,
+    ) -> None:
+        self.columns = list(columns)
+        self.fields_group = fields_group
+        self.n_features = max(1, int(n_features))
+
+    def __call__(self, df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty or not self.columns:
+            return df
+        block, is_multi = _flat_block(df, self.fields_group)
+        new_block = pd.DataFrame(index=block.index)
+        for col in self.columns:
+            if col not in block.columns:
+                continue
+            buckets = block[col].astype(str).map(lambda v: hash(v) % self.n_features)
+            for i in range(self.n_features):
+                new_block[f"{col}__h{i}"] = (buckets == i).astype("float32")
+        if new_block.empty:
+            return df
+        return _restore_block(df, new_block, self.fields_group, is_multi, drop_cols=list(self.columns))
+
+
+class FrequencyEncode(Processor):
+    """Replace categorical values with their training-set frequency."""
+
+    fit_required = True
+
+    def __init__(
+        self,
+        columns: list[str],
+        fields_group: str = "feature",
+    ) -> None:
+        self.columns = list(columns)
+        self.fields_group = fields_group
+        self._freq: dict[str, dict[Any, float]] = {}
+
+    def fit(self, df: pd.DataFrame) -> None:
+        block, _ = _flat_block(df, self.fields_group)
+        n = max(1, len(block))
+        for col in self.columns:
+            if col not in block.columns:
+                continue
+            counts = block[col].value_counts() / n
+            self._freq[col] = counts.to_dict()
+
+    def __call__(self, df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty or not self._freq:
+            return df
+        block, is_multi = _flat_block(df, self.fields_group)
+        new_block = pd.DataFrame(index=block.index)
+        for col, m in self._freq.items():
+            if col not in block.columns:
+                continue
+            new_block[col] = block[col].map(m).fillna(0.0).astype("float32")
+        return _restore_block(df, new_block, self.fields_group, is_multi)
+
+
 # ---------------------------------------------------------------------------
 # Outlier / anomaly filtering — PyOD-backed.
 # ---------------------------------------------------------------------------
@@ -444,8 +775,14 @@ __all__ = [
     "DropnaLabel",
     "FilterCol",
     "Fillna",
+    "FrequencyEncode",
+    "HashEncode",
     "MinMaxNorm",
+    "OneHotEncode",
+    "OrdinalEncode",
     "PreprocessingSpec",
     "Processor",
     "PyODOutlierFilter",
+    "RobustScaler",
+    "TargetEncode",
 ]

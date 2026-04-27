@@ -1,0 +1,36 @@
+name: "ML4T Ch12 — GBM Baseline"
+description: >
+  Mirrors stefan-jansen/machine-learning-for-trading
+  12_gradient_boosting_machines/01_boosting_baseline. A straightforward
+  LightGBM baseline on Alpha158 features, used as the reference point for
+  later GBM tuning experiments.
+
+dataset:
+  class: DatasetH
+  module_path: aqp.ml.dataset
+  kwargs:
+    handler:
+      class: Alpha158
+      module_path: aqp.ml.features.alpha158
+      kwargs:
+        instruments: [SPY, AAPL, MSFT, GOOGL, AMZN, META, NVDA, JPM, JNJ, V]
+        start_time: "2010-01-01"
+        end_time: "2024-12-31"
+    segments:
+      train: ["2010-01-01", "2018-12-31"]
+      valid: ["2019-01-01", "2020-12-31"]
+      test:  ["2021-01-01", "2024-12-31"]
+
+model:
+  class: LGBModel
+  module_path: aqp.ml.models.tree
+  kwargs:
+    objective: regression
+    num_leaves: 31
+    max_depth: -1
+    learning_rate: 0.05
+    n_estimators: 500
+
+records:
+  - {class: SignalRecord, module_path: aqp.ml.recorder, kwargs: {}}
+  - {class: SigAnaRecord, module_path: aqp.ml.recorder, kwargs: {horizons: [1, 5, 10, 21]}}

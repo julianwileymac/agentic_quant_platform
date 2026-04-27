@@ -1,0 +1,93 @@
+---
+description: Project-wide conventions and hard rules for the Agentic Quant Platform
+globs:
+  - aqp/**/*.py
+  - tests/**/*.py
+  - alembic/versions/*.py
+  - configs/**/*.yaml
+alwaysApply: true
+---
+
+# AQP Rules
+
+This is the Agentic Quant Platform (AQP) — a local-first, agentic
+quantitative research and trading platform. Read [AGENTS.md](mdc:AGENTS.md)
+for the full agent rule-set; this file is the Cursor-specific subset
+that applies on every change.
+
+## Hard rules
+
+1. All symbols are `Symbol` instances. All symbol IDs are `vt_symbol`
+   strings shaped `{TICKER}.{EXCHANGE}`. Never split a `vt_symbol` on
+   `.`. Use `Symbol.parse(vt_symbol)` from
+   [aqp/core/types.py](mdc:aqp/core/types.py).
+2. All LLM calls go through `router_complete` in
+   [aqp/llm/providers/router.py](mdc:aqp/llm/providers/router.py).
+   Never call `litellm.completion`, `OllamaClient`, or vendor SDKs
+   directly.
+3. All Iceberg writes go through `iceberg_catalog.append_arrow` /
+   `create_or_replace_table` in
+   [aqp/data/iceberg_catalog.py](mdc:aqp/data/iceberg_catalog.py).
+   Never call PyIceberg's `Catalog.create_table` /
+   `Table.append` directly.
+4. All Celery progress emits go through
+   [aqp/tasks/_progress.py](mdc:aqp/tasks/_progress.py):
+   `emit(task_id, stage, message, **extras)`,
+   `emit_done(task_id, result)`, `emit_error(task_id, error)`.
+5. All ledger writes go through `LedgerWriter` in
+   [aqp/persistence/ledger.py](mdc:aqp/persistence/ledger.py).
+6. Migrations are immutable once committed in
+   [alembic/versions/](mdc:alembic/versions/). Add a new migration —
+   never edit a shipped one.
+7. Configuration is read once via `from aqp.config import settings`
+   from [aqp/config.py](mdc:aqp/config.py). Don't construct
+   `Settings()` directly. New env vars must be `AQP_*` prefixed and
+   added to both `Settings` and [.env.example](mdc:.env.example).
+8. New strategies / models / engines use the `class` / `module_path`
+   / `kwargs` factory pattern. Decorate with
+   `@register("Name")` from
+   [aqp/core/registry.py](mdc:aqp/core/registry.py).
+9. Tests live under [tests/](mdc:tests/) mirroring the source path
+   and must run hermetically (no network, no host filesystem).
+
+## Style
+
+- `from __future__ import annotations` at the top of every Python file.
+- `logger = logging.getLogger(__name__)` at module top.
+- Type hints required on public function signatures.
+- No emojis in code or commit messages.
+- Ruff for lint + format (`pyproject.toml`).
+
+## Where things live
+
+| Need | Path |
+| --- | --- |
+| API route | [aqp/api/routes/](mdc:aqp/api/routes/) |
+| Celery task | [aqp/tasks/](mdc:aqp/tasks/) |
+| LLM provider | [aqp/llm/providers/catalog.py](mdc:aqp/llm/providers/catalog.py) |
+| ML model | [aqp/ml/models/](mdc:aqp/ml/models/) |
+| Strategy | [aqp/strategies/](mdc:aqp/strategies/) |
+| Backtest engine | [aqp/backtest/](mdc:aqp/backtest/) |
+| ORM model | [aqp/persistence/models*.py](mdc:aqp/persistence/) |
+| Ingestion | [aqp/data/pipelines/](mdc:aqp/data/pipelines/) |
+
+## Doc references
+
+- [docs/architecture.md](mdc:docs/architecture.md) — system overview
+- [docs/erd.md](mdc:docs/erd.md) — schema diagrams
+- [docs/class-diagram.md](mdc:docs/class-diagram.md) — class hierarchies
+- [docs/data-dictionary.md](mdc:docs/data-dictionary.md) — column reference
+- [docs/flows.md](mdc:docs/flows.md) — sequence diagrams
+- [docs/glossary.md](mdc:docs/glossary.md) — terms
+
+## Don't
+
+- Don't edit shipped Alembic migrations.
+- Don't construct new `Settings()` instances.
+- Don't call `litellm.completion` / `OllamaClient` directly.
+- Don't write to Iceberg via raw PyIceberg.
+- Don't pickle ORM objects across tasks (pass IDs, re-fetch).
+- Don't put strategy logic in API routes.
+- Don't break the progress-bus payload shape
+  (`{task_id, stage, message, timestamp, **extras}`).
+- Don't add new diagram formats. Mermaid only.

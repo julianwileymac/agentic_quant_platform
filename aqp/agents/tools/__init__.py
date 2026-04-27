@@ -1,6 +1,7 @@
 """CrewAI tool adapters — the platform's public agent-facing API."""
 
 from aqp.agents.tools.backtest_tool import BacktestTool, WalkForwardTool
+from aqp.agents.tools.backtrader_tool import BacktraderTool
 from aqp.agents.tools.chroma_tool import ChromaSearchTool, MemoryRecallTool
 from aqp.agents.tools.directory_tool import DirectoryReadTool
 from aqp.agents.tools.duckdb_tool import DescribeBarsTool, DuckDBQueryTool
@@ -19,6 +20,7 @@ TOOL_REGISTRY: dict[str, type] = {
     "memory_recall": MemoryRecallTool,
     "directory_read": DirectoryReadTool,
     "backtest": BacktestTool,
+    "backtrader_quick": BacktraderTool,
     "walk_forward": WalkForwardTool,
     "risk_check": RiskCheckTool,
     "kill_switch": KillSwitchTool,
@@ -41,6 +43,7 @@ def get_tool(name: str):
 
 __all__ = [
     "BacktestTool",
+    "BacktraderTool",
     "ChromaSearchTool",
     "DescribeBarsTool",
     "DirectoryReadTool",

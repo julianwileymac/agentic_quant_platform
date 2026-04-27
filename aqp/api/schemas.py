@@ -13,7 +13,9 @@ class HealthResponse(BaseModel):
     redis: bool
     postgres: bool
     chromadb: bool
+    vllm: bool = False
     models: list[str] = Field(default_factory=list)
+    vllm_models: list[str] = Field(default_factory=list)
 
 
 class TaskAccepted(BaseModel):
@@ -129,6 +131,29 @@ class AgenticBacktestRequest(BaseModel):
     skip_precompute: bool = False
     # Optional override for the framework config. When omitted the server
     # uses ``configs/strategies/agentic_trader_quickstart.yaml``.
+    config: dict[str, Any] | None = None
+
+
+class AgenticPipelineRequest(BaseModel):
+    """Multi-run orchestration request for agentic backtests."""
+
+    symbols: list[str]
+    start: str
+    end: str
+    strategy_id: str | None = None
+    run_name: str = "agentic-pipeline"
+    preset: str = "trader_crew_quick"
+    provider: str = ""
+    deep_model: str = ""
+    quick_model: str = ""
+    max_debate_rounds: int | None = None
+    rebalance_frequency: str = "weekly"
+    mode: str = "precompute"
+    skip_precompute: bool = False
+    x_backtests: int = Field(default=1, ge=1, le=64)
+    universe_filter: dict[str, Any] = Field(default_factory=dict)
+    conditions: dict[str, Any] = Field(default_factory=dict)
+    data_source: dict[str, Any] | None = None
     config: dict[str, Any] | None = None
 
 

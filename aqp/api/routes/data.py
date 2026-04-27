@@ -498,6 +498,19 @@ def list_indicators() -> list[IndicatorDescriptor]:
     return out
 
 
+@router.get("/indicators/catalog")
+def list_indicator_catalog() -> dict[str, Any]:
+    """Return the full TA-Lib taxonomy with engine availability per entry.
+
+    Drives the Data Browser's indicator catalog. Always returns metadata
+    even when no compute engine is installed, so the UI can still render
+    the full taxonomy.
+    """
+    from aqp.data import talib_catalog
+
+    return talib_catalog.catalog()
+
+
 @router.post("/indicators/preview")
 def indicator_preview(req: IndicatorPreviewRequest) -> dict[str, Any]:
     """Apply a list of indicator specs to one symbol's bar slice.

@@ -72,7 +72,17 @@ def precompute_decisions(
             )
 
         cache = DecisionCache(strategy_id=strategy_id)
-        cfg = build_trader_crew_config(preset=preset, overrides=overrides or {})
+        merged_overrides = dict(overrides or {})
+        try:
+            from aqp.runtime.control_plane import get_provider_control
+
+            runtime_provider = get_provider_control()
+            merged_overrides.setdefault("provider", runtime_provider.get("provider"))
+            merged_overrides.setdefault("deep_model", runtime_provider.get("deep_model"))
+            merged_overrides.setdefault("quick_model", runtime_provider.get("quick_model"))
+        except Exception:
+            logger.debug("runtime provider control unavailable", exc_info=True)
+        cfg = build_trader_crew_config(preset=preset, overrides=merged_overrides)
 
         def on_progress(pct: float, message: str) -> None:
             emit(task_id, "running", message, progress=pct)
@@ -130,6 +140,15 @@ def run_agentic_backtest(
     task_id = self.request.id or "local"
     emit(task_id, "start", "Preparing agentic backtest…")
     sid = strategy_id or f"agentic-{task_id[:8]}"
+    try:
+        from aqp.runtime.control_plane import get_provider_control
+
+        runtime_provider = get_provider_control()
+        provider = provider or runtime_provider.get("provider") or None
+        deep_model = deep_model or runtime_provider.get("deep_model") or None
+        quick_model = quick_model or runtime_provider.get("quick_model") or None
+    except Exception:
+        logger.debug("runtime provider control unavailable", exc_info=True)
 
     try:
         # 1. Precompute (unless the user pointed at an existing cache).
@@ -208,6 +227,70 @@ def run_agentic_backtest(
         return result
     except Exception as exc:  # pragma: no cover
         logger.exception("run_agentic_backtest failed")
+        emit_error(task_id, str(exc))
+        raise
+
+
+@celery_app.task(
+    bind=True,
+    name="aqp.tasks.agentic_backtest_tasks.run_agentic_pipeline",
+)
+def run_agentic_pipeline(
+    self,
+    *,
+    cfg: dict[str, Any],
+    symbols: list[str],
+    start: str,
+    end: str,
+    strategy_id: str | None = None,
+    run_name: str = "agentic-pipeline",
+    x_backtests: int = 1,
+    preset: str | None = None,
+    provider: str | None = None,
+    deep_model: str | None = None,
+    quick_model: str | None = None,
+    max_debate_rounds: int | None = None,
+    rebalance_frequency: str = "weekly",
+    mode: str = "precompute",
+    skip_precompute: bool = False,
+    universe_filter: dict[str, Any] | None = None,
+    conditions: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run a multi-variant agentic backtesting pipeline."""
+    task_id = self.request.id or "local"
+    emit(task_id, "start", "Starting agentic pipeline orchestration…")
+    sid = strategy_id or f"agentic-pipeline-{task_id[:8]}"
+    try:
+        from aqp.agents.trading.orchestration import run_agentic_pipeline as _run
+
+        def _progress(pct: float, msg: str) -> None:
+            emit(task_id, "running", msg, progress=float(pct))
+
+        payload = _run(
+            cfg=cfg,
+            symbols=symbols,
+            start=start,
+            end=end,
+            strategy_id=sid,
+            run_name=run_name,
+            x_backtests=x_backtests,
+            mode=mode,
+            skip_precompute=skip_precompute,
+            rebalance_frequency=rebalance_frequency,
+            preset=preset,
+            provider=provider,
+            deep_model=deep_model,
+            quick_model=quick_model,
+            max_debate_rounds=max_debate_rounds,
+            universe_filter=universe_filter,
+            conditions=conditions,
+            runner=run_agentic_backtest,
+            on_progress=_progress,
+        )
+        emit_done(task_id, payload)
+        return payload
+    except Exception as exc:  # pragma: no cover
+        logger.exception("run_agentic_pipeline failed")
         emit_error(task_id, str(exc))
         raise
 

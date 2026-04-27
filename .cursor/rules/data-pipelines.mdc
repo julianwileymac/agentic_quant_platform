@@ -1,0 +1,103 @@
+---
+description: Generic file-to-Iceberg ingestion pipeline conventions
+globs:
+  - aqp/data/pipelines/**/*.py
+  - aqp/data/iceberg_catalog.py
+  - aqp/agents/prompts/data_director.py
+  - tests/data/**/*.py
+  - scripts/ingest_*.py
+  - scripts/iceberg_*.py
+alwaysApply: false
+---
+
+# Data pipelines (Iceberg ingestion)
+
+Rules that apply when working on the discovery → director → materialise
+→ verify → annotate pipeline. See [docs/data-catalog.md](mdc:docs/data-catalog.md)
+for the prose walkthrough and [docs/flows.md#1-generic-file--iceberg-ingestion](mdc:docs/flows.md)
+for the canonical sequence diagram.
+
+## Pipeline contract
+
+The five stages are pinned to specific files and dataclasses:
+
+| Stage | File | Output |
+| --- | --- | --- |
+| Discover | [aqp/data/pipelines/discovery.py](mdc:aqp/data/pipelines/discovery.py) | `list[DiscoveredDataset]` |
+| Plan | [aqp/data/pipelines/director.py](mdc:aqp/data/pipelines/director.py) | `IngestionPlan` |
+| Materialise | [aqp/data/pipelines/materialize.py](mdc:aqp/data/pipelines/materialize.py) | `MaterializeResult` |
+| Verify | [aqp/data/pipelines/director.py](mdc:aqp/data/pipelines/director.py) (`verify_after_materialise`) | `VerifierVerdict` |
+| Annotate | [aqp/data/pipelines/annotate.py](mdc:aqp/data/pipelines/annotate.py) | `AnnotationResult` |
+
+The orchestrator [`IngestionPipeline`](mdc:aqp/data/pipelines/runner.py)
+sequences them; aggregate output is `IngestionReport`.
+
+## Hard rules
+
+1. Iceberg writes go through `iceberg_catalog.append_arrow` (and
+   `create_or_replace_table`). Never call PyIceberg's
+   `Catalog.create_table` / `Table.append` directly.
+2. The Director is a Nemotron LLM call by default
+   (`AQP_LLM_DIRECTOR_MODEL=nemotron-3-nano:30b`). It must always
+   produce an `IngestionPlan` — when the LLM is unreachable / returns
+   garbage / is disabled, fall back to the deterministic
+   `_identity_plan` in
+   [aqp/data/pipelines/director.py](mdc:aqp/data/pipelines/director.py).
+3. The Director's JSON parser
+   (`_parse_director_response`) must handle reasoning-style output
+   that prefixes the JSON with chain-of-thought. It walks every
+   balanced `{...}` block longest-first and accepts the first one
+   containing the required top-level key.
+4. The verifier triggers when
+   `rows_written < expected_min_rows / 2` OR every file was skipped.
+   It returns `accept` or `retry` — retries are capped at one per
+   dataset.
+5. Discovery groups members by `_family_key(subdir, leaf_name)`
+   so SEC-style sibling subdirs keep distinct family keys when their
+   leaf names collide.
+6. Browser-style `(N)` duplicate suffixes collapse via
+   `_dedup_key` + `outer_mtime`; the most recently modified file
+   wins, the rest are recorded under `inventory_extra` with
+   `reason="duplicate-suffix-suppressed"`.
+7. USPTO-style `.xml` archives go to the synthetic `__assets__`
+   family with an explanatory note. Don't try to ingest them as
+   tabular data unless you've written a streaming XML extractor.
+
+## Iceberg namespaces
+
+Use the `aqp_<source>` slug pattern. The four regulatory namespaces
+are reserved:
+
+- `aqp_cfpb`
+- `aqp_uspto`
+- `aqp_fda`
+- `aqp_sec`
+
+`aqp` is the default fallback; `aqp_smoke` is reserved for
+[scripts/iceberg_smoke.py](mdc:scripts/iceberg_smoke.py). Pick a new
+`aqp_<source>` slug for any new corpus.
+
+## Tests
+
+- [tests/data/test_discovery_patches.py](mdc:tests/data/test_discovery_patches.py)
+  covers discovery edge cases (subdir disambig, XML, duplicates).
+- [tests/data/test_director.py](mdc:tests/data/test_director.py)
+  covers director planning + verifier; stub `_call_llm` with
+  `monkeypatch` to keep tests hermetic.
+- [tests/data/test_pipelines_smoke.py](mdc:tests/data/test_pipelines_smoke.py)
+  is the end-to-end smoke; pass `director_enabled=False` to
+  `IngestionPipeline` so the LLM path is bypassed.
+
+## Don't
+
+- Don't lower the discovery's tabular ext set without updating the
+  XML / non-tabular tests.
+- Don't bypass the Director by calling `materialize_dataset`
+  directly from a route or task — go through `IngestionPipeline`.
+- Don't widen the Director's prompt without checking it still fits
+  in the model's context (4K token output budget by default).
+- Don't store director_raw beyond 32KB in the report — truncate.
+- Don't add a per-source Celery task; use
+  `ingest_local_paths_with_director` or spawn one
+  `_run_one_source.py` subprocess per path
+  (see [scripts/ingest_regulatory.py](mdc:scripts/ingest_regulatory.py)).

@@ -1,5 +1,7 @@
 # Streaming Architecture (IBKR + Alpaca -> Kafka -> Flink -> AQP)
 
+> Doc map: [docs/index.md](index.md) · Live subscription flow: [docs/flows.md#5-bonus-live-data-subscription](flows.md#5-bonus-live-data-subscription).
+
 This document describes the end-to-end live streaming pipeline that
 turns broker events from Interactive Brokers and Alpaca into normalized
 features + trading signals consumable by strategies, the paper trader,
@@ -219,3 +221,27 @@ done by the `kafka-init` one-shot.
   Flink image, and the KafkaDataFeed. Roll all three together when
   changing a schema; bump the suffix (`v2`) rather than mutate `v1` in
   place.
+
+## Kafka topology
+
+```mermaid
+flowchart LR
+    IBKR[IB Gateway] --> IBIngester[ingester-ibkr]
+    Alpaca --> AIngester[ingester-alpaca]
+    IBIngester --> Trade[market.trade.v1]
+    IBIngester --> Quote[market.quote.v1]
+    IBIngester --> Bar[market.bar.v1]
+    AIngester --> Trade
+    AIngester --> Quote
+    AIngester --> Bar
+    Trade --> Flink[Flink jobs]
+    Quote --> Flink
+    Bar --> Flink
+    Flink --> Indicators[features.indicators.v1]
+    Flink --> Normalised[features.normalized.v1]
+    Flink --> Signals[features.signals.v1]
+    Indicators --> AQPFeed[KafkaDataFeed]
+    Signals --> AQPFeed
+    AQPFeed --> Strategy[IStrategy]
+```
+

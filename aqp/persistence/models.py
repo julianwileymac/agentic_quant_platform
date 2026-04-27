@@ -415,6 +415,12 @@ class DatasetCatalog(Base):
     description = Column(Text, nullable=True)
     tags = Column(JSON, default=list)
     meta = Column(JSON, default=dict)
+    # Iceberg-first catalog columns (migration 0011).
+    iceberg_identifier = Column(String(240), nullable=True, index=True)
+    load_mode = Column(String(32), nullable=False, default="managed")
+    source_uri = Column(String(1024), nullable=True)
+    llm_annotations = Column(JSON, default=dict)
+    column_docs = Column(JSON, default=list)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

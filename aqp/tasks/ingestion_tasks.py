@@ -137,7 +137,12 @@ def load_local_directory(
     tz: str | None = None,
     overwrite: bool = False,
 ) -> dict[str, Any]:
-    """Ingest a user's local CSV / Parquet files into AQP's lake."""
+    """Ingest a user's local CSV / Parquet files into AQP's lake.
+
+    Backward-compatible OHLCV bars path. Generic non-bars datasets should
+    use :func:`ingest_local_path` instead, which materializes into the
+    Iceberg-managed catalog.
+    """
     task_id = self.request.id or "local"
     emit(task_id, "start", f"Loading {format} from {source_dir}…")
     try:
@@ -156,6 +161,184 @@ def load_local_directory(
     except Exception as e:  # pragma: no cover
         logger.exception("load_local_directory failed")
         emit_error(task_id, str(e))
+        raise
+
+
+@celery_app.task(bind=True, name="aqp.tasks.ingestion_tasks.ingest_local_path")
+def ingest_local_path(
+    self,
+    path: str,
+    namespace: str | None = None,
+    table_prefix: str | None = None,
+    annotate: bool = True,
+    max_rows_per_dataset: int | None = None,
+    max_files_per_dataset: int | None = None,
+    director_enabled: bool | None = None,
+    allowed_namespaces: list[str] | None = None,
+) -> dict[str, Any]:
+    """Generic file / folder / ZIP ingestion into the Iceberg catalog.
+
+    Uses :class:`aqp.data.pipelines.IngestionPipeline` for discovery,
+    Director planning, streamed extraction, materialization, optional
+    verifier-retry, and LLM annotation.
+    """
+    task_id = self.request.id or "local"
+    emit(task_id, "start", f"Ingesting {path} → iceberg ns={namespace or 'aqp'}")
+
+    def _progress(phase: str, message: str) -> None:
+        emit(task_id, phase, message)
+
+    try:
+        from aqp.data.pipelines import IngestionPipeline
+
+        pipe = IngestionPipeline(
+            progress_cb=_progress,
+            max_rows_per_dataset=max_rows_per_dataset,
+            max_files_per_dataset=max_files_per_dataset,
+            director_enabled=director_enabled,
+            allowed_namespaces=allowed_namespaces,
+        )
+        report = pipe.run_path(
+            path=path,
+            namespace=namespace,
+            table_prefix=table_prefix,
+            annotate=bool(annotate),
+        )
+        payload = report.to_dict()
+        emit_done(task_id, payload)
+        return payload
+    except Exception as exc:  # pragma: no cover
+        logger.exception("ingest_local_path failed")
+        emit_error(task_id, str(exc))
+        raise
+
+
+# ---------------------------------------------------------------------------
+# Director-driven batch wrapper for the four regulatory corpora
+# (CFPB / USPTO / FDA / SEC). Dispatches one ``ingest_local_path`` job
+# per source path with the matching namespace and namespace allow-list.
+# ---------------------------------------------------------------------------
+
+
+_REGULATORY_DEFAULT_NAMESPACES = {
+    "cfpb": "aqp_cfpb",
+    "uspto": "aqp_uspto",
+    "fda": "aqp_fda",
+    "sec": "aqp_sec",
+}
+
+
+@celery_app.task(
+    bind=True, name="aqp.tasks.ingestion_tasks.ingest_local_paths_with_director"
+)
+def ingest_local_paths_with_director(
+    self,
+    paths: list[str],
+    namespace_per_path: dict[str, str] | None = None,
+    *,
+    annotate: bool = True,
+    max_rows_per_dataset: int | None = None,
+    max_files_per_dataset: int | None = None,
+    director_enabled: bool | None = None,
+) -> dict[str, Any]:
+    """Director-aware batch wrapper.
+
+    Runs the full discovery → director-plan → materialise → verify →
+    annotate pipeline once per ``paths`` entry, in-process within a
+    single Celery task. The Director is told about every namespace in
+    ``namespace_per_path`` so it can route inter-source concerns
+    correctly. Returns one :class:`IngestionReport` payload per path.
+    """
+    task_id = self.request.id or "local"
+    paths = [str(p) for p in (paths or []) if str(p).strip()]
+    namespace_per_path = dict(namespace_per_path or {})
+    if not paths:
+        emit_done(task_id, {"sources": []})
+        return {"sources": []}
+
+    allowed = sorted({namespace_per_path.get(p) or "aqp" for p in paths})
+    emit(
+        task_id,
+        "start",
+        f"Director batch: {len(paths)} sources, namespaces={allowed}",
+    )
+
+    def _progress(phase: str, message: str) -> None:
+        emit(task_id, phase, message)
+
+    sources: list[dict[str, Any]] = []
+    errors: list[str] = []
+    try:
+        from aqp.data.pipelines import IngestionPipeline
+
+        pipe = IngestionPipeline(
+            progress_cb=_progress,
+            max_rows_per_dataset=max_rows_per_dataset,
+            max_files_per_dataset=max_files_per_dataset,
+            director_enabled=director_enabled,
+            allowed_namespaces=allowed,
+        )
+        for path in paths:
+            ns = namespace_per_path.get(path) or "aqp"
+            emit(task_id, "running", f"→ source={path} namespace={ns}")
+            try:
+                report = pipe.run_path(
+                    path=path,
+                    namespace=ns,
+                    annotate=bool(annotate),
+                )
+                sources.append(report.to_dict())
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("ingest of %s failed", path)
+                errors.append(f"{path}: {exc}")
+                sources.append(
+                    {
+                        "source_path": path,
+                        "namespace": ns,
+                        "errors": [str(exc)],
+                    }
+                )
+
+        payload: dict[str, Any] = {
+            "sources": sources,
+            "errors": errors,
+            "namespace_per_path": namespace_per_path,
+            "allowed_namespaces": allowed,
+        }
+        emit_done(task_id, payload)
+        return payload
+    except Exception as exc:  # pragma: no cover
+        logger.exception("ingest_local_paths_with_director failed")
+        emit_error(task_id, str(exc))
+        raise
+
+
+@celery_app.task(bind=True, name="aqp.tasks.ingestion_tasks.annotate_dataset")
+def annotate_dataset(
+    self,
+    iceberg_identifier: str,
+    source_uri: str | None = None,
+    truncated: bool = False,
+    sample_rows: int = 25,
+) -> dict[str, Any]:
+    """Re-run the LLM annotation step for an existing Iceberg table."""
+    task_id = self.request.id or "local"
+    emit(task_id, "start", f"Annotating {iceberg_identifier}")
+    try:
+        from aqp.data.pipelines.annotate import annotate_table
+
+        result = annotate_table(
+            iceberg_identifier=iceberg_identifier,
+            source_uri=source_uri,
+            truncated=bool(truncated),
+            sample_rows=int(sample_rows),
+        )
+        payload = {"identifier": iceberg_identifier, **result.to_dict()}
+        emit_done(task_id, payload)
+        return payload
+    except Exception as exc:  # pragma: no cover
+        logger.exception("annotate_dataset failed")
+        emit_error(task_id, str(exc))
         raise
 
 
@@ -359,4 +542,46 @@ def ingest_ibkr_historical(
     except Exception as e:  # pragma: no cover
         logger.exception("ingest_ibkr_historical failed")
         emit_error(task_id, str(e))
+        raise
+
+
+@celery_app.task(bind=True, name="aqp.tasks.ingestion_tasks.consolidate_iceberg_group")
+def consolidate_iceberg_group(
+    self,
+    group_name: str,
+    members: list[str],
+    *,
+    dry_run: bool = True,
+    drop_members: bool = True,
+) -> dict[str, Any]:
+    """Physically merge Iceberg ``members`` into ``group_name``.
+
+    Streams progress over ``/chat/stream/{task_id}`` so the UI can render
+    a live consolidation log. Always returns a dict-shaped report
+    regardless of dry-run vs. wet-run.
+    """
+    task_id = self.request.id or "local"
+    emit(task_id, "start", f"Consolidating {len(members)} members into {group_name}")
+    try:
+        from aqp.data.iceberg_consolidate import consolidate_group
+
+        def _on_progress(percent: float, message: str) -> None:
+            emit(task_id, "progress", message, percent=round(percent, 2))
+
+        report = consolidate_group(
+            group_name=group_name,
+            members=members,
+            dry_run=dry_run,
+            drop_members=drop_members,
+            on_progress=_on_progress,
+        )
+        result = report.to_dict()
+        if report.error:
+            emit_error(task_id, report.error, report=result)
+        else:
+            emit_done(task_id, result)
+        return result
+    except Exception as exc:  # pragma: no cover
+        logger.exception("consolidate_iceberg_group failed")
+        emit_error(task_id, str(exc))
         raise

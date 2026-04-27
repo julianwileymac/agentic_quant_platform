@@ -26,6 +26,7 @@ from aqp.core.indicators import (
     MovingAverageConvergenceDivergence,
     Stochastic,
 )
+from aqp.data import talib_catalog
 from aqp.data.model_prediction import apply_model_predictions, is_model_pred_spec
 
 logger = logging.getLogger(__name__)
@@ -85,7 +86,11 @@ class IndicatorZoo:
         self._extra_classes = extra_classes or {}
 
     def known(self) -> list[str]:
-        return sorted({*ALL_INDICATORS.keys(), *self._extra_classes.keys()})
+        names: set[str] = {*ALL_INDICATORS.keys(), *self._extra_classes.keys()}
+        for ind in talib_catalog.ALL_TALIB:
+            if talib_catalog.can_compute(ind):
+                names.add(ind.name)
+        return sorted(names)
 
     def transform(
         self,
@@ -115,6 +120,16 @@ class IndicatorZoo:
             for spec in specs:
                 cls = self._extra_classes.get(spec.name) or ALL_INDICATORS.get(spec.name)
                 if cls is None:
+                    talib_result = _compute_talib_spec(spec, sub)
+                    if talib_result is not None:
+                        col_name = _col_name(spec)
+                        primary_key = next(iter(talib_result))
+                        sub[col_name] = talib_result[primary_key]
+                        for k, vals in talib_result.items():
+                            if k == primary_key:
+                                continue
+                            sub[f"{col_name}_{k}"] = vals
+                        continue
                     logger.warning("unknown indicator: %s", spec.name)
                     continue
                 try:
@@ -262,3 +277,26 @@ def _row_to_indicator_input(indicator: IndicatorBase, row: pd.Series):
 
 
 DEFAULT_FEATURE_SPECS = _default_specs()
+
+
+# ---------------------------------------------------------------------------
+# TA-Lib / pandas-ta dispatch
+# ---------------------------------------------------------------------------
+
+
+def _compute_talib_spec(spec: IndicatorSpec, sub: pd.DataFrame) -> dict[str, list[float]] | None:
+    """Try to compute a TA-Lib catalog indicator on a single-symbol bars frame.
+
+    Returns ``{output_name: list_of_values}`` (preserving row order) or
+    ``None`` when no engine is available.
+    """
+    ind = talib_catalog.find(spec.name)
+    if ind is None:
+        return None
+    talib_result = talib_catalog.compute_via_talib(ind, sub, dict(spec.kwargs))
+    if talib_result is not None:
+        return talib_result
+    pta_result = talib_catalog.compute_via_pandas_ta(ind, sub, dict(spec.kwargs))
+    if pta_result is not None:
+        return pta_result
+    return None

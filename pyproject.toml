@@ -167,11 +167,19 @@ fred = ["fredapi>=0.5.2"]
 sec = ["edgartools>=5.0"]
 gdelt = ["aiohttp>=3.9", "aiofiles>=24.1"]
 gdelt-bq = ["google-cloud-bigquery>=3.22"]
+# Iceberg-first generic data catalog. PyIceberg drives the REST/SQL catalog
+# clients; ``s3fs`` lets the warehouse live on MinIO/S3; ``ijson`` enables
+# streaming JSON-array parsing for the regulatory ZIP corpora (FDA, USPTO).
+iceberg = [
+    "pyiceberg[s3fs,sql-sqlite]>=0.7",
+    "s3fs>=2024.5",
+    "ijson>=3.2",
+]
 data-plane = [
-    "agentic-quant-platform[fred,sec,gdelt]",
+    "agentic-quant-platform[fred,sec,gdelt,iceberg]",
 ]
 full = [
-    "agentic-quant-platform[alpaca,ibkr,tradier,otel,cli,paper,streaming,vectorbt,backtesting,ml,ml-torch,ml-forecast,ml-anomaly,portfolio,ml-structural,serving,llm-finance,fred,sec,gdelt]",
+    "agentic-quant-platform[alpaca,ibkr,tradier,otel,cli,paper,streaming,vectorbt,backtesting,ml,ml-torch,ml-forecast,ml-anomaly,portfolio,ml-structural,serving,llm-finance,fred,sec,gdelt,iceberg]",
 ]
 dev = [
     "pytest>=7.4",

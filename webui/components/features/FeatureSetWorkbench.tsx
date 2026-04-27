@@ -1,6 +1,6 @@
 "use client";
 
-import { DeleteOutlined, PlusOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { DeleteOutlined, ExperimentOutlined, PlusOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import {
   App,
   Alert,
@@ -8,10 +8,12 @@ import {
   Card,
   Col,
   Descriptions,
+  Drawer,
   Empty,
   Form,
   Input,
   InputNumber,
+  List,
   Modal,
   Row,
   Select,
@@ -25,6 +27,7 @@ import { useMemo, useState } from "react";
 
 import { PageContainer } from "@/components/shell/PageContainer";
 import { apiFetch } from "@/lib/api/client";
+import { useApiQuery } from "@/lib/api/hooks";
 import {
   useFeatureSet,
   useFeatureSets,
@@ -33,6 +36,32 @@ import {
   type FeatureSetPreviewResp,
   type FeatureSetSummary,
 } from "@/lib/api/featureSets";
+
+interface IndicatorEntry {
+  id: string;
+  name: string;
+  group: string;
+  description: string;
+  outputs: string[];
+  params: { name: string; default: number | string | null; type: string }[];
+}
+
+interface CatalogResponse {
+  groups: { name: string; indicators: IndicatorEntry[] }[];
+}
+
+interface FeatureCandidate {
+  id: string;
+  source: string;
+  domain: string;
+  field: string;
+  description: string;
+  frequency?: string;
+}
+
+interface FeatureCandidatesResponse {
+  candidates: FeatureCandidate[];
+}
 
 const { Text, Paragraph, Title } = Typography;
 
@@ -51,11 +80,26 @@ export function FeatureSetWorkbench() {
   const [previewEnd, setPreviewEnd] = useState("2024-06-30");
   const [previewLoading, setPreviewLoading] = useState(false);
   const [preview, setPreview] = useState<FeatureSetPreviewResp | null>(null);
+  const [picker, setPicker] = useState<"indicators" | "candidates" | null>(null);
 
   const list = useFeatureSets();
   const detail = useFeatureSet(selectedId);
   const versions = useFeatureSetVersions(selectedId);
   const usages = useFeatureSetUsages(selectedId);
+
+  const indicatorCatalog = useApiQuery<CatalogResponse>({
+    queryKey: ["indicator-catalog"],
+    path: "/data/indicators/catalog",
+    enabled: picker === "indicators",
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const featureCandidates = useApiQuery<FeatureCandidatesResponse>({
+    queryKey: ["feature-catalog", "candidates"],
+    path: "/feature-catalog/candidates",
+    enabled: picker === "candidates",
+    staleTime: 5 * 60 * 1000,
+  });
 
   const items = useMemo(() => list.data ?? [], [list.data]);
 
@@ -156,6 +200,13 @@ export function FeatureSetWorkbench() {
     } catch (err) {
       message.error((err as Error).message);
     }
+  }
+
+  function appendSpec(spec: string) {
+    const current = String(form.getFieldValue("specs") ?? "");
+    const next = current ? `${current}\n${spec}` : spec;
+    form.setFieldValue("specs", next);
+    message.success(`Added ${spec}`);
   }
 
   async function runPreview() {
@@ -266,7 +317,17 @@ export function FeatureSetWorkbench() {
                     <Select mode="tags" tokenSeparators={[","]} />
                   </Form.Item>
                   <Form.Item
-                    label="Specs (one per line)"
+                    label={
+                      <Space>
+                        <Text>Specs (one per line)</Text>
+                        <Button size="small" icon={<ExperimentOutlined />} onClick={() => setPicker("indicators")}>
+                          Pick indicator
+                        </Button>
+                        <Button size="small" onClick={() => setPicker("candidates")}>
+                          Pick feed field
+                        </Button>
+                      </Space>
+                    }
                     name="specs"
                     tooltip="IndicatorZoo specs e.g. SMA:20, RSI:14, MACD, ModelPred:deployment_id=...,column_name=mp1"
                   >
@@ -396,6 +457,77 @@ export function FeatureSetWorkbench() {
           )}
         </Col>
       </Row>
+
+      <Drawer
+        open={picker === "indicators"}
+        title="Indicator catalog"
+        width={420}
+        onClose={() => setPicker(null)}
+      >
+        <List
+          loading={indicatorCatalog.isFetching}
+          dataSource={(indicatorCatalog.data?.groups ?? []).flatMap((g) => g.indicators)}
+          pagination={{ pageSize: 20 }}
+          renderItem={(ind) => {
+            const period = ind.params.find((p) => p.name === "timeperiod")?.default;
+            const spec = period ? `${ind.name}:${period}` : ind.name;
+            return (
+              <List.Item
+                actions={[
+                  <Button key="add" size="small" onClick={() => appendSpec(spec)}>
+                    Insert
+                  </Button>,
+                ]}
+              >
+                <List.Item.Meta
+                  title={
+                    <Space>
+                      <Text strong>{ind.name}</Text>
+                      <Tag>{ind.group}</Tag>
+                    </Space>
+                  }
+                  description={ind.description}
+                />
+              </List.Item>
+            );
+          }}
+        />
+      </Drawer>
+      <Drawer
+        open={picker === "candidates"}
+        title="Feed feature candidates"
+        width={420}
+        onClose={() => setPicker(null)}
+      >
+        <List
+          loading={featureCandidates.isFetching}
+          dataSource={featureCandidates.data?.candidates ?? []}
+          pagination={{ pageSize: 25 }}
+          renderItem={(cand) => {
+            const spec = `Field:${cand.source}.${cand.domain}.${cand.field}`;
+            return (
+              <List.Item
+                actions={[
+                  <Button key="add" size="small" onClick={() => appendSpec(spec)}>
+                    Insert
+                  </Button>,
+                ]}
+              >
+                <List.Item.Meta
+                  title={
+                    <Space>
+                      <Text strong>{cand.field}</Text>
+                      <Tag color="blue">{cand.source}</Tag>
+                      <Tag color="cyan">{cand.domain}</Tag>
+                    </Space>
+                  }
+                  description={cand.description}
+                />
+              </List.Item>
+            );
+          }}
+        />
+      </Drawer>
 
       <Modal
         title="New feature set"

@@ -36,20 +36,37 @@ def register_dataset_version(
     tags: list[str] | None = None,
     meta: dict[str, Any] | None = None,
     file_count: int | None = None,
+    iceberg_identifier: str | None = None,
+    load_mode: str | None = None,
+    source_uri: str | None = None,
+    llm_annotations: dict[str, Any] | None = None,
+    column_docs: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Persist a dataset catalog/version row and return lineage ids.
 
     The helper is intentionally best-effort: if the DB is unavailable, we log
     and return an empty mapping so ingestion still succeeds.
+
+    For non-OHLCV (``domain != "market.bars"``) datasets the ``vt_symbol``
+    / ``timestamp`` extraction and instrument upsert paths are skipped so
+    generic Iceberg tables don't blow up on missing columns.
     """
     if df is None or df.empty:
         return {}
 
+    is_market_bars = (domain or "").startswith("market.bars")
+
     try:
-        ts = pd.to_datetime(df.get("timestamp"), errors="coerce")
-        start_time = _to_dt(ts.min())
-        end_time = _to_dt(ts.max())
-        vt_symbols = sorted(df.get("vt_symbol", pd.Series(dtype=str)).dropna().astype(str).unique().tolist())
+        if is_market_bars:
+            ts = pd.to_datetime(df.get("timestamp"), errors="coerce")
+            start_time = _to_dt(ts.min())
+            end_time = _to_dt(ts.max())
+            vt_symbols = sorted(
+                df.get("vt_symbol", pd.Series(dtype=str)).dropna().astype(str).unique().tolist()
+            )
+        else:
+            start_time = end_time = None
+            vt_symbols = []
         schema = _schema_snapshot(df)
         digest = dataset_hash_value or _dataset_hash(df)
 
@@ -71,6 +88,11 @@ def register_dataset_version(
                     schema_json=schema,
                     tags=list(tags or []),
                     meta=dict(meta or {}),
+                    iceberg_identifier=iceberg_identifier,
+                    load_mode=load_mode or "managed",
+                    source_uri=source_uri,
+                    llm_annotations=dict(llm_annotations or {}),
+                    column_docs=list(column_docs or []),
                     created_at=datetime.utcnow(),
                     updated_at=datetime.utcnow(),
                 )
@@ -83,6 +105,19 @@ def register_dataset_version(
                 catalog.schema_json = schema or catalog.schema_json
                 catalog.tags = list(tags or catalog.tags or [])
                 catalog.meta = {**(catalog.meta or {}), **(meta or {})}
+                if iceberg_identifier:
+                    catalog.iceberg_identifier = iceberg_identifier
+                if load_mode:
+                    catalog.load_mode = load_mode
+                if source_uri:
+                    catalog.source_uri = source_uri
+                if llm_annotations:
+                    catalog.llm_annotations = {
+                        **(catalog.llm_annotations or {}),
+                        **(llm_annotations or {}),
+                    }
+                if column_docs:
+                    catalog.column_docs = list(column_docs)
                 catalog.updated_at = datetime.utcnow()
                 session.add(catalog)
 
@@ -110,7 +145,8 @@ def register_dataset_version(
                 created_at=datetime.utcnow(),
             )
             session.add(row)
-            _upsert_instruments(session, vt_symbols)
+            if is_market_bars:
+                _upsert_instruments(session, vt_symbols)
             session.flush()
             return {
                 "dataset_catalog_id": catalog.id,
@@ -120,6 +156,55 @@ def register_dataset_version(
     except Exception:
         logger.warning("dataset lineage registration skipped", exc_info=True)
         return {}
+
+
+def register_iceberg_dataset(
+    *,
+    iceberg_identifier: str,
+    name: str | None = None,
+    provider: str = "iceberg",
+    domain: str = "user.dataset",
+    sample_df: pd.DataFrame | None = None,
+    source_uri: str | None = None,
+    storage_uri: str | None = None,
+    load_mode: str = "managed",
+    llm_annotations: dict[str, Any] | None = None,
+    column_docs: list[dict[str, Any]] | None = None,
+    tags: list[str] | None = None,
+    meta: dict[str, Any] | None = None,
+    row_count: int | None = None,
+    file_count: int | None = None,
+    truncated: bool = False,
+) -> dict[str, Any]:
+    """Persist a catalog row + version for an Iceberg-backed dataset.
+
+    ``sample_df`` may be ``None`` for tables that have just been created
+    but not yet annotated; we still write a catalog row so the UI can
+    show "discovered" datasets immediately.
+    """
+    catalog_name = name or iceberg_identifier
+    full_meta: dict[str, Any] = {
+        "iceberg_identifier": iceberg_identifier,
+        "truncated": bool(truncated),
+        **(meta or {}),
+    }
+    if sample_df is None or sample_df.empty:
+        sample_df = pd.DataFrame({"_sentinel": [None]})
+    return register_dataset_version(
+        name=catalog_name,
+        provider=provider,
+        domain=domain,
+        df=sample_df,
+        storage_uri=storage_uri,
+        meta=full_meta,
+        tags=tags,
+        file_count=file_count,
+        iceberg_identifier=iceberg_identifier,
+        load_mode=load_mode,
+        source_uri=source_uri,
+        llm_annotations=llm_annotations,
+        column_docs=column_docs,
+    )
 
 
 def _polymorphic_identity_for(sym: Symbol) -> tuple[str, type | None]:

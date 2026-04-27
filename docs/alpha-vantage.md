@@ -1,5 +1,7 @@
 # Alpha Vantage Integration
 
+> Doc map: [docs/index.md](index.md) · See [docs/data-plane.md](data-plane.md) for the broader provider model.
+
 Alpha Vantage now lives directly in AQP as a first-class data provider. The
 port keeps the useful admin-panel surface from `rpi_kubernetes` but adapts it
 to AQP's local-first service, provider, task, and web UI conventions.
@@ -89,3 +91,20 @@ fetcher = pick_fetcher("equity.quote", vendor="alpha_vantage")
 
 The AQP web UI includes an Alpha Vantage section at `/alpha-vantage` with
 provider health, usage, endpoint explorers, and a bulk-load admin page.
+
+## Quota + cache flow
+
+```mermaid
+flowchart LR
+    Caller[API route or task] --> Service[AlphaVantageService]
+    Service --> Cache{cache hit?}
+    Cache -->|fresh| Return[return cached payload]
+    Cache -->|miss / stale| Quota{quota gate}
+    Quota -->|exhausted| Backoff[sleep then retry up to AQP_ALPHA_VANTAGE_MAX_RETRIES]
+    Quota -->|ok| HTTP[HTTPX GET alphavantage.co]
+    HTTP -->|"2xx"| Persist[write cache + emit DataLink]
+    HTTP -->|"429 / 5xx"| Backoff
+    Backoff --> Quota
+    Persist --> Return
+```
+

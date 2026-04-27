@@ -89,7 +89,13 @@ def get_connection(
 
 @register("DuckDBHistoryProvider")
 class DuckDBHistoryProvider(IHistoryProvider):
-    """Read-only Parquet-backed history provider."""
+    """Read-only Parquet-backed history provider.
+
+    Supports both the canonical ``bars`` view (default) and external,
+    user-managed roots that may be Hive-partitioned and use non-canonical
+    column names. Pass ``hive_partitioning``, ``glob_pattern``, and
+    ``column_map`` to opt into the latter mode.
+    """
 
     supports_ticks: bool = False
 
@@ -98,12 +104,84 @@ class DuckDBHistoryProvider(IHistoryProvider):
         parquet_dir: str | Path | None = None,
         extra_parquet_paths: Iterable[Path | str] | None = None,
         auxiliary_store: AuxiliaryStore | None = None,
+        *,
+        hive_partitioning: bool = False,
+        glob_pattern: str | None = None,
+        column_map: dict[str, str] | None = None,
     ) -> None:
         self.parquet_dir = Path(parquet_dir or settings.parquet_dir)
         self.extra_parquet_paths: list[Path] = [
             Path(p).expanduser().resolve() for p in (extra_parquet_paths or [])
         ]
         self.auxiliary = auxiliary_store or AuxiliaryStore()
+        self.hive_partitioning = bool(hive_partitioning)
+        self.glob_pattern = glob_pattern or None
+        self.column_map: dict[str, str] = {
+            k: str(v) for k, v in (column_map or {}).items() if v
+        }
+
+    # ----------------------------------------------------------- helpers --
+
+    def _root_pattern(self) -> str | None:
+        """Return the glob string for the primary parquet root (custom mode)."""
+        if not self.parquet_dir.exists():
+            return None
+        if self.glob_pattern:
+            return str(self.parquet_dir / self.glob_pattern)
+        # If the user-managed mode is set without an explicit pattern,
+        # default to recursive ``**/*.parquet`` for hive datasets, else
+        # the previous flat ``*.parquet`` glob.
+        return str(self.parquet_dir / ("**/*.parquet" if self.hive_partitioning else "*.parquet"))
+
+    def _custom_query(
+        self,
+        vt_symbols: list[str],
+        start: datetime,
+        end: datetime,
+    ) -> pd.DataFrame:
+        """Issue a ``read_parquet(...)`` over ``parquet_dir`` honouring column_map."""
+        pattern = self._root_pattern()
+        if not pattern:
+            return pd.DataFrame()
+
+        ts = self.column_map.get("timestamp", "timestamp")
+        sym = self.column_map.get("vt_symbol", "vt_symbol")
+        open_c = self.column_map.get("open", "open")
+        high_c = self.column_map.get("high", "high")
+        low_c = self.column_map.get("low", "low")
+        close_c = self.column_map.get("close", "close")
+        vol_c = self.column_map.get("volume", "volume")
+
+        select_cols = [
+            f'"{ts}" AS timestamp',
+            f'"{sym}" AS vt_symbol',
+            f'"{open_c}" AS open',
+            f'"{high_c}" AS high',
+            f'"{low_c}" AS low',
+            f'"{close_c}" AS close',
+            f'"{vol_c}" AS volume',
+        ]
+        opts = "union_by_name=true"
+        if self.hive_partitioning:
+            opts += ", hive_partitioning=true"
+
+        placeholders = ",".join(["?"] * len(vt_symbols)) if vt_symbols else ""
+        sym_clause = f' AND "{sym}" IN ({placeholders})' if placeholders else ""
+        sql = (
+            f"SELECT {', '.join(select_cols)} "
+            f"FROM read_parquet('{pattern}', {opts}) "
+            f'WHERE "{ts}" >= ? AND "{ts}" <= ?{sym_clause} '
+            f'ORDER BY "{ts}", "{sym}"'
+        )
+        args: list[Any] = [start, end, *vt_symbols]
+
+        conn = duckdb.connect(":memory:", read_only=False)
+        try:
+            return conn.execute(sql, args).fetchdf()
+        finally:
+            conn.close()
+
+    # -------------------------------------------------------------- bars --
 
     def get_bars(
         self,
@@ -116,6 +194,20 @@ class DuckDBHistoryProvider(IHistoryProvider):
         placeholders = ",".join(["?"] * len(vt_symbols))
         if not placeholders:
             return pd.DataFrame()
+
+        # Custom-root mode: bypass the ``bars`` view and read the parquet
+        # tree directly so hive-partitioned datasets work as data sources.
+        if self.hive_partitioning or self.glob_pattern or self.column_map:
+            df = self._custom_query(vt_symbols, start, end)
+            if df.empty:
+                logger.warning(
+                    "DuckDB (custom root %s) returned no rows for %s between %s and %s",
+                    self.parquet_dir,
+                    vt_symbols,
+                    start,
+                    end,
+                )
+            return df
 
         conn = get_connection(self.parquet_dir, extra_parquet_paths=self.extra_parquet_paths)
         try:

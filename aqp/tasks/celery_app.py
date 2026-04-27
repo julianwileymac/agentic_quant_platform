@@ -29,6 +29,7 @@ celery_app = Celery(
         "aqp.tasks.optimize_tasks",
         "aqp.tasks.feature_set_tasks",
         "aqp.tasks.equity_report_tasks",
+        "aqp.tasks.llm_tasks",
     ],
 )
 
@@ -52,6 +53,7 @@ celery_app.conf.update(
         "aqp.tasks.optimize_tasks.*": {"queue": "backtest"},
         "aqp.tasks.feature_set_tasks.*": {"queue": "ml"},
         "aqp.tasks.equity_report_tasks.*": {"queue": "agents"},
+        "aqp.tasks.llm_tasks.*": {"queue": "default"},
     },
     beat_schedule={
         "drift-check": {

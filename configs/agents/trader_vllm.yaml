@@ -1,0 +1,48 @@
+# vLLM-served trader crew. Talks to a vLLM OpenAI-compatible endpoint
+# (the docker-compose ``vllm`` profile or any external vLLM you run
+# yourself) for both bull/bear debate and risk-manager roles. The crew
+# emits structured trading signals to Kafka topic ``signals.research.v1``
+# when streaming is enabled.
+#
+# Set in your `.env`:
+#   AQP_VLLM_BASE_URL=http://vllm:8000/v1   # in-cluster vllm service
+#   AQP_VLLM_API_KEY=                       # blank when vLLM is open
+#   VLLM_MODEL_ID=nvidia/Nemotron-4-Mini-Instruct
+#   VLLM_SERVED_NAME=nemotron
+
+name: trader_vllm
+
+provider: vllm
+deep_model: nemotron
+quick_model: nemotron
+
+max_debate_rounds: 2
+
+risk_max_position_pct: 0.20
+risk_max_daily_loss_pct: 0.03
+
+include_fundamentals: true
+include_sentiment: true
+include_news: true
+include_technical: true
+
+news_lookback_days: 7
+technical_lookback_days: 120
+
+# Stream the crew's verdicts to a Kafka research-signals topic. Picked
+# up by Flink jobs and the live dashboard.
+emit_signals_topic: signals.research.v1
+emit_to_kafka: true
+
+# MCP servers the crew can call. Each entry is a McpServerSpec; they
+# remain inactive until ``aqp.agents.capability_runtime`` initialises
+# them with credentials present in environment.
+mcp_servers:
+  - name: marketdata
+    transport: http
+    url: http://api:8000/mcp/marketdata
+    tools: ["get_bars", "get_fundamentals", "get_news"]
+  - name: portfolio
+    transport: http
+    url: http://api:8000/mcp/portfolio
+    tools: ["get_positions", "submit_order"]

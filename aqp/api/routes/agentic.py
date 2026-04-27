@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 
 from aqp.api.schemas import (
     AgenticBacktestRequest,
+    AgenticPipelineRequest,
     AgenticPrecomputeRequest,
     AgentDecisionResponse,
     DebateTurnResponse,
@@ -49,6 +50,7 @@ from aqp.tasks.agentic_backtest_tasks import (
     precompute_decisions,
     run_agentic_backtest,
     run_agentic_judge,
+    run_agentic_pipeline,
     run_agentic_replay,
 )
 
@@ -66,6 +68,14 @@ def _default_strategy_config() -> dict[str, Any]:
         raise HTTPException(500, f"Quickstart template not found at {path}")
     with path.open("r", encoding="utf-8") as fh:
         return yaml.safe_load(fh) or {}
+
+
+class ProviderControlRequest(BaseModel):
+    provider: str | None = None
+    deep_model: str | None = None
+    quick_model: str | None = None
+    ollama_host: str | None = None
+    vllm_base_url: str | None = None
 
 
 @router.post("/precompute", response_model=TaskAccepted)
@@ -110,6 +120,38 @@ def backtest(req: AgenticBacktestRequest) -> TaskAccepted:
     )
 
 
+@router.post("/pipeline", response_model=TaskAccepted)
+def pipeline(req: AgenticPipelineRequest) -> TaskAccepted:
+    """Queue the multi-run agentic orchestration pipeline."""
+    cfg = req.config or _default_strategy_config()
+    if req.data_source:
+        cfg = dict(cfg)
+        cfg["data_source"] = dict(req.data_source)
+    async_result = run_agentic_pipeline.delay(
+        cfg=cfg,
+        symbols=req.symbols,
+        start=req.start,
+        end=req.end,
+        strategy_id=req.strategy_id,
+        run_name=req.run_name,
+        x_backtests=req.x_backtests,
+        preset=req.preset,
+        provider=req.provider or None,
+        deep_model=req.deep_model or None,
+        quick_model=req.quick_model or None,
+        max_debate_rounds=req.max_debate_rounds,
+        rebalance_frequency=req.rebalance_frequency,
+        mode=req.mode,
+        skip_precompute=req.skip_precompute,
+        universe_filter=req.universe_filter or {},
+        conditions=req.conditions or {},
+    )
+    return TaskAccepted(
+        task_id=async_result.id,
+        stream_url=f"/chat/stream/{async_result.id}",
+    )
+
+
 @router.get("/decisions/{backtest_id}", response_model=list[AgentDecisionResponse])
 def list_decisions(backtest_id: str, limit: int = 500) -> list[AgentDecisionResponse]:
     with get_session() as s:
@@ -118,6 +160,35 @@ def list_decisions(backtest_id: str, limit: int = 500) -> list[AgentDecisionResp
             .where(AgentDecision.backtest_id == backtest_id)
             .order_by(AgentDecision.ts.asc())
             .limit(limit)
+        ).scalars().all()
+    return [
+        AgentDecisionResponse(
+            id=r.id,
+            vt_symbol=r.vt_symbol,
+            ts=r.ts,
+            action=r.action,
+            size_pct=float(r.size_pct or 0.0),
+            confidence=float(r.confidence or 0.5),
+            rating=r.rating,
+            rationale=r.rationale,
+            token_cost_usd=float(r.token_cost_usd or 0.0),
+            provider=r.provider,
+            deep_model=r.deep_model,
+            quick_model=r.quick_model,
+            crew_run_id=r.crew_run_id,
+        )
+        for r in rows
+    ]
+
+
+@router.get("/decisions", response_model=list[AgentDecisionResponse])
+def list_recent_decisions(limit: int = 200) -> list[AgentDecisionResponse]:
+    """Recent decisions across all runs — drives the live monitor feed."""
+    with get_session() as s:
+        rows = s.execute(
+            select(AgentDecision)
+            .order_by(desc(AgentDecision.ts))
+            .limit(max(1, min(limit, 1000)))
         ).scalars().all()
     return [
         AgentDecisionResponse(
@@ -205,9 +276,11 @@ def cache_stats(strategy_id: str) -> dict[str, Any]:
 def providers() -> dict[str, Any]:
     """Expose the provider catalog so the UI wizard can populate dropdowns."""
     from aqp.llm.providers.catalog import PROVIDERS
+    from aqp.runtime.control_plane import get_provider_control
 
+    runtime = get_provider_control()
     return {
-        "active": settings.llm_provider,
+        "active": runtime.get("provider") or settings.llm_provider,
         "providers": [
             {
                 "slug": p.slug,
@@ -221,6 +294,161 @@ def providers() -> dict[str, Any]:
             for p in PROVIDERS.values()
         ],
         "available": list_providers(),
+    }
+
+
+@router.get("/provider-control")
+def get_provider_control_panel() -> dict[str, Any]:
+    """Runtime provider defaults configurable from the UI."""
+    from aqp.llm.ollama_client import check_health, list_local_models
+    from aqp.runtime.control_plane import get_provider_control
+
+    control = get_provider_control()
+    ollama_online = bool(check_health())
+    payload: dict[str, Any] = {
+        **control,
+        "ollama_online": ollama_online,
+        "ollama_models": list_local_models() if ollama_online else [],
+        "vllm_online": False,
+        "vllm_models": [],
+    }
+    try:
+        import httpx
+
+        base = str(control.get("vllm_base_url") or "").rstrip("/")
+        if base:
+            if base.endswith("/v1"):
+                base = base[: -len("/v1")]
+            with httpx.Client(timeout=2.0) as client:
+                resp = client.get(f"{base}/v1/models")
+                resp.raise_for_status()
+                obj = resp.json()
+            data = obj.get("data") if isinstance(obj, dict) else []
+            payload["vllm_models"] = [
+                str(m.get("id", "")) for m in data if isinstance(m, dict) and m.get("id")
+            ]
+            payload["vllm_online"] = True
+    except Exception:
+        payload["vllm_online"] = False
+    return payload
+
+
+@router.put("/provider-control")
+def set_provider_control_panel(req: ProviderControlRequest) -> dict[str, Any]:
+    from aqp.runtime.control_plane import update_provider_control
+
+    return update_provider_control(
+        provider=req.provider,
+        deep_model=req.deep_model,
+        quick_model=req.quick_model,
+        ollama_host=req.ollama_host,
+        vllm_base_url=req.vllm_base_url,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Model lifecycle: Ollama pull/delete + vLLM compose start/stop.
+# ---------------------------------------------------------------------------
+
+
+class OllamaPullRequest(BaseModel):
+    name: str = Field(..., description="Ollama model tag, e.g. 'llama3.2'.")
+    host: str | None = None
+
+
+class VllmStartRequest(BaseModel):
+    profile: str = Field(..., description="Profile filename (no .yaml) under configs/llm/.")
+
+
+@router.post("/models/pull", response_model=TaskAccepted)
+def models_pull(req: OllamaPullRequest) -> TaskAccepted:
+    """Schedule an Ollama ``pull`` Celery task and return a stream URL."""
+    from aqp.tasks.llm_tasks import pull_ollama_model
+
+    name = (req.name or "").strip()
+    if not name:
+        raise HTTPException(400, "model name is required")
+    async_result = pull_ollama_model.delay(name=name, host=req.host or None)
+    return TaskAccepted(
+        task_id=async_result.id,
+        stream_url=f"/chat/stream/{async_result.id}",
+    )
+
+
+@router.delete("/models/{name:path}")
+def models_delete(name: str, host: str | None = None) -> dict[str, Any]:
+    """Synchronously delete a local Ollama model."""
+    from aqp.llm.ollama_client import delete_model
+
+    safe = (name or "").strip()
+    if not safe:
+        raise HTTPException(400, "model name is required")
+    ok = delete_model(safe, host=host)
+    if not ok:
+        raise HTTPException(400, f"could not delete Ollama model {safe!r}")
+    return {"name": safe, "deleted": True}
+
+
+@router.get("/models/running")
+def models_running(host: str | None = None) -> dict[str, Any]:
+    """Return models currently loaded in Ollama (``/api/ps``)."""
+    from aqp.llm.ollama_client import list_running_models
+
+    return {"running": list_running_models(host=host)}
+
+
+@router.get("/vllm/profiles")
+def vllm_profiles() -> dict[str, Any]:
+    """Return the list of ``configs/llm/*.yaml`` vLLM profiles + status."""
+    from aqp.llm.vllm_runner import serving_summary
+
+    return serving_summary()
+
+
+@router.post("/vllm/start", response_model=TaskAccepted)
+def vllm_start(req: VllmStartRequest) -> TaskAccepted:
+    """Bring up a vLLM compose service via Celery; streams progress."""
+    from aqp.llm.vllm_runner import get_profile
+    from aqp.tasks.llm_tasks import serve_vllm_profile
+
+    profile = get_profile(req.profile)
+    if profile is None:
+        raise HTTPException(404, f"vllm profile {req.profile!r} not found")
+    async_result = serve_vllm_profile.delay(profile_name=profile.name)
+    return TaskAccepted(
+        task_id=async_result.id,
+        stream_url=f"/chat/stream/{async_result.id}",
+    )
+
+
+@router.post("/vllm/stop", response_model=TaskAccepted)
+def vllm_stop(req: VllmStartRequest) -> TaskAccepted:
+    """Stop a vLLM compose service."""
+    from aqp.llm.vllm_runner import get_profile
+    from aqp.tasks.llm_tasks import stop_vllm_profile
+
+    profile = get_profile(req.profile)
+    if profile is None:
+        raise HTTPException(404, f"vllm profile {req.profile!r} not found")
+    async_result = stop_vllm_profile.delay(profile_name=profile.name)
+    return TaskAccepted(
+        task_id=async_result.id,
+        stream_url=f"/chat/stream/{async_result.id}",
+    )
+
+
+@router.get("/vllm/logs/{profile}")
+def vllm_logs(profile: str, tail: int = 200) -> dict[str, Any]:
+    """Tail compose logs for the given vLLM profile."""
+    from aqp.llm.vllm_runner import compose_logs, get_profile
+
+    handle = get_profile(profile)
+    if handle is None:
+        raise HTTPException(404, f"vllm profile {profile!r} not found")
+    return {
+        "profile": handle.name,
+        "service": handle.compose_service,
+        "logs": compose_logs(handle, tail=int(tail)),
     }
 
 

@@ -56,8 +56,87 @@ services:
     volumes:
       - mlflow-artifacts:/mlflow/artifacts
 
+  # -----------------------------------------------------------------------
+  # MinIO — S3-compatible object store. **Disabled by default** now that
+  # the Iceberg catalog runs in PyIceberg SQL mode against the
+  # bind-mounted host warehouse at D:/aqp-warehouse → /warehouse. Bring
+  # MinIO back with the ``legacy`` profile when you specifically need an
+  # S3 endpoint:
+  #   docker compose --profile legacy up -d minio minio-init iceberg-rest
+  # -----------------------------------------------------------------------
+  minio:
+    profiles: ["legacy"]
+    image: minio/minio:RELEASE.2024-09-22T00-33-43Z
+    container_name: aqp-minio
+    command: server /data --console-address ":9090"
+    environment:
+      MINIO_ROOT_USER: "${AQP_S3_ACCESS_KEY:-aqpminio}"
+      MINIO_ROOT_PASSWORD: "${AQP_S3_SECRET_KEY:-aqpminiosecret}"
+    ports:
+      - "9000:9000"
+      - "9091:9090"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  minio-init:
+    profiles: ["legacy"]
+    image: minio/mc:RELEASE.2024-09-16T17-43-14Z
+    container_name: aqp-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 ${AQP_S3_ACCESS_KEY:-aqpminio} ${AQP_S3_SECRET_KEY:-aqpminiosecret} &&
+        mc mb -p local/aqp-iceberg || true &&
+        mc mb -p local/aqp-artifacts || true &&
+        mc mb -p local/aqp-datasets || true &&
+        echo 'MinIO buckets ready'
+      "
+
+  # -----------------------------------------------------------------------
+  # Iceberg REST catalog — also moved to the ``legacy`` profile. Default
+  # AQP now uses PyIceberg's SQL catalog rooted at /warehouse (host bind
+  # mount), so this service is opt-in only. The REST catalog still has
+  # value for cross-engine consumers (Spark/Trino/Flink) — bring it up
+  # with ``docker compose --profile legacy up -d iceberg-rest`` and set
+  # ``AQP_ICEBERG_REST_URI=http://iceberg-rest:8181`` to switch.
+  # -----------------------------------------------------------------------
+  iceberg-rest:
+    profiles: ["legacy"]
+    image: tabulario/iceberg-rest:1.6.0
+    container_name: aqp-iceberg-rest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: "${AQP_S3_ACCESS_KEY:-aqpminio}"
+      AWS_SECRET_ACCESS_KEY: "${AQP_S3_SECRET_KEY:-aqpminiosecret}"
+      AWS_REGION: "${AQP_S3_REGION:-us-east-1}"
+      CATALOG_WAREHOUSE: "s3://aqp-iceberg/"
+      CATALOG_IO__IMPL: "org.apache.iceberg.aws.s3.S3FileIO"
+      CATALOG_S3_ENDPOINT: "http://minio:9000"
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+    ports:
+      - "8181:8181"
+    healthcheck:
+      # tabulario/iceberg-rest is based on a JRE image without curl/wget,
+      # so probe the listening port via bash's /dev/tcp builtin instead.
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8181' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
   chromadb:
-    image: chromadb/chroma:0.4.24
+    # Image bumped to the 1.x line to match the chromadb python client
+    # (>=1.0) shipped via pyproject.toml. The 0.4.x image speaks v1 API
+    # while the new client expects v2 → 404 on /api/v2/auth/identity.
+    image: chromadb/chroma:1.0.16
     container_name: aqp-chromadb
     ports:
       - "8001:8000"
@@ -80,9 +159,24 @@ services:
       AQP_POSTGRES_DSN: postgresql+psycopg2://aqp:aqp@postgres:5432/aqp
       AQP_POSTGRES_ASYNC_DSN: postgresql+asyncpg://aqp:aqp@postgres:5432/aqp
       AQP_CHROMA_HOST: chromadb
+      AQP_CHROMA_PORT: "8000"
       AQP_MLFLOW_TRACKING_URI: http://mlflow:5000
       AQP_OLLAMA_HOST: http://host.docker.internal:11434
+      AQP_VLLM_BASE_URL: ${AQP_VLLM_BASE_URL:-}
+      AQP_VLLM_API_KEY: ${AQP_VLLM_API_KEY:-}
       AQP_OTEL_ENDPOINT: http://otel-collector:4317
+      # Iceberg catalog — PyIceberg SQL mode rooted at the bind-mounted
+      # host warehouse (D:/aqp-warehouse on Windows, see volumes below).
+      # REST + MinIO are intentionally cleared so the SQL fallback is taken.
+      AQP_ICEBERG_REST_URI: ""
+      AQP_ICEBERG_S3_WAREHOUSE: ""
+      AQP_ICEBERG_WAREHOUSE: /warehouse/iceberg
+      AQP_ICEBERG_STAGING_DIR: /warehouse/staging
+      AQP_ICEBERG_NAMESPACE_DEFAULT: aqp
+      AQP_S3_ENDPOINT_URL: ""
+      AQP_S3_ACCESS_KEY: ""
+      AQP_S3_SECRET_KEY: ""
+      AQP_S3_REGION: "${AQP_S3_REGION:-us-east-1}"
       # Next.js webui (:3000) calls the API from the browser; whitelist enables credentialed CORS if needed.
       AQP_WEBUI_CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
       # Writable HOME / data dirs — CrewAI's RAG module eagerly wants a
@@ -94,6 +188,12 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
+      - "C:/Users/Julian Wiley/Downloads:/host-downloads:ro"
+      # Persistent Iceberg warehouse + staging on the host drive. Tear
+      # down the entire stack and the catalog still survives here.
+      # NOTE: original target was D:/aqp-warehouse; moved to C: because
+      # D: was not present on this host at apply-time.
+      - "C:/aqp-warehouse:/warehouse"
     depends_on:
       redis:
         condition: service_healthy
@@ -117,19 +217,35 @@ services:
       AQP_POSTGRES_DSN: postgresql+psycopg2://aqp:aqp@postgres:5432/aqp
       AQP_POSTGRES_ASYNC_DSN: postgresql+asyncpg://aqp:aqp@postgres:5432/aqp
       AQP_CHROMA_HOST: chromadb
+      AQP_CHROMA_PORT: "8000"
       AQP_MLFLOW_TRACKING_URI: http://mlflow:5000
       AQP_OLLAMA_HOST: http://host.docker.internal:11434
+      AQP_VLLM_BASE_URL: ${AQP_VLLM_BASE_URL:-}
+      AQP_VLLM_API_KEY: ${AQP_VLLM_API_KEY:-}
       AQP_OTEL_ENDPOINT: http://otel-collector:4317
+      AQP_ICEBERG_REST_URI: ""
+      AQP_ICEBERG_S3_WAREHOUSE: ""
+      AQP_ICEBERG_WAREHOUSE: /warehouse/iceberg
+      AQP_ICEBERG_STAGING_DIR: /warehouse/staging
+      AQP_ICEBERG_NAMESPACE_DEFAULT: aqp
+      AQP_S3_ENDPOINT_URL: ""
+      AQP_S3_ACCESS_KEY: ""
+      AQP_S3_SECRET_KEY: ""
+      AQP_S3_REGION: "${AQP_S3_REGION:-us-east-1}"
       HOME: /app
       CREWAI_STORAGE_DIR: /app/data/crewai
       XDG_DATA_HOME: /app/data/xdg
     volumes:
       - .:/app
+      - "C:/Users/Julian Wiley/Downloads:/host-downloads:ro"
+      - "C:/aqp-warehouse:/warehouse"
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      chromadb:
+        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -144,6 +260,8 @@ services:
       AQP_REDIS_URL: redis://redis:6379/0
       AQP_REDIS_PUBSUB_URL: redis://redis:6379/1
       AQP_POSTGRES_DSN: postgresql+psycopg2://aqp:aqp@postgres:5432/aqp
+      AQP_CHROMA_HOST: chromadb
+      AQP_CHROMA_PORT: "8000"
       AQP_MLFLOW_TRACKING_URI: http://mlflow:5000
       AQP_OLLAMA_HOST: http://host.docker.internal:11434
       HOME: /app
@@ -258,6 +376,88 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+
+  # -----------------------------------------------------------------------
+  # vLLM — OpenAI-compatible inference server. Optional, GPU-only profile.
+  # Bring it up with:
+  #   docker compose --profile vllm up -d vllm
+  # AQP talks to it through the ``vllm`` LLM provider entry pointed at
+  # http://vllm:8000/v1 (set AQP_VLLM_BASE_URL in .env).
+  # -----------------------------------------------------------------------
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: aqp-vllm
+    profiles: ["vllm"]
+    environment:
+      HUGGING_FACE_HUB_TOKEN: "${HUGGINGFACE_HUB_TOKEN:-}"
+      MODEL_ID: "${VLLM_MODEL_ID:-nvidia/Nemotron-4-Mini-Instruct}"
+      SERVED_NAME: "${VLLM_SERVED_NAME:-nemotron}"
+    command: >
+      --model ${VLLM_MODEL_ID:-nvidia/Nemotron-4-Mini-Instruct}
+      --served-model-name ${VLLM_SERVED_NAME:-nemotron}
+      --host 0.0.0.0
+      --port 8000
+      --gpu-memory-utilization 0.85
+    ports:
+      - "${VLLM_PORT:-8002}:8000"
+    volumes:
+      - ./data/llm-models:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/v1/models || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+
+  # -----------------------------------------------------------------------
+  # vllm-fingpt — separate vLLM instance with `--enable-lora` so a FinGPT
+  # LoRA adapter can be served alongside (or instead of) the base model.
+  # Bring it up with:
+  #   docker compose --profile vllm-fingpt up -d vllm-fingpt
+  # Set FINGPT_LORA_ID and FINGPT_LORA_PATH in `.env` to point at the
+  # adapter weights you have downloaded.
+  # -----------------------------------------------------------------------
+  vllm-fingpt:
+    image: vllm/vllm-openai:latest
+    container_name: aqp-vllm-fingpt
+    profiles: ["vllm-fingpt"]
+    environment:
+      HUGGING_FACE_HUB_TOKEN: "${HUGGINGFACE_HUB_TOKEN:-}"
+      FINGPT_BASE_MODEL: "${FINGPT_BASE_MODEL:-meta-llama/Llama-2-7b-hf}"
+      FINGPT_LORA_ID: "${FINGPT_LORA_ID:-fingpt-forecaster}"
+      FINGPT_LORA_PATH: "${FINGPT_LORA_PATH:-FinGPT/fingpt-forecaster_dow30_llama2-7b_lora}"
+    command: >
+      --model ${FINGPT_BASE_MODEL:-meta-llama/Llama-2-7b-hf}
+      --served-model-name ${FINGPT_BASE_MODEL:-meta-llama/Llama-2-7b-hf}
+      --enable-lora
+      --lora-modules ${FINGPT_LORA_ID:-fingpt-forecaster}=${FINGPT_LORA_PATH:-FinGPT/fingpt-forecaster_dow30_llama2-7b_lora}
+      --host 0.0.0.0
+      --port 8000
+      --gpu-memory-utilization 0.85
+    ports:
+      - "${VLLM_FINGPT_PORT:-8003}:8000"
+    volumes:
+      - ./data/llm-models:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/v1/models || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
 
   # -----------------------------------------------------------------------
   # OpenTelemetry Collector + Jaeger for distributed tracing.
@@ -409,3 +609,4 @@ volumes:
   mlflow-artifacts:
   chroma-data:
   kafka-data:
+  minio-data:

@@ -1,5 +1,7 @@
 # Backtest engines
 
+> Doc map: [docs/index.md](index.md) · Class hierarchy: [docs/class-diagram.md#4-backtest--paper--live-ibrokerage--idataqueuehandler](class-diagram.md#4-backtest--paper--live-ibrokerage--idataqueuehandler).
+
 AQP ships three interchangeable backtest engines that all return the same
 `aqp.backtest.engine.BacktestResult` shape so the runner, persistence, UI,
 and MLflow tracking don't need to care which engine produced a run.
@@ -94,3 +96,33 @@ All three engines return a `BacktestResult` with:
   risk models → **EventDrivenBacktester**.
 - You need `backtesting.py`'s sambo / heatmap optimisation or you're
   porting a single-asset strategy from their docs → **BacktestingPyEngine**.
+
+## Engine hierarchy
+
+```mermaid
+classDiagram
+    class BacktestEngine {
+        <<abstract>>
+        +run(strategy, history, brokerage) BacktestResult
+    }
+    class VectorbtEngine
+    class EventDrivenBacktester
+    class BacktestingPyEngine
+    class WalkForwardEngine
+    class MonteCarloEngine
+    class BrokerSim
+    class BacktestResult {
+        +Series equity_curve
+        +DataFrame trades
+        +DataFrame orders
+        +dict summary
+    }
+    BacktestEngine <|-- VectorbtEngine
+    BacktestEngine <|-- EventDrivenBacktester
+    BacktestEngine <|-- BacktestingPyEngine
+    BacktestEngine <|-- WalkForwardEngine
+    BacktestEngine <|-- MonteCarloEngine
+    BacktestEngine ..> BacktestResult : returns
+    EventDrivenBacktester o-- BrokerSim
+```
+

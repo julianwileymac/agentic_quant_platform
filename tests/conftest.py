@@ -83,7 +83,9 @@ def in_memory_db(monkeypatch: pytest.MonkeyPatch):
     # Also patch any module that already imported get_session at module scope.
     for module_name in (
         "aqp.api.routes.entities",
+        "aqp.api.routes.datasets",
         "aqp.services.portfolio_service",
+        "aqp.data.catalog",
         "aqp.data.feature_sets",
     ):
         try:

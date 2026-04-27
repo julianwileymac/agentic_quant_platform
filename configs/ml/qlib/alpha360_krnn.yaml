@@ -1,0 +1,38 @@
+name: "Alpha360 + KRNN"
+description: >
+  Alpha360 + Kernelized RNN (Conv1d kernel + GRU). Mirrors
+  `qlib/contrib/model/pytorch_krnn.py`.
+
+dataset:
+  class: TSDatasetH
+  module_path: aqp.ml.dataset
+  kwargs:
+    step_len: 20
+    handler:
+      class: Alpha360
+      module_path: aqp.ml.features.alpha360
+      kwargs:
+        instruments: [SPY, AAPL, MSFT, GOOGL, AMZN]
+        start_time: "2019-01-01"
+        end_time: "2024-12-31"
+    segments:
+      train: ["2019-01-01", "2022-12-31"]
+      valid: ["2023-01-01", "2023-12-31"]
+      test:  ["2024-01-01", "2024-12-31"]
+
+model:
+  class: KRNNModel
+  module_path: aqp.ml.models.torch.krnn
+  kwargs:
+    kernel_size: 3
+    cnn_channels: 32
+    hidden_size: 64
+    num_layers: 1
+    dropout: 0.2
+    step_len: 20
+    lr: 0.001
+    batch_size: 128
+    n_epochs: 25
+
+records:
+  - {class: SignalRecord, module_path: aqp.ml.recorder, kwargs: {}}

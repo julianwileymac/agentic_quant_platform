@@ -1,0 +1,21 @@
+{
+  "data_sources": [
+    {
+      "config": {},
+      "created_at": "2026-04-27T04:31:14.928051+00:00",
+      "enabled": true,
+      "id": "default-bars",
+      "kind": "bars_default",
+      "name": "Default Parquet Bars",
+      "updated_at": "2026-04-27T04:31:14.928062+00:00"
+    }
+  ],
+  "provider": {
+    "deep_model": "nemotron-3-nano:latest",
+    "ollama_host": "http://host.docker.internal:11434",
+    "provider": "ollama",
+    "quick_model": "llama3.2:latest",
+    "updated_at": "2026-04-27T04:28:19.326446+00:00",
+    "vllm_base_url": ""
+  }
+}

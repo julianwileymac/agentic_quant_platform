@@ -1,5 +1,7 @@
 # webui — Next.js 15 frontend
 
+> Doc map: [docs/index.md](index.md) · API surface: [docs/architecture.md#system-component-diagram](architecture.md#system-component-diagram).
+
 The `webui/` package is the React/TypeScript replacement for the legacy Solara
 UI on `:8765`. It runs as a separate Node process on `:3000` and talks to the
 FastAPI backend on `:8000` over REST + WebSocket.
@@ -71,3 +73,24 @@ When the Next.js app reaches feature parity:
 2. Delete `aqp/ui/pages/` and `aqp/ui/app.py` (keep the Dash factory).
 3. Optionally relax `fastapi<0.116` and `starlette<0.46` pins in
    `pyproject.toml` (they exist solely to satisfy Solara).
+
+## Page tree (top-level)
+
+```mermaid
+flowchart TB
+    Root["/"] --> Dash["/dashboard"]
+    Root --> Data["/data"]
+    Data --> DataCatalog["/data/catalog"]
+    Data --> DataIceberg["/data/iceberg"]
+    Data --> DataIngest["/data/ingest"]
+    Data --> DataBrowser["/data/browser"]
+    Root --> Backtest["/backtest"]
+    Backtest --> BTHistory["/backtest/history"]
+    Backtest --> BTNew["/backtest/new"]
+    Root --> Strategies["/strategies"]
+    Root --> Models["/models"]
+    Root --> Agentic["/agentic"]
+    Root --> Paper["/paper"]
+    Root --> Settings["/settings"]
+```
+

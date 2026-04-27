@@ -31,17 +31,29 @@ _CODE_COLLECTION = "aqp_code_snippets"
 def _client():
     """Prefer an embedded PersistentClient — no network, no version mismatch.
 
-    If ``AQP_CHROMA_HOST`` is explicitly set to a non-localhost value we still
-    try an HTTP client; otherwise we run in-process.
+    If ``AQP_CHROMA_HOST`` is explicitly set to a non-localhost value we
+    try an HTTP client and **fail loudly** if it cannot be reached. This
+    matters because our ``/health`` probe constructs ``ChromaStore()``
+    and we want a misconfigured port to surface visibly rather than
+    silently fall back to embedded mode (which would mask the bug).
     """
     import chromadb
 
     host = settings.chroma_host
     if host and host not in {"localhost", "127.0.0.1", "0.0.0.0", ""}:
+        client = chromadb.HttpClient(host=host, port=settings.chroma_port)
+        # Force a round-trip so we surface unreachable servers immediately
+        # rather than at the first collection access.
         try:
-            return chromadb.HttpClient(host=host, port=settings.chroma_port)
-        except Exception:
-            logger.warning("HTTP Chroma unavailable at %s:%d; falling back to embedded.", host, settings.chroma_port)
+            client.heartbeat()
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "Chroma HTTP client unreachable at %s:%d", host, settings.chroma_port
+            )
+            raise RuntimeError(
+                f"Chroma server at {host}:{settings.chroma_port} is unreachable: {exc}"
+            ) from exc
+        return client
     Path(settings.chroma_dir).mkdir(parents=True, exist_ok=True)
     return chromadb.PersistentClient(path=str(settings.chroma_dir))
 

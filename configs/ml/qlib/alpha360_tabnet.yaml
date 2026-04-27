@@ -1,0 +1,37 @@
+name: "Alpha360 + TabNet"
+description: >
+  Alpha360 + TabNet attentive tabular learner. Mirrors
+  `qlib/contrib/model/pytorch_tabnet.py`.
+
+dataset:
+  class: TSDatasetH
+  module_path: aqp.ml.dataset
+  kwargs:
+    step_len: 20
+    handler:
+      class: Alpha360
+      module_path: aqp.ml.features.alpha360
+      kwargs:
+        instruments: [SPY, AAPL, MSFT, GOOGL, AMZN]
+        start_time: "2019-01-01"
+        end_time: "2024-12-31"
+    segments:
+      train: ["2019-01-01", "2022-12-31"]
+      valid: ["2023-01-01", "2023-12-31"]
+      test:  ["2024-01-01", "2024-12-31"]
+
+model:
+  class: TabNetModel
+  module_path: aqp.ml.models.torch.tabnet
+  kwargs:
+    n_d: 32
+    n_a: 32
+    n_steps: 3
+    gamma: 1.5
+    step_len: 20
+    lr: 0.001
+    batch_size: 256
+    n_epochs: 20
+
+records:
+  - {class: SignalRecord, module_path: aqp.ml.recorder, kwargs: {}}

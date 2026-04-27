@@ -1,5 +1,7 @@
 # `aqp.ml` — native qlib-style ML framework
 
+> Doc map: [docs/index.md](index.md) · See [docs/factor-research.md](factor-research.md) for the alphalens-style evaluation pipeline.
+
 `aqp.ml` is a vendored port of [Microsoft Qlib](https://github.com/microsoft/qlib)'s
 feature / dataset / model / record abstractions, re-built as pure Python on top
 of AQP's own DuckDB-backed data lake. There is **no qlib runtime dependency**
@@ -220,3 +222,19 @@ alpha_model:
   kwargs:
     deployment_id: "<deployment-id>"
 ```
+
+## Train -> register -> deploy -> score
+
+```mermaid
+flowchart LR
+    Dataset[DatasetVersion] --> Split[SplitPlan + SplitArtifacts]
+    Split --> Recipe[PipelineRecipe]
+    Recipe --> Train[ml_tasks.train_ml_model]
+    Train --> MLflow[(MLflow registry)]
+    MLflow --> ModelVersion[ModelVersion row]
+    ModelVersion --> Deploy[ModelDeployment]
+    Deploy --> Score[ml_tasks.evaluate / preview]
+    Score --> Backtest[backtest replay]
+    Score --> WebUI
+```
+

@@ -77,4 +77,18 @@ PROVIDERS: dict[str, ProviderSpec] = {
         default_quick_model="llama3.2:latest",
         requires_api_key=False,
     ),
+    # vLLM exposes an OpenAI-compatible HTTP API; we proxy through LiteLLM's
+    # ``openai/`` adapter pointed at ``vllm_base_url``. Works for both an
+    # in-cluster vLLM service (docker compose ``vllm`` profile) and any
+    # external vLLM endpoint a user runs themselves.
+    "vllm": ProviderSpec(
+        slug="vllm",
+        litellm_prefix="openai/",
+        env_key="AQP_VLLM_API_KEY",
+        settings_attr="vllm_api_key",
+        base_url_attr="vllm_base_url",
+        default_deep_model="nemotron",
+        default_quick_model="nemotron",
+        requires_api_key=False,
+    ),
 }

@@ -1,5 +1,7 @@
 # Domain Model
 
+> Doc map: [docs/index.md](index.md) · Schema diagrams: [docs/erd.md](erd.md) · Column reference: [docs/data-dictionary.md](data-dictionary.md).
+
 The AQP platform's domain model lives under
 [`aqp/core/domain/`](../aqp/core/domain/) and is the single source of truth
 for every tradable-asset, issuer, event, market-data, fundamentals,

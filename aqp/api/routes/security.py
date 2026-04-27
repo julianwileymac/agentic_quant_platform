@@ -306,3 +306,54 @@ def invalidate_cache(vt_symbol: str) -> JSONResponse:
         else:
             removed += cache_invalidate(scope, ticker)
     return JSONResponse({"ticker": ticker, "removed": removed})
+
+
+@router.get("/{vt_symbol}/cache/info")
+def cache_info(vt_symbol: str) -> dict[str, Any]:
+    """Inspect cached facets for a ticker.
+
+    Returns per-scope hit / TTL information so the Data Browser can show
+    a "what's cached" panel. Best-effort: missing Redis or unreachable
+    cache returns ``{ scopes: [], available: false }``.
+    """
+    ticker = _ticker_from_vt(vt_symbol)
+    out: list[dict[str, Any]] = []
+    available = True
+    try:
+        from aqp.data.cache import _scoped_key, _sync_client  # type: ignore[attr-defined]
+
+        client = _sync_client()
+        scopes: list[tuple[str, str]] = [
+            (_SCOPE_FUNDAMENTALS, ticker),
+            (_SCOPE_CALENDAR, ticker),
+            (_SCOPE_CORPORATE, ticker),
+            (_SCOPE_QUOTE, ticker),
+            (_SCOPE_NEWS, f"{ticker}:20"),
+            (_SCOPE_NEWS, f"{ticker}:50"),
+        ]
+        for scope, key in scopes:
+            full = _scoped_key(scope, key)
+            try:
+                ttl = int(client.ttl(full))
+                exists = bool(client.exists(full))
+            except Exception:
+                ttl = -2
+                exists = False
+            out.append(
+                {
+                    "scope": scope,
+                    "key": key,
+                    "redis_key": full,
+                    "cached": exists,
+                    "ttl_seconds": ttl,
+                }
+            )
+    except Exception:
+        available = False
+
+    return {
+        "ticker": ticker,
+        "vt_symbol": vt_symbol,
+        "available": available,
+        "scopes": out,
+    }

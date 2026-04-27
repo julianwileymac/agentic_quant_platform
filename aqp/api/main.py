@@ -20,9 +20,12 @@ from aqp.api.routes import (
     brokers,
     chat,
     data,
+    data_pipelines,
     datalinks,
+    datasets,
     entities,
     factors,
+    feature_catalog,
     feature_sets,
     fred,
     gdelt,
@@ -112,6 +115,9 @@ app.include_router(brokers.router)
 app.include_router(strategies.router)
 app.include_router(registry.router)
 app.include_router(feature_sets.router)
+app.include_router(feature_catalog.router)
+app.include_router(data_pipelines.router)
+app.include_router(datasets.router)
 app.include_router(entities.router)
 app.include_router(market_data_live.router)
 app.include_router(factors.router)

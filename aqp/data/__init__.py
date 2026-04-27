@@ -37,6 +37,15 @@ from aqp.data.ingestion import (
     ingest,
     write_parquet,
 )
+from aqp.data.pipelines import (
+    DiscoveredDataset,
+    DiscoveredMember,
+    IngestionPipeline,
+    IngestionReport,
+    IngestionTableResult,
+    discover_datasets,
+    run_ingest_path,
+)
 from aqp.data.subscription import SubscriptionManager, subscriptions_from_symbols
 
 __all__ = [
@@ -87,4 +96,12 @@ __all__ = [
     "dataset_hash",
     "ingest",
     "write_parquet",
+    # Iceberg ingestion pipelines
+    "DiscoveredDataset",
+    "DiscoveredMember",
+    "IngestionPipeline",
+    "IngestionReport",
+    "IngestionTableResult",
+    "discover_datasets",
+    "run_ingest_path",
 ]

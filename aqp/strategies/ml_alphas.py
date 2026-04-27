@@ -568,3 +568,121 @@ class DeployedModelAlpha(_MLBaseAlpha):
                 )
             )
         return signals
+
+
+# ---------------------------------------------------------------------------
+# Ensemble alpha — combine rule-based and ML alphas with additive scores.
+# ---------------------------------------------------------------------------
+
+
+@register("EnsembleAlpha")
+class EnsembleAlpha(IAlphaModel):
+    """Sum-of-normalised-scores ensemble of N child :class:`IAlphaModel` instances.
+
+    Each child's signals contribute a per-symbol score = ``strength`` (signed
+    by direction). Scores are summed across alphas, then converted back into
+    :class:`aqp.core.types.Signal` rows via the configured thresholds.
+
+    Constructor args
+    ----------------
+    alphas:
+        List of ``{class, module_path, kwargs}`` build specs OR pre-instantiated
+        :class:`IAlphaModel`. The platform's :func:`aqp.core.registry.build_from_config`
+        is used to materialise dict specs at first use.
+    weights:
+        Optional list of floats with the same length as ``alphas``. Default
+        weight is ``1.0`` per alpha.
+    long_threshold / short_threshold / allow_short:
+        Final-decision thresholds applied to the summed score.
+    """
+
+    def __init__(
+        self,
+        alphas: list[Any] | None = None,
+        weights: list[float] | None = None,
+        long_threshold: float = 0.05,
+        short_threshold: float = -0.05,
+        allow_short: bool = True,
+    ) -> None:
+        self._alpha_specs = list(alphas or [])
+        self._weights = list(weights) if weights else None
+        self.long_threshold = float(long_threshold)
+        self.short_threshold = float(short_threshold)
+        self.allow_short = bool(allow_short)
+        self._materialised: list[IAlphaModel] | None = None
+
+    def _materialise(self) -> list[IAlphaModel]:
+        if self._materialised is not None:
+            return self._materialised
+        from aqp.core.registry import build_from_config
+
+        out: list[IAlphaModel] = []
+        for spec in self._alpha_specs:
+            if isinstance(spec, IAlphaModel):
+                out.append(spec)
+                continue
+            if isinstance(spec, dict):
+                out.append(build_from_config(spec))
+                continue
+            raise TypeError(
+                f"EnsembleAlpha child must be IAlphaModel or build-spec dict, got {type(spec)}"
+            )
+        if self._weights and len(self._weights) != len(out):
+            raise ValueError(
+                f"weights length ({len(self._weights)}) does not match alphas ({len(out)})"
+            )
+        self._materialised = out
+        return out
+
+    def generate_signals(
+        self,
+        bars: pd.DataFrame,
+        universe: list[Symbol],
+        context: dict[str, Any],
+    ) -> list[Signal]:
+        alphas = self._materialise()
+        if not alphas:
+            return []
+        weights = self._weights or [1.0] * len(alphas)
+
+        scores: dict[str, float] = {}
+        rationales: dict[str, list[str]] = {}
+        for alpha, weight in zip(alphas, weights, strict=False):
+            try:
+                child_signals = alpha.generate_signals(bars=bars, universe=universe, context=context)
+            except Exception:
+                logger.exception("EnsembleAlpha child %s failed", type(alpha).__name__)
+                continue
+            for sig in child_signals:
+                vt = sig.symbol.vt_symbol
+                signed = float(sig.strength) * (1.0 if sig.direction == Direction.LONG else -1.0)
+                scores[vt] = scores.get(vt, 0.0) + weight * signed
+                rationales.setdefault(vt, []).append(
+                    f"{type(alpha).__name__}({signed:+.3f})"
+                )
+
+        now = context.get("current_time")
+        if now is None and not bars.empty:
+            now = pd.to_datetime(bars["timestamp"]).max()
+
+        out: list[Signal] = []
+        for vt, score in scores.items():
+            direction = None
+            if score >= self.long_threshold:
+                direction = Direction.LONG
+            elif score <= self.short_threshold and self.allow_short:
+                direction = Direction.SHORT
+            if direction is None:
+                continue
+            out.append(
+                Signal(
+                    symbol=Symbol.parse(vt),
+                    strength=float(min(1.0, abs(score))),
+                    direction=direction,
+                    timestamp=now,
+                    confidence=float(min(1.0, abs(score) * 2)),
+                    source=type(self).__name__,
+                    rationale="ensemble: " + " + ".join(rationales.get(vt, [])),
+                )
+            )
+        return out

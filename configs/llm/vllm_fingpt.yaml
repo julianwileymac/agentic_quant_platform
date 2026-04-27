@@ -1,0 +1,33 @@
+# vLLM preset — FinGPT forecaster.
+#
+# FinGPT is distributed as LoRA adapters on top of base models like
+# Llama-2 / Llama-3 / ChatGLM. Two ways to serve it:
+#
+# 1) Run the dedicated `vllm-fingpt` compose profile (preferred):
+#
+#       docker compose --profile vllm-fingpt up -d vllm-fingpt
+#
+#    `.env` settings:
+#       AQP_VLLM_BASE_URL=http://vllm-fingpt:8000/v1
+#       FINGPT_BASE_MODEL=meta-llama/Llama-2-7b-hf
+#       FINGPT_LORA_ID=fingpt-forecaster
+#       FINGPT_LORA_PATH=FinGPT/fingpt-forecaster_dow30_llama2-7b_lora
+#       HUGGINGFACE_HUB_TOKEN=hf_xxx
+#
+# 2) Merge the LoRA adapter into a single HF directory ahead of time and
+#    point the regular `vllm` profile at it (set VLLM_MODEL_ID).
+
+provider: vllm
+model: fingpt-forecaster
+served_model_name: fingpt-forecaster
+hf_model_id: FinGPT/fingpt-forecaster_dow30_llama2-7b_lora
+base_url: http://vllm-fingpt:8000/v1
+
+# Forecasters tend to want longer outputs and a tighter temperature.
+temperature: 0.3
+max_tokens: 1024
+context_window: 8192
+
+# Optional structural defaults the FinGPT pipeline reads.
+forecast_horizon_days: 5
+news_lookback_days: 14

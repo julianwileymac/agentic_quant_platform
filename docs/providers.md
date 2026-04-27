@@ -1,5 +1,7 @@
 # Providers: Fetcher / QueryParams / Data
 
+> Doc map: [docs/index.md](index.md) · LLM provider class diagram: [docs/class-diagram.md#2-llm-provider-registry](class-diagram.md#2-llm-provider-registry).
+
 AQP's provider layer ports OpenBB's ``Fetcher[Q, R]`` + ``QueryParams`` + ``Data``
 triad ([original](https://github.com/OpenBB-finance/OpenBB/tree/develop/openbb_platform/core/openbb_core/provider/abstract))
 plus a catalog registry keyed by domain path.

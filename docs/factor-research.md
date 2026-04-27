@@ -1,5 +1,7 @@
 # Factor Research
 
+> Doc map: [docs/index.md](index.md) · See [docs/strategy-lifecycle.md](strategy-lifecycle.md) for the broader strategy lifecycle.
+
 AQP ships an Alphalens-inspired factor evaluation pipeline plus the
 purged / walk-forward cross-validators described in Lopez de Prado's
 *Advances in Financial ML* and ML4T's utility module.
@@ -49,3 +51,19 @@ Both accept a ``feature_specs`` list (passed through
 gets pickled after ``train()``. Training auto-logs to MLflow via the
 :mod:`aqp.mlops.model_registry` helper and can then be loaded in
 production by calling :func:`aqp.mlops.model_registry.load_alpha_path`.
+
+## Factor evaluation flow
+
+```mermaid
+flowchart LR
+    FeatureSet[FeatureSet specs] --> IndicatorZoo[indicators_zoo build]
+    IndicatorZoo --> Factor["factor values per (symbol, ts)"]
+    Factor --> Rank[rank / quantile bucket]
+    Rank --> ICEval[Information Coefficient + IC-IR]
+    Rank --> Returns[returns by quantile]
+    Factor --> CV[purged walk-forward CV]
+    ICEval --> Report[alphalens-style report]
+    Returns --> Report
+    CV --> Report
+```
+

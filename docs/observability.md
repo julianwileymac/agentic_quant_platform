@@ -1,5 +1,7 @@
 # Observability
 
+> Doc map: [docs/index.md](index.md) · Progress bus reference: [docs/flows.md#cross-cutting-progress-bus](flows.md#cross-cutting-progress-bus).
+
 AQP ships with opt-in OpenTelemetry tracing covering the full request
 path: FastAPI → Celery → paper session → broker SDK → Postgres →
 Redis. Install the `otel` extra to enable it::
@@ -101,3 +103,18 @@ also exports metrics on port 8889 via the Prometheus exporter, so you
 can point a Prometheus scraper at the collector for JVM-style
 service-level dashboards. The AQP code doesn't emit custom metrics
 yet — PRs welcome.
+
+## Tracing topology
+
+```mermaid
+flowchart LR
+    API[FastAPI] -->|spans| OTEL[OTEL collector :4317]
+    Worker[Celery worker] -->|spans| OTEL
+    Paper[paper-trader] -->|spans| OTEL
+    OTEL --> Jaeger[Jaeger UI :16686]
+    OTEL --> Prom[Prometheus exporter :8889]
+    API -.publish.-> RedisBus[("aqp:task pubsub")]
+    Worker -.publish.-> RedisBus
+    RedisBus -.subscribe.-> WS["/chat/stream WS"]
+```
+

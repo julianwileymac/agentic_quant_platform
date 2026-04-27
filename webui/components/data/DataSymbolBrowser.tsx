@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowLeftOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Row, Space, Statistic, Tag, Typography } from "antd";
+import { ArrowLeftOutlined, DeleteOutlined } from "@ant-design/icons";
+import { App, Button, Card, Col, List, Row, Space, Statistic, Tag, Typography } from "antd";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 
 import { OhlcChart, type OhlcBar } from "@/components/charts";
 import { PageContainer } from "@/components/shell/PageContainer";
+import { apiFetch } from "@/lib/api/client";
 import { useApiQuery } from "@/lib/api/hooks";
 import { usePageContextStore } from "@/lib/store/page-context";
 
@@ -32,8 +33,22 @@ interface StatsResponse {
   vol_annualized?: number | null;
 }
 
+interface CacheScopeRow {
+  scope: string;
+  key: string;
+  cached: boolean;
+  ttl_seconds: number;
+}
+
+interface CacheInfoResponse {
+  ticker: string;
+  available: boolean;
+  scopes: CacheScopeRow[];
+}
+
 export function DataSymbolBrowser({ vtSymbol }: { vtSymbol: string }) {
   const router = useRouter();
+  const { message } = App.useApp();
   const setContext = usePageContextStore((s) => s.setContext);
 
   useEffect(() => {
@@ -49,6 +64,23 @@ export function DataSymbolBrowser({ vtSymbol }: { vtSymbol: string }) {
     queryKey: ["data", "stats", vtSymbol],
     path: `/data/${encodeURIComponent(vtSymbol)}/stats`,
   });
+  const cache = useApiQuery<CacheInfoResponse>({
+    queryKey: ["data", "cache", vtSymbol],
+    path: `/data/security/${encodeURIComponent(vtSymbol)}/cache/info`,
+    refetchInterval: 30_000,
+  });
+
+  async function flushCache() {
+    try {
+      await apiFetch(`/data/security/${encodeURIComponent(vtSymbol)}/cache`, {
+        method: "DELETE",
+      });
+      message.success("Cache flushed");
+      cache.refetch();
+    } catch (err) {
+      message.error((err as Error).message);
+    }
+  }
 
   const ohlc: OhlcBar[] = useMemo(
     () =>
@@ -105,6 +137,41 @@ export function DataSymbolBrowser({ vtSymbol }: { vtSymbol: string }) {
                 {stats.data?.end ? `→ ${stats.data.end}` : null}
               </Text>
             </Space>
+          </Card>
+          <Card
+            title="Cached details"
+            size="small"
+            style={{ marginTop: 16 }}
+            extra={
+              <Button size="small" icon={<DeleteOutlined />} onClick={flushCache} danger>
+                Flush
+              </Button>
+            }
+          >
+            {cache.data?.available === false ? (
+              <Text type="secondary">Redis cache unreachable.</Text>
+            ) : (
+              <List
+                size="small"
+                dataSource={cache.data?.scopes ?? []}
+                locale={{ emptyText: "No cached records" }}
+                renderItem={(item) => (
+                  <List.Item style={{ padding: "4px 0" }}>
+                    <Space size={6}>
+                      <Tag color={item.cached ? "green" : "default"}>
+                        {item.scope}
+                      </Tag>
+                      <Text style={{ fontSize: 11 }}>{item.key}</Text>
+                      {item.cached ? (
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          ttl {item.ttl_seconds}s
+                        </Text>
+                      ) : null}
+                    </Space>
+                  </List.Item>
+                )}
+              />
+            )}
           </Card>
         </Col>
       </Row>

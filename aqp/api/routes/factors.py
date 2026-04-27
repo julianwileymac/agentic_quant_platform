@@ -253,3 +253,59 @@ def _parse_ts(text: str | None, *, default):
         return _dt.datetime.fromisoformat(text)
     except ValueError:
         return default
+
+
+# ---------------------------------------------------------------------------
+# Factor → Flink export
+# ---------------------------------------------------------------------------
+
+
+class FlinkExportRequest(BaseModel):
+    job_name: str = Field(..., description="Logical Flink job name (kebab/snake_case)")
+    formula: str
+    symbols: list[str] = Field(default_factory=list)
+    output_topic: str = Field(default="factors.preview.v1")
+    parallelism: int = Field(default=1, ge=1, le=16)
+
+
+@router.post("/export/flink")
+def export_to_flink(req: FlinkExportRequest) -> dict[str, Any]:
+    """Compile a factor formula into a Flink job spec.
+
+    The actual streaming runtime is managed by the streaming workers under
+    ``aqp/streaming/``. Here we validate the DSL, materialize a job spec,
+    and (best-effort) submit it to the streaming runtime. When the
+    streaming subsystem is not configured we still return the spec so the
+    UI can show a deterministic preview.
+    """
+    from aqp.data.expressions import Expression, ExpressionError
+
+    try:
+        Expression(req.formula)
+    except ExpressionError as exc:
+        raise HTTPException(status_code=400, detail=f"formula error: {exc}") from exc
+
+    job_id = f"factor-{req.job_name}"
+    spec = {
+        "job_id": job_id,
+        "job_name": req.job_name,
+        "formula": req.formula,
+        "symbols": req.symbols,
+        "topic": req.output_topic,
+        "parallelism": req.parallelism,
+    }
+
+    submitted = False
+    error: str | None = None
+    try:  # pragma: no cover - streaming runtime is optional
+        from aqp.streaming.runtime import submit_factor_job  # type: ignore[import-not-found]
+
+        submit_factor_job(spec)
+        submitted = True
+    except Exception as exc:  # noqa: BLE001
+        error = str(exc)
+
+    spec["submitted"] = submitted
+    if error:
+        spec["error"] = error
+    return spec

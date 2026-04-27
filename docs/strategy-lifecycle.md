@@ -1,5 +1,7 @@
 # Strategy Lifecycle
 
+> Doc map: [docs/index.md](index.md) · Backtest dispatch sequence: [docs/flows.md#2-backtest-dispatch](flows.md#2-backtest-dispatch).
+
 Every strategy in AQP follows the same six-step cycle: **build → save →
 version → test → paper → live**.
 
@@ -53,3 +55,20 @@ backtester — no code changes required.
 ``DELETE /strategies/{id}`` soft-deletes by setting ``status=archived``.
 Archived strategies are hidden from the default list but all versions +
 tests remain queryable via the API for audit.
+
+## State machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Draft : author + save
+    Draft --> Versioned : freeze YAML
+    Versioned --> Backtested : run_backtest succeeds
+    Backtested --> Paper : promote (operator)
+    Paper --> Live : promote (operator)
+    Backtested --> Versioned : revise + bump version
+    Paper --> Backtested : reset
+    Live --> Paper : pause
+    Live --> Archived : decommission
+    Archived --> [*]
+```
+

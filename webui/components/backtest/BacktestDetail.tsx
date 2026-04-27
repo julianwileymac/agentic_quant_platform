@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { EquityChart } from "@/components/charts";
+import { BacktestTimelineChart } from "@/components/backtest/BacktestTimelineChart";
 import { InterruptPanel } from "@/components/backtest/InterruptPanel";
 import { JudgeReport } from "@/components/backtest/JudgeReport";
 import { ReplayDrawer } from "@/components/backtest/ReplayDrawer";
@@ -177,6 +178,15 @@ export function BacktestDetail({ backtestId }: { backtestId: string }) {
       <Tabs
         style={{ marginTop: 16 }}
         items={[
+          {
+            key: "decisions",
+            label: "Decisions",
+            children: (
+              <Card size="small">
+                <BacktestTimelineChart backtestId={backtestId} />
+              </Card>
+            ),
+          },
           {
             key: "judge",
             label: "Judge",

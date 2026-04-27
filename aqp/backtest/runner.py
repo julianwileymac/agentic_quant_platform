@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -25,6 +26,7 @@ import pandas as pd
 from aqp.config import settings
 from aqp.core.registry import build_from_config, resolve
 from aqp.core.types import Symbol
+from aqp.data import iceberg_catalog
 from aqp.data.duckdb_engine import DuckDBHistoryProvider
 from aqp.persistence.db import get_session
 from aqp.persistence.models import BacktestRun
@@ -143,6 +145,125 @@ def _dataset_hash_for_deployment(deployment_id: str | None) -> str | None:
         return None
 
 
+def _quote_ident(name: str) -> str:
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def _bars_from_iceberg(
+    identifier: str,
+    *,
+    symbols: list[Symbol],
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+) -> pd.DataFrame:
+    import duckdb
+
+    conn = duckdb.connect(":memory:", read_only=False)
+    try:
+        view_name = iceberg_catalog.iceberg_to_duckdb_view(conn, identifier, view_name="bars_src")
+        if not view_name:
+            return pd.DataFrame()
+        info = conn.execute(f"PRAGMA table_info({_quote_ident(view_name)})").fetchdf()
+        cols = {str(c).lower(): str(c) for c in info["name"].tolist()}
+
+        ts_col = next((cols[k] for k in ("timestamp", "ts", "datetime", "date") if k in cols), None)
+        sym_col = next((cols[k] for k in ("vt_symbol", "symbol", "ticker", "instrument") if k in cols), None)
+        open_col = next((cols[k] for k in ("open", "o", "open_price") if k in cols), None)
+        high_col = next((cols[k] for k in ("high", "h", "high_price") if k in cols), None)
+        low_col = next((cols[k] for k in ("low", "l", "low_price") if k in cols), None)
+        close_col = next((cols[k] for k in ("close", "c", "adj_close", "close_price") if k in cols), None)
+        volume_col = next((cols[k] for k in ("volume", "vol", "v") if k in cols), None)
+
+        if not ts_col or not sym_col or not all((open_col, high_col, low_col, close_col)):
+            return pd.DataFrame()
+
+        vt_list = [s.vt_symbol for s in symbols]
+        ticker_list = [s.ticker for s in symbols]
+        sym_placeholders = ",".join(["?"] * len(vt_list)) if vt_list else ""
+        ticker_placeholders = ",".join(["?"] * len(ticker_list)) if ticker_list else ""
+
+        where = [f"{_quote_ident(ts_col)} >= ?", f"{_quote_ident(ts_col)} <= ?"]
+        args: list[Any] = [start.to_pydatetime(), end.to_pydatetime()]
+        if vt_list and ticker_list:
+            where.append(
+                f"({_quote_ident(sym_col)} IN ({sym_placeholders}) OR {_quote_ident(sym_col)} IN ({ticker_placeholders}))"
+            )
+            args.extend(vt_list)
+            args.extend(ticker_list)
+        elif vt_list:
+            where.append(f"{_quote_ident(sym_col)} IN ({sym_placeholders})")
+            args.extend(vt_list)
+
+        select_cols = [
+            f"{_quote_ident(ts_col)} AS timestamp",
+            f"{_quote_ident(sym_col)} AS vt_symbol",
+            f"{_quote_ident(open_col)} AS open",
+            f"{_quote_ident(high_col)} AS high",
+            f"{_quote_ident(low_col)} AS low",
+            f"{_quote_ident(close_col)} AS close",
+            (f"{_quote_ident(volume_col)} AS volume" if volume_col else "0.0 AS volume"),
+        ]
+        sql = (
+            f"SELECT {', '.join(select_cols)} FROM {_quote_ident(view_name)} "
+            f"WHERE {' AND '.join(where)} ORDER BY timestamp, vt_symbol"
+        )
+        return conn.execute(sql, args).fetchdf()
+    finally:
+        conn.close()
+
+
+def _load_bars(
+    strategy_cfg: dict[str, Any],
+    cfg: dict[str, Any],
+    *,
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    symbols = _symbols_from_strategy_cfg(strategy_cfg)
+    source = dict(cfg.get("data_source") or {})
+    source_kind = str(source.get("kind") or "bars_default").lower()
+    source_meta = {"kind": source_kind, **source}
+
+    if source_kind == "parquet_root":
+        config = dict(source.get("config") or {})
+        parquet_root = str(
+            config.get("parquet_root") or source.get("parquet_root") or ""
+        ).strip()
+        if not parquet_root:
+            raise ValueError("data_source.kind=parquet_root requires config.parquet_root")
+        hive_partitioning = bool(
+            config.get("hive_partitioning") or source.get("hive_partitioning")
+        )
+        glob_pattern = config.get("glob_pattern") or source.get("glob_pattern")
+        column_map = dict(config.get("column_map") or source.get("column_map") or {})
+        provider = DuckDBHistoryProvider(
+            parquet_dir=Path(parquet_root),
+            hive_partitioning=hive_partitioning,
+            glob_pattern=str(glob_pattern) if glob_pattern else None,
+            column_map=column_map or None,
+        )
+        bars = provider.get_bars(symbols, start=start, end=end)
+        source_meta["resolved_path"] = parquet_root
+        source_meta["hive_partitioning"] = hive_partitioning
+        if glob_pattern:
+            source_meta["glob_pattern"] = str(glob_pattern)
+        if column_map:
+            source_meta["column_map"] = column_map
+        return bars, source_meta
+
+    if source_kind == "iceberg_table":
+        identifier = str((source.get("config") or {}).get("iceberg_identifier") or source.get("iceberg_identifier") or "").strip()
+        if not identifier:
+            raise ValueError("data_source.kind=iceberg_table requires config.iceberg_identifier")
+        bars = _bars_from_iceberg(identifier, symbols=symbols, start=start, end=end)
+        source_meta["iceberg_identifier"] = identifier
+        return bars, source_meta
+
+    provider = DuckDBHistoryProvider()
+    bars = provider.get_bars(symbols, start=start, end=end)
+    return bars, source_meta
+
+
 def run_backtest_from_config(
     cfg: dict[str, Any],
     run_name: str = "adhoc",
@@ -162,9 +283,8 @@ def run_backtest_from_config(
     start = pd.Timestamp(engine_cfg.get("kwargs", {}).get("start") or settings.default_start)
     end = pd.Timestamp(engine_cfg.get("kwargs", {}).get("end") or settings.default_end)
 
-    provider = DuckDBHistoryProvider()
+    bars, source_meta = _load_bars(strategy_cfg, cfg, start=start, end=end)
     symbols = _symbols_from_strategy_cfg(strategy_cfg)
-    bars = provider.get_bars(symbols, start=start, end=end)
     if bars.empty:
         raise RuntimeError(
             f"No bars for {[s.vt_symbol for s in symbols]} between {start.date()} and {end.date()}. "
@@ -182,6 +302,7 @@ def run_backtest_from_config(
 
     summary = result.summary
     summary["engine"] = engine_label
+    summary["data_source"] = source_meta
     deployment_id = _deployment_id_from_strategy_cfg(strategy_cfg)
     if deployment_id:
         summary["model_deployment_id"] = deployment_id
@@ -269,6 +390,7 @@ def _persist_run(
             "run_name": run_name,
             "strategy_config": strategy_cfg,
             "engine": engine_label,
+            "timeline": _serialize_timeline(result),
         },
     )
     try:
@@ -279,6 +401,33 @@ def _persist_run(
     except Exception as e:
         logger.warning("Backtest persistence skipped (DB unavailable): %s", e)
         return ""
+
+
+_MAX_TIMELINE_ROWS = 5000
+
+
+def _serialize_timeline(result) -> dict[str, Any]:
+    """Serialize trades/signals/orders for later UI overlays.
+
+    Capped at ``_MAX_TIMELINE_ROWS`` rows per stream so the JSONB blob
+    stays manageable; longer histories should use the dedicated
+    ``agent_decisions`` table or MLflow artifacts.
+    """
+
+    def _df_to_records(df: pd.DataFrame) -> list[dict[str, Any]]:
+        if df is None or len(df) == 0:
+            return []
+        out = df.tail(_MAX_TIMELINE_ROWS).copy()
+        for col in out.columns:
+            if pd.api.types.is_datetime64_any_dtype(out[col]):
+                out[col] = out[col].astype(str)
+        return out.to_dict(orient="records")
+
+    return {
+        "trades": _df_to_records(getattr(result, "trades", None)),
+        "signals": _df_to_records(getattr(result, "signals", None)),
+        "orders": _df_to_records(getattr(result, "orders", None)),
+    }
 
 
 def build_engine(shortcut_or_config: str | dict[str, Any]):

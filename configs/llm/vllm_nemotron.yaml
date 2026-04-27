@@ -1,0 +1,15 @@
+# vLLM preset — Nemotron Mini Instruct served via OpenAI-compatible API.
+#
+# Pair with ``configs/agents/trader_vllm.yaml`` to run the trader crew
+# against a self-hosted Nemotron deployment.
+
+provider: vllm
+model: nemotron
+served_model_name: nemotron
+hf_model_id: nvidia/Nemotron-4-Mini-Instruct
+base_url: http://vllm:8000/v1
+
+# Sampling defaults — overridden per-call by the agentic strategies.
+temperature: 0.2
+max_tokens: 2048
+context_window: 32768

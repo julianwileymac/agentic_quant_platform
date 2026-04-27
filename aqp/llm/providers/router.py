@@ -52,6 +52,20 @@ class _DefaultProvider(LLMProvider):
         return os.environ.get(self.spec.env_key, "")
 
     def base_url(self) -> str:
+        try:
+            from aqp.runtime.control_plane import get_provider_control
+
+            control = get_provider_control()
+            if self.spec.slug == "ollama":
+                override = str(control.get("ollama_host") or "").strip()
+                if override:
+                    return override
+            if self.spec.slug == "vllm":
+                override = str(control.get("vllm_base_url") or "").strip()
+                if override:
+                    return override
+        except Exception:
+            logger.debug("runtime provider control unavailable", exc_info=True)
         if not self.spec.base_url_attr:
             return ""
         return getattr(settings, self.spec.base_url_attr, "") or ""
@@ -155,6 +169,11 @@ def router_complete(
     key = handle.api_key()
     if key:
         call_kwargs.setdefault("api_key", key)
+    elif handle.spec.slug == "vllm" and base_url:
+        # vLLM speaks OpenAI-compatible HTTP but doesn't require a real
+        # API key. LiteLLM's ``openai/`` adapter still validates the key
+        # is present, so pass a placeholder so calls go through.
+        call_kwargs.setdefault("api_key", "EMPTY")
 
     response = litellm.completion(
         model=full_model,

@@ -1,5 +1,7 @@
 # Live Market Data
 
+> Doc map: [docs/index.md](index.md) · Sequence diagram: [docs/flows.md#5-bonus-live-data-subscription](flows.md#5-bonus-live-data-subscription).
+
 ## Endpoints
 
 - ``POST /live/subscribe`` — body ``{venue, symbols, poll_cadence_seconds?}``.
@@ -54,3 +56,26 @@ See [streaming.md](streaming.md) for the end-to-end pipeline that powers
 the ``kafka`` venue: IBKR + Alpaca ingesters, Avro-schemed Kafka topics,
 and the PyFlink jobs that normalize and score the stream before the
 feed consumes it.
+
+## Live subscribe sequence
+
+```mermaid
+sequenceDiagram
+    participant UI
+    participant API
+    participant Bridge as live broker bridge
+    participant Broker
+    participant Bus as Redis aqp:live
+    participant WS as /live/<channel>
+
+    UI->>API: POST /live/subscribe
+    API->>Bridge: spawn bridge
+    Bridge->>Broker: subscribe symbols
+    API-->>UI: channel_id + ws_url
+    UI->>WS: connect
+    Broker-->>Bridge: tick / quote / bar
+    Bridge->>Bus: publish
+    Bus-->>WS: deliver
+    WS-->>UI: WebSocket frame
+```
+

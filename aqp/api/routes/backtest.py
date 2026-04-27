@@ -28,6 +28,63 @@ from aqp.tasks.backtest_tasks import run_backtest, run_monte_carlo, run_walk_for
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 
 
+class BacktestDataSource(BaseModel):
+    id: str
+    name: str
+    kind: str
+    config: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class BacktestDataSourceUpsert(BaseModel):
+    id: str | None = None
+    name: str
+    kind: str = Field(default="parquet_root", description="bars_default | parquet_root | iceberg_table")
+    config: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+@router.get("/data-sources", response_model=list[BacktestDataSource])
+def list_data_sources() -> list[BacktestDataSource]:
+    from aqp.runtime.control_plane import list_backtest_data_sources
+
+    return [BacktestDataSource(**row) for row in list_backtest_data_sources()]
+
+
+@router.post("/data-sources", response_model=BacktestDataSource)
+def upsert_data_source(req: BacktestDataSourceUpsert) -> BacktestDataSource:
+    from aqp.runtime.control_plane import upsert_backtest_data_source
+
+    row = upsert_backtest_data_source(req.model_dump())
+    return BacktestDataSource(**row)
+
+
+@router.delete("/data-sources/{source_id}")
+def delete_data_source(source_id: str) -> dict[str, Any]:
+    from aqp.runtime.control_plane import delete_backtest_data_source
+
+    return {"id": source_id, "deleted": bool(delete_backtest_data_source(source_id))}
+
+
+class ParquetInspectRequest(BaseModel):
+    parquet_root: str = Field(..., description="Absolute path on the API host.")
+    max_files: int = Field(default=5000, ge=1, le=50_000)
+
+
+@router.post("/data-sources/inspect")
+def inspect_data_source(req: ParquetInspectRequest) -> dict[str, Any]:
+    """Probe a local parquet root and return a structured inspection report.
+
+    The webui Settings page calls this before persisting a ``parquet_root``
+    data source so users can see partition keys, columns, and a sample.
+    """
+    from aqp.data.parquet_inspector import inspect_root
+
+    return inspect_root(req.parquet_root, max_files=int(req.max_files)).to_dict()
+
+
 @router.post("/run", response_model=TaskAccepted)
 def submit_backtest(req: BacktestRequest) -> TaskAccepted:
     async_result = run_backtest.delay(req.config, req.run_name)
@@ -106,6 +163,105 @@ def plot(backtest_id: str, kind: str) -> dict:
     import json
 
     return json.loads(fig.to_json())
+
+
+@router.get("/runs/{backtest_id}/timeline")
+def get_run_timeline(
+    backtest_id: str,
+    vt_symbol: str | None = None,
+    interval: str = "1d",
+    limit_bars: int = 5000,
+) -> dict[str, Any]:
+    """Return OHLCV bars + signals/trades/decisions for a backtest run.
+
+    Powers the "Decisions" tab in the backtest detail UI: candlestick
+    chart with overlaid markers showing where the strategy decided to
+    buy/sell. ``vt_symbol`` is required when the run trades multiple
+    symbols; if omitted we pick the first one we see in the persisted
+    timeline / strategy config.
+    """
+    import datetime as _dt
+
+    from aqp.core.types import DataNormalizationMode, Symbol
+    from aqp.data.duckdb_engine import DuckDBHistoryProvider
+
+    with get_session() as s:
+        run = s.get(BacktestRun, backtest_id)
+        if run is None:
+            raise HTTPException(404, "no such run")
+        metrics = run.metrics or {}
+        timeline = metrics.get("timeline") or {}
+        strategy_cfg = metrics.get("strategy_config") or {}
+        run_start = run.start
+        run_end = run.end
+
+    trades = list(timeline.get("trades", []) or [])
+    signals = list(timeline.get("signals", []) or [])
+    orders = list(timeline.get("orders", []) or [])
+
+    # Pick a symbol if caller didn't specify one.
+    selected = vt_symbol
+    if not selected:
+        for collection in (trades, signals, orders):
+            for row in collection:
+                if isinstance(row, dict) and row.get("vt_symbol"):
+                    selected = str(row["vt_symbol"])
+                    break
+            if selected:
+                break
+    if not selected:
+        kwargs = strategy_cfg.get("kwargs", {}) if isinstance(strategy_cfg, dict) else {}
+        uni = kwargs.get("universe_model", {}).get("kwargs", {}) if isinstance(kwargs, dict) else {}
+        candidates = uni.get("symbols") or []
+        if candidates:
+            sym = candidates[0]
+            selected = sym if "." in sym else f"{sym}.NASDAQ"
+
+    bars: list[dict[str, Any]] = []
+    symbols_seen: list[str] = []
+    if selected:
+        try:
+            sym = Symbol.parse(selected) if "." in selected else Symbol(ticker=selected)
+            provider = DuckDBHistoryProvider()
+            start_dt = run_start or _dt.datetime(2000, 1, 1)
+            end_dt = run_end or _dt.datetime.utcnow()
+            df = provider.get_bars_normalized(
+                [sym],
+                start_dt,
+                end_dt,
+                interval=interval,
+                normalization=DataNormalizationMode.ADJUSTED,
+            )
+            if df is not None and not df.empty:
+                df = df.sort_values("timestamp").tail(limit_bars).copy()
+                df["timestamp"] = df["timestamp"].astype(str)
+                bars = df.to_dict(orient="records")
+        except Exception:  # noqa: BLE001 - timeline endpoint is best-effort
+            bars = []
+
+    def _filter_to_symbol(rows: list[Any]) -> list[Any]:
+        if not selected:
+            return rows
+        out = []
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            sym = r.get("vt_symbol")
+            symbols_seen.append(str(sym)) if sym else None
+            if not sym or sym == selected:
+                out.append(r)
+        return out
+
+    return {
+        "backtest_id": backtest_id,
+        "vt_symbol": selected,
+        "interval": interval,
+        "available_symbols": sorted(set(symbols_seen)) or ([selected] if selected else []),
+        "bars": bars,
+        "trades": _filter_to_symbol(trades),
+        "signals": _filter_to_symbol(signals),
+        "orders": _filter_to_symbol(orders),
+    }
 
 
 # ---------------------------------------------------------------------------

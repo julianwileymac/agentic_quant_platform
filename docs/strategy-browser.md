@@ -1,5 +1,7 @@
 # Strategy Browser
 
+> Doc map: [docs/index.md](index.md) · Strategy lifecycle: [docs/strategy-lifecycle.md](strategy-lifecycle.md).
+
 The Strategy Browser is a dedicated Solara page at `/strategy-browser` that
 exposes two complementary views of the strategy library:
 
@@ -76,3 +78,16 @@ A sibling Solara page at `/ml` — launch any `aqp.ml` training run from a
 form (pick feature handler + model class + segments), stream progress
 through the existing `/chat/stream/{task_id}` WebSocket, and see the
 resulting `ModelVersion` rows.
+
+## Browser export flow
+
+```mermaid
+flowchart LR
+    Picker[User picks securities + indicators + transformations] --> Form[StrategyBrowser form]
+    Form -->|POST| API["/pipelines/from-browser"]
+    API --> Spec[FeatureSet spec]
+    Spec --> DB[(feature_sets row)]
+    Spec --> Topic["Kafka features.preview.&lt;name&gt;.v1"]
+    Topic --> Stream[live overlay charts]
+```
+

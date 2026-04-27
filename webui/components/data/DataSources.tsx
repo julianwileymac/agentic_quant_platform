@@ -31,7 +31,7 @@ export function DataSources() {
 
   async function toggle(row: SourceRow) {
     try {
-      await apiFetch(`/sources/${row.name}/enabled`, {
+      await apiFetch(`/sources/${row.name}`, {
         method: "PATCH",
         body: JSON.stringify({ enabled: !row.enabled }),
       });
@@ -44,9 +44,7 @@ export function DataSources() {
 
   async function probe(row: SourceRow) {
     try {
-      const res = await apiFetch<{ ok: boolean; message?: string }>(`/sources/${row.name}/probe`, {
-        method: "POST",
-      });
+      const res = await apiFetch<{ ok: boolean; message?: string }>(`/sources/${row.name}/probe`);
       if (res.ok) message.success(`${row.display_name}: reachable`);
       else message.warning(`${row.display_name}: ${res.message ?? "unreachable"}`);
     } catch (err) {

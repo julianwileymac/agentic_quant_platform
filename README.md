@@ -2,6 +2,8 @@
 
 A **local-first, agentic quantitative research and trading platform** that fuses Agent-Ops and RL-Ops into a single autonomous laboratory. Every LLM call, every backtest, every reinforcement-learning rollout, and every piece of metadata stays on your hardware — no proprietary alpha traverses external APIs.
 
+> **New here?** Humans → [CONTRIBUTING.md](CONTRIBUTING.md) + [docs/architecture.md](docs/architecture.md). AI agents → [AGENTS.md](AGENTS.md). Doc index → [docs/index.md](docs/index.md).
+
 AQP distills architectural patterns from the best-of-breed open-source quant ecosystem:
 
 | Inspiration | Pattern adopted |
@@ -15,35 +17,70 @@ AQP distills architectural patterns from the best-of-breed open-source quant eco
 
 ## Architecture
 
-```
-                     ┌──────────────────────┐
-                     │  Next.js webui :3000 │
-                     │  (React + Ant + Flow │
-                     │   + AG Grid + WS)    │
-                     └──────────┬───────────┘
-                                │ REST / WebSocket
-                     ┌──────────▼───────────┐
-                     │   FastAPI Gateway    │
-                     └──────────┬───────────┘
-                                │
-            ┌───────────────────┴───────────────────┐
-            │           Redis  (broker + pubsub)    │
-            └─────┬──────────────────────────┬──────┘
-                  │                          │
-       ┌──────────▼───────────┐   ┌──────────▼────────────┐
-       │  Celery Workers      │   │  Celery Workers (GPU) │
-       │  - Backtesting       │   │  - RL Training        │
-       │  - Agent Crews       │   │  - Large LLM inf.     │
-       │  - Ingestion         │   │                       │
-       └──────────┬───────────┘   └──────────┬────────────┘
-                  │                          │
-    ┌─────────────┴──────────────┬───────────┴───────────────┐
-    │                            │                           │
-┌───▼─────┐  ┌──────────┐  ┌─────▼─────┐  ┌─────────┐  ┌─────▼──────┐
-│ DuckDB  │  │ ChromaDB │  │ PostgreSQL│  │ MLflow  │  │   Ollama   │
-│ Parquet │  │ Vectors  │  │  Ledger   │  │Tracking │  │ (Nemotron) │
-└─────────┘  └──────────┘  └───────────┘  └─────────┘  └────────────┘
-```
+The webui talks REST + WebSocket to a FastAPI gateway; long-running
+work is dispatched through Redis + Celery to specialised queues
+(default / backtest / agents / ingestion / paper / training). Postgres
+holds the execution ledger; Apache Iceberg (PyIceberg SQL catalog,
+host-mounted at `C:/aqp-warehouse`) holds the dataset warehouse;
+ChromaDB holds vector memory; MLflow tracks experiments; Ollama serves
+local LLMs.
+
+> **Full diagram + request lifecycle**: [docs/architecture.md](docs/architecture.md).
+> **Doc index**: [docs/index.md](docs/index.md).
+> **Agentic-coder rule-set**: [AGENTS.md](AGENTS.md).
+> **Human onboarding**: [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## What's new in 0.8 — Agentic pipeline control plane
+
+End-to-end UX for the agentic-trading lifecycle, plus a focused set of
+inspiration extracts:
+
+- **Models & Providers page** (`/models`) — Ollama `pull` /`delete` /
+  `running` controls and a vLLM compose start/stop dashboard backed by
+  the YAML profiles under `configs/llm/*.yaml`. New endpoints
+  `POST /agentic/models/pull`, `DELETE /agentic/models/{name}`,
+  `GET /agentic/models/running`, `GET /agentic/vllm/profiles`,
+  `POST /agentic/vllm/{start,stop}`. Pull progress streams over
+  `/chat/stream/{task_id}`.
+- **Backtest wizard data picker** — new
+  [`DatasetCatalogPicker`](webui/components/backtest/DatasetCatalogPicker.tsx)
+  with tabs for configured sources, Iceberg catalog, and ad-hoc paths.
+  *Preview availability* hits the new `GET
+  /datasets/{ns}/{name}/preview-bars` endpoint to surface row counts,
+  date range, and symbol universe before commit.
+- **ML alpha preview + ensemble** — `POST
+  /ml/deployments/{id}/preview` runs the deployment scorer on a small
+  slice and returns last-N signals; the wizard renders them in a card
+  under the alpha step. New
+  [`EnsembleAlpha`](aqp/strategies/ml_alphas.py) wraps a rule-based
+  alpha + `DeployedModelAlpha` with additive normalised scores.
+- **Local partitioned parquet** —
+  [`aqp/data/parquet_inspector.py`](aqp/data/parquet_inspector.py)
+  detects Hive-style partitions, suggests column mappings, and powers a
+  new Settings inspector flow. The `parquet_root` data-source kind now
+  honours `hive_partitioning`, `glob_pattern`, and `column_map` in
+  `DuckDBHistoryProvider`.
+- **Iceberg Editor** (`/data/iceberg`) — inline edit description /
+  tags / column docs (via existing `PATCH`), drop tables, multi-select
+  → physical consolidation.
+- **Physical consolidation** —
+  [`aqp/data/iceberg_consolidate.py`](aqp/data/iceberg_consolidate.py)
+  merges Iceberg part-tables into a single target table with schema
+  validation, dry-run + explicit `confirm` flag, and Celery progress
+  streaming. UI at
+  [`/data/iceberg/consolidate`](webui/app/(shell)/data/iceberg/consolidate/page.tsx)
+  shows heuristic + LLM grouping suggestions side-by-side.
+- **Inspiration extracts** —
+  `QuarterlyRotationUniverse` (FinRL-X),
+  `regime_detection.slow_regime` / `fast_overlay` (FinRL-X),
+  `BacktraderTool` agent-callable backtest + `register_keys_from_json`
+  (FinRobot), and the FinGPT Forecaster prompt template
+  (`aqp.agents.prompts.forecaster`). Each extract is decoupled from
+  its demo-specific glue so it composes with the existing `router_complete`
+  / `IAlphaModel` / `IUniverseSelectionModel` interfaces.
+
+See [docs/agentic-pipeline.md](docs/agentic-pipeline.md) for the full
+walkthrough.
 
 ## What's new in 0.7 — Next.js webui + visual workflow editors
 

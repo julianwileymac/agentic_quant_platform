@@ -1,0 +1,165 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aqp-trader-vllm-config
+  labels:
+    app.kubernetes.io/name: aqp-trader-vllm
+    app.kubernetes.io/part-of: agentic-quant-platform
+data:
+  trader.yaml: |
+    # Trader crew preset that talks to the vllm Service in the same
+    # namespace via http://vllm:8000/v1.
+    name: trader_vllm
+    provider: vllm
+    deep_model: nemotron
+    quick_model: nemotron
+    max_debate_rounds: 2
+    risk_max_position_pct: 0.20
+    risk_max_daily_loss_pct: 0.03
+    include_fundamentals: true
+    include_sentiment: true
+    include_news: true
+    include_technical: true
+    news_lookback_days: 7
+    technical_lookback_days: 120
+    emit_to_kafka: true
+    emit_signals_topic: signals.research.v1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trader-vllm
+  labels:
+    app.kubernetes.io/name: aqp-trader-vllm
+    app.kubernetes.io/part-of: agentic-quant-platform
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: aqp-trader-vllm
+  template:
+    metadata:
+      labels:
+        app: aqp-trader-vllm
+    spec:
+      containers:
+        - name: trader
+          image: aqp-paper:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -m
+            - aqp.agents.trading.run_trader
+            - --config
+            - /etc/aqp/trader.yaml
+          envFrom:
+            - configMapRef:
+                name: aqp-env
+            - secretRef:
+                name: aqp-broker-secrets
+                optional: true
+          env:
+            - name: AQP_REDIS_URL
+              value: redis://redis:6379/0
+            - name: AQP_POSTGRES_DSN
+              value: postgresql+psycopg2://aqp:aqp@postgres:5432/aqp
+            - name: AQP_OTEL_ENDPOINT
+              value: http://otel-collector:4317
+            - name: AQP_LLM_PROVIDER
+              value: vllm
+            - name: AQP_VLLM_BASE_URL
+              value: http://vllm:8000/v1
+            - name: AQP_VLLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aqp-vllm-secrets
+                  key: api_key
+                  optional: true
+          volumeMounts:
+            - name: trader-config
+              mountPath: /etc/aqp
+              readOnly: true
+      volumes:
+        - name: trader-config
+          configMap:
+            name: aqp-trader-vllm-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/part-of: agentic-quant-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+    spec:
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:latest
+          args:
+            - --model
+            - $(VLLM_MODEL_ID)
+            - --served-model-name
+            - $(VLLM_SERVED_NAME)
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+            - --gpu-memory-utilization
+            - "0.85"
+          env:
+            - name: VLLM_MODEL_ID
+              value: nvidia/Nemotron-4-Mini-Instruct
+            - name: VLLM_SERVED_NAME
+              value: nemotron
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: aqp-vllm-secrets
+                  key: hf_token
+                  optional: true
+          ports:
+            - containerPort: 8000
+              name: http
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+          readinessProbe:
+            httpGet:
+              path: /v1/models
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 15
+      volumes:
+        - name: hf-cache
+          persistentVolumeClaim:
+            claimName: aqp-hf-cache
+            # Provision separately — falls back to emptyDir when missing.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/part-of: agentic-quant-platform
+spec:
+  selector:
+    app: vllm
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

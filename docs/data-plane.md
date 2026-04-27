@@ -1,5 +1,7 @@
 # Data plane expansion
 
+> Doc map: [docs/index.md](index.md) · Catalog walkthrough: [docs/data-catalog.md](data-catalog.md).
+
 The data plane groups together the source registry, the identifier
 graph, and the adapters for FRED, SEC EDGAR and GDelt GKG 2.0. This
 work layers on top of the original [ingestion](../aqp/data/ingestion.py)
@@ -146,3 +148,17 @@ aqp data links show AAPL.NASDAQ
   that never migrated keep reading the right value.
 - The `data_sources.credentials_ref` column holds the *name* of the env
   var holding the credential — never the secret itself.
+
+## Provider -> cache -> view
+
+```mermaid
+flowchart LR
+    Provider["DataSourceAdapter or Fetcher"] --> Adapter[provider client]
+    Adapter --> RawCache[(parquet / iceberg cache)]
+    RawCache --> DuckDB[DuckDB view]
+    DuckDB --> Strategy
+    DuckDB --> WebUI
+    Adapter -.lineage.-> Lineage[(data_links + dataset_versions)]
+    Lineage -.metadata.-> WebUI
+```
+

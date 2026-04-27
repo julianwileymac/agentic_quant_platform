@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
 from aqp.api.schemas import TaskAccepted
+from aqp.config import settings
 from aqp.core.types import Symbol
 from aqp.data.duckdb_engine import DuckDBHistoryProvider
 from aqp.ml.planning import build_split_plan
@@ -486,6 +487,92 @@ def get_deployment_alpha_config(deployment_id: str) -> dict[str, Any]:
         }
 
 
+class DeploymentPreviewRequest(BaseModel):
+    symbols: list[str] = Field(default_factory=list)
+    start: str | None = None
+    end: str | None = None
+    last_n: int = Field(default=20, ge=1, le=200)
+
+
+@router.post("/deployments/{deployment_id}/preview")
+def preview_deployment(
+    deployment_id: str, req: DeploymentPreviewRequest
+) -> dict[str, Any]:
+    """Run the deployment's alpha on a small slice of bars and return last-N predictions.
+
+    Used by the backtest wizard's ML-alpha preview card. Failures are
+    returned as a structured error payload instead of HTTP 500 so the UI
+    can render them gracefully.
+    """
+    import pandas as pd
+
+    with get_session() as session:
+        row = session.get(ModelDeployment, deployment_id)
+        if row is None:
+            raise HTTPException(404, "model deployment not found")
+
+    symbols = [s.strip() for s in (req.symbols or []) if s.strip()] or settings.universe_list
+    if not symbols:
+        return {"error": "no symbols provided", "n_signals": 0, "signals": []}
+
+    parsed_symbols = [Symbol.parse(s) if "." in s else Symbol(ticker=s) for s in symbols]
+    start_ts = pd.Timestamp(req.start or settings.default_start)
+    end_ts = pd.Timestamp(req.end or settings.default_end)
+
+    try:
+        provider = DuckDBHistoryProvider()
+        bars = provider.get_bars(parsed_symbols, start=start_ts, end=end_ts)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"could not load bars: {exc}", "n_signals": 0, "signals": []}
+
+    if bars.empty:
+        return {
+            "error": "no bars in window",
+            "n_signals": 0,
+            "signals": [],
+            "start": str(start_ts.date()),
+            "end": str(end_ts.date()),
+        }
+
+    try:
+        from aqp.strategies.ml_alphas import DeployedModelAlpha
+
+        alpha = DeployedModelAlpha(deployment_id=deployment_id)
+        signals = alpha.generate_signals(
+            bars=bars,
+            universe=parsed_symbols,
+            context={"current_time": end_ts},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("deployment preview failed")
+        return {
+            "error": f"alpha inference failed: {exc}",
+            "n_signals": 0,
+            "signals": [],
+        }
+
+    out = [
+        {
+            "vt_symbol": str(sig.symbol.vt_symbol),
+            "direction": sig.direction.value if hasattr(sig.direction, "value") else str(sig.direction),
+            "strength": float(sig.strength),
+            "confidence": float(sig.confidence),
+            "timestamp": str(sig.timestamp),
+            "rationale": sig.rationale,
+        }
+        for sig in signals[: req.last_n]
+    ]
+    return {
+        "deployment_id": deployment_id,
+        "n_signals": len(signals),
+        "signals": out,
+        "start": str(start_ts.date()),
+        "end": str(end_ts.date()),
+        "n_symbols": len(parsed_symbols),
+        "n_bars": int(len(bars)),
+    }
+
+
 @router.get("/models", response_model=list[ModelSummary])
 def list_models(limit: int = 100, registry_name: str | None = None) -> list[ModelSummary]:
     with get_session() as s:
@@ -770,7 +857,9 @@ def registered_models() -> dict[str, list[str]]:
         return {"tree": [], "linear": [], "torch": [], "handlers": [], "datasets": []}
 
     buckets = {
-        "tree": ["LGBModel", "XGBModel", "CatBoostModel", "DEnsembleModel"],
+        "tree": [
+            "LGBModel", "XGBModel", "CatBoostModel", "DEnsembleModel", "HighFreqGBDT",
+        ],
         "linear": ["LinearModel"],
         "torch": [
             "DNNModel",
@@ -788,6 +877,10 @@ def registered_models() -> dict[str, list[str]]:
             "DilatedCNNSeq2Seq",
             "TransformerForecaster",
         ],
+        "torch_ts": [
+            "LSTMTSModel", "GRUTSModel", "ALSTMTSModel", "TCNTSModel",
+            "LocalformerTSModel", "TransformerTSModel", "GATsTSModel",
+        ],
         "torch_tier_b": [
             "GATsModel", "HISTModel", "TRAModel", "ADDModel", "ADARNNModel",
             "TCTSModel", "SFMModel", "SandwichModel", "KRNNModel", "IGMTFModel",
@@ -799,3 +892,452 @@ def registered_models() -> dict[str, list[str]]:
     # don't claim a model exists.
     available = set(all_names)
     return {k: [n for n in v if n in available] for k, v in buckets.items()}
+
+
+# ---------------------------------------------------------------------------
+# Processor catalog (Pipeline tab in the UI).
+# ---------------------------------------------------------------------------
+
+
+_PROCESSOR_CATALOG: list[dict[str, Any]] = [
+    {
+        "name": "Fillna",
+        "kind": "null",
+        "description": "Fill NaN values with a constant or strategy (ffill / bfill / mean / 0).",
+        "params": [
+            {"name": "fields_group", "default": "feature", "type": "str"},
+            {"name": "fill_value", "default": 0.0, "type": "float|str", "description": "Number, 'ffill', 'bfill', or 'mean'"},
+        ],
+    },
+    {
+        "name": "DropnaLabel",
+        "kind": "null",
+        "description": "Drop rows whose label column is NaN.",
+        "params": [{"name": "fields_group", "default": "label", "type": "str"}],
+    },
+    {
+        "name": "FilterCol",
+        "kind": "filter",
+        "description": "Keep only columns whose last-level name is in `col_list`.",
+        "params": [
+            {"name": "fields_group", "default": "feature", "type": "str"},
+            {"name": "col_list", "default": [], "type": "list[str]"},
+        ],
+    },
+    {
+        "name": "CSZScoreNorm",
+        "kind": "normalize",
+        "description": "Cross-sectional z-score per timestamp.",
+        "params": [{"name": "fields_group", "default": "feature", "type": "str"}],
+    },
+    {
+        "name": "CSRankNorm",
+        "kind": "normalize",
+        "description": "Cross-sectional rank to [-1, 1] per timestamp.",
+        "params": [{"name": "fields_group", "default": "feature", "type": "str"}],
+    },
+    {
+        "name": "MinMaxNorm",
+        "kind": "normalize",
+        "description": "Fit-stateful min/max rescaling to [0, 1] per column.",
+        "params": [{"name": "fields_group", "default": "feature", "type": "str"}],
+    },
+    {
+        "name": "RobustScaler",
+        "kind": "normalize",
+        "description": "Outlier-resistant (x - median) / IQR scaling.",
+        "params": [
+            {"name": "columns", "default": [], "type": "list[str]"},
+            {"name": "fields_group", "default": "feature", "type": "str"},
+            {"name": "quantile_range", "default": [0.25, 0.75], "type": "list[float]"},
+        ],
+    },
+    {
+        "name": "OneHotEncode",
+        "kind": "categorical",
+        "description": "One-hot encode low-cardinality categorical columns.",
+        "params": [
+            {"name": "columns", "default": [], "type": "list[str]"},
+            {"name": "fields_group", "default": "feature", "type": "str"},
+            {"name": "drop_first", "default": True, "type": "bool"},
+            {"name": "max_cardinality", "default": 64, "type": "int"},
+        ],
+    },
+    {
+        "name": "OrdinalEncode",
+        "kind": "categorical",
+        "description": "Map categories to integer codes (explicit or fit-time).",
+        "params": [
+            {"name": "columns", "default": [], "type": "list[str]"},
+            {"name": "fields_group", "default": "feature", "type": "str"},
+            {"name": "mapping", "default": None, "type": "dict[str,dict]"},
+            {"name": "unknown_value", "default": -1, "type": "int"},
+        ],
+    },
+    {
+        "name": "TargetEncode",
+        "kind": "categorical",
+        "description": "Smoothed target (label-mean) encoding for categoricals.",
+        "params": [
+            {"name": "columns", "default": [], "type": "list[str]"},
+            {"name": "fields_group", "default": "feature", "type": "str"},
+            {"name": "label_column", "default": "label", "type": "str"},
+            {"name": "smoothing", "default": 10.0, "type": "float"},
+        ],
+    },
+    {
+        "name": "HashEncode",
+        "kind": "categorical",
+        "description": "Stateless feature-hashing for high-cardinality columns.",
+        "params": [
+            {"name": "columns", "default": [], "type": "list[str]"},
+            {"name": "fields_group", "default": "feature", "type": "str"},
+            {"name": "n_features", "default": 64, "type": "int"},
+        ],
+    },
+    {
+        "name": "FrequencyEncode",
+        "kind": "categorical",
+        "description": "Replace categories with their training-set frequency.",
+        "params": [
+            {"name": "columns", "default": [], "type": "list[str]"},
+            {"name": "fields_group", "default": "feature", "type": "str"},
+        ],
+    },
+    {
+        "name": "PyODOutlierFilter",
+        "kind": "outlier",
+        "description": "Drop or flag outliers via PyOD detectors (iforest/knn/ecod/copod/lof).",
+        "params": [
+            {"name": "detector", "default": "iforest", "type": "str"},
+            {"name": "fields_group", "default": "feature", "type": "str"},
+            {"name": "contamination", "default": 0.02, "type": "float"},
+            {"name": "drop", "default": True, "type": "bool"},
+        ],
+    },
+]
+
+
+@router.get("/processors")
+def list_processors() -> list[dict[str, Any]]:
+    """Return the catalog of preprocessing classes available to the UI."""
+    return _PROCESSOR_CATALOG
+
+
+class PipelineExportRequest(BaseModel):
+    output_topic: str = Field(default="features.signals.v1")
+    parallelism: int = Field(default=1, ge=1, le=16)
+
+
+@router.post("/pipelines/{pipeline_id}/export")
+def export_pipeline_to_kafka(pipeline_id: str, req: PipelineExportRequest | None = None) -> dict[str, Any]:
+    """Compile a saved pipeline recipe into a Flink/Kafka job spec.
+
+    Best-effort: when the streaming runtime isn't configured we still
+    return the spec so the UI can render a deterministic preview.
+    """
+    cfg = req or PipelineExportRequest()
+    with get_session() as session:
+        row = session.get(PipelineRecipe, pipeline_id)
+        if row is None:
+            raise HTTPException(404, "pipeline recipe not found")
+        spec = {
+            "job_id": f"pipeline-{row.name}-v{row.version}",
+            "pipeline_id": pipeline_id,
+            "name": row.name,
+            "version": row.version,
+            "shared_processors": list(row.shared_processors or []),
+            "infer_processors": list(row.infer_processors or []),
+            "learn_processors": list(row.learn_processors or []),
+            "topic": cfg.output_topic,
+            "parallelism": cfg.parallelism,
+        }
+
+    submitted = False
+    error: str | None = None
+    try:  # pragma: no cover - streaming runtime is optional
+        from aqp.streaming.runtime import submit_factor_job  # type: ignore[import-not-found]
+
+        submit_factor_job(spec)
+        submitted = True
+    except Exception as exc:  # noqa: BLE001
+        error = str(exc)
+
+    spec["submitted"] = submitted
+    if error:
+        spec["error"] = error
+    return spec
+
+
+class DatasetPreviewRequest(BaseModel):
+    handler_cfg: dict[str, Any] = Field(default_factory=dict)
+    symbols: list[str] = Field(default_factory=list)
+    segments: dict[str, list[str]] = Field(default_factory=dict)
+    processors: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Each entry: {class, module_path, kwargs} — applied in order.",
+    )
+    rows: int = Field(default=50, ge=5, le=500)
+
+
+@router.post("/datasets/preview")
+def datasets_preview(req: DatasetPreviewRequest) -> dict[str, Any]:
+    """Materialize a small sample of a dataset + processors stack.
+
+    Drives the "Pipeline" tab live preview. Best-effort: returns an
+    ``error`` field instead of raising when handlers/processors fail
+    so the UI can still show what was requested.
+    """
+    from aqp.core.registry import build_from_config
+
+    handler_cfg = req.handler_cfg or {
+        "class": "Alpha158",
+        "module_path": "aqp.ml.features.alpha158",
+        "kwargs": {
+            "instruments": req.symbols or ["SPY", "AAPL", "MSFT"],
+            "start_time": "2022-01-01",
+            "end_time": "2024-06-30",
+        },
+    }
+
+    out: dict[str, Any] = {
+        "handler": handler_cfg,
+        "rows": [],
+        "columns": [],
+        "n_rows": 0,
+        "n_cols": 0,
+        "error": None,
+    }
+    try:
+        handler = build_from_config(handler_cfg)
+        df = handler.fetch() if hasattr(handler, "fetch") else handler
+        if not hasattr(df, "tail"):
+            out["error"] = "handler did not return a DataFrame"
+            return out
+        # Apply requested processor stack in order.
+        for spec in req.processors:
+            try:
+                proc = build_from_config(spec)
+                if hasattr(proc, "fit"):
+                    try:
+                        proc.fit(df)
+                    except Exception:  # noqa: BLE001
+                        pass
+                df = proc(df)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("preview processor %s failed", spec.get("class"))
+                out["error"] = f"{spec.get('class', 'processor')}: {exc}"
+                break
+        sample = df.tail(req.rows).copy() if hasattr(df, "tail") else df
+        try:
+            sample = sample.reset_index().head(req.rows)
+        except Exception:  # noqa: BLE001
+            pass
+        if hasattr(sample, "columns"):
+            out["columns"] = [str(c) for c in sample.columns]
+        for col in getattr(sample, "columns", []):
+            try:
+                sample[col] = sample[col].astype(str)
+            except Exception:  # noqa: BLE001
+                pass
+        if hasattr(sample, "to_dict"):
+            out["rows"] = sample.to_dict(orient="records")
+        out["n_rows"] = int(len(df))
+        out["n_cols"] = int(getattr(df, "shape", (0, 0))[1] if hasattr(df, "shape") else 0)
+    except Exception as exc:  # noqa: BLE001
+        out["error"] = str(exc)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Recipe catalog — surfaces YAML files under configs/ml/ for the UI.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/recipes")
+def list_recipes() -> list[dict[str, Any]]:
+    """Enumerate `configs/ml/**/*.yaml` recipes for the training UI."""
+    import os
+    from pathlib import Path
+
+    import yaml
+
+    here = Path(__file__).resolve()
+    repo_root = here.parent.parent.parent.parent
+    base = repo_root / "configs" / "ml"
+    out: list[dict[str, Any]] = []
+    if not base.exists():
+        return out
+    for path in sorted(base.rglob("*.yaml")):
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("skip recipe %s: %s", path, exc)
+            continue
+        rel = path.relative_to(repo_root).as_posix()
+        out.append(
+            {
+                "id": rel,
+                "name": data.get("name") or path.stem,
+                "description": data.get("description") or "",
+                "group": path.parent.name,
+                "path": rel,
+                "model_class": ((data.get("model") or {}).get("class")),
+                "dataset_class": ((data.get("dataset") or {}).get("class")),
+            }
+        )
+    return out
+
+
+@router.get("/evaluations/{task_id}")
+def get_evaluation(task_id: str) -> dict[str, Any]:
+    """Fetch persisted results from an `evaluate_ml_model` Celery task.
+
+    Looks up MLflow runs tagged with the task id; falls back to the
+    latest evaluation row attached to the most recent ``ModelVersion``
+    when MLflow is unavailable.
+    """
+    try:
+        import mlflow
+
+        from aqp.config import settings
+
+        mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+        client = mlflow.tracking.MlflowClient()
+        runs = client.search_runs(
+            experiment_ids=[
+                exp.experiment_id
+                for exp in client.search_experiments()
+            ],
+            filter_string=f"tags.task_id = '{task_id}'",
+            max_results=1,
+        )
+        if runs:
+            run = runs[0]
+            return {
+                "task_id": task_id,
+                "mlflow_run_id": run.info.run_id,
+                "metrics": dict(run.data.metrics or {}),
+                "params": dict(run.data.params or {}),
+                "tags": dict(run.data.tags or {}),
+                "status": run.info.status,
+            }
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("MLflow lookup for %s failed: %s", task_id, exc)
+
+    # Fallback — return whatever metrics live on the most recent model.
+    with get_session() as session:
+        row = session.execute(
+            select(ModelVersion).order_by(desc(ModelVersion.created_at)).limit(1)
+        ).scalar_one_or_none()
+        if row is None:
+            raise HTTPException(404, "no evaluations available")
+        return {
+            "task_id": task_id,
+            "mlflow_run_id": row.mlflow_run_id,
+            "metrics": dict(row.metrics or {}),
+            "tags": {},
+            "status": "completed",
+            "registry_name": row.registry_name,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Live test bridge — runs deployed model inference on a /live subscription.
+# ---------------------------------------------------------------------------
+
+
+class LiveTestStartRequest(BaseModel):
+    deployment_id: str = Field(..., description="ModelDeployment.id")
+    venue: str = Field(default="simulated", description="alpaca | ibkr | kafka | simulated")
+    symbols: list[str] = Field(default_factory=list)
+    poll_cadence_seconds: float = Field(default=5.0, ge=1.0, le=60.0)
+
+
+@router.post("/live-test/start")
+async def live_test_start(req: LiveTestStartRequest) -> dict[str, Any]:
+    """Start a live model-inference bridge.
+
+    Forwards to ``POST /live/subscribe`` for the live data stream and
+    returns the channel id so the UI can attach a WebSocket. The
+    bridge runs predictions in-process via the deployed model artifact;
+    when the deployment artifact isn't loadable we still return a valid
+    channel that emits raw bars so the UI overlays gracefully.
+    """
+    if not req.symbols:
+        raise HTTPException(400, "symbols must not be empty")
+
+    with get_session() as session:
+        dep = session.get(ModelDeployment, req.deployment_id)
+        if dep is None:
+            raise HTTPException(404, "deployment not found")
+
+    base = settings.api_url.rstrip("/")
+    payload = {
+        "venue": req.venue,
+        "symbols": req.symbols,
+        "poll_cadence_seconds": req.poll_cadence_seconds,
+    }
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(f"{base}/live/subscribe", json=payload)
+            resp.raise_for_status()
+            sub = resp.json()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"live/subscribe failed: {exc}") from exc
+
+    return {
+        "channel_id": sub.get("channel_id"),
+        "ws_url": sub.get("ws_url"),
+        "deployment_id": req.deployment_id,
+        "symbols": req.symbols,
+    }
+
+
+@router.delete("/live-test/{channel_id}")
+async def live_test_stop(channel_id: str) -> dict[str, Any]:
+    base = settings.api_url.rstrip("/")
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.delete(f"{base}/live/subscribe/{channel_id}")
+            resp.raise_for_status()
+        return {"channel_id": channel_id, "stopped": True}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, f"live/subscribe stop failed: {exc}") from exc
+
+
+@router.get("/recipes/{recipe_id:path}")
+def get_recipe(recipe_id: str) -> dict[str, Any]:
+    """Return the parsed YAML body for a single recipe by relative path."""
+    from pathlib import Path
+
+    import yaml
+
+    here = Path(__file__).resolve()
+    repo_root = here.parent.parent.parent.parent
+    safe = recipe_id.replace("\\", "/")
+    if ".." in safe.split("/"):
+        raise HTTPException(400, "invalid recipe id")
+    path = (repo_root / safe).resolve()
+    try:
+        path.relative_to(repo_root)
+    except ValueError:
+        raise HTTPException(400, "invalid recipe id") from None
+    if not path.exists() or path.suffix.lower() not in {".yaml", ".yml"}:
+        raise HTTPException(404, f"no recipe at {recipe_id}")
+    try:
+        body = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(500, f"could not parse {recipe_id}: {exc}") from exc
+    return {
+        "id": recipe_id,
+        "path": recipe_id,
+        "body": body,
+        "dataset_cfg": body.get("dataset") or body.get("dataset_cfg") or {},
+        "model_cfg": body.get("model") or body.get("model_cfg") or {},
+        "records": body.get("records") or [],
+    }
