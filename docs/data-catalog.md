@@ -27,6 +27,33 @@ descriptions, tags, domain hints, PII flags, and per-column docs on top.
 | Run scripts | [`scripts/iceberg_smoke.py`](../scripts/iceberg_smoke.py), [`scripts/ingest_regulatory.py`](../scripts/ingest_regulatory.py), [`scripts/_run_one_source.py`](../scripts/_run_one_source.py) |
 | Web UI | `/data/catalog`, `/data/catalog/<ns>/<name>`, `/data/ingest` |
 
+## Data fabric
+
+The AQP data fabric exposes one configuration pane (Settings → Data
+Fabric) that ties this catalog to:
+
+- The `data_sources` registry (yfinance, AlphaVantage, IBKR, Alpaca,
+  FRED, SEC EDGAR, GDelt, …).
+- The Instrument master (`/data/universe?source=catalog`).
+- Per-endpoint AlphaVantage Iceberg tables under
+  `aqp_alpha_vantage`. Each lake-supported endpoint declares an
+  `iceberg_table` and a `partition_spec` in
+  [`aqp/data/sources/alpha_vantage/catalog.py`](../aqp/data/sources/alpha_vantage/catalog.py).
+- The identifier graph (`identifier_links`) and coverage rows
+  (`data_links`).
+
+Operators toggle bulk-loader inclusion and override cache TTLs per
+endpoint via `PATCH /alpha-vantage/functions/{function_id}` (state
+persisted on `dataset_catalogs.meta.alpha_vantage_endpoint_state`).
+The aggregate is served by `GET /data/fabric/overview`.
+
+The bulk loader (`POST /pipelines/alpha-vantage/endpoints`) writes
+through the partition-aware
+[`iceberg_catalog.append_arrow`](../aqp/data/iceberg_catalog.py) helper,
+registers `dataset_versions`, and emits `data_links` per instrument so
+`GET /data/securities/{vt_symbol}/coverage` reflects the new rows
+without scanning Parquet files.
+
 ## Persistent host warehouse
 
 AQP defaults to a **PyIceberg SQL catalog** rooted at a host-bind-

@@ -14,6 +14,7 @@ import {
 } from "antd";
 
 import { BacktestDataSources } from "@/components/settings/BacktestDataSources";
+import { DataFabricCard } from "@/components/settings/DataFabricCard";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { useApiQuery } from "@/lib/api/hooks";
 import { useUiStore } from "@/lib/store/ui";
@@ -136,6 +137,11 @@ export default function SettingsPage() {
               <Button onClick={() => providerControl.refetch()}>Refresh status</Button>
             </Space>
           </Card>
+        </Col>
+      </Row>
+      <Row gutter={16} style={{ marginTop: 16 }}>
+        <Col xs={24}>
+          <DataFabricCard />
         </Col>
       </Row>
       <Row gutter={16} style={{ marginTop: 16 }}>

@@ -8,6 +8,7 @@ data:
   AQP_OTEL_SERVICE_NAME: "aqp"
   AQP_OTEL_SAMPLE_RATIO: "1.0"
   AQP_PAPER_DEFAULT_HEARTBEAT_SECONDS: "30"
+  AQP_API_URL: "http://api.aqp.svc.cluster.local:8000"
   AQP_ALPACA_PAPER: "true"
   AQP_ALPACA_BASE_URL: ""
   AQP_ALPACA_FEED: "iex"
@@ -33,6 +34,26 @@ data:
   AQP_STREAM_INCLUDE_BARS: "true"
   AQP_STREAM_METRICS_PORT: "9300"
   AQP_STREAM_HEALTH_PORT: "9301"
+  # --- Shared rpi_kubernetes metadata and lakehouse services ---
+  AQP_MLFLOW_TRACKING_URI: "http://mlflow.ml-platform.svc.cluster.local:5000"
+  AQP_ICEBERG_REST_URI: "http://datahub-datahub-gms.data-services.svc.cluster.local:8080/iceberg"
+  AQP_ICEBERG_S3_WAREHOUSE: "s3://iceberg-warehouse/aqp/"
+  AQP_S3_ENDPOINT_URL: "http://minio.data-services.svc.cluster.local:9000"
+  AQP_S3_REGION: "us-east-1"
+  AQP_S3_PATH_STYLE_ACCESS: "true"
+  AQP_MINIO_ENDPOINT_URL: "http://minio.data-services.svc.cluster.local:9000"
+  AQP_MINIO_ARTIFACTS_BUCKET: "aqp-artifacts"
+  AQP_MINIO_DATASETS_BUCKET: "aqp-datasets"
+  AQP_DATAHUB_GMS_URL: "http://datahub-datahub-gms.data-services.svc.cluster.local:8080"
+  AQP_DATAHUB_ENV: "PROD"
+  AQP_ALPHA_VANTAGE_INTRADAY_INTERVAL: "1min"
+  AQP_ALPHA_VANTAGE_INTRADAY_LOOKBACK_MONTHS: "36"
+  AQP_ALPHA_VANTAGE_INTRADAY_BATCH_SIZE: "25"
+  AQP_ALPHA_VANTAGE_INTRADAY_RUN_GUARD_MAX_STARTS: "3"
+  AQP_ALPHA_VANTAGE_INTRADAY_RUN_GUARD_WINDOW_SECONDS: "900"
+  AQP_ALPHA_VANTAGE_INTRADAY_MANIFEST_DIR: "/app/data/alpha_vantage/intraday_components"
+  AQP_ALPHA_VANTAGE_INTRADAY_NAMESPACE: "aqp_alpha_vantage"
+  AQP_ALPHA_VANTAGE_INTRADAY_TABLE: "time_series_intraday"
 ---
 # NB: populate real broker creds via `kubectl create secret generic aqp-broker-secrets
 # --from-literal=AQP_ALPACA_API_KEY=... --from-literal=AQP_ALPACA_SECRET_KEY=...
@@ -49,6 +70,7 @@ stringData:
   AQP_TRADIER_ACCOUNT_ID: ""
   AQP_KAFKA_SASL_USERNAME: ""
   AQP_KAFKA_SASL_PASSWORD: ""
+  AQP_DATAHUB_TOKEN: ""
   # IB Gateway (gnzsnz/ib-gateway) login. Required when running the in-cluster
   # ibgateway Deployment. Leave empty to opt out.
   TWS_USERID: ""

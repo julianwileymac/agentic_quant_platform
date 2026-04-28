@@ -8,6 +8,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from aqp.data.sources.alpha_vantage.catalog import function_by_id, list_functions
+from aqp.data.sources.alpha_vantage.endpoint_state import (
+    get_state as get_endpoint_state,
+)
+from aqp.data.sources.alpha_vantage.endpoint_state import (
+    set_state as set_endpoint_state,
+)
 from aqp.services.alpha_vantage_service import AlphaVantageService
 
 logger = logging.getLogger(__name__)
@@ -65,6 +72,10 @@ class BulkLoadQueued(BaseModel):
     symbols: list[str]
 
 
+class AlphaVantageFunctionCatalog(BaseModel):
+    functions: list[dict[str, Any]]
+
+
 def get_alpha_vantage_service() -> AlphaVantageService:
     global _SERVICE
     if _SERVICE is None:
@@ -72,18 +83,76 @@ def get_alpha_vantage_service() -> AlphaVantageService:
     return _SERVICE
 
 
+_ALPHA_VANTAGE_SERVICE_DEP = Depends(get_alpha_vantage_service)
+
+
 def _guard_enabled(service: AlphaVantageService) -> None:
     if not service.enabled:
         raise HTTPException(status_code=503, detail="Alpha Vantage integration disabled")
 
 
+def _cache_query(cache: bool | None, cache_ttl: float | None) -> dict[str, Any]:
+    params: dict[str, Any] = {}
+    if cache is not None:
+        params["cache"] = bool(cache)
+    if cache_ttl is not None:
+        params["cache_ttl"] = float(cache_ttl)
+    return params
+
+
+@router.get("/functions", response_model=AlphaVantageFunctionCatalog)
+async def functions_catalog() -> AlphaVantageFunctionCatalog:
+    enriched = []
+    for entry in list_functions():
+        state = get_endpoint_state(entry["id"])
+        enriched.append(
+            {
+                **entry,
+                "enabled_for_bulk": bool(state.get("enabled_for_bulk", entry.get("lake_supported", False))),
+                "cache_ttl_override": state.get("cache_ttl_seconds"),
+            }
+        )
+    return AlphaVantageFunctionCatalog(functions=enriched)
+
+
+@router.get("/functions/{function_id}")
+async def function_detail(function_id: str) -> dict[str, Any]:
+    entry = function_by_id(function_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"unknown Alpha Vantage function: {function_id}")
+    state = get_endpoint_state(entry["id"])
+    entry["enabled_for_bulk"] = bool(state.get("enabled_for_bulk", entry.get("lake_supported", False)))
+    entry["cache_ttl_override"] = state.get("cache_ttl_seconds")
+    return entry
+
+
+class AlphaVantageFunctionPatch(BaseModel):
+    enabled_for_bulk: bool | None = None
+    cache_ttl_seconds: float | None = None
+
+
+@router.patch("/functions/{function_id}")
+async def patch_function(function_id: str, payload: AlphaVantageFunctionPatch) -> dict[str, Any]:
+    entry = function_by_id(function_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"unknown Alpha Vantage function: {function_id}")
+    state = set_endpoint_state(
+        entry["id"],
+        enabled_for_bulk=payload.enabled_for_bulk,
+        cache_ttl_seconds=payload.cache_ttl_seconds,
+    )
+    entry["enabled_for_bulk"] = bool(state.get("enabled_for_bulk", entry.get("lake_supported", False)))
+    entry["cache_ttl_override"] = state.get("cache_ttl_seconds")
+    return entry
+
+
 @router.get("/health", response_model=AlphaVantageHealth)
-async def health(service: AlphaVantageService = Depends(get_alpha_vantage_service)) -> AlphaVantageHealth:
+async def health(service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP) -> AlphaVantageHealth:
     return AlphaVantageHealth(**await service.health())
 
 
 @router.get("/usage", response_model=AlphaVantageUsage)
-async def usage(service: AlphaVantageService = Depends(get_alpha_vantage_service)) -> AlphaVantageUsage:
+async def usage(service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP) -> AlphaVantageUsage:
     _guard_enabled(service)
     return AlphaVantageUsage(**await service.usage())
 
@@ -91,16 +160,22 @@ async def usage(service: AlphaVantageService = Depends(get_alpha_vantage_service
 @router.get("/search")
 async def search(
     keywords: str = Query(..., min_length=1),
-    service: AlphaVantageService = Depends(get_alpha_vantage_service),
+    cache: bool | None = Query(default=None),
+    cache_ttl: float | None = Query(default=None, ge=0),
+    service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP,
 ) -> list[dict[str, Any]]:
     _guard_enabled(service)
-    return await service.symbol_search(keywords)
+    return await service.symbol_search(keywords, **_cache_query(cache, cache_ttl))
 
 
 @router.get("/market-status")
-async def market_status(service: AlphaVantageService = Depends(get_alpha_vantage_service)) -> dict[str, Any]:
+async def market_status(
+    cache: bool | None = Query(default=None),
+    cache_ttl: float | None = Query(default=None, ge=0),
+    service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP,
+) -> dict[str, Any]:
     _guard_enabled(service)
-    return await service.market_status()
+    return await service.market_status(**_cache_query(cache, cache_ttl))
 
 
 @router.get("/timeseries/{function}")
@@ -114,7 +189,10 @@ async def timeseries(
     extended_hours: bool | None = Query(default=None),
     entitlement: str | None = Query(default=None),
     symbols: str | None = Query(default=None, description="Comma-separated symbols for bulk quotes"),
-    service: AlphaVantageService = Depends(get_alpha_vantage_service),
+    datatype: str | None = Query(default=None),
+    cache: bool | None = Query(default=None),
+    cache_ttl: float | None = Query(default=None, ge=0),
+    service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP,
 ) -> Any:
     _guard_enabled(service)
     params: dict[str, Any] = {
@@ -125,6 +203,8 @@ async def timeseries(
         "adjusted": adjusted,
         "extended_hours": extended_hours,
         "entitlement": entitlement,
+        "datatype": datatype,
+        **_cache_query(cache, cache_ttl),
     }
     if function == "bulk_quotes":
         params["symbols"] = [s.strip() for s in (symbols or symbol).split(",") if s.strip()]
@@ -141,7 +221,7 @@ async def fundamentals(
     horizon: str | None = Query(default=None),
     date: str | None = Query(default=None),
     state: str | None = Query(default=None),
-    service: AlphaVantageService = Depends(get_alpha_vantage_service),
+    service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP,
 ) -> Any:
     _guard_enabled(service)
     try:
@@ -168,7 +248,9 @@ async def technicals(
     series_type: str | None = Query(default="close"),
     month: str | None = Query(default=None),
     entitlement: str | None = Query(default=None),
-    service: AlphaVantageService = Depends(get_alpha_vantage_service),
+    cache: bool | None = Query(default=None),
+    cache_ttl: float | None = Query(default=None, ge=0),
+    service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP,
 ) -> Any:
     _guard_enabled(service)
     try:
@@ -180,6 +262,7 @@ async def technicals(
             series_type=series_type,
             month=month,
             entitlement=entitlement,
+            **_cache_query(cache, cache_ttl),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -197,7 +280,9 @@ async def intelligence(
     symbol: str | None = Query(default=None),
     quarter: str | None = Query(default=None),
     entitlement: str | None = Query(default=None),
-    service: AlphaVantageService = Depends(get_alpha_vantage_service),
+    cache: bool | None = Query(default=None),
+    cache_ttl: float | None = Query(default=None, ge=0),
+    service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP,
 ) -> Any:
     _guard_enabled(service)
     params: dict[str, Any] = {
@@ -210,6 +295,7 @@ async def intelligence(
         "symbol": symbol,
         "quarter": quarter,
         "entitlement": entitlement,
+        **_cache_query(cache, cache_ttl),
     }
     try:
         return await service.intelligence(kind, **params)
@@ -226,7 +312,7 @@ async def forex(
     to_symbol: str | None = None,
     interval: str | None = None,
     outputsize: str | None = None,
-    service: AlphaVantageService = Depends(get_alpha_vantage_service),
+    service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP,
 ) -> Any:
     _guard_enabled(service)
     try:
@@ -250,7 +336,7 @@ async def crypto(
     market: str = Query(default="USD"),
     interval: str | None = Query(default=None),
     outputsize: str | None = Query(default=None),
-    service: AlphaVantageService = Depends(get_alpha_vantage_service),
+    service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP,
 ) -> Any:
     _guard_enabled(service)
     try:
@@ -271,7 +357,7 @@ async def options(
     symbol: str = Query(..., min_length=1),
     contract: str | None = Query(default=None),
     date: str | None = Query(default=None),
-    service: AlphaVantageService = Depends(get_alpha_vantage_service),
+    service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP,
 ) -> Any:
     _guard_enabled(service)
     try:
@@ -284,7 +370,7 @@ async def options(
 async def commodities(
     commodity: str,
     interval: str = Query(default="monthly"),
-    service: AlphaVantageService = Depends(get_alpha_vantage_service),
+    service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP,
 ) -> Any:
     _guard_enabled(service)
     return await service.commodities(commodity, interval=interval)
@@ -295,14 +381,14 @@ async def economics(
     indicator: str,
     interval: str | None = None,
     maturity: str | None = None,
-    service: AlphaVantageService = Depends(get_alpha_vantage_service),
+    service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP,
 ) -> Any:
     _guard_enabled(service)
     return await service.economics(indicator, interval=interval, maturity=maturity)
 
 
 @router.get("/indices/catalog")
-async def indices_catalog(service: AlphaVantageService = Depends(get_alpha_vantage_service)) -> Any:
+async def indices_catalog(service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP) -> Any:
     _guard_enabled(service)
     return await service.index_catalog()
 
@@ -311,7 +397,7 @@ async def indices_catalog(service: AlphaVantageService = Depends(get_alpha_vanta
 async def indices(
     name: str,
     interval: str | None = None,
-    service: AlphaVantageService = Depends(get_alpha_vantage_service),
+    service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP,
 ) -> Any:
     _guard_enabled(service)
     return await service.indices(name, interval=interval)
@@ -320,7 +406,7 @@ async def indices(
 @router.post("/bulk-load", response_model=BulkLoadQueued)
 async def bulk_load(
     payload: BulkLoadRequest,
-    service: AlphaVantageService = Depends(get_alpha_vantage_service),
+    service: AlphaVantageService = _ALPHA_VANTAGE_SERVICE_DEP,
 ) -> BulkLoadQueued:
     _guard_enabled(service)
     try:

@@ -51,12 +51,18 @@ def test_sync_snapshot_upserts_and_lists(
         "register_dataset_version",
         lambda **kwargs: {"catalog_id": "catalog", "version_id": "version", "dataset_version": 1},  # noqa: ARG005
     )
+    monkeypatch.setattr(
+        AlphaVantageUniverseService,
+        "_sync_identifier_links",
+        lambda self_inner, normalized: int(len(normalized)) * 3,
+    )
 
     service = AlphaVantageUniverseService(client=_FakeClient(_listing_frame()))
     first = service.sync_snapshot(limit=10)
     assert first["ingested"] == 2
     assert first["created"] == 2
     assert first["updated"] == 0
+    assert first["identifier_links"] == 6
 
     listed = service.list_snapshot(limit=10)
     tickers = {row["ticker"] for row in listed}
@@ -67,3 +73,37 @@ def test_sync_snapshot_upserts_and_lists(
     assert second["ingested"] == 2
     assert second["created"] == 0
     assert second["updated"] == 2
+    assert second["identifier_links"] == 6
+
+
+def test_sync_identifier_links_emits_three_schemes_per_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pandas as pd
+
+    from aqp.data.sources.alpha_vantage.universe import AlphaVantageUniverseService
+
+    captured = {}
+
+    class _FakeResolver:
+        def __init__(self, source_name=None):  # noqa: ARG002
+            captured["source"] = source_name
+            captured["specs"] = []
+
+        def upsert_links(self, specs):
+            captured["specs"].extend(list(specs))
+            return [f"link-{idx}" for idx in range(len(captured["specs"]))]
+
+    import aqp.data.sources.resolvers.identifiers as resolver_mod
+
+    monkeypatch.setattr(resolver_mod, "IdentifierResolver", _FakeResolver)
+
+    df = pd.DataFrame(
+        [
+            {"vt_symbol": "AAPL.NASDAQ", "ticker": "AAPL", "name": "Apple", "exchange": "NASDAQ", "asset_type": "Stock", "status": "Active"},
+        ]
+    )
+    service = AlphaVantageUniverseService(client=_FakeClient(_listing_frame()))
+    count = service._sync_identifier_links(df)
+    schemes = sorted({spec.scheme for spec in captured["specs"]})
+    assert count == 3
+    assert schemes == ["alpha_vantage_symbol", "ticker", "vt_symbol"]
+    assert captured["source"] == "alpha_vantage"

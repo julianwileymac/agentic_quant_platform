@@ -1,0 +1,39 @@
+# Knowledge orders for the AQP hierarchical RAG.
+#
+# Each order maps to a tier of upstream sources. Corpora are the source
+# of truth — this YAML is descriptive metadata used by the /rag UI.
+
+orders:
+  - id: first
+    name: "First-order — price/trade/performance"
+    description: >-
+      Bars (intraday + daily), trades, and per-strategy backtest /
+      paper / live performance. Drives the bulk of L0 / L1 retrievals
+      for the trader and analysis agents.
+    corpora: [bars_minute, bars_daily, performance, decisions]
+  - id: second
+    name: "Second-order — SEC / fundamentals / news"
+    description: >-
+      SEC EDGAR filings, standardised XBRL financials, computed
+      ratios, earnings call transcripts, news + sentiment. Used by
+      research and selection agents.
+    corpora:
+      - sec_filings
+      - sec_xbrl
+      - financial_ratios
+      - earnings_call
+      - news_sentiment
+  - id: third
+    name: "Third-order — regulatory"
+    description: >-
+      CFPB consumer complaints, FDA applications + adverse events +
+      recalls, USPTO patents + trademarks + assignments. Surfaces
+      tail-risk and pipeline / IP signals.
+    corpora:
+      - cfpb_complaints
+      - fda_applications
+      - fda_adverse_events
+      - fda_recalls
+      - uspto_patents
+      - uspto_trademarks
+      - uspto_assignments

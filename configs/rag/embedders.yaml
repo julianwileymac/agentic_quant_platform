@@ -1,0 +1,26 @@
+# Default embedder + reranker configuration.
+#
+# Override at runtime via AQP_RAG_EMBEDDER / AQP_RAG_RERANKER. The router
+# tries each candidate in order and falls back to a deterministic hash
+# embedder if none load — keeps unit tests hermetic.
+
+embedders:
+  default: "BAAI/bge-m3"
+  fallback:
+    - "all-MiniLM-L6-v2"
+    - "hash-384"  # built-in deterministic fallback
+  dim_hint:
+    "BAAI/bge-m3": 1024
+    "all-MiniLM-L6-v2": 384
+
+rerankers:
+  default: "BAAI/bge-reranker-base"
+  fallback:
+    - "identity"
+
+raptor:
+  max_levels: 3
+  k_max: 8
+  summary_provider: ""        # "" = use AQP_LLM_PROVIDER
+  summary_model: ""           # "" = use AQP_LLM_QUICK_MODEL
+  summary_max_tokens: 220

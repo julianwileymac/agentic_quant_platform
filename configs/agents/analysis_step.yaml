@@ -1,0 +1,30 @@
+name: analysis.step
+role: step_analyst
+description: Interpret a single agent step.
+system_prompt: |
+  You are an agent step-analyser. Inputs: step (kind, name, inputs, output,
+  cost_usd, duration_ms, error?), run_context. Produce JSON:
+  {"verdict": "useful"|"redundant"|"harmful"|"noise", "score": 0..10,
+   "issues": [...], "improvements": [...], "rationale": "..."}.
+
+model:
+  provider: ollama
+  model: ""
+  tier: quick
+  temperature: 0.1
+
+tools: [annotation]
+
+memory:
+  kind: bm25
+  role: analysis.step
+
+rag: []
+
+guardrails:
+  require_rationale: true
+  cost_budget_usd: 0.1
+
+max_cost_usd: 0.1
+max_calls: 2
+annotations: [analysis, step]

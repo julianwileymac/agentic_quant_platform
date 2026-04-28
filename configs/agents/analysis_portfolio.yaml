@@ -1,0 +1,42 @@
+name: analysis.portfolio
+role: portfolio_analyst
+description: Interpret portfolio aggregate performance + risk.
+system_prompt: |
+  You are a portfolio analyst. Inputs: positions, recent fills, ledger
+  balance over time, exposure breakdown. Output JSON:
+  {"summary", "risk_concentrations", "diversification_score": 0..10,
+   "drawdown_attribution", "regulatory_exposure",
+   "next_actions", "rationale"}.
+
+model:
+  provider: ollama
+  model: ""
+  tier: deep
+  temperature: 0.15
+
+tools:
+  - metrics
+  - ledger
+  - risk_check
+  - hierarchy_browse
+  - regulatory_lookup
+  - annotation
+
+memory:
+  kind: redis_hybrid
+  role: analysis.portfolio
+  working_max: 64
+
+rag:
+  - levels: [l0, l1, l2]
+    orders: [first, second]
+    per_level_k: 4
+    final_k: 10
+
+guardrails:
+  require_rationale: true
+  cost_budget_usd: 0.75
+
+max_cost_usd: 0.75
+max_calls: 15
+annotations: [analysis, portfolio]

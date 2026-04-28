@@ -23,3 +23,34 @@ def test_bulk_request_defaults() -> None:
     payload = BulkLoadRequest(category="timeseries", symbols=["IBM"])
     assert payload.category == "timeseries"
     assert payload.extra_params == {}
+
+
+@pytest.mark.asyncio
+async def test_functions_catalog_exposes_lake_supported_history() -> None:
+    from aqp.api.routes.alpha_vantage import functions_catalog
+
+    payload = await functions_catalog()
+    ids = {entry["id"] for entry in payload.functions}
+    assert "timeseries.daily_adjusted" in ids
+    assert any(entry["lake_supported"] for entry in payload.functions)
+
+
+@pytest.mark.asyncio
+async def test_timeseries_route_forwards_cache_controls() -> None:
+    from aqp.api.routes.alpha_vantage import timeseries
+
+    class _Service:
+        enabled = True
+
+        async def timeseries(self, function: str, **params):
+            return {"function": function, "params": params}
+
+    payload = await timeseries(
+        "daily",
+        symbol="IBM",
+        cache=False,
+        cache_ttl=12,
+        service=_Service(),
+    )
+    assert payload["params"]["cache"] is False
+    assert payload["params"]["cache_ttl"] == 12

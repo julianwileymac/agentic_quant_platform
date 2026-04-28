@@ -1,0 +1,40 @@
+name: analysis.run
+role: run_analyst
+description: Interpret a backtest / paper / live run end-to-end.
+system_prompt: |
+  You are a backtest run analyst. Input: a backtest_run row + key metrics
+  (sharpe, sortino, max_drawdown, total_return, ...). Output JSON:
+  {"headline", "strengths", "weaknesses", "regime_attribution",
+   "next_actions", "score": 0..10, "rationale"}.
+
+model:
+  provider: ollama
+  model: ""
+  tier: deep
+  temperature: 0.15
+
+tools:
+  - metrics
+  - rag_query
+  - optimize_proposal
+  - annotation
+
+memory:
+  kind: redis_hybrid
+  role: analysis.run
+  working_max: 64
+
+rag:
+  - levels: [l0, l1]
+    orders: [first]
+    corpora: [performance, decisions]
+    per_level_k: 5
+    final_k: 10
+
+guardrails:
+  require_rationale: true
+  cost_budget_usd: 0.5
+
+max_cost_usd: 0.5
+max_calls: 10
+annotations: [analysis, run]

@@ -16,7 +16,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 
 from aqp.api.schemas import (
     DataSearchRequest,
@@ -28,10 +28,11 @@ from aqp.api.schemas import (
     UniverseSyncRequest,
 )
 from aqp.config import settings
+from aqp.core.types import Symbol
 from aqp.data.chroma_store import ChromaStore
 from aqp.data.duckdb_engine import DuckDBHistoryProvider
 from aqp.persistence.db import get_session
-from aqp.persistence.models import DatasetCatalog, DatasetVersion
+from aqp.persistence.models import DatasetCatalog, DatasetVersion, Instrument
 from aqp.tasks.ingestion_tasks import (
     index_chroma,
     ingest_ibkr_historical,
@@ -98,32 +99,78 @@ def sync_universe(req: UniverseSyncRequest) -> TaskAccepted:
 @router.get("/universe")
 def list_universe(
     limit: int = 200,
+    offset: int = 0,
     query: str | None = None,
+    source: str | None = None,
+    state: str = "active",
+    include_otc: bool = False,
 ) -> dict[str, Any]:
-    policy = str(settings.universe_provider or "managed_snapshot").strip().lower()
+    policy = str(source or settings.universe_provider or "managed_snapshot").strip().lower()
     q = (query or "").strip()
+    cap = max(1, min(int(limit), 5000))
+    start = max(0, int(offset))
 
     items: list[dict[str, Any]] = []
-    if policy != "config":
+    if policy in {"alpha_vantage", "alpha_vantage_live", "live"}:
         try:
             from aqp.data.sources.alpha_vantage.universe import AlphaVantageUniverseService
 
-            items = AlphaVantageUniverseService().list_snapshot(limit=limit, query=q or None)
+            svc = AlphaVantageUniverseService()
+            raw = svc.fetch_snapshot(state=state)
+            normalized = svc.normalize_snapshot(
+                raw,
+                include_otc=include_otc,
+                query=q or None,
+                limit=None,
+            )
+            total = int(len(normalized))
+            page = normalized.iloc[start : start + cap]
+            items = [
+                {
+                    "id": "",
+                    "vt_symbol": row["vt_symbol"],
+                    "ticker": row["ticker"],
+                    "exchange": row["exchange"],
+                    "asset_class": row["asset_class"],
+                    "security_type": row["security_type"],
+                    "sector": None,
+                    "industry": None,
+                    "currency": row.get("currency") or "USD",
+                    "name": row.get("name"),
+                    "status": row.get("status"),
+                    "updated_at": None,
+                }
+                for row in page.to_dict(orient="records")
+            ]
+            return _universe_response("alpha_vantage_live", items, total=total, offset=start, limit=cap)
         except Exception:
             items = []
+    elif policy in {"catalog", "data_catalog", "instrument", "instruments"}:
+        items, total = _list_catalog_universe(limit=cap, offset=start, query=q or None)
+        return _universe_response("catalog", items, total=total, offset=start, limit=cap)
+    elif policy != "config":
+        try:
+            from aqp.data.sources.alpha_vantage.universe import AlphaVantageUniverseService
+
+            items = AlphaVantageUniverseService().list_snapshot(limit=cap, offset=start, query=q or None)
+            total = _count_instruments(query=q or None)
+        except Exception:
+            items = []
+            total = 0
 
     if not items:
         source = "config"
         tickers = [s.strip().upper() for s in settings.universe_list if s and s.strip()]
         if q:
             tickers = [ticker for ticker in tickers if q.upper() in ticker]
-        tickers = tickers[: max(1, int(limit))]
+        total = len(tickers)
+        tickers = tickers[start : start + cap]
         items = [
             {
                 "id": "",
-                "vt_symbol": f"{ticker}.NASDAQ",
+                "vt_symbol": Symbol.parse(ticker).vt_symbol,
                 "ticker": ticker,
-                "exchange": "NASDAQ",
+                "exchange": Symbol.parse(ticker).exchange.value,
                 "asset_class": "equity",
                 "security_type": "equity",
                 "sector": None,
@@ -136,11 +183,262 @@ def list_universe(
     else:
         source = "managed_snapshot"
 
+    return _universe_response(source, items, total=total, offset=start, limit=cap)
+
+
+def _universe_response(
+    source: str,
+    items: list[dict[str, Any]],
+    *,
+    total: int,
+    offset: int,
+    limit: int,
+) -> dict[str, Any]:
+    next_offset = offset + len(items)
     return {
         "source": source,
         "count": len(items),
+        "total": int(total),
+        "offset": int(offset),
+        "limit": int(limit),
+        "next_offset": next_offset if next_offset < int(total) else None,
+        "has_more": next_offset < int(total),
         "items": items,
     }
+
+
+def _instrument_filter(stmt: Any, query: str | None) -> Any:
+    q = (query or "").strip()
+    if not q:
+        return stmt
+    needle = f"%{q}%"
+    return stmt.where(
+        (Instrument.ticker.ilike(needle))
+        | (Instrument.vt_symbol.ilike(needle))
+        | (Instrument.sector.ilike(needle))
+        | (Instrument.industry.ilike(needle))
+    )
+
+
+def _count_instruments(query: str | None = None) -> int:
+    with get_session() as session:
+        stmt = _instrument_filter(select(func.count()).select_from(Instrument), query)
+        return int(session.execute(stmt).scalar_one() or 0)
+
+
+def _list_catalog_universe(
+    *,
+    limit: int,
+    offset: int = 0,
+    query: str | None = None,
+) -> tuple[list[dict[str, Any]], int]:
+    with get_session() as session:
+        total = int(session.execute(_instrument_filter(select(func.count()).select_from(Instrument), query)).scalar_one() or 0)
+        stmt = _instrument_filter(select(Instrument), query)
+        rows = session.execute(
+            stmt.order_by(Instrument.ticker.asc())
+            .offset(max(0, int(offset)))
+            .limit(max(1, int(limit)))
+        ).scalars().all()
+    return [
+        {
+            "id": row.id,
+            "vt_symbol": row.vt_symbol,
+            "ticker": row.ticker,
+            "exchange": row.exchange,
+            "asset_class": row.asset_class,
+            "security_type": row.security_type,
+            "sector": row.sector,
+            "industry": row.industry,
+            "currency": row.currency,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        }
+        for row in rows
+    ], total
+
+
+@router.get("/fabric/overview")
+def fabric_overview() -> dict[str, Any]:
+    """Aggregated view across the data fabric: sources, namespaces, instruments, links."""
+    sources_summary: list[dict[str, Any]] = []
+    try:
+        from aqp.data.sources.registry import list_data_sources
+
+        for source in list_data_sources():
+            row = source if isinstance(source, dict) else dict(source)
+            sources_summary.append(
+                {
+                    "name": row.get("name"),
+                    "display_name": row.get("display_name"),
+                    "kind": row.get("kind"),
+                    "vendor": row.get("vendor"),
+                    "enabled": bool(row.get("enabled")),
+                    "domains": (row.get("capabilities") or {}).get("domains", []),
+                }
+            )
+    except Exception:
+        pass
+
+    namespaces: list[str] = []
+    table_count = 0
+    try:
+        from aqp.data import iceberg_catalog as ic
+
+        namespaces = ic.list_namespaces()
+        for ns in namespaces:
+            table_count += len(ic.list_tables(ns))
+    except Exception:
+        pass
+
+    instrument_count = 0
+    identifier_link_count = 0
+    catalog_summary: list[dict[str, Any]] = []
+    try:
+        from sqlalchemy import func as sa_func
+
+        from aqp.persistence.models import IdentifierLink
+
+        with get_session() as session:
+            instrument_count = int(
+                session.execute(select(sa_func.count()).select_from(Instrument)).scalar_one() or 0
+            )
+            identifier_link_count = int(
+                session.execute(select(sa_func.count()).select_from(IdentifierLink)).scalar_one() or 0
+            )
+            rows = session.execute(
+                select(DatasetCatalog).order_by(desc(DatasetCatalog.updated_at)).limit(50)
+            ).scalars().all()
+            for row in rows:
+                catalog_summary.append(
+                    {
+                        "name": row.name,
+                        "provider": row.provider,
+                        "domain": row.domain,
+                        "iceberg_identifier": row.iceberg_identifier,
+                        "load_mode": row.load_mode,
+                        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                    }
+                )
+    except Exception:
+        pass
+
+    alpha_vantage_endpoints: list[dict[str, Any]] = []
+    try:
+        from aqp.data.sources.alpha_vantage.catalog import lake_supported_functions
+
+        for fn in lake_supported_functions():
+            entry = fn.to_dict()
+            entry["last_refreshed_at"] = None
+            for catalog_row in catalog_summary:
+                if catalog_row.get("iceberg_identifier") == entry.get("iceberg_identifier"):
+                    entry["last_refreshed_at"] = catalog_row.get("updated_at")
+                    break
+            alpha_vantage_endpoints.append(entry)
+    except Exception:
+        pass
+
+    return {
+        "sources": sources_summary,
+        "namespaces": namespaces,
+        "namespace_count": len(namespaces),
+        "table_count": table_count,
+        "instrument_count": instrument_count,
+        "identifier_link_count": identifier_link_count,
+        "catalog_recent": catalog_summary,
+        "alpha_vantage_endpoints": alpha_vantage_endpoints,
+    }
+
+
+@router.get("/securities/{vt_symbol}/coverage")
+def security_coverage(vt_symbol: str) -> dict[str, Any]:
+    """Return every Iceberg-backed dataset that contains rows for ``vt_symbol``.
+
+    Joins :class:`DataLink` to :class:`DatasetVersion` and :class:`DatasetCatalog`
+    so the data fabric UI can answer "what data do we have about AAPL.NASDAQ"
+    without scanning parquet files.
+    """
+    from aqp.persistence.models import DataLink
+
+    vt = (vt_symbol or "").strip()
+    if not vt:
+        raise HTTPException(400, "vt_symbol is required")
+
+    with get_session() as session:
+        instrument = session.execute(
+            select(Instrument).where(Instrument.vt_symbol == vt).limit(1)
+        ).scalar_one_or_none()
+        if instrument is None:
+            return {
+                "vt_symbol": vt,
+                "instrument_id": None,
+                "datasets": [],
+                "identifier_links": [],
+            }
+
+        dataset_rows = (
+            session.execute(
+                select(DataLink, DatasetVersion, DatasetCatalog)
+                .join(DatasetVersion, DataLink.dataset_version_id == DatasetVersion.id, isouter=True)
+                .join(DatasetCatalog, DatasetVersion.catalog_id == DatasetCatalog.id, isouter=True)
+                .where(DataLink.instrument_id == instrument.id)
+            )
+            .all()
+        )
+
+        by_catalog: dict[str, dict[str, Any]] = {}
+        for link, version, catalog in dataset_rows:
+            if catalog is None:
+                continue
+            slot = by_catalog.setdefault(
+                catalog.id,
+                {
+                    "catalog_id": catalog.id,
+                    "iceberg_identifier": catalog.iceberg_identifier,
+                    "name": catalog.name,
+                    "provider": catalog.provider,
+                    "domain": catalog.domain,
+                    "row_count": 0,
+                    "coverage_start": None,
+                    "coverage_end": None,
+                    "latest_version": version.version if version else None,
+                },
+            )
+            slot["row_count"] = int(slot["row_count"]) + int(getattr(link, "row_count", 0) or 0)
+            cs = link.coverage_start
+            ce = link.coverage_end
+            if cs and (slot["coverage_start"] is None or cs.isoformat() < slot["coverage_start"]):
+                slot["coverage_start"] = cs.isoformat()
+            if ce and (slot["coverage_end"] is None or ce.isoformat() > slot["coverage_end"]):
+                slot["coverage_end"] = ce.isoformat()
+            if version and (slot["latest_version"] is None or version.version > slot["latest_version"]):
+                slot["latest_version"] = version.version
+
+        datasets = sorted(by_catalog.values(), key=lambda row: row.get("name") or "")
+
+        try:
+            from aqp.data.sources.resolvers.identifiers import IdentifierResolver
+
+            identifiers = IdentifierResolver().instrument_identifiers(instrument.id)
+        except Exception:
+            identifiers = []
+
+        return {
+            "vt_symbol": instrument.vt_symbol,
+            "instrument_id": instrument.id,
+            "ticker": instrument.ticker,
+            "exchange": instrument.exchange,
+            "asset_class": instrument.asset_class,
+            "datasets": datasets,
+            "identifier_links": [
+                {
+                    "scheme": entry.get("scheme"),
+                    "value": entry.get("value"),
+                    "source_id": entry.get("source_id"),
+                    "confidence": entry.get("confidence"),
+                }
+                for entry in identifiers
+            ],
+        }
 
 
 @router.post("/load", response_model=TaskAccepted)

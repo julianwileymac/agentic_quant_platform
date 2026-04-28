@@ -1,0 +1,45 @@
+# Default per-agent RAG routing plans.
+#
+# Each entry tells the AgentRuntime which levels / orders / corpora to
+# pull from when augmenting a prompt. Overridable via AgentSpec.rag.
+
+defaults:
+  per_level_k: 5
+  final_k: 8
+  rerank: true
+  compress: true
+
+agents:
+  research.news_miner:
+    levels: [l1, l2, l3]
+    orders: [second, third]
+    corpora: [news_sentiment, cfpb_complaints, fda_recalls]
+  research.equity:
+    levels: [l1, l2, l3]
+    orders: [second, third]
+    corpora:
+      - sec_filings
+      - sec_xbrl
+      - financial_ratios
+      - earnings_call
+      - cfpb_complaints
+      - uspto_patents
+  research.universe:
+    levels: [l0, l1, l2]
+    orders: [first, second]
+  selection.stock_selector:
+    levels: [l0, l1, l2]
+    orders: [first, second]
+  trader.signal_emitter:
+    levels: [l1, l2]
+    orders: [first, second]
+    corpora: [bars_daily, performance, financial_ratios]
+  analysis.step:
+    levels: [l0]
+    orders: [first]
+  analysis.run:
+    levels: [l0, l1]
+    orders: [first]
+  analysis.portfolio:
+    levels: [l0, l1, l2]
+    orders: [first, second]

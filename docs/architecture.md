@@ -241,11 +241,15 @@ flowchart LR
 | --- | --- |
 | Run AQP for the first time | [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Understand the data plane end-to-end | [data-plane.md](data-plane.md) |
+| Run a manifest-driven pipeline | [data-engine.md](data-engine.md) |
 | Add a new ingest source | [data-catalog.md](data-catalog.md) |
+| Browse / augment the unified entity registry | [entity-registry.md](entity-registry.md) |
 | Author a new strategy | [factor-research.md](factor-research.md) + [strategy-lifecycle.md](strategy-lifecycle.md) |
 | Add an LLM provider | [providers.md](providers.md) |
 | Add an ML model | [ml-framework.md](ml-framework.md) |
 | Wire a new agent into the crew | [agentic-pipeline.md](agentic-pipeline.md) |
+| Sync metadata to DataHub | [datahub-sync.md](datahub-sync.md) |
+| Schedule jobs via Dagster | [dagster.md](dagster.md) |
 | Trace a slow request | [observability.md](observability.md) |
 | Hack on the webui | [webui.md](webui.md) |
 

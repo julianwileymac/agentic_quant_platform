@@ -23,6 +23,28 @@ from aqp.persistence.models import (
 logger = logging.getLogger(__name__)
 
 
+def _resolve_code_version_sha() -> str | None:
+    """Best-effort capture of the current git SHA at materialization time."""
+    import os
+    import subprocess
+
+    if env := os.environ.get("AQP_CODE_VERSION_SHA"):
+        return env.strip() or None
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip() or None
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
 def register_dataset_version(
     *,
     name: str,
@@ -41,6 +63,7 @@ def register_dataset_version(
     source_uri: str | None = None,
     llm_annotations: dict[str, Any] | None = None,
     column_docs: list[dict[str, Any]] | None = None,
+    engine_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Persist a dataset catalog/version row and return lineage ids.
 
@@ -50,25 +73,57 @@ def register_dataset_version(
     For non-OHLCV (``domain != "market.bars"``) datasets the ``vt_symbol``
     / ``timestamp`` extraction and instrument upsert paths are skipped so
     generic Iceberg tables don't blow up on missing columns.
+
+    ``engine_meta`` is the new (data-fabric expansion) bag of fields written
+    to both ``dataset_catalogs`` and ``dataset_versions``: ``compute_backend``,
+    ``dagster_asset_key``, ``datahub_urn``, ``code_version_sha``,
+    ``materialization_engine``, ``dagster_run_id``, ``partition_key``,
+    ``manifest_id``, ``pipeline_kind``, ``rows_written``,
+    ``entity_extraction_status``.
     """
+    engine_meta = dict(engine_meta or {})
     if df is None or df.empty:
-        return {}
+        # Even with no rows we still want to surface the engine_meta on the
+        # catalog so the UI shows the engine that ran (with zero rows).
+        if not (iceberg_identifier and engine_meta):
+            return {}
 
     is_market_bars = (domain or "").startswith("market.bars")
+    code_version_sha = engine_meta.pop("code_version_sha", None) or _resolve_code_version_sha()
+    compute_backend = engine_meta.pop("compute_backend", None)
+    dagster_asset_key = engine_meta.pop("dagster_asset_key", None)
+    datahub_urn = engine_meta.pop("datahub_urn", None)
+    materialization_engine = engine_meta.pop("materialization_engine", None) or compute_backend
+    dagster_run_id = engine_meta.pop("dagster_run_id", None)
+    partition_key = engine_meta.pop("partition_key", None)
+    manifest_id_val = engine_meta.pop("manifest_id", None)
+    pipeline_kind = engine_meta.pop("pipeline_kind", None)
+    entity_extraction_status = engine_meta.pop("entity_extraction_status", None)
+    rows_written_hint = engine_meta.pop("rows_written", None)
 
     try:
-        if is_market_bars:
-            ts = pd.to_datetime(df.get("timestamp"), errors="coerce")
-            start_time = _to_dt(ts.min())
-            end_time = _to_dt(ts.max())
-            vt_symbols = sorted(
-                df.get("vt_symbol", pd.Series(dtype=str)).dropna().astype(str).unique().tolist()
-            )
+        if df is not None and not df.empty:
+            if is_market_bars:
+                ts = pd.to_datetime(df.get("timestamp"), errors="coerce")
+                start_time = _to_dt(ts.min())
+                end_time = _to_dt(ts.max())
+                vt_symbols = sorted(
+                    df.get("vt_symbol", pd.Series(dtype=str))
+                    .dropna()
+                    .astype(str)
+                    .unique()
+                    .tolist()
+                )
+            else:
+                start_time = end_time = None
+                vt_symbols = []
+            schema = _schema_snapshot(df)
+            digest = dataset_hash_value or _dataset_hash(df)
         else:
             start_time = end_time = None
             vt_symbols = []
-        schema = _schema_snapshot(df)
-        digest = dataset_hash_value or _dataset_hash(df)
+            schema = {"columns": [], "dtypes": {}}
+            digest = dataset_hash_value
 
         with get_session() as session:
             catalog = session.execute(
@@ -93,6 +148,12 @@ def register_dataset_version(
                     source_uri=source_uri,
                     llm_annotations=dict(llm_annotations or {}),
                     column_docs=list(column_docs or []),
+                    compute_backend=compute_backend,
+                    dagster_asset_key=dagster_asset_key,
+                    datahub_urn=datahub_urn,
+                    entity_extraction_status=entity_extraction_status or "pending",
+                    manifest_id=manifest_id_val,
+                    pipeline_kind=pipeline_kind,
                     created_at=datetime.utcnow(),
                     updated_at=datetime.utcnow(),
                 )
@@ -118,6 +179,18 @@ def register_dataset_version(
                     }
                 if column_docs:
                     catalog.column_docs = list(column_docs)
+                if compute_backend:
+                    catalog.compute_backend = compute_backend
+                if dagster_asset_key:
+                    catalog.dagster_asset_key = dagster_asset_key
+                if datahub_urn:
+                    catalog.datahub_urn = datahub_urn
+                if entity_extraction_status:
+                    catalog.entity_extraction_status = entity_extraction_status
+                if manifest_id_val:
+                    catalog.manifest_id = manifest_id_val
+                if pipeline_kind:
+                    catalog.pipeline_kind = pipeline_kind
                 catalog.updated_at = datetime.utcnow()
                 session.add(catalog)
 
@@ -127,6 +200,12 @@ def register_dataset_version(
                 ).scalar_one()
                 or 0
             )
+            row_count_val = int(rows_written_hint) if rows_written_hint else (
+                int(len(df)) if df is not None else 0
+            )
+            columns_val = list(df.columns) if df is not None and not df.empty else (
+                list((schema or {}).get("columns") or [])
+            )
             row = DatasetVersion(
                 catalog_id=catalog.id,
                 version=int(current_version) + 1,
@@ -134,14 +213,18 @@ def register_dataset_version(
                 as_of=as_of or datetime.utcnow(),
                 start_time=start_time,
                 end_time=end_time,
-                row_count=int(len(df)),
+                row_count=row_count_val,
                 symbol_count=int(len(vt_symbols)),
                 file_count=int(file_count or len(vt_symbols) or 1),
                 dataset_hash=digest,
                 materialization_uri=storage_uri,
-                columns=list(df.columns),
+                columns=columns_val,
                 schema_json=schema,
                 meta=dict(meta or {}),
+                materialization_engine=materialization_engine,
+                dagster_run_id=dagster_run_id,
+                partition_key=partition_key,
+                code_version_sha=code_version_sha,
                 created_at=datetime.utcnow(),
             )
             session.add(row)
@@ -152,6 +235,10 @@ def register_dataset_version(
                 "dataset_catalog_id": catalog.id,
                 "dataset_version_id": row.id,
                 "dataset_hash": digest,
+                "code_version_sha": code_version_sha,
+                "compute_backend": compute_backend,
+                "dagster_asset_key": dagster_asset_key,
+                "datahub_urn": datahub_urn,
             }
     except Exception:
         logger.warning("dataset lineage registration skipped", exc_info=True)

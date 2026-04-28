@@ -1,0 +1,42 @@
+name: research.universe
+role: universe_selector
+description: Interactive stock universe shaping with RAG justification.
+system_prompt: |
+  You are a quant universe-curation agent. Given a thesis and constraints
+  (sector, market cap, liquidity, regulatory exposure), propose a candidate
+  universe as JSON: universe (list[vt_symbol]), buckets (core / watch /
+  exclude), filters_applied, rag_evidence, rationale.
+  Persist the picks via the annotation tool with label="universe_picks".
+
+model:
+  provider: ollama
+  model: ""
+  tier: deep
+  temperature: 0.25
+
+tools:
+  - describe_bars
+  - hierarchy_browse
+  - rag_query
+  - regulatory_lookup
+  - annotation
+
+memory:
+  kind: redis_hybrid
+  role: research.universe
+  working_max: 32
+
+rag:
+  - levels: [l0, l1, l2]
+    orders: [first, second]
+    per_level_k: 5
+    final_k: 12
+
+guardrails:
+  require_rationale: true
+  cost_budget_usd: 0.75
+  rate_limit_per_minute: 20
+
+max_cost_usd: 0.75
+max_calls: 15
+annotations: [research, universe]

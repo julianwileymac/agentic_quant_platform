@@ -46,10 +46,7 @@ class Settings(BaseSettings):
     llm_temperature_quick: float = Field(default=0.4)
     llm_context_window: int = Field(default=32768)
     llm_request_timeout: int = Field(default=120)
-    # --- Data-pipeline Director (Nemotron by default). The Director is
-    # invoked by ``aqp.data.pipelines.director.plan_ingestion`` to
-    # review the discovery brief and decide on namespaces, table names,
-    # row floors, and per-member skip lists before materialisation.
+    # --- Data-pipeline Director (Nemotron by default).
     llm_director_provider: str = Field(default="ollama")
     llm_director_model: str = Field(default="nemotron-3-nano:30b")
     llm_director_temperature: float = Field(default=0.1)
@@ -63,10 +60,7 @@ class Settings(BaseSettings):
     deepseek_api_key: str = Field(default="")
     groq_api_key: str = Field(default="")
     openrouter_api_key: str = Field(default="")
-    # vLLM — OpenAI-compatible HTTP API. Either a containerised service
-    # (the docker-compose ``vllm`` profile) or any external endpoint a
-    # user runs themselves. The ``vllm`` provider in the LLM router
-    # dispatches through LiteLLM's ``openai/`` adapter using these.
+    # vLLM — OpenAI-compatible HTTP API.
     vllm_base_url: str = Field(default="")
     vllm_api_key: str = Field(default="")
     vllm_default_model: str = Field(default="nemotron")
@@ -88,6 +82,41 @@ class Settings(BaseSettings):
     chroma_port: int = Field(default=8001)
     chroma_embedding_model: str = Field(default="all-MiniLM-L6-v2")
 
+    # --- Hierarchical RAG (Redis Stack / RediSearch) ---
+    # All RAG vectors + tag indexes live in the single Redis instance
+    # configured by ``redis_url``. Index keys are namespaced by
+    # ``rag_redis_prefix`` so other Redis users in the cluster aren't
+    # affected. The default embedder is BGE-M3 (matches the Alpha-GPT
+    # paper); falls back to all-MiniLM-L6-v2 if BGE-M3 isn't installed
+    # and finally to a deterministic hash embedder for hermetic tests.
+    rag_redis_prefix: str = Field(default="aqp:rag")
+    rag_embedder: str = Field(default="BAAI/bge-m3")
+    rag_reranker: str = Field(default="BAAI/bge-reranker-base")
+    rag_default_k: int = Field(default=8)
+    rag_per_level_k: int = Field(default=5)
+    rag_raptor_levels: int = Field(default=3)
+    rag_raptor_k_max: int = Field(default=8)
+    rag_audit_enabled: bool = Field(default=True)
+    rag_compress_threshold: float = Field(default=0.15)
+    rag_working_max: int = Field(default=64)
+
+    # --- Agent runtime / observability ---
+    agent_run_artifact_dir: Path = Field(default=Path("./data/agent_runs"))
+    agent_default_max_calls: int = Field(default=20)
+    agent_default_max_cost_usd: float = Field(default=2.0)
+    agent_decision_log_path: Path = Field(default=Path("./data/agent_runs/decision_log.md"))
+
+    # --- Regulatory data adapter credentials ---
+    cfpb_user_agent: str = Field(default="aqp-research/0.1 (+https://github.com/)")
+    cfpb_base_url: str = Field(default="https://www.consumerfinance.gov/data-research/consumer-complaints")
+    cfpb_api_url: str = Field(default="https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1")
+    fda_api_key: str = Field(default="")
+    fda_base_url: str = Field(default="https://api.fda.gov")
+    uspto_api_key: str = Field(default="")
+    uspto_patentsview_url: str = Field(default="https://search.patentsview.org/api/v1")
+    uspto_peds_url: str = Field(default="https://ped.uspto.gov/api")
+    uspto_tsdr_url: str = Field(default="https://tsdrapi.uspto.gov/ts/cd/casestatus")
+
     # --- MLflow ---
     mlflow_tracking_uri: str = Field(default="http://localhost:5000")
     mlflow_experiment: str = Field(default="aqp-default")
@@ -96,10 +125,7 @@ class Settings(BaseSettings):
     mlflow_serve_port: int = Field(default=5001)
 
     # --- Ray Serve ---
-    # When targeting the rpi_kubernetes cluster use
-    # ``ray://ray-head.mlops.svc.cluster.local:10001`` for the client API and
-    # ``http://ray-serve.mlops.svc.cluster.local:8000`` for the HTTP ingress.
-    ray_address: str = Field(default="auto")  # ``auto`` = start local head
+    ray_address: str = Field(default="auto")
     ray_serve_http_host: str = Field(default="0.0.0.0")
     ray_serve_http_port: int = Field(default=8000)
     ray_serve_route_prefix: str = Field(default="/aqp")
@@ -110,18 +136,12 @@ class Settings(BaseSettings):
     torchserve_model_store: Path = Field(default=Path("./data/torchserve/model-store"))
 
     # --- Sentiment / FinGPT ---
-    # Default HuggingFace model id for SentimentScorer. ``yiyanghkust/finbert-tone``
-    # is free and open; gated FinGPT LoRA checkpoints can be swapped in here.
     sentiment_model: str = Field(default="yiyanghkust/finbert-tone")
-    fingpt_forecaster_model: str = Field(default="")  # "" = route via LLM router
+    fingpt_forecaster_model: str = Field(default="")
     finrobot_default_tier: str = Field(default="deep")
 
-    # --- Cross-repo integration (agentic_assistants + rpi_kubernetes) ---
-    # The agentic_assistants lineage API is consumed via its REST surface
-    # and keeps a shared dataset→run→model graph across both repos.
+    # --- Cross-repo integration ---
     agentic_assistants_api: str = Field(default="")
-    # MinIO / S3 bucket for shared artifacts (maps to the MinIO service
-    # deployed by rpi_kubernetes/base-services/minio).
     minio_endpoint_url: str = Field(default="")
     minio_access_key: str = Field(default="")
     minio_secret_key: str = Field(default="")
@@ -139,10 +159,6 @@ class Settings(BaseSettings):
     ui_port: int = Field(default=8765)
 
     # --- WebUI (Next.js) ---
-    # Comma-separated list of allowed origins for CORS. The Next dev server
-    # uses :3000 by default; production deployments should narrow this to
-    # the canonical hostname. The legacy ``*`` behaviour is retained when
-    # this is left empty so existing clients (Solara on :8765) keep working.
     webui_cors_origins: str = Field(default="")
 
     # --- Celery ---
@@ -162,9 +178,6 @@ class Settings(BaseSettings):
     default_start: str = Field(default="2020-01-01")
     default_end: str = Field(default="2024-12-31")
 
-    # Optional comma-separated list of extra Parquet roots merged into the
-    # DuckDB ``bars`` view. Useful when users drop their own Parquet files
-    # outside the default lake (e.g. vendor exports on a mounted drive).
     local_data_roots: str = Field(default="")
     market_bars_provider: str = Field(default="auto")
     fundamentals_provider: str = Field(default="auto")
@@ -179,14 +192,14 @@ class Settings(BaseSettings):
     alpaca_api_key: str = Field(default="")
     alpaca_secret_key: str = Field(default="")
     alpaca_paper: bool = Field(default=True)
-    alpaca_base_url: str = Field(default="")  # "" = use SDK default
+    alpaca_base_url: str = Field(default="")
 
     # --- Interactive Brokers (TWS / IB Gateway) ---
     ibkr_host: str = Field(default="127.0.0.1")
-    ibkr_port: int = Field(default=7497)  # 7497 = paper, 7496 = live
+    ibkr_port: int = Field(default=7497)
     ibkr_client_id: int = Field(default=1)
 
-    # --- Tradier (generic REST example) ---
+    # --- Tradier ---
     tradier_token: str = Field(default="")
     tradier_base_url: str = Field(default="https://sandbox.tradier.com/v1")
     tradier_account_id: str = Field(default="")
@@ -203,32 +216,43 @@ class Settings(BaseSettings):
     alpha_vantage_cache_backend: str = Field(default="memory")
     alpha_vantage_cache_max_entries: int = Field(default=512)
     alpha_vantage_rapidapi: bool = Field(default=False)
+    alpha_vantage_intraday_interval: str = Field(default="1min")
+    alpha_vantage_intraday_lookback_months: int = Field(default=36)
+    alpha_vantage_intraday_batch_size: int = Field(default=25)
+    alpha_vantage_intraday_run_guard_max_starts: int = Field(default=3)
+    alpha_vantage_intraday_run_guard_window_seconds: int = Field(default=900)
+    alpha_vantage_intraday_manifest_dir: Path = Field(
+        default=Path("./data/alpha_vantage/intraday_components")
+    )
+    alpha_vantage_intraday_namespace: str = Field(default="aqp_alpha_vantage")
+    alpha_vantage_intraday_table: str = Field(default="time_series_intraday")
+
+    # --- DataHub metadata emission ---
+    datahub_gms_url: str = Field(default="")
+    datahub_token: str = Field(default="")
+    datahub_env: str = Field(default="PROD")
 
     # --- OpenTelemetry ---
-    otel_endpoint: str = Field(default="")  # "" disables tracing
+    otel_endpoint: str = Field(default="")
     otel_service_name: str = Field(default="aqp")
     otel_sample_ratio: float = Field(default=1.0)
-    otel_protocol: str = Field(default="grpc")  # grpc | http/protobuf
+    otel_protocol: str = Field(default="grpc")
 
-    # --- Kafka (streaming pipeline) ---
-    # The ingesters produce to Kafka and the KafkaDataFeed consumes from it.
-    # On the rpi_kubernetes cluster the bootstrap server is
-    # ``trading-kafka-kafka-bootstrap.data-services.svc.cluster.local:9092``.
+    # --- Kafka ---
     kafka_bootstrap: str = Field(default="localhost:9092")
     kafka_client_id: str = Field(default="aqp")
-    kafka_compression: str = Field(default="zstd")  # zstd | lz4 | snappy | none
-    kafka_acks: str = Field(default="all")  # all | 1 | 0
-    kafka_security_protocol: str = Field(default="PLAINTEXT")  # PLAINTEXT | SSL | SASL_SSL | SASL_PLAINTEXT
-    kafka_sasl_mechanism: str = Field(default="")  # PLAIN | SCRAM-SHA-256 | SCRAM-SHA-512
+    kafka_compression: str = Field(default="zstd")
+    kafka_acks: str = Field(default="all")
+    kafka_security_protocol: str = Field(default="PLAINTEXT")
+    kafka_sasl_mechanism: str = Field(default="")
     kafka_sasl_username: str = Field(default="")
     kafka_sasl_password: str = Field(default="")
-    kafka_topic_prefix: str = Field(default="")  # Prefix prepended to every topic; empty for plain names
+    kafka_topic_prefix: str = Field(default="")
     kafka_consumer_group: str = Field(default="aqp-live")
 
-    # --- Streaming ingester configuration ---
-    stream_universe: str = Field(default="")  # Comma-separated tickers; "" = fall back to default_universe
-    stream_config_file: str = Field(default="")  # YAML with option/future contracts
-    # IBKR ``reqMarketDataType`` codes: 1 live, 2 frozen, 3 delayed, 4 delayed-frozen.
+    # --- Streaming ingester ---
+    stream_universe: str = Field(default="")
+    stream_config_file: str = Field(default="")
     stream_market_data_type: int = Field(default=3)
     stream_scanner_interval_sec: int = Field(default=300)
     stream_scanner_enabled: bool = Field(default=False)
@@ -238,71 +262,159 @@ class Settings(BaseSettings):
     stream_metrics_port: int = Field(default=9300)
     stream_health_port: int = Field(default=9301)
 
-    # --- Alpaca streaming feed selection ---
-    # ``iex`` free tier, ``sip`` paid tier, ``delayed_sip`` 15-min delayed.
+    # --- Alpaca streaming ---
     alpaca_feed: str = Field(default="iex")
     news_provider: str = Field(default="yfinance")
     agentic_default_preset: str = Field(default="trader_crew_quick")
     agentic_cache_dir: Path = Field(default=Path("./data/agentic_cache"))
 
-    # --- FRED (St. Louis Fed economic data) ---
+    # --- FRED ---
     fred_api_key: str = Field(default="")
     fred_cache_ttl_seconds: int = Field(default=3600)
 
-    # --- SEC EDGAR (via edgartools) ---
-    # edgartools requires an identity string ``"Name email@example.com"``
-    # to comply with SEC's fair-use guidance. When empty, the adapter
-    # will refuse to issue requests.
+    # --- SEC EDGAR ---
     sec_edgar_identity: str = Field(default="")
     sec_filing_cache_dir: Path = Field(default=Path("./data/sec_cache"))
 
     # --- Iceberg data catalog ---
-    # The Iceberg-first generic catalog. When ``iceberg_rest_uri`` is set we
-    # use the Tabular/Lakekeeper-style REST catalog; otherwise we fall back
-    # to a local PyIceberg ``sql`` catalog (sqlite metadata, filesystem
-    # warehouse) so unit tests and ``make api`` work without Docker.
     iceberg_rest_uri: str = Field(default="")
     iceberg_catalog_name: str = Field(default="aqp")
-    # Filesystem path used when the SQL fallback catalog is active. When the
-    # REST catalog is configured this path is also where the SQLite metadata
-    # store lives (warehouse data goes to S3/MinIO instead).
-    #
-    # In Docker Compose this is overridden via ``AQP_ICEBERG_WAREHOUSE`` to
-    # point at ``/warehouse/iceberg``, which is the host bind mount of
-    # ``D:/aqp-warehouse``. The ``./data/iceberg`` Python default keeps
-    # native (non-container) workflows working without extra setup.
     iceberg_warehouse: Path = Field(default=Path("./data/iceberg"))
-    # Scratch directory for unzipping / staging large archives during
-    # ingestion. Lives next to the warehouse so it benefits from the same
-    # host bind mount and isn't lost when the container restarts.
     iceberg_staging_dir: Path = Field(default=Path("./data/iceberg-staging"))
     iceberg_namespace_default: str = Field(default="aqp")
-    # When using the REST catalog with MinIO, surface the warehouse URI
-    # explicitly. ``s3a://aqp-iceberg`` is the typical bucket layout.
     iceberg_s3_warehouse: str = Field(default="")
-    # Default cap on how many rows we materialize per logical dataset before
-    # flagging the table as "truncated" in lineage. 5M handles most regulatory
-    # CSVs; the harness can override to slice through 30 GB ZIPs in chunks.
     iceberg_max_rows_per_dataset: int = Field(default=5_000_000)
-    # Cap on how many files we will pull from a single ZIP / folder when
-    # materializing one logical dataset. Protects against runaway extraction.
     iceberg_max_files_per_dataset: int = Field(default=2000)
+    iceberg_health_check_timeout_seconds: float = Field(default=5.0)
 
-    # --- S3 / MinIO credentials shared by Iceberg + general object storage ---
+    # --- S3 / MinIO ---
     s3_endpoint_url: str = Field(default="")
     s3_access_key: str = Field(default="")
     s3_secret_key: str = Field(default="")
     s3_region: str = Field(default="us-east-1")
     s3_path_style_access: bool = Field(default=True)
 
-    # --- GDelt (Global Knowledge Graph 2.0) ---
+    # --- GDelt ---
     gdelt_manifest_url: str = Field(default="http://data.gdeltproject.org/gkg/index.html")
-    gdelt_parquet_subdir: str = Field(default="gdelt")  # under ``parquet_dir``
-    # Drop rows that don't mention a registered :class:`Instrument`. When
-    # false, all manifest rows are kept (scales to ~2.5 TB/year).
+    gdelt_parquet_subdir: str = Field(default="gdelt")
     gdelt_subject_filter_only: bool = Field(default=True)
     gdelt_bigquery_project: str = Field(default="")
     gdelt_bigquery_table: str = Field(default="gdelt-bq.gdeltv2.gkg")
+
+    # ------------------------------------------------------------------
+    # Data engine + compute backends (Phase 1, data-fabric-expansion)
+    # ------------------------------------------------------------------
+    # Default executor flavor for new pipelines. ``auto`` lets
+    # ``aqp.data.compute.selection.pick_backend`` promote based on the
+    # ``compute_local_to_*`` thresholds.
+    compute_backend_default: str = Field(default="auto")
+    compute_local_to_dask_rows: int = Field(default=1_000_000)
+    compute_local_to_ray_rows: int = Field(default=25_000_000)
+    compute_local_to_dask_bytes: int = Field(default=256 * 1024 * 1024)
+    compute_local_to_ray_bytes: int = Field(default=8 * 1024 * 1024 * 1024)
+
+    # Dask / Ray cluster wiring. Empty means "spin up local cluster on
+    # demand"; set to a scheduler URL for a remote cluster.
+    dask_scheduler_address: str = Field(default="")
+    dask_n_workers: int = Field(default=2)
+    dask_threads_per_worker: int = Field(default=2)
+    ray_init_kwargs_json: str = Field(default="")
+
+    # Engine pipeline tuning.
+    engine_default_chunk_rows: int = Field(default=50_000)
+    engine_max_concurrent_pipelines: int = Field(default=2)
+    engine_pipeline_timeout_seconds: int = Field(default=3600)
+
+    # ------------------------------------------------------------------
+    # Source library defaults (Phase 2, data-fabric-expansion)
+    # ------------------------------------------------------------------
+    fetcher_default_chunk_rows: int = Field(default=50_000)
+    fetcher_max_concurrent: int = Field(default=4)
+    fetcher_default_timeout_seconds: float = Field(default=120.0)
+    fetcher_max_retries: int = Field(default=5)
+    fetcher_user_agent: str = Field(
+        default="aqp-fetcher/1.0 (+https://github.com/)"
+    )
+    finance_database_repo: str = Field(
+        default="https://raw.githubusercontent.com/JerBouma/FinanceDatabase/main/financedatabase/compression"
+    )
+    polygon_api_key: str = Field(default="")
+    tiingo_api_key: str = Field(default="")
+    quandl_api_key: str = Field(default="")
+    coingecko_api_key: str = Field(default="")
+    akshare_enabled: bool = Field(default=False)
+
+    # ------------------------------------------------------------------
+    # Profile cache (Phase 3, data-fabric-expansion)
+    # ------------------------------------------------------------------
+    profile_cache_ttl_seconds: int = Field(default=3600)
+    profile_cache_prefix: str = Field(default="aqp:profile")
+    profile_topk: int = Field(default=10)
+    profile_distinct_sample_rows: int = Field(default=200_000)
+    profile_default_engine: str = Field(default="auto")  # auto | local | dask | ray
+
+    # ------------------------------------------------------------------
+    # Entity registry (Phase 4, data-fabric-expansion)
+    # ------------------------------------------------------------------
+    entity_extraction_enabled: bool = Field(default=True)
+    entity_llm_enrichment_enabled: bool = Field(default=False)
+    entity_llm_provider: str = Field(default="")
+    entity_llm_model: str = Field(default="")
+    entity_max_neighbors: int = Field(default=64)
+    entity_dedup_similarity_threshold: float = Field(default=0.85)
+
+    # ------------------------------------------------------------------
+    # Dagster code location (Phase 5, data-fabric-expansion)
+    # ------------------------------------------------------------------
+    dagster_home: Path = Field(default=Path("./data/dagster_home"))
+    dagster_grpc_host: str = Field(default="0.0.0.0")
+    dagster_grpc_port: int = Field(default=4000)
+    dagster_webserver_url: str = Field(default="")
+    dagster_graphql_url: str = Field(default="")
+    dagster_code_location: str = Field(default="aqp")
+    dagster_module_path: str = Field(default="aqp.dagster.definitions")
+    aqp_api_url_internal: str = Field(default="http://api.aqp.svc.cluster.local:8000")
+    aqp_api_token: str = Field(default="")
+
+    # ------------------------------------------------------------------
+    # DataHub bidirectional sync (Phase 6, data-fabric-expansion)
+    # ------------------------------------------------------------------
+    datahub_sync_enabled: bool = Field(default=False)
+    datahub_sync_direction: str = Field(default="push")  # push | pull | bidirectional
+    datahub_sync_interval_seconds: int = Field(default=900)
+    datahub_platform: str = Field(default="iceberg")
+    datahub_platform_instance: str = Field(default="agentic-quant-platform")
+    datahub_external_platforms: str = Field(default="")  # comma-separated
+
+    # ------------------------------------------------------------------
+    # Airbyte hybrid data fabric (full Airbyte + embedded PyAirbyte).
+    # ------------------------------------------------------------------
+    airbyte_enabled: bool = Field(default=False)
+    airbyte_base_url: str = Field(default="http://airbyte-server.elt.svc.cluster.local:8001")
+    airbyte_api_url: str = Field(default="")
+    airbyte_workspace_id: str = Field(default="")
+    airbyte_auth_token: str = Field(default="")
+    airbyte_request_timeout_seconds: float = Field(default=30.0)
+    airbyte_poll_interval_seconds: float = Field(default=5.0)
+    airbyte_sync_timeout_seconds: int = Field(default=3600)
+    airbyte_default_destination: str = Field(default="destination-s3-minio")
+    airbyte_default_namespace: str = Field(default="aqp_airbyte")
+    airbyte_embedded_cache_dir: Path = Field(default=Path("./data/airbyte/cache"))
+    airbyte_staging_root: str = Field(default="s3://aqp-datasets/airbyte")
+    airbyte_datahub_sync_enabled: bool = Field(default=True)
+
+    # ------------------------------------------------------------------
+    # dbt foundation (local DuckDB development project).
+    # ------------------------------------------------------------------
+    dbt_project_dir: Path = Field(default=Path("./data/dbt/aqp"))
+    dbt_profiles_dir: Path = Field(default=Path("./data/dbt"))
+    dbt_duckdb_path: Path = Field(default=Path("./data/dbt/aqp.duckdb"))
+    dbt_target: str = Field(default="dev")
+    dbt_generated_schema: str = Field(default="aqp_generated")
+    dbt_generated_tag: str = Field(default="aqp_generated")
+    dbt_artifact_retention: int = Field(default=25)
+    dbt_command_timeout_seconds: int = Field(default=900)
+    dbt_export_dir: Path = Field(default=Path("./data/dbt/exports"))
 
     @field_validator(
         "data_dir",
@@ -314,10 +426,36 @@ class Settings(BaseSettings):
         "agentic_cache_dir",
         "iceberg_warehouse",
         "iceberg_staging_dir",
+        "agent_run_artifact_dir",
+        "dagster_home",
+        "airbyte_embedded_cache_dir",
+        "dbt_project_dir",
+        "dbt_profiles_dir",
+        "dbt_duckdb_path",
+        "dbt_export_dir",
     )
     @classmethod
     def _coerce_path(cls, v: Path | str) -> Path:
         return Path(v).expanduser().resolve()
+
+    @property
+    def datahub_external_platform_list(self) -> list[str]:
+        """Parsed list of platform slugs we should pull from DataHub."""
+        return [s.strip() for s in self.datahub_external_platforms.split(",") if s.strip()]
+
+    @property
+    def ray_init_kwargs(self) -> dict[str, object]:
+        """Parsed Ray ``ray.init`` kwargs from JSON env."""
+        import json
+
+        raw = (self.ray_init_kwargs_json or "").strip()
+        if not raw:
+            return {}
+        try:
+            value = json.loads(raw)
+        except Exception:
+            return {}
+        return dict(value) if isinstance(value, dict) else {}
 
     @property
     def universe_list(self) -> list[str]:
@@ -325,11 +463,7 @@ class Settings(BaseSettings):
 
     @property
     def webui_cors_origin_list(self) -> list[str]:
-        """Parsed list of CORS origins for the Next.js webui.
-
-        Empty list means "allow all" (the legacy ``*`` behaviour). Used by
-        :mod:`aqp.api.main` to seed the FastAPI CORSMiddleware.
-        """
+        """Parsed list of CORS origins for the Next.js webui."""
         return [s.strip() for s in self.webui_cors_origins.split(",") if s.strip()]
 
     @property

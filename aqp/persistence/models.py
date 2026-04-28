@@ -421,6 +421,15 @@ class DatasetCatalog(Base):
     source_uri = Column(String(1024), nullable=True)
     llm_annotations = Column(JSON, default=dict)
     column_docs = Column(JSON, default=list)
+    # Data fabric expansion (migration 0013).
+    compute_backend = Column(String(32), nullable=True)
+    dagster_asset_key = Column(String(240), nullable=True, index=True)
+    datahub_urn = Column(String(512), nullable=True, index=True)
+    entity_extraction_status = Column(
+        String(32), nullable=False, default="pending"
+    )
+    manifest_id = Column(String(36), nullable=True)
+    pipeline_kind = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -453,6 +462,11 @@ class DatasetVersion(Base):
     columns = Column(JSON, default=list)
     schema_json = Column(JSON, default=dict)
     meta = Column(JSON, default=dict)
+    # Data fabric expansion (migration 0013).
+    materialization_engine = Column(String(32), nullable=True)
+    dagster_run_id = Column(String(120), nullable=True, index=True)
+    partition_key = Column(String(240), nullable=True)
+    code_version_sha = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     catalog = relationship("DatasetCatalog")
@@ -915,6 +929,14 @@ class DataSource(Base):
     credentials_ref = Column(String(120), nullable=True)
     enabled = Column(Boolean, nullable=False, default=True)
     meta = Column(JSON, default=dict)
+    # Data fabric expansion (migration 0013).
+    kind_subtype = Column(String(64), nullable=True)
+    transport = Column(String(64), nullable=True)
+    rate_limit_json = Column(JSON, default=dict)
+    pagination_json = Column(JSON, default=dict)
+    endpoints_json = Column(JSON, default=list)
+    health_status = Column(String(32), nullable=False, default="unknown")
+    last_probe_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

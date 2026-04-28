@@ -1,0 +1,35 @@
+# Hierarchical RAG levels (Alpha-GPT paper Figure 3, RAG#0..#3)
+#
+# This file is descriptive metadata used by the /rag explorer UI and the
+# router. Levels are also enforced in code by aqp.rag.redis_store.VALID_LEVELS.
+
+levels:
+  - id: l0
+    name: "Alpha / Decision base"
+    paper_id: "RAG#0"
+    description: >-
+      Past agent decisions, equity reports, and backtest outcomes used
+      by the LLM to learn the characteristics of previously successful
+      alphas / decisions before generating new ideas.
+    default_corpora: [decisions, performance]
+  - id: l1
+    name: "High-level categories"
+    paper_id: "RAG#1"
+    description: >-
+      Top-level domain such as price-volume, fundamental,
+      news-sentiment, regulatory. Lets the agent narrow the search
+      space without retrieving excessive detail.
+  - id: l2
+    name: "Sub-categories"
+    paper_id: "RAG#2"
+    description: >-
+      Sub-domain such as earnings-call, disclosures, insider,
+      cfpb-complaint, fda-recall, patent-grant. Progressively narrows
+      the search.
+  - id: l3
+    name: "Specific data fields / chunks"
+    paper_id: "RAG#3"
+    description: >-
+      Individual field descriptions, document chunks, complaint
+      narratives. Granular retrieval used to compose the final
+      context.

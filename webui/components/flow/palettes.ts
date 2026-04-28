@@ -99,6 +99,13 @@ export const DATA_PALETTE: PaletteSection[] = [
     title: "Sources",
     items: [
       {
+        kind: "Template",
+        label: "Loading template",
+        description: "Run a curated backend loading workflow",
+        accent: "#14b8a6",
+        defaultParams: { template_id: "alpha-vantage-intraday-2y-all-active", overrides: {} },
+      },
+      {
         kind: "Source",
         label: "yfinance",
         accent: "#10b981",
@@ -145,6 +152,13 @@ export const DATA_PALETTE: PaletteSection[] = [
         accent: "#3b82f6",
         defaultParams: { kind: "dropna" },
       },
+      {
+        kind: "Dbt",
+        label: "dbt build",
+        description: "Run sink.dbt_build for selected models or tags",
+        accent: "#ff694b",
+        defaultParams: { select: ["tag:aqp_generated"] },
+      },
     ],
   },
   {
@@ -171,8 +185,31 @@ export const DATA_PALETTE: PaletteSection[] = [
     ],
   },
   {
+    title: "Execution",
+    items: [
+      {
+        kind: "Plan",
+        label: "Plan manifest",
+        accent: "#0ea5e9",
+        defaultParams: {},
+      },
+      {
+        kind: "Load",
+        label: "Load batch",
+        accent: "#6366f1",
+        defaultParams: { batch_size: 25 },
+      },
+    ],
+  },
+  {
     title: "Sinks",
     items: [
+      {
+        kind: "Iceberg",
+        label: "Iceberg sink",
+        accent: "#f59e0b",
+        defaultParams: { namespace: "aqp", table: "" },
+      },
       { kind: "Parquet", label: "Parquet sink", accent: "#f59e0b", defaultParams: { path: "data/parquet/" } },
       { kind: "Index", label: "Chroma index", accent: "#f59e0b", defaultParams: {} },
     ],

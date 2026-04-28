@@ -2,6 +2,7 @@ import {
   AppstoreOutlined,
   BulbOutlined,
   CloudUploadOutlined,
+  CodeOutlined,
   DatabaseOutlined,
   DotChartOutlined,
   ExperimentOutlined,
@@ -27,7 +28,7 @@ export interface NavItem {
   label: string;
   href: string;
   icon: ReactNode;
-  group: "Workspace" | "Research" | "Lab" | "Execution" | "Workflows" | "System";
+  group: "Workspace" | "Research" | "Lab" | "Execution" | "Workflows" | "Agents" | "RAG" | "System";
   hotkey?: string;
 }
 
@@ -56,10 +57,45 @@ export const NAV_ITEMS: NavItem[] = [
     group: "Research",
   },
   {
+    key: "data-dbt",
+    label: "dbt Models",
+    href: "/data/dbt",
+    icon: <CodeOutlined />,
+    group: "Research",
+  },
+  {
     key: "data-ingest",
     label: "Data Ingest",
     href: "/data/ingest",
     icon: <CloudUploadOutlined />,
+    group: "Research",
+  },
+  {
+    key: "airbyte",
+    label: "Airbyte",
+    href: "/airbyte",
+    icon: <CloudUploadOutlined />,
+    group: "Research",
+  },
+  {
+    key: "airbyte-connectors",
+    label: "Airbyte Connectors",
+    href: "/airbyte/connectors",
+    icon: <DatabaseOutlined />,
+    group: "Research",
+  },
+  {
+    key: "airbyte-builder",
+    label: "Airbyte Builder",
+    href: "/airbyte/builder",
+    icon: <ExperimentOutlined />,
+    group: "Research",
+  },
+  {
+    key: "airbyte-runs",
+    label: "Airbyte Runs",
+    href: "/airbyte/runs",
+    icon: <MonitorOutlined />,
     group: "Research",
   },
   {
@@ -81,6 +117,27 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Sources",
     href: "/data/sources",
     icon: <PartitionOutlined />,
+    group: "Research",
+  },
+  {
+    key: "data-cfpb",
+    label: "CFPB Complaints",
+    href: "/data/cfpb",
+    icon: <DatabaseOutlined />,
+    group: "Research",
+  },
+  {
+    key: "data-fda",
+    label: "FDA",
+    href: "/data/fda",
+    icon: <DatabaseOutlined />,
+    group: "Research",
+  },
+  {
+    key: "data-uspto",
+    label: "USPTO",
+    href: "/data/uspto",
+    icon: <DatabaseOutlined />,
     group: "Research",
   },
   {
@@ -231,6 +288,77 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/workflows/strategy",
     icon: <NodeIndexOutlined />,
     group: "Workflows",
+  },
+  // -- Phase 7 of agentic-RAG expansion: Agents shell + RAG explorer ---
+  {
+    key: "agents-home",
+    label: "Agents",
+    href: "/agents",
+    icon: <RobotOutlined />,
+    group: "Agents",
+  },
+  {
+    key: "agents-registry",
+    label: "Agent Registry",
+    href: "/agents/registry",
+    icon: <UnorderedListOutlined />,
+    group: "Agents",
+  },
+  {
+    key: "agents-runs",
+    label: "Agent Runs",
+    href: "/agents/runs",
+    icon: <MonitorOutlined />,
+    group: "Agents",
+  },
+  {
+    key: "agents-evaluations",
+    label: "Evaluations",
+    href: "/agents/evaluations",
+    icon: <ExperimentOutlined />,
+    group: "Agents",
+  },
+  {
+    key: "agents-research",
+    label: "Research Agents",
+    href: "/agents/research",
+    icon: <BulbOutlined />,
+    group: "Agents",
+  },
+  {
+    key: "agents-selection",
+    label: "Selection Agent",
+    href: "/agents/selection",
+    icon: <AppstoreOutlined />,
+    group: "Agents",
+  },
+  {
+    key: "agents-trader",
+    label: "Trader Agent",
+    href: "/agents/trader",
+    icon: <ThunderboltOutlined />,
+    group: "Agents",
+  },
+  {
+    key: "agents-analysis",
+    label: "Analysis Agents",
+    href: "/agents/analysis",
+    icon: <DotChartOutlined />,
+    group: "Agents",
+  },
+  {
+    key: "rag-explorer",
+    label: "RAG Explorer",
+    href: "/rag",
+    icon: <NodeIndexOutlined />,
+    group: "RAG",
+  },
+  {
+    key: "rag-admin",
+    label: "RAG Admin",
+    href: "/rag/admin",
+    icon: <SettingOutlined />,
+    group: "RAG",
   },
   {
     key: "models",

@@ -28,6 +28,12 @@ from pydantic import BaseModel, Field
 
 from aqp.api.schemas import TaskAccepted
 from aqp.config import settings
+from aqp.data.loading_templates import (
+    LoadingTemplate,
+    build_template_payload,
+    get_loading_template,
+    list_loading_templates,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["data-pipelines"])
@@ -172,6 +178,24 @@ class IngestPathRequest(BaseModel):
     max_files_per_dataset: int | None = Field(default=None, ge=1)
 
 
+class AlphaVantageHistoryIngestRequest(BaseModel):
+    symbols: list[str] = Field(default_factory=list)
+    start: str | None = None
+    end: str | None = None
+    function: str = Field(default="daily_adjusted", description="intraday | daily | daily_adjusted | weekly | monthly")
+    interval: str | None = Field(default=None, description="1min | 5min | 15min | 30min | 60min for intraday")
+    outputsize: str = Field(default="full", description="compact | full")
+    month: str | None = Field(default=None, description="YYYY-MM for intraday history")
+    adjusted: bool | None = None
+    extended_hours: bool | None = None
+    entitlement: str | None = None
+    namespace: str = Field(default="aqp_alpha_vantage")
+    table: str = Field(default="stock_history")
+    cache: bool = True
+    cache_ttl: float | None = Field(default=None, ge=0)
+    extra_params: dict[str, Any] = Field(default_factory=dict)
+
+
 @router.post("/pipelines/ingest", response_model=TaskAccepted)
 def ingest_path(req: IngestPathRequest) -> TaskAccepted:
     p = Path(req.path).expanduser()
@@ -188,6 +212,180 @@ def ingest_path(req: IngestPathRequest) -> TaskAccepted:
         req.max_rows_per_dataset,
         req.max_files_per_dataset,
     )
+    return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
+
+
+@router.post("/pipelines/alpha-vantage/history", response_model=TaskAccepted)
+def ingest_alpha_vantage_history(req: AlphaVantageHistoryIngestRequest) -> TaskAccepted:
+    if not req.symbols:
+        raise HTTPException(400, "symbols must not be empty")
+    from aqp.tasks.ingestion_tasks import ingest_alpha_vantage_history as task
+
+    async_result = task.delay(req.model_dump())
+    return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
+
+
+class AlphaVantageEndpointBulkRequest(BaseModel):
+    endpoints: list[str] = Field(default_factory=list, description="Function ids from /alpha-vantage/functions")
+    symbols: list[str] | str = Field(default="all_active", description="Explicit symbol list, or 'all_active'")
+    filters: dict[str, Any] = Field(default_factory=dict, description="Optional active-universe filters (exchange, asset_class, security_type)")
+    limit: int | None = Field(default=None, ge=1, description="Optional cap when symbols='all_active'")
+    cache: bool = Field(default=True)
+    cache_ttl: float | None = Field(default=None, ge=0)
+
+
+class AlphaVantageIntradayPlanRequest(BaseModel):
+    symbols: list[str] | str = Field(default="all_active")
+    filters: dict[str, Any] = Field(default_factory=dict)
+    limit: int | None = Field(default=None, ge=1)
+    interval: str = Field(default="1min")
+    lookback_months: int = Field(default=36, ge=1)
+    manifest_dir: str | None = None
+    entitlement: str | None = None
+
+
+class AlphaVantageIntradayLoadRequest(BaseModel):
+    manifest_path: str
+    batch_size: int | None = Field(default=None, ge=1)
+    repair: bool = False
+    cache: bool = True
+    cache_ttl: float | None = Field(default=None, ge=0)
+
+
+class AlphaVantageIntradayDeltaLoadOptions(BaseModel):
+    batch_size: int | None = Field(default=None, ge=1)
+    repair: bool = False
+    cache: bool = True
+    cache_ttl: float | None = Field(default=None, ge=0)
+
+
+class AlphaVantageIntradayDeltaRequest(BaseModel):
+    plan: AlphaVantageIntradayPlanRequest = Field(default_factory=AlphaVantageIntradayPlanRequest)
+    load: AlphaVantageIntradayDeltaLoadOptions | None = None
+
+
+class LoadingTemplateRunRequest(BaseModel):
+    overrides: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Deep-merged onto the template default payload before dispatch.",
+    )
+    dry_run: bool = Field(
+        default=False,
+        description="Return the resolved payload without queuing a Celery task.",
+    )
+
+
+@router.get("/pipelines/templates", response_model=list[LoadingTemplate])
+def loading_templates() -> list[LoadingTemplate]:
+    """List curated loading templates for the visual data workflow editor."""
+    return list_loading_templates()
+
+
+@router.get("/pipelines/templates/{template_id}", response_model=LoadingTemplate)
+def loading_template(template_id: str) -> LoadingTemplate:
+    try:
+        return get_loading_template(template_id)
+    except KeyError as exc:
+        raise HTTPException(404, f"unknown loading template: {template_id}") from exc
+
+
+@router.post("/pipelines/templates/{template_id}/run")
+def run_loading_template(template_id: str, req: LoadingTemplateRunRequest) -> dict[str, Any]:
+    """Resolve and queue a loading template.
+
+    Templates are intentionally thin routing metadata over the existing
+    Celery-backed ingestion tasks, so progress continues to stream through
+    the normal ``/chat/stream/{task_id}`` channel.
+    """
+    try:
+        template, payload = build_template_payload(template_id, req.overrides)
+    except KeyError as exc:
+        raise HTTPException(404, f"unknown loading template: {template_id}") from exc
+
+    if req.dry_run:
+        return {
+            "template_id": template.id,
+            "endpoint": template.endpoint,
+            "run_kind": template.run_kind,
+            "dry_run": True,
+            "payload": payload,
+        }
+
+    if template.run_kind == "alpha_vantage_intraday_delta":
+        from aqp.tasks.ingestion_tasks import run_alpha_vantage_intraday_delta
+
+        async_result = run_alpha_vantage_intraday_delta.delay(payload)
+    elif template.run_kind == "alpha_vantage_endpoints":
+        endpoints = payload.get("endpoints") or []
+        if not endpoints:
+            raise HTTPException(400, "at least one endpoint id is required")
+        from aqp.tasks.ingestion_tasks import load_alpha_vantage_endpoints
+
+        async_result = load_alpha_vantage_endpoints.delay(payload)
+    elif template.run_kind == "ingest_local_path":
+        path = str(payload.get("path") or "").strip()
+        if not path:
+            raise HTTPException(400, "path is required")
+        p = Path(path).expanduser()
+        if not p.exists():
+            raise HTTPException(400, f"path does not exist: {p}")
+        from aqp.tasks.ingestion_tasks import ingest_local_path
+
+        async_result = ingest_local_path.delay(
+            str(p),
+            payload.get("namespace"),
+            payload.get("table_prefix"),
+            bool(payload.get("annotate", True)),
+            payload.get("max_rows_per_dataset"),
+            payload.get("max_files_per_dataset"),
+        )
+    else:  # pragma: no cover - protects future template additions
+        raise HTTPException(500, f"unsupported loading template run kind: {template.run_kind}")
+
+    return {
+        "template_id": template.id,
+        "endpoint": template.endpoint,
+        "run_kind": template.run_kind,
+        "task_id": async_result.id,
+        "stream_url": f"/chat/stream/{async_result.id}",
+    }
+
+
+@router.post("/pipelines/alpha-vantage/endpoints", response_model=TaskAccepted)
+def queue_alpha_vantage_endpoints(req: AlphaVantageEndpointBulkRequest) -> TaskAccepted:
+    if not req.endpoints:
+        raise HTTPException(400, "at least one endpoint id is required")
+    from aqp.tasks.ingestion_tasks import load_alpha_vantage_endpoints
+
+    async_result = load_alpha_vantage_endpoints.delay(req.model_dump())
+    return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
+
+
+@router.post("/pipelines/alpha-vantage/intraday/plan", response_model=TaskAccepted)
+def queue_alpha_vantage_intraday_plan(req: AlphaVantageIntradayPlanRequest) -> TaskAccepted:
+    from aqp.tasks.ingestion_tasks import plan_alpha_vantage_intraday
+
+    async_result = plan_alpha_vantage_intraday.delay(req.model_dump())
+    return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
+
+
+@router.post("/pipelines/alpha-vantage/intraday/load", response_model=TaskAccepted)
+def queue_alpha_vantage_intraday_load(req: AlphaVantageIntradayLoadRequest) -> TaskAccepted:
+    from aqp.tasks.ingestion_tasks import load_alpha_vantage_intraday_components
+
+    async_result = load_alpha_vantage_intraday_components.delay(req.model_dump())
+    return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
+
+
+@router.post("/pipelines/alpha-vantage/intraday/delta", response_model=TaskAccepted)
+def queue_alpha_vantage_intraday_delta(req: AlphaVantageIntradayDeltaRequest) -> TaskAccepted:
+    from aqp.tasks.ingestion_tasks import run_alpha_vantage_intraday_delta
+
+    payload = {
+        "plan": req.plan.model_dump(),
+        "load": req.load.model_dump() if req.load else {},
+    }
+    async_result = run_alpha_vantage_intraday_delta.delay(payload)
     return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
 
 

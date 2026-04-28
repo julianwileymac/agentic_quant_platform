@@ -74,7 +74,7 @@ def test_universe_list_uses_managed_snapshot_when_available(
     from aqp.data.sources.alpha_vantage import universe as universe_mod
 
     class _SnapshotService:
-        def list_snapshot(self, *, limit: int = 200, query: str | None = None):  # noqa: ARG002
+        def list_snapshot(self, *, limit: int = 200, offset: int = 0, query: str | None = None):  # noqa: ARG002
             return [
                 {
                     "id": "instrument-1",
@@ -92,6 +92,7 @@ def test_universe_list_uses_managed_snapshot_when_available(
 
     monkeypatch.setattr(universe_mod, "AlphaVantageUniverseService", _SnapshotService)
     monkeypatch.setattr(data_route.settings, "universe_provider", "managed_snapshot", raising=False)
+    monkeypatch.setattr(data_route, "_count_instruments", lambda query=None: 1)  # noqa: ARG005
 
     response = fastapi_test_client.get("/data/universe")
     assert response.status_code == 200, response.text
@@ -99,3 +100,32 @@ def test_universe_list_uses_managed_snapshot_when_available(
     assert payload["source"] == "managed_snapshot"
     assert payload["count"] == 1
     assert payload["items"][0]["vt_symbol"] == "AAPL.NASDAQ"
+
+
+def test_universe_list_can_use_catalog_source(
+    fastapi_test_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from aqp.api.routes import data as data_route
+
+    monkeypatch.setattr(
+        data_route,
+        "_list_catalog_universe",
+        lambda *, limit, offset=0, query=None: (  # noqa: ARG005
+            [
+                {
+                    "id": "instrument-1",
+                    "vt_symbol": "MSFT.NASDAQ",
+                    "ticker": "MSFT",
+                    "exchange": "NASDAQ",
+                }
+            ],
+            1,
+        ),
+    )
+
+    response = fastapi_test_client.get("/data/universe?source=catalog")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["source"] == "catalog"
+    assert payload["items"][0]["vt_symbol"] == "MSFT.NASDAQ"

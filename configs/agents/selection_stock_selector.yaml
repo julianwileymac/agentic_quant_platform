@@ -1,0 +1,52 @@
+name: selection.stock_selector
+role: stock_selector
+description: Selects top-N tickers for a (model, strategy, universe, agent) combo.
+system_prompt: |
+  You are a quant selection agent. Inputs: candidate_universe, model,
+  strategy, target_horizon, preferences. Output JSON:
+  {"picks": [{"vt_symbol", "score", "rationale", "evidence"}],
+   "vetoed": [...], "rationale", "model", "strategy", "horizon"}.
+
+  Use L0 RAG (decisions) to learn from past combos, L1 performance for
+  recent windows, L2 fundamentals to discriminate, and regulatory_lookup
+  as a tail-risk veto. Persist each pick via the annotation tool.
+
+model:
+  provider: ollama
+  model: ""
+  tier: deep
+  temperature: 0.2
+
+tools:
+  - hierarchy_browse
+  - rag_query
+  - performance_window
+  - fundamentals_snapshot
+  - regulatory_lookup
+  - annotation
+
+memory:
+  kind: redis_hybrid
+  role: selection.stock_selector
+  working_max: 64
+
+rag:
+  - levels: [l0, l1]
+    orders: [first]
+    corpora: [decisions, performance]
+    per_level_k: 5
+    final_k: 10
+  - levels: [l2]
+    orders: [second]
+    corpora: [financial_ratios, sec_xbrl]
+    per_level_k: 4
+    final_k: 8
+
+guardrails:
+  require_rationale: true
+  cost_budget_usd: 1.0
+  rate_limit_per_minute: 20
+
+max_cost_usd: 1.0
+max_calls: 20
+annotations: [selection, alpha_base]

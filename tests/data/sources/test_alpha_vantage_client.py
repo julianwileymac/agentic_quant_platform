@@ -16,8 +16,7 @@ def test_rate_limiter_snapshot_shape() -> None:
 
 
 def test_load_api_key_non_strict_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    from aqp.data.sources.alpha_vantage import load_api_key
-    from aqp.data.sources.alpha_vantage import _credentials
+    from aqp.data.sources.alpha_vantage import _credentials, load_api_key
 
     monkeypatch.setattr(_credentials.settings, "alpha_vantage_api_key", "")
     monkeypatch.setattr(_credentials.settings, "alpha_vantage_api_key_file", "")
@@ -32,6 +31,17 @@ def test_payload_error_classification() -> None:
 
     err = classify_payload({"Note": "Thank you for using Alpha Vantage! Our standard API rate limit is reached."})
     assert isinstance(err, RateLimitError)
+
+
+def test_coerce_stock_intraday_interval() -> None:
+    from aqp.data.sources.alpha_vantage.endpoints._base import coerce_stock_intraday_interval
+
+    assert coerce_stock_intraday_interval(None) == "5min"
+    assert coerce_stock_intraday_interval("") == "5min"
+    assert coerce_stock_intraday_interval("5min") == "5min"
+    assert coerce_stock_intraday_interval("5m") == "5min"
+    assert coerce_stock_intraday_interval("1h") == "60min"
+    assert coerce_stock_intraday_interval("1d") == "5min"
 
 
 def test_timeseries_payload_normalization() -> None:

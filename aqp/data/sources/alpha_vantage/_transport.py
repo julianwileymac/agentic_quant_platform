@@ -4,9 +4,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from email.utils import parsedate_to_datetime
-from typing import Any, Mapping
+from typing import Any
 
 import httpx
 
@@ -122,14 +123,15 @@ class Transport(_TransportMixin):
         datatype: str | None = None,
     ) -> Any:
         query = self._prepare_params(params, datatype=datatype)
+        response_datatype = datatype or str(query.get("datatype") or "").lower() or None
         key = CacheKey.from_params(query)
         ttl = cache_ttl if cache_ttl is not None else default_ttl(key.function, query)
         if cache and ttl > 0:
             hit = self.cache.get(key)
             if hit is not None:
                 return hit
-        payload = self._retry_request(query, datatype=datatype)
-        if cache and ttl > 0 and datatype != "csv":
+        payload = self._retry_request(query, datatype=response_datatype)
+        if cache and ttl > 0 and response_datatype != "csv":
             self.cache.set(key, payload, ttl)
         return payload
 
@@ -194,14 +196,15 @@ class AsyncTransport(_TransportMixin):
         datatype: str | None = None,
     ) -> Any:
         query = self._prepare_params(params, datatype=datatype)
+        response_datatype = datatype or str(query.get("datatype") or "").lower() or None
         key = CacheKey.from_params(query)
         ttl = cache_ttl if cache_ttl is not None else default_ttl(key.function, query)
         if cache and ttl > 0:
             hit = self.cache.get(key)
             if hit is not None:
                 return hit
-        payload = await self._retry_request(query, datatype=datatype)
-        if cache and ttl > 0 and datatype != "csv":
+        payload = await self._retry_request(query, datatype=response_datatype)
+        if cache and ttl > 0 and response_datatype != "csv":
             self.cache.set(key, payload, ttl)
         return payload
 

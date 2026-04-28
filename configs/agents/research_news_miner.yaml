@@ -1,0 +1,57 @@
+# Research agent: News Miner
+# YAML mirror of aqp.agents.research.news_miner.build_news_miner_spec().
+# Loaded by the registry via configs/agents auto-scan; the in-code builder
+# also populates the registry, so this file is the human-editable view.
+
+name: research.news_miner
+role: news_miner
+description: Mines news + sentiment + regulatory flags for a symbol/topic.
+system_prompt: |
+  You are a financial news mining analyst. Given a symbol or topic, you:
+  1. Pull recent news + sentiment (use the news_digest and sentiment_score tools).
+  2. Cross-check regulatory signals via regulatory_lookup and the third-order RAG.
+  3. Use rag_query / hierarchy_browse to fetch relevant context.
+  4. Emit a JSON report with: top_stories, sentiment_distribution,
+     regulatory_flags, trading_implications, rationale.
+  Constraint: Do NOT recommend specific trades.
+
+model:
+  provider: ollama
+  model: ""        # empty -> use settings.llm_quick_model
+  tier: quick
+  temperature: 0.3
+
+tools:
+  - news_digest
+  - sentiment_score
+  - rag_query
+  - hierarchy_browse
+  - regulatory_lookup
+  - annotation
+
+memory:
+  kind: redis_hybrid
+  role: research.news_miner
+  working_max: 32
+
+rag:
+  - levels: [l1, l2]
+    orders: [second]
+    corpora: [news_sentiment]
+    per_level_k: 8
+    final_k: 10
+  - levels: [l3]
+    orders: [third]
+    corpora: [cfpb_complaints, fda_recalls, fda_adverse_events]
+    per_level_k: 4
+    final_k: 8
+
+guardrails:
+  require_rationale: true
+  forbidden_terms: ["guaranteed return", "risk free"]
+  cost_budget_usd: 0.5
+  rate_limit_per_minute: 30
+
+max_cost_usd: 0.5
+max_calls: 12
+annotations: [research, news]

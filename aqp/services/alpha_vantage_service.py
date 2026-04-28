@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Any, Sequence
+from collections.abc import Sequence
+from datetime import UTC, datetime
+from typing import Any
 
 from aqp.config import Settings, settings
 from aqp.data.sources.alpha_vantage import (
@@ -46,6 +47,8 @@ class AlphaVantageService:
     def _build_client(self) -> AlphaVantageClient:
         cache = None
         cache_backend = str(getattr(self.settings, "alpha_vantage_cache_backend", "memory")).lower()
+        if cache_backend == "redis" and self._redis_client is None:
+            self._redis_client = _make_redis_client(getattr(self.settings, "redis_url", ""))
         if cache_backend == "redis" and self._redis_client is not None:
             cache = RedisCache(self._redis_client)
         elif cache_backend == "memory":
@@ -119,21 +122,31 @@ class AlphaVantageService:
             "monthly_adjusted": ts.amonthly_adjusted,
         }
         if function == "global_quote":
-            return _serialize(await ts.aglobal_quote(params["symbol"], entitlement=params.get("entitlement")))
+            return _serialize(
+                await ts.aglobal_quote(
+                    params["symbol"],
+                    entitlement=params.get("entitlement"),
+                    **_cache_options(params),
+                )
+            )
         if function == "bulk_quotes":
             symbols = params.get("symbols") or []
-            return await ts.arealtime_bulk_quotes(symbols, entitlement=params.get("entitlement"))
+            return await ts.arealtime_bulk_quotes(
+                symbols,
+                entitlement=params.get("entitlement"),
+                **_cache_options(params),
+            )
         if function not in dispatch:
             raise ValueError(f"Unsupported timeseries function: {function}")
-        return _serialize(await dispatch[function](**_prune(params)))
+        return _serialize(await dispatch[function](**_with_cache_controls(params)))
 
-    async def symbol_search(self, keywords: str) -> list[dict[str, Any]]:
+    async def symbol_search(self, keywords: str, **params: Any) -> list[dict[str, Any]]:
         client = await self._get_client()
-        return [_serialize(row) for row in await client.timeseries.asearch(keywords)]
+        return [_serialize(row) for row in await client.timeseries.asearch(keywords, **_cache_options(params))]
 
-    async def market_status(self) -> dict[str, Any]:
+    async def market_status(self, **params: Any) -> dict[str, Any]:
         client = await self._get_client()
-        return _serialize(await client.timeseries.amarket_status())
+        return _serialize(await client.timeseries.amarket_status(**_cache_options(params)))
 
     async def fundamentals(self, kind: str, **params: Any) -> Any:
         client = await self._get_client()
@@ -166,19 +179,19 @@ class AlphaVantageService:
         client = await self._get_client()
         ai = client.intelligence
         if kind == "news":
-            return _serialize(await ai.anews(**_prune(params)))
+            return _serialize(await ai.anews(**_with_cache_controls(params)))
         if kind == "transcript":
             return _serialize(await ai.aearnings_transcript(params["symbol"], params["quarter"]))
         if kind == "top-movers":
-            return _serialize(await ai.atop_movers(entitlement=params.get("entitlement")))
+            return _serialize(await ai.atop_movers(entitlement=params.get("entitlement"), **_cache_options(params)))
         if kind == "insider":
             return [_serialize(row) for row in await ai.ainsider(params["symbol"])]
         if kind == "institutional":
             return [_serialize(row) for row in await ai.ainstitutional(params["symbol"])]
         if kind == "analytics-fixed":
-            return _serialize(await ai.aanalytics_fixed(**_prune(params)))
+            return _serialize(await ai.aanalytics_fixed(**_with_cache_controls(params)))
         if kind == "analytics-sliding":
-            return _serialize(await ai.aanalytics_sliding(**_prune(params)))
+            return _serialize(await ai.aanalytics_sliding(**_with_cache_controls(params)))
         raise ValueError(f"Unsupported intelligence kind: {kind}")
 
     async def forex(self, kind: str, **params: Any) -> Any:
@@ -187,13 +200,13 @@ class AlphaVantageService:
         if kind == "rate":
             return _serialize(await fx.aexchange_rate(params["from_currency"], params["to_currency"]))
         if kind == "intraday":
-            return _serialize(await fx.aintraday(**_prune(params)))
+            return _serialize(await fx.aintraday(**_with_cache_controls(params)))
         if kind == "daily":
-            return _serialize(await fx.adaily(**_prune(params)))
+            return _serialize(await fx.adaily(**_with_cache_controls(params)))
         if kind == "weekly":
-            return _serialize(await fx.aweekly(**_prune(params)))
+            return _serialize(await fx.aweekly(**_with_cache_controls(params)))
         if kind == "monthly":
-            return _serialize(await fx.amonthly(**_prune(params)))
+            return _serialize(await fx.amonthly(**_with_cache_controls(params)))
         raise ValueError(f"Unsupported forex kind: {kind}")
 
     async def crypto(self, kind: str, **params: Any) -> Any:
@@ -202,7 +215,7 @@ class AlphaVantageService:
         if kind == "rate":
             return _serialize(await c.aexchange_rate(params["symbol"], params["market"]))
         if kind == "intraday":
-            return _serialize(await c.aintraday(**_prune(params)))
+            return _serialize(await c.aintraday(**_with_cache_controls(params)))
         if kind == "daily":
             return _serialize(await c.adaily(params["symbol"], params["market"]))
         if kind == "weekly":
@@ -230,19 +243,19 @@ class AlphaVantageService:
 
     async def commodities(self, name: str, **params: Any) -> Any:
         client = await self._get_client()
-        return _serialize(await client.commodities.aby_name(name, **_prune(params)))
+        return _serialize(await client.commodities.aby_name(name, **_with_cache_controls(params)))
 
     async def economics(self, indicator: str, **params: Any) -> Any:
         client = await self._get_client()
-        return _serialize(await client.economics.aby_name(indicator, **_prune(params)))
+        return _serialize(await client.economics.aby_name(indicator, **_with_cache_controls(params)))
 
     async def technicals(self, indicator: str, symbol: str, **params: Any) -> Any:
         client = await self._get_client()
-        return _serialize(await client.technicals.aget(indicator, symbol, **_prune(params)))
+        return _serialize(await client.technicals.aget(indicator, symbol, **_with_cache_controls(params)))
 
     async def indices(self, key: str, **params: Any) -> Any:
         client = await self._get_client()
-        return _serialize(await client.indices.aget(key, **_prune(params)))
+        return _serialize(await client.indices.aget(key, **_with_cache_controls(params)))
 
     async def index_catalog(self) -> list[dict[str, Any]]:
         client = await self._get_client()
@@ -266,7 +279,7 @@ class AlphaVantageService:
             extra_params or {},
             target_bucket,
         )
-        submitted_at = datetime.now(timezone.utc).isoformat()
+        submitted_at = datetime.now(UTC).isoformat()
         return {
             "task_id": async_result.id,
             "status": "queued",
@@ -279,6 +292,39 @@ class AlphaVantageService:
 
 def _prune(params: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in params.items() if v is not None and v != ""}
+
+
+def _with_cache_controls(params: dict[str, Any]) -> dict[str, Any]:
+    out = _prune(
+        {
+            key: value
+            for key, value in params.items()
+            if key not in {"cache", "cache_ttl"}
+        }
+    )
+    out.update(_cache_options(params))
+    return out
+
+
+def _cache_options(params: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if "cache" in params and params["cache"] is not None:
+        out["_cache"] = bool(params["cache"])
+    if "cache_ttl" in params and params["cache_ttl"] is not None:
+        out["_cache_ttl"] = params["cache_ttl"]
+    return out
+
+
+def _make_redis_client(redis_url: str) -> Any | None:
+    if not redis_url:
+        return None
+    try:
+        import redis
+
+        return redis.Redis.from_url(redis_url, decode_responses=True)
+    except Exception:
+        logger.debug("Alpha Vantage Redis cache unavailable", exc_info=True)
+        return None
 
 
 def _serialize(obj: Any) -> Any:

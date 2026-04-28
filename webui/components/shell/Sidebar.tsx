@@ -13,6 +13,8 @@ const { Text } = Typography;
 
 const GROUP_ORDER: NavItem["group"][] = [
   "Workspace",
+  "Agents",
+  "RAG",
   "Research",
   "Lab",
   "Execution",

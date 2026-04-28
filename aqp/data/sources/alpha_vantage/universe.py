@@ -3,14 +3,14 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
 from sqlalchemy import or_, select
 
-from aqp.core.types import AssetClass, Exchange, SecurityType
 from aqp.config import settings
+from aqp.core.types import AssetClass, Exchange, SecurityType
 from aqp.data.catalog import register_dataset_version
 from aqp.data.sources.alpha_vantage.client import (
     AlphaVantageClient,
@@ -127,7 +127,7 @@ class AlphaVantageUniverseService:
             frame = frame.head(int(limit))
 
         rows: list[dict[str, Any]] = []
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for item in frame.to_dict(orient="records"):
             ticker = str(item.get("symbol") or "").strip().upper()
             if not ticker:
@@ -183,7 +183,7 @@ class AlphaVantageUniverseService:
                 "lineage": {},
             }
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         created = 0
         updated = 0
         vt_symbols = normalized["vt_symbol"].astype(str).tolist()
@@ -294,19 +294,90 @@ class AlphaVantageUniverseService:
         except Exception:
             logger.debug("alpha_vantage universe lineage registration skipped", exc_info=True)
 
+        identifier_links = self._sync_identifier_links(normalized)
+
         return {
             "source": "alpha_vantage",
             "state": state,
             "ingested": int(len(normalized)),
             "created": int(created),
             "updated": int(updated),
+            "identifier_links": identifier_links,
             "lineage": lineage,
         }
+
+    def _sync_identifier_links(self, normalized: pd.DataFrame) -> int:
+        """Write canonical identifier-link rows for every row in the snapshot.
+
+        We register ``ticker``, ``vt_symbol`` and ``alpha_vantage_symbol`` so
+        downstream loaders and the data fabric can resolve a security from
+        any of those vocabularies.
+        """
+        if normalized is None or normalized.empty:
+            return 0
+        try:
+            from aqp.data.sources.base import IdentifierSpec
+            from aqp.data.sources.resolvers.identifiers import IdentifierResolver
+        except Exception:
+            logger.debug(
+                "identifier resolver unavailable; skipping identifier link sync",
+                exc_info=True,
+            )
+            return 0
+
+        specs: list[IdentifierSpec] = []
+        for item in normalized.to_dict(orient="records"):
+            ticker = str(item.get("ticker") or "").strip().upper()
+            vt_symbol = str(item.get("vt_symbol") or "").strip()
+            if not ticker or not vt_symbol:
+                continue
+            base_meta = {
+                "name": item.get("name"),
+                "asset_type": item.get("asset_type"),
+                "exchange": item.get("exchange"),
+                "status": item.get("status"),
+            }
+            specs.append(
+                IdentifierSpec(
+                    scheme="ticker",
+                    value=ticker,
+                    instrument_vt_symbol=vt_symbol,
+                    confidence=1.0,
+                    meta=dict(base_meta),
+                )
+            )
+            specs.append(
+                IdentifierSpec(
+                    scheme="vt_symbol",
+                    value=vt_symbol,
+                    instrument_vt_symbol=vt_symbol,
+                    confidence=1.0,
+                    meta=dict(base_meta),
+                )
+            )
+            specs.append(
+                IdentifierSpec(
+                    scheme="alpha_vantage_symbol",
+                    value=ticker,
+                    instrument_vt_symbol=vt_symbol,
+                    confidence=1.0,
+                    meta=dict(base_meta),
+                )
+            )
+
+        try:
+            resolver = IdentifierResolver(source_name="alpha_vantage")
+            persisted = resolver.upsert_links(specs)
+        except Exception:
+            logger.debug("identifier link sync failed", exc_info=True)
+            return 0
+        return len(persisted)
 
     def list_snapshot(
         self,
         *,
         limit: int = 200,
+        offset: int = 0,
         query: str | None = None,
     ) -> list[dict[str, Any]]:
         with get_session() as session:
@@ -321,7 +392,11 @@ class AlphaVantageUniverseService:
                         Instrument.industry.ilike(q),
                     )
                 )
-            stmt = stmt.order_by(Instrument.ticker.asc()).limit(max(1, int(limit)))
+            stmt = (
+                stmt.order_by(Instrument.ticker.asc())
+                .offset(max(0, int(offset)))
+                .limit(max(1, int(limit)))
+            )
             rows = session.execute(stmt).scalars().all()
 
             out: list[dict[str, Any]] = []

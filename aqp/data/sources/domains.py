@@ -13,16 +13,9 @@ from enum import StrEnum
 
 
 class DataDomain(StrEnum):
-    """Well-known AQP data domains.
+    """Well-known AQP data domains."""
 
-    Values deliberately use ``.`` as the separator so they sort and
-    filter cleanly in UIs ("everything under ``market.*``"). Expanded as
-    part of the domain-model expansion to cover every flow the
-    :mod:`aqp.providers` catalog exposes (fundamentals, ownership,
-    estimates, calendar, macro, ESG, alternative data, options, futures).
-    """
-
-    # Market microstructure (existing)
+    # Market microstructure
     MARKET_BARS = "market.bars"
     MARKET_QUOTES = "market.quotes"
     MARKET_TICKS = "market.ticks"
@@ -44,7 +37,7 @@ class DataDomain(StrEnum):
     MACRO_ECB = "macro.ecb"
     MACRO_BALANCE_OF_PAYMENTS = "macro.balance_of_payments"
 
-    # Filings (existing + expanded)
+    # Filings
     FILINGS_INDEX = "filings.index"
     FILINGS_XBRL = "filings.xbrl"
     FILINGS_INSIDER = "filings.insider"
@@ -98,7 +91,7 @@ class DataDomain(StrEnum):
     ESG_SCORE = "esg.score"
     ESG_RISK = "esg.risk"
 
-    # Options / futures / bonds / fx / crypto specifics
+    # Options / futures / bonds / fx / crypto
     OPTIONS_CHAIN = "options.chain"
     OPTIONS_SNAPSHOT = "options.snapshot"
     OPTIONS_UNUSUAL = "options.unusual"
@@ -142,14 +135,18 @@ class DataDomain(StrEnum):
     SECTOR_PE = "sector.pe"
     INDUSTRY_PE = "industry.pe"
 
+    # Regulatory (CFPB / FDA / USPTO)
+    REGULATORY_CFPB_COMPLAINT = "regulatory.cfpb.complaint"
+    REGULATORY_FDA_APPLICATION = "regulatory.fda.application"
+    REGULATORY_FDA_ADVERSE_EVENT = "regulatory.fda.adverse_event"
+    REGULATORY_FDA_RECALL = "regulatory.fda.recall"
+    REGULATORY_USPTO_PATENT = "regulatory.uspto.patent"
+    REGULATORY_USPTO_TRADEMARK = "regulatory.uspto.trademark"
+    REGULATORY_USPTO_ASSIGNMENT = "regulatory.uspto.assignment"
+
     @classmethod
     def parse(cls, value: str | "DataDomain" | None) -> "DataDomain | str | None":
-        """Return the enum value if known, else the input string unchanged.
-
-        This keeps backwards compatibility with legacy free-form domains
-        (e.g. ``"custom.foo"``) while still giving callers the enum type
-        when they pass a known value.
-        """
+        """Return the enum value if known, else the input string unchanged."""
         if value is None:
             return None
         if isinstance(value, DataDomain):
@@ -176,5 +173,17 @@ MARKET_DOMAINS: frozenset[DataDomain] = frozenset(
         DataDomain.MARKET_QUOTES,
         DataDomain.MARKET_TICKS,
         DataDomain.MARKET_FUNDAMENTALS,
+    }
+)
+
+REGULATORY_DOMAINS: frozenset[DataDomain] = frozenset(
+    {
+        DataDomain.REGULATORY_CFPB_COMPLAINT,
+        DataDomain.REGULATORY_FDA_APPLICATION,
+        DataDomain.REGULATORY_FDA_ADVERSE_EVENT,
+        DataDomain.REGULATORY_FDA_RECALL,
+        DataDomain.REGULATORY_USPTO_PATENT,
+        DataDomain.REGULATORY_USPTO_TRADEMARK,
+        DataDomain.REGULATORY_USPTO_ASSIGNMENT,
     }
 )

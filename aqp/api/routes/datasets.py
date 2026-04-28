@@ -17,9 +17,10 @@ Routes:
 """
 from __future__ import annotations
 
-import logging
 import json
+import logging
 import re
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
@@ -30,8 +31,10 @@ from sqlalchemy import select
 from aqp.api.schemas import TaskAccepted
 from aqp.data import iceberg_catalog
 from aqp.data.iceberg_catalog import IcebergUnavailableError
+from aqp.data.sources.base import IdentifierSpec
+from aqp.data.sources.resolvers.identifiers import IdentifierResolver
 from aqp.persistence.db import get_session
-from aqp.persistence.models import DatasetCatalog
+from aqp.persistence.models import DatasetCatalog, IdentifierLink, Instrument
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/datasets", tags=["datasets"])
@@ -142,6 +145,38 @@ class GroupingConsolidateRequest(BaseModel):
     confirm: bool = False
 
 
+class IdentifierMappingSuggestion(BaseModel):
+    column: str
+    scheme: str
+    confidence: float
+    non_null: int
+    distinct_values: int
+    matched_values: int
+    sample_values: list[str] = Field(default_factory=list)
+    reason: str | None = None
+
+
+class DatasetProfileResponse(BaseModel):
+    iceberg_identifier: str
+    sample_size: int
+    row_count_estimate: int
+    columns: list[dict[str, Any]] = Field(default_factory=list)
+    identifier_suggestions: list[IdentifierMappingSuggestion] = Field(default_factory=list)
+
+
+class IdentifierMappingApply(BaseModel):
+    column: str
+    scheme: str
+    vt_symbol_column: str | None = None
+    confidence: float = Field(default=0.85, ge=0.0, le=1.0)
+
+
+class IdentifierMappingApplyRequest(BaseModel):
+    mappings: list[IdentifierMappingApply] = Field(default_factory=list)
+    sample_rows: int = Field(default=1000, ge=1, le=10000)
+    source_name: str = "iceberg_profile"
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -153,14 +188,53 @@ def _split(namespace: str, name: str) -> str:
     return f"{namespace}.{name}"
 
 
-def _catalog_row_for(identifier: str) -> DatasetCatalog | None:
+@dataclass(frozen=True)
+class CatalogRowSnapshot:
+    """Detached snapshot of a :class:`DatasetCatalog` row.
+
+    Built while a SQLAlchemy session is still open so callers can read the
+    fields after the session closes without triggering
+    :class:`sqlalchemy.orm.exc.DetachedInstanceError` from lazy loading.
+    """
+
+    id: str | None = None
+    description: str | None = None
+    domain: str | None = None
+    tags: list[str] = field(default_factory=list)
+    load_mode: str = "managed"
+    source_uri: str | None = None
+    meta: dict[str, Any] = field(default_factory=dict)
+    llm_annotations: dict[str, Any] = field(default_factory=dict)
+    column_docs: list[dict[str, Any]] = field(default_factory=list)
+    updated_at: datetime | None = None
+
+    @classmethod
+    def from_orm(cls, row: DatasetCatalog) -> "CatalogRowSnapshot":
+        return cls(
+            id=getattr(row, "id", None),
+            description=getattr(row, "description", None),
+            domain=getattr(row, "domain", None),
+            tags=list(getattr(row, "tags", []) or []),
+            load_mode=str(getattr(row, "load_mode", "managed") or "managed"),
+            source_uri=getattr(row, "source_uri", None),
+            meta=dict(getattr(row, "meta", {}) or {}),
+            llm_annotations=dict(getattr(row, "llm_annotations", {}) or {}),
+            column_docs=[dict(item) for item in (getattr(row, "column_docs", []) or [])],
+            updated_at=getattr(row, "updated_at", None),
+        )
+
+
+def _catalog_row_for(identifier: str) -> CatalogRowSnapshot | None:
     try:
         with get_session() as session:
-            return session.execute(
+            row = session.execute(
                 select(DatasetCatalog)
                 .where(DatasetCatalog.iceberg_identifier == identifier)
                 .limit(1)
             ).scalar_one_or_none()
+            if row is None:
+                return None
+            return CatalogRowSnapshot.from_orm(row)
     except Exception:  # noqa: BLE001
         logger.debug("catalog lookup failed for %s", identifier, exc_info=True)
         return None
@@ -168,7 +242,7 @@ def _catalog_row_for(identifier: str) -> DatasetCatalog | None:
 
 def _summary_from_catalog(
     identifier: str,
-    catalog_row: DatasetCatalog | None,
+    catalog_row: CatalogRowSnapshot | None,
     metadata: dict[str, Any] | None,
 ) -> TableSummary:
     ns, _, name = identifier.rpartition(".")
@@ -206,6 +280,53 @@ def _ensure_catalog_loadable() -> None:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=503, detail=f"iceberg catalog unavailable: {exc}") from exc
+
+
+_IDENTIFIER_SCHEMES = {"vt_symbol", "ticker", "cik", "cusip", "isin", "figi", "openfigi", "lei"}
+
+
+def _infer_identifier_scheme(column: str, values: list[str]) -> tuple[str | None, float, str | None]:
+    lower = column.strip().lower()
+    if lower in _IDENTIFIER_SCHEMES:
+        return lower, 0.95, "column name matches a known identifier scheme"
+    if lower in {"symbol", "ticker_symbol"}:
+        return "ticker", 0.8, "column name looks like a ticker"
+    if lower in {"instrument", "security", "security_id"} and any("." in v for v in values):
+        return "vt_symbol", 0.75, "values look like vt_symbol identifiers"
+    if values:
+        upper = [v.upper() for v in values[:100]]
+        if sum(1 for v in upper if "." in v and len(v) <= 80) >= max(1, len(upper) // 2):
+            return "vt_symbol", 0.7, "sample values contain exchange-qualified symbols"
+        if sum(1 for v in upper if re.fullmatch(r"[A-Z]{1,8}", v)) >= max(1, len(upper) // 2):
+            return "ticker", 0.65, "sample values look like equity tickers"
+        if sum(1 for v in upper if re.fullmatch(r"\d{1,10}", v)) >= max(1, len(upper) // 2):
+            return "cik", 0.6, "sample values look numeric like CIKs"
+        if sum(1 for v in upper if re.fullmatch(r"[A-Z0-9]{9}", v)) >= max(1, len(upper) // 2):
+            return "cusip", 0.55, "sample values are nine-character security identifiers"
+        if sum(1 for v in upper if re.fullmatch(r"[A-Z]{2}[A-Z0-9]{10}", v)) >= max(1, len(upper) // 2):
+            return "isin", 0.8, "sample values match ISIN shape"
+        if sum(1 for v in upper if v.startswith("BBG") and len(v) >= 10) >= max(1, len(upper) // 2):
+            return "figi", 0.75, "sample values look like FIGI/OpenFIGI identifiers"
+        if sum(1 for v in upper if re.fullmatch(r"[A-Z0-9]{20}", v)) >= max(1, len(upper) // 2):
+            return "lei", 0.65, "sample values match LEI length"
+    return None, 0.0, None
+
+
+def _matched_identifier_count(scheme: str, values: list[str]) -> int:
+    if not values:
+        return 0
+    with get_session() as session:
+        if scheme == "vt_symbol":
+            rows = session.execute(select(Instrument.vt_symbol).where(Instrument.vt_symbol.in_(values))).all()
+        elif scheme == "ticker":
+            rows = session.execute(select(Instrument.ticker).where(Instrument.ticker.in_(values))).all()
+        else:
+            rows = session.execute(
+                select(IdentifierLink.value)
+                .where(IdentifierLink.scheme == scheme)
+                .where(IdentifierLink.value.in_(values))
+            ).all()
+    return len({str(row[0]) for row in rows if row and row[0] is not None})
 
 
 def _base_group_name(name: str) -> str:
@@ -297,6 +418,18 @@ def _llm_grouping(identifiers: list[str], min_group_size: int) -> list[GroupingS
 # ---------------------------------------------------------------------------
 
 
+@router.get("/health")
+def catalog_health(timeout: float | None = None) -> dict[str, Any]:
+    """Bounded health probe for the Iceberg catalog engine.
+
+    Returns the raw status dict from
+    :func:`aqp.data.iceberg_catalog.health_check` (never raises). Callers
+    can use ``ok`` to drive a UI banner or alert. ``timeout`` is in seconds
+    and falls back to ``settings.iceberg_health_check_timeout_seconds``.
+    """
+    return iceberg_catalog.health_check(timeout=timeout)
+
+
 @router.get("/namespaces")
 def list_namespaces() -> dict[str, Any]:
     _ensure_catalog_loadable()
@@ -315,13 +448,13 @@ def list_tables(namespace: str | None = None) -> list[TableSummary]:
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(503, f"iceberg list_tables failed: {exc}") from exc
 
-    catalog_rows: dict[str, DatasetCatalog] = {}
+    catalog_rows: dict[str, CatalogRowSnapshot] = {}
     try:
         with get_session() as session:
             stmt = select(DatasetCatalog).where(DatasetCatalog.iceberg_identifier.is_not(None))
             for row in session.execute(stmt).scalars().all():
                 if row.iceberg_identifier:
-                    catalog_rows[row.iceberg_identifier] = row
+                    catalog_rows[row.iceberg_identifier] = CatalogRowSnapshot.from_orm(row)
     except Exception:  # noqa: BLE001
         logger.debug("catalog batch lookup failed", exc_info=True)
 
@@ -345,16 +478,17 @@ def list_tables(namespace: str | None = None) -> list[TableSummary]:
 @router.get("/groups")
 def list_groups(namespace: str | None = None) -> dict[str, Any]:
     groups: dict[str, list[str]] = {}
+    snapshots: list[tuple[str, dict[str, Any]]] = []
     with get_session() as session:
         stmt = select(DatasetCatalog).where(DatasetCatalog.iceberg_identifier.is_not(None))
-        rows = session.execute(stmt).scalars().all()
-    for row in rows:
-        ident = str(row.iceberg_identifier or "").strip()
-        if not ident:
-            continue
+        for row in session.execute(stmt).scalars().all():
+            ident = str(row.iceberg_identifier or "").strip()
+            if not ident:
+                continue
+            snapshots.append((ident, dict(row.meta or {})))
+    for ident, meta in snapshots:
         if namespace and not ident.startswith(f"{namespace}."):
             continue
-        meta = dict(row.meta or {})
         group_name = str(meta.get("group_name") or "").strip()
         if not group_name:
             continue
@@ -550,6 +684,251 @@ def preview_bars(
         "columns": columns,
         "timestamp_column": ts_col,
         "symbol_column": sym_col,
+    }
+
+
+@router.get("/{namespace}/{name}/profile", response_model=DatasetProfileResponse)
+def profile_table(namespace: str, name: str, sample_rows: int = 1000) -> DatasetProfileResponse:
+    _ensure_catalog_loadable()
+    identifier = _split(namespace, name)
+    limit = max(1, min(int(sample_rows), 10_000))
+    arrow = iceberg_catalog.read_arrow(identifier, limit=limit)
+    if arrow is None:
+        raise HTTPException(404, f"table {identifier!r} not found or has no readable data")
+    rows = arrow.to_pylist() if arrow.num_rows else []
+    columns: list[dict[str, Any]] = []
+    suggestions: list[IdentifierMappingSuggestion] = []
+    for field in arrow.schema:
+        name_str = str(field.name)
+        values = [
+            str(row.get(name_str)).strip()
+            for row in rows
+            if row.get(name_str) is not None and str(row.get(name_str)).strip()
+        ]
+        distinct = sorted(set(values))
+        columns.append(
+            {
+                "name": name_str,
+                "type": str(field.type),
+                "non_null": len(values),
+                "distinct_values": len(distinct),
+                "sample_values": distinct[:10],
+            }
+        )
+        scheme, confidence, reason = _infer_identifier_scheme(name_str, distinct)
+        if scheme is None:
+            continue
+        matched = _matched_identifier_count(scheme, distinct[:1000])
+        suggestions.append(
+            IdentifierMappingSuggestion(
+                column=name_str,
+                scheme=scheme,
+                confidence=round(float(confidence), 3),
+                non_null=len(values),
+                distinct_values=len(distinct),
+                matched_values=matched,
+                sample_values=distinct[:10],
+                reason=reason,
+            )
+        )
+    suggestions.sort(key=lambda item: (item.matched_values, item.confidence), reverse=True)
+    return DatasetProfileResponse(
+        iceberg_identifier=identifier,
+        sample_size=len(rows),
+        row_count_estimate=int(arrow.num_rows),
+        columns=columns,
+        identifier_suggestions=suggestions,
+    )
+
+
+class DataLinkRefreshRequest(BaseModel):
+    vt_symbol_column: str = Field(default="vt_symbol", description="Column carrying the canonical vt_symbol")
+    sample_rows: int = Field(default=5000, ge=1, le=100_000, description="Cap on rows scanned to enumerate symbols")
+    timestamp_column: str | None = Field(default=None, description="Optional column used to derive coverage_start/end")
+
+
+@router.post("/{namespace}/{name}/data-links/refresh")
+def refresh_data_links(namespace: str, name: str, req: DataLinkRefreshRequest) -> dict[str, Any]:
+    """Walk the table's symbol column and write/refresh DataLink rows for each instrument."""
+    _ensure_catalog_loadable()
+    identifier = _split(namespace, name)
+    arrow = iceberg_catalog.read_arrow(identifier, limit=max(1, int(req.sample_rows)))
+    if arrow is None:
+        raise HTTPException(404, f"table {identifier!r} not found or has no readable data")
+    if req.vt_symbol_column not in arrow.schema.names:
+        raise HTTPException(400, f"column {req.vt_symbol_column!r} not present in table schema")
+
+    column = arrow.column(req.vt_symbol_column)
+    symbols = sorted({str(value).strip() for value in column.to_pylist() if value is not None and str(value).strip()})
+    if not symbols:
+        return {
+            "iceberg_identifier": identifier,
+            "symbols_scanned": 0,
+            "links_written": 0,
+            "resolved_instruments": 0,
+            "unresolved_symbols": [],
+        }
+
+    coverage_start = None
+    coverage_end = None
+    ts_col = req.timestamp_column or _infer_timestamp_column(arrow.schema.names)
+    if ts_col and ts_col in arrow.schema.names:
+        try:
+            ts_values = arrow.column(ts_col).to_pylist()
+            ts_clean = [v for v in ts_values if v is not None]
+            if ts_clean:
+                coverage_start = min(ts_clean)
+                coverage_end = max(ts_clean)
+                if hasattr(coverage_start, "isoformat"):
+                    pass  # already datetime-like; ORM handles assignment
+        except Exception:
+            coverage_start = None
+            coverage_end = None
+
+    catalog_row = _catalog_row_for(identifier)
+    if catalog_row is None:
+        raise HTTPException(404, f"no catalog row for {identifier!r}")
+    latest_version = _latest_dataset_version_id(catalog_row.id)
+    if not latest_version:
+        raise HTTPException(409, f"no dataset_versions row for {identifier!r}; ingest the dataset first")
+
+    from aqp.persistence.models import DataLink
+
+    written = 0
+    resolved = 0
+    unresolved: list[str] = []
+    with get_session() as session:
+        instrument_rows = session.execute(
+            select(Instrument).where(Instrument.vt_symbol.in_(symbols))
+        ).scalars().all()
+        instrument_by_vt = {row.vt_symbol: row for row in instrument_rows}
+
+        for vt_symbol in symbols:
+            instrument = instrument_by_vt.get(vt_symbol)
+            instrument_id = instrument.id if instrument else None
+            if instrument is None:
+                unresolved.append(vt_symbol)
+            else:
+                resolved += 1
+            row_count = int(_value_count(column, vt_symbol))
+            link = DataLink(
+                dataset_version_id=latest_version,
+                entity_kind="instrument",
+                entity_id=str(instrument_id or vt_symbol),
+                instrument_id=instrument_id,
+                coverage_start=_as_dt(coverage_start),
+                coverage_end=_as_dt(coverage_end),
+                row_count=row_count,
+                meta={
+                    "iceberg_identifier": identifier,
+                    "vt_symbol": vt_symbol,
+                    "refreshed": True,
+                },
+            )
+            session.add(link)
+            written += 1
+        session.flush()
+
+    return {
+        "iceberg_identifier": identifier,
+        "symbols_scanned": len(symbols),
+        "links_written": written,
+        "resolved_instruments": resolved,
+        "unresolved_symbols": unresolved[:100],
+    }
+
+
+def _infer_timestamp_column(columns: list[str]) -> str | None:
+    candidates = ["timestamp", "ts", "datetime", "date", "as_of"]
+    lookup = {c.lower(): c for c in columns}
+    for cand in candidates:
+        if cand in lookup:
+            return lookup[cand]
+    return None
+
+
+def _value_count(column: Any, value: str) -> int:
+    try:
+        return sum(1 for v in column.to_pylist() if v is not None and str(v).strip() == value)
+    except Exception:
+        return 0
+
+
+def _as_dt(value: Any) -> Any:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value
+    try:
+        import pandas as pd
+
+        ts = pd.to_datetime(value, errors="coerce", utc=True)
+        if pd.isna(ts):
+            return None
+        return ts.tz_convert("UTC").tz_localize(None).to_pydatetime()
+    except Exception:
+        return None
+
+
+def _latest_dataset_version_id(catalog_id: str) -> str | None:
+    from aqp.persistence.models import DatasetVersion
+
+    with get_session() as session:
+        row = session.execute(
+            select(DatasetVersion)
+            .where(DatasetVersion.catalog_id == catalog_id)
+            .order_by(DatasetVersion.version.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        return row.id if row else None
+
+
+@router.post("/{namespace}/{name}/identifier-mappings/apply")
+def apply_identifier_mappings(namespace: str, name: str, req: IdentifierMappingApplyRequest) -> dict[str, Any]:
+    _ensure_catalog_loadable()
+    identifier = _split(namespace, name)
+    if not req.mappings:
+        raise HTTPException(400, "at least one mapping is required")
+    arrow = iceberg_catalog.read_arrow(identifier, limit=max(1, min(int(req.sample_rows), 10_000)))
+    if arrow is None:
+        raise HTTPException(404, f"table {identifier!r} not found or has no readable data")
+    rows = arrow.to_pylist() if arrow.num_rows else []
+    specs: list[IdentifierSpec] = []
+    for mapping in req.mappings:
+        if mapping.scheme not in _IDENTIFIER_SCHEMES:
+            raise HTTPException(400, f"unsupported identifier scheme: {mapping.scheme}")
+        for row in rows:
+            value = row.get(mapping.column)
+            if value is None or not str(value).strip():
+                continue
+            vt_symbol = None
+            if mapping.vt_symbol_column:
+                raw_vt = row.get(mapping.vt_symbol_column)
+                vt_symbol = str(raw_vt).strip() if raw_vt is not None and str(raw_vt).strip() else None
+            if vt_symbol is None and mapping.scheme == "vt_symbol":
+                vt_symbol = str(value).strip()
+            if vt_symbol is None:
+                continue
+            specs.append(
+                IdentifierSpec(
+                    scheme=mapping.scheme,
+                    value=str(value).strip(),
+                    instrument_vt_symbol=vt_symbol,
+                    confidence=float(mapping.confidence),
+                    meta={
+                        "source_table": identifier,
+                        "source_column": mapping.column,
+                    },
+                )
+            )
+    resolver = IdentifierResolver(source_name=req.source_name)
+    persisted = resolver.upsert_links(specs)
+    return {
+        "iceberg_identifier": identifier,
+        "requested_mappings": len(req.mappings),
+        "candidate_links": len(specs),
+        "persisted_links": len(persisted),
+        "link_ids": persisted[:100],
     }
 
 

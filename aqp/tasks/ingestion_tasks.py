@@ -127,6 +127,154 @@ def alpha_vantage_bulk_load(
         raise
 
 
+@celery_app.task(bind=True, name="aqp.tasks.ingestion_tasks.ingest_alpha_vantage_history")
+def ingest_alpha_vantage_history(
+    self,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Fetch Alpha Vantage stock history and append it to Iceberg."""
+    task_id = self.request.id or "local"
+    symbols = list(payload.get("symbols") or [])
+    emit(task_id, "start", f"Alpha Vantage history → Iceberg ({len(symbols)} symbols)")
+    try:
+        from aqp.data.sources.alpha_vantage.history import ingest_history
+
+        result = ingest_history(**payload)
+        response = result.to_dict()
+        emit_done(task_id, response)
+        return response
+    except Exception as exc:
+        logger.exception("ingest_alpha_vantage_history failed")
+        emit_error(task_id, str(exc))
+        raise
+
+
+@celery_app.task(bind=True, name="aqp.tasks.ingestion_tasks.load_alpha_vantage_endpoints")
+def load_alpha_vantage_endpoints(
+    self,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Multi-endpoint AlphaVantage bulk loader into the per-endpoint Iceberg lake."""
+    task_id = self.request.id or "local"
+    endpoints = list(payload.get("endpoints") or [])
+    symbols = payload.get("symbols") or "all_active"
+    filters = payload.get("filters") or {}
+    limit = payload.get("limit")
+    cache = bool(payload.get("cache", True))
+    cache_ttl = payload.get("cache_ttl")
+
+    emit(
+        task_id,
+        "start",
+        f"AlphaVantage endpoint loader: {len(endpoints)} endpoint(s), symbols={symbols!r}",
+        endpoints=endpoints,
+        symbols=symbols if isinstance(symbols, str) else len(symbols),
+    )
+
+    def _progress(stage: str, message: str, extras: dict[str, Any] | None = None) -> None:
+        emit(task_id, stage, message, **(extras or {}))
+
+    try:
+        from aqp.data.sources.alpha_vantage.bulk_loader import AlphaVantageBulkLoader
+
+        loader = AlphaVantageBulkLoader(progress_cb=_progress)
+        try:
+            result = loader.run(
+                endpoints=endpoints,
+                symbols=symbols,
+                filters=filters,
+                limit=int(limit) if limit else None,
+                cache=cache,
+                cache_ttl=float(cache_ttl) if cache_ttl is not None else None,
+            )
+        finally:
+            loader.close()
+        response = result.to_dict()
+        emit_done(task_id, response)
+        return response
+    except Exception as exc:
+        logger.exception("load_alpha_vantage_endpoints failed")
+        emit_error(task_id, str(exc))
+        raise
+
+
+@celery_app.task(bind=True, name="aqp.tasks.ingestion_tasks.plan_alpha_vantage_intraday")
+def plan_alpha_vantage_intraday(
+    self,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Build and persist 1-minute Alpha Vantage intraday request components."""
+
+    task_id = self.request.id or "local"
+    emit(task_id, "start", "Planning Alpha Vantage intraday request components")
+    try:
+        from aqp.data.sources.alpha_vantage.intraday_plan import build_intraday_plan
+
+        plan = build_intraday_plan(**payload)
+        response = plan.to_dict()
+        emit_done(task_id, response)
+        return response
+    except Exception as exc:
+        logger.exception("plan_alpha_vantage_intraday failed")
+        emit_error(task_id, str(exc))
+        raise
+
+
+@celery_app.task(bind=True, name="aqp.tasks.ingestion_tasks.load_alpha_vantage_intraday_components")
+def load_alpha_vantage_intraday_components(
+    self,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Load a batch of planned Alpha Vantage intraday components into Iceberg."""
+
+    task_id = self.request.id or "local"
+    emit(task_id, "start", "Loading Alpha Vantage intraday component batch")
+    try:
+        from aqp.data.sources.alpha_vantage.intraday_backfill import run_intraday_manifest
+
+        result = run_intraday_manifest(**payload)
+        response = result.to_dict()
+        emit_done(task_id, response)
+        return response
+    except Exception as exc:
+        logger.exception("load_alpha_vantage_intraday_components failed")
+        emit_error(task_id, str(exc))
+        raise
+
+
+@celery_app.task(bind=True, name="aqp.tasks.ingestion_tasks.run_alpha_vantage_intraday_delta")
+def run_alpha_vantage_intraday_delta(
+    self,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Plan and load one resumable Alpha Vantage intraday delta batch."""
+
+    task_id = self.request.id or "local"
+    emit(task_id, "start", "Running Alpha Vantage intraday delta cycle")
+    try:
+        from aqp.data.sources.alpha_vantage.intraday_backfill import run_intraday_manifest
+        from aqp.data.sources.alpha_vantage.intraday_plan import build_intraday_plan
+
+        plan_payload = dict(payload.get("plan") or payload)
+        load_payload = dict(payload.get("load") or {})
+        plan = build_intraday_plan(**plan_payload)
+        emit(
+            task_id,
+            "planned",
+            f"Planned {len(plan.components)} Alpha Vantage intraday components",
+            manifest_path=plan.manifest_path,
+            component_count=len(plan.components),
+        )
+        result = run_intraday_manifest(manifest_path=plan.manifest_path, **load_payload)
+        response = {"plan": plan.to_dict(), "load": result.to_dict()}
+        emit_done(task_id, response)
+        return response
+    except Exception as exc:
+        logger.exception("run_alpha_vantage_intraday_delta failed")
+        emit_error(task_id, str(exc))
+        raise
+
+
 @celery_app.task(bind=True, name="aqp.tasks.ingestion_tasks.load_local_directory")
 def load_local_directory(
     self,

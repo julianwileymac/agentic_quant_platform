@@ -1,8 +1,8 @@
 "use client";
 
-import { Button, Card, Input, Space, Tag, Typography } from "antd";
+import { Button, Card, Input, Select, Space, Tag, Typography } from "antd";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { PageContainer } from "@/components/shell/PageContainer";
 import { useApiQuery } from "@/lib/api/hooks";
@@ -15,29 +15,69 @@ interface UniverseEntry {
   name?: string;
 }
 
+interface UniverseResponse {
+  items?: UniverseEntry[];
+  source?: string;
+  total?: number;
+  next_offset?: number | null;
+  has_more?: boolean;
+}
+
 export function DataBrowserHome() {
   const router = useRouter();
   const [q, setQ] = useState("");
-  const universe = useApiQuery<{ items?: UniverseEntry[]; source?: string }>({
-    queryKey: ["data", "universe", q || ""],
+  const [source, setSource] = useState("managed_snapshot");
+  const [offset, setOffset] = useState(0);
+  const [items, setItems] = useState<UniverseEntry[]>([]);
+  const universe = useApiQuery<UniverseResponse>({
+    queryKey: ["data", "universe", q || "", source, offset],
     path: "/data/universe",
-    query: { limit: 100, query: q || undefined },
+    query: { limit: 250, offset, query: q || undefined, source },
   });
 
-  const items = universe.data?.items ?? [];
+  useEffect(() => {
+    const next = universe.data?.items ?? [];
+    setItems((previous) => {
+      const merged = offset === 0 ? next : [...previous, ...next];
+      const bySymbol = new Map<string, UniverseEntry>();
+      for (const item of merged) {
+        const key = item.vt_symbol ?? item.ticker;
+        if (key) bySymbol.set(key, item);
+      }
+      return Array.from(bySymbol.values());
+    });
+  }, [universe.data, offset]);
+
+  useEffect(() => {
+    setOffset(0);
+    setItems([]);
+  }, [q, source]);
 
   return (
     <PageContainer
       title="Data Browser"
       subtitle="Pick a symbol to inspect bars, indicators, fundamentals, and news."
       extra={
-        <Input.Search
-          allowClear
-          placeholder="Filter symbols"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          style={{ width: 280 }}
-        />
+        <Space>
+          <Select
+            value={source}
+            onChange={setSource}
+            style={{ width: 180 }}
+            options={[
+              { value: "managed_snapshot", label: "Managed snapshot" },
+              { value: "alpha_vantage", label: "AlphaVantage live" },
+              { value: "catalog", label: "Data catalog" },
+              { value: "config", label: "Config fallback" },
+            ]}
+          />
+          <Input.Search
+            allowClear
+            placeholder="Filter symbols"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            style={{ width: 280 }}
+          />
+        </Space>
       }
     >
       <Card>
@@ -69,6 +109,18 @@ export function DataBrowserHome() {
         {universe.data?.source ? (
           <div style={{ marginTop: 12 }}>
             <Tag>source: {universe.data.source}</Tag>
+            <Tag>
+              {items.length} of {universe.data.total ?? "?"} loaded
+            </Tag>
+            {universe.data.has_more ? (
+              <Button
+                size="small"
+                onClick={() => setOffset(universe.data?.next_offset ?? items.length)}
+                loading={universe.isFetching}
+              >
+                Load more
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </Card>

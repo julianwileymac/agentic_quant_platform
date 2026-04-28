@@ -64,24 +64,19 @@ dependencies = [
     # UI
     "solara>=1.30",
     "plotly>=5.19",
-    # anywidget is an *optional* Plotly dep that its `FigureWidget` class
-    # imports lazily. Solara's `FigurePlotly` renders via FigureWidget, so
-    # without anywidget every page that draws a Plotly chart crashes with
-    # ``ModuleNotFoundError: No module named 'anywidget'``.
     "anywidget>=0.9",
     "dash>=2.15",
-    # CLI + resilience (used by the unified `aqp` CLI and broker adapters)
+    # CLI + resilience
     "typer>=0.12",
     "tenacity>=8.2",
 ]
 
 [project.optional-dependencies]
 arcticdb = ["arcticdb>=4.4"]
-# Paper/live brokerage adapters — each adapter is opt-in so the base install stays lean.
+dagster = ["dagster>=1.7.0"]
 alpaca = ["alpaca-py>=0.25"]
 ibkr = ["ib-async>=1.0"]
-tradier = []  # uses base httpx; listed for symmetry + future pin points
-# OpenTelemetry tracing stack — auto-instruments FastAPI, Celery, SQLAlchemy, HTTPX, Redis.
+tradier = []
 otel = [
     "opentelemetry-sdk>=1.25",
     "opentelemetry-exporter-otlp-proto-grpc>=1.25",
@@ -93,7 +88,6 @@ otel = [
 ]
 paper = ["tenacity>=8.2"]
 cli = ["typer[all]>=0.12"]
-# Kafka streaming producers/consumers + Avro serialization + Prometheus metrics.
 streaming = [
     "confluent-kafka>=2.5",
     "aiokafka>=0.11",
@@ -101,11 +95,8 @@ streaming = [
     "prometheus-client>=0.20",
     "aiohttp>=3.9",
 ]
-# Vectorized/event-driven third-party backtest engines (Phase 2 adapters).
 vectorbt = ["vectorbt>=0.26", "numba>=0.58"]
 backtesting = ["backtesting>=0.3.3", "bokeh>=3.1"]
-# Classical ML stack (trees + linear + sklearn + pandas-ta bridge).
-# PyPI ``pandas-ta`` 0.4.x requires Python >=3.12; use community classic for 3.11.
 ml = [
     "xgboost>=2.0",
     "lightgbm>=4.3",
@@ -114,72 +105,128 @@ ml = [
     "statsmodels>=0.14",
     "pandas-ta-classic>=0.3.15",
 ]
-# Deep-learning / PyTorch model zoo (Tier A LSTM/GRU/ALSTM/Transformer/TCN/TabNet).
 ml-torch = ["torch>=2.1", "pytorch-tabnet>=4.1"]
-# Optional graph-learning extras for Tier B GATs/HIST-style models.
 ml-graph = ["torch-geometric>=2.5"]
-# Classical + modern time-series forecasters (statsmodels already in `ml`).
 ml-forecast = [
     "prophet>=1.1.5",
     "sktime>=0.29",
     "pmdarima>=2.0",
 ]
-# Outlier / anomaly detection pipeline steps (feature cleaning + risk gating).
 ml-anomaly = ["pyod>=1.1.3"]
-# Portfolio optimization backends (PyPortfolioOpt uses cvxpy for CVaR /
-# semivariance / CDaR / Efficient Frontier).
 portfolio = ["PyPortfolioOpt>=1.5.5", "cvxpy>=1.4", "ecos>=2.0", "scs>=3.2"]
-# mlfinlab-style labeling + structural bars + fracdiff (native implementations
-# inspired by the hudson-and-thames book — no paid dependency).
 ml-structural = ["numba>=0.58"]
-# Ray Serve backend for model deployments.
 serving-ray = ["ray[serve]>=2.10", "fastapi>=0.110,<0.116"]
-# TorchServe backend for model deployments.
 serving-torch = [
     "torch>=2.1",
     "torchserve>=0.10",
     "torch-model-archiver>=0.10",
 ]
-# MLflow-native serving (mlflow models serve + MLServer optional).
 serving-mlflow = ["mlflow>=2.11", "mlserver>=1.4", "mlserver-mlflow>=1.4"]
-# Umbrella: wire every serving backend.
 serving = [
     "agentic-quant-platform[serving-mlflow,serving-ray,serving-torch]",
 ]
-# FinGPT / FinBERT LLM-based sentiment + forecasting (Phase 4).
 llm-finance = [
     "transformers>=4.40",
     "accelerate>=0.30",
     "peft>=0.11",
     "sentencepiece>=0.2",
 ]
-# FinRobot / TradingAgents autogen orchestration (Phase 4).
 llm-agents = [
     "pyautogen>=0.2.30",
     "autogen-agentchat>=0.2.30",
     "langchain>=0.2",
 ]
+
 # ---------------------------------------------------------------------------
-# Data-plane expansion: FRED / SEC EDGAR / GDelt adapters (Phase 2-4 extras).
-# Keep each dependency minimal so users can install just what they need.
+# Data-plane expansion: FRED / SEC EDGAR / GDelt adapters.
 # ---------------------------------------------------------------------------
 fred = ["fredapi>=0.5.2"]
 sec = ["edgartools>=5.0"]
 gdelt = ["aiohttp>=3.9", "aiofiles>=24.1"]
 gdelt-bq = ["google-cloud-bigquery>=3.22"]
-# Iceberg-first generic data catalog. PyIceberg drives the REST/SQL catalog
-# clients; ``s3fs`` lets the warehouse live on MinIO/S3; ``ijson`` enables
-# streaming JSON-array parsing for the regulatory ZIP corpora (FDA, USPTO).
 iceberg = [
     "pyiceberg[s3fs,sql-sqlite]>=0.7",
     "s3fs>=2024.5",
     "ijson>=3.2",
 ]
+
+# ---------------------------------------------------------------------------
+# Phase 2 (agentic-RAG expansion): regulatory data adapters.
+# CFPB + FDA use httpx (already in core deps); USPTO PEDS XML uses xmltodict.
+# ---------------------------------------------------------------------------
+regulatory = [
+    "xmltodict>=0.13",
+]
+
+# ---------------------------------------------------------------------------
+# Phase 1 + Phase 5 (agentic-RAG expansion): hierarchical Redis RAG +
+# LangGraph orchestration. The base ``redis`` and ``sentence-transformers``
+# pins are already in core deps; this extra adds the optional reranker,
+# RAPTOR clustering, and LangGraph state machine.
+# ---------------------------------------------------------------------------
+agents-rag = [
+    "redis[hiredis]>=5.0",
+    "umap-learn>=0.5",
+    "scikit-learn>=1.4",
+    "FlagEmbedding>=1.2",
+    "langgraph>=0.2",
+    "tiktoken>=0.7",
+]
+
+# ---------------------------------------------------------------------------
+# Data fabric expansion — pluggable compute backends, broader source
+# library, hybrid Dagster code location, DataHub bidirectional sync.
+# Heavy optional deps; gated by import-time fallbacks so a missing extra
+# downgrades the engine to ``LocalBackend`` with a warning.
+# ---------------------------------------------------------------------------
+compute-dask = [
+    "dask[distributed,dataframe]>=2024.5",
+    "bokeh>=3.1",
+]
+compute-ray = [
+    "ray[data]>=2.10",
+]
+compute = [
+    "agentic-quant-platform[compute-dask,compute-ray]",
+]
+
+# Broader source library deps (FinanceDatabase / akshare / coingecko etc).
+sources = [
+    "aiofiles>=24.1",
+    "boto3>=1.34",
+    "google-cloud-storage>=2.16",
+    "azure-storage-blob>=12.19",
+]
+
+# DataHub bidirectional emitter + GMS client.
+datahub-sync = [
+    "acryl-datahub[datahub-rest]>=0.13",
+]
+
+# Local dbt + DuckDB modeling runtime. Kept optional so the core API can
+# start without dbt installed in lean service images.
+dbt = [
+    "dbt-core>=1.8",
+    "dbt-duckdb>=1.8",
+]
+
+# Dagster code-location runtime for AQP. Lighter than the full Dagster
+# install: just enough to expose ``Definitions`` over gRPC.
+dagster-aqp = [
+    "dagster>=1.7.0",
+    "dagster-graphql>=1.7.0",
+    "dagster-postgres>=0.23",
+    "dagster-k8s>=0.23",
+]
+
 data-plane = [
-    "agentic-quant-platform[fred,sec,gdelt,iceberg]",
+    "agentic-quant-platform[fred,sec,gdelt,iceberg,regulatory]",
+]
+data-fabric = [
+    "agentic-quant-platform[data-plane,compute,sources,datahub-sync,dagster-aqp,dbt]",
 ]
 full = [
-    "agentic-quant-platform[alpaca,ibkr,tradier,otel,cli,paper,streaming,vectorbt,backtesting,ml,ml-torch,ml-forecast,ml-anomaly,portfolio,ml-structural,serving,llm-finance,fred,sec,gdelt,iceberg]",
+    "agentic-quant-platform[alpaca,ibkr,tradier,otel,cli,paper,streaming,vectorbt,backtesting,ml,ml-torch,ml-forecast,ml-anomaly,portfolio,ml-structural,serving,llm-finance,fred,sec,gdelt,iceberg,regulatory,agents-rag,compute,sources,datahub-sync,dagster-aqp,dbt]",
 ]
 dev = [
     "pytest>=7.4",
@@ -214,8 +261,6 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
-# Typer uses function-call defaults (typer.Option / typer.Argument) as its
-# documented idiom, which otherwise triggers B008.
 "aqp/cli/*.py" = ["B008"]
 
 [tool.mypy]

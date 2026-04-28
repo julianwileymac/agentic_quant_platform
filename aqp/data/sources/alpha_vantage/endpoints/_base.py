@@ -1,13 +1,27 @@
 """Endpoint helpers shared by Alpha Vantage resource groups."""
 from __future__ import annotations
 
-from typing import Any, Mapping
+import logging
+from collections.abc import Mapping
+from typing import Any
 
 import pandas as pd
 
 from aqp.data.sources.alpha_vantage._parsers import normalize_mapping
 from aqp.data.sources.alpha_vantage._transport import AsyncTransport, Transport
 from aqp.data.sources.alpha_vantage.models import AVModel, TimeSeriesPayload
+
+logger = logging.getLogger(__name__)
+
+_STOCK_INTRADAY_INTERVALS = frozenset({"1min", "5min", "15min", "30min", "60min"})
+_STOCK_INTRADAY_ALIASES: dict[str, str] = {
+    "1m": "1min",
+    "5m": "5min",
+    "15m": "15min",
+    "30m": "30min",
+    "60m": "60min",
+    "1h": "60min",
+}
 
 
 class BaseEndpoint:
@@ -22,7 +36,13 @@ class BaseEndpoint:
         datatype: str | None = None,
         cache: bool = True,
     ) -> Any:
-        return self._transport.request(params, datatype=datatype, cache=cache)
+        query, use_cache, cache_ttl = _request_options(params, cache)
+        return self._transport.request(
+            query,
+            datatype=datatype,
+            cache=use_cache,
+            cache_ttl=cache_ttl,
+        )
 
     async def _async_request(
         self,
@@ -31,7 +51,13 @@ class BaseEndpoint:
         datatype: str | None = None,
         cache: bool = True,
     ) -> Any:
-        return await self._async_transport.request(params, datatype=datatype, cache=cache)
+        query, use_cache, cache_ttl = _request_options(params, cache)
+        return await self._async_transport.request(
+            query,
+            datatype=datatype,
+            cache=use_cache,
+            cache_ttl=cache_ttl,
+        )
 
     @staticmethod
     def _model(payload: Any) -> AVModel:
@@ -69,4 +95,39 @@ def _prune(params: Mapping[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in params.items() if v is not None and v != ""}
 
 
-__all__ = ["BaseEndpoint", "_prune"]
+def coerce_stock_intraday_interval(interval: str | None) -> str:
+    """Return a ``TIME_SERIES_INTRADAY`` interval Alpha Vantage accepts.
+
+    Callers often pass ``None`` (explicit or from JSON), which would otherwise be
+    pruned from the query string and trigger Alpha Vantage's *Invalid API call*
+    for intraday. UI-style tokens like ``1d`` or ``5m`` are normalized.
+    """
+    if interval is None:
+        return "5min"
+    raw = str(interval).strip().lower()
+    if not raw:
+        return "5min"
+    raw = _STOCK_INTRADAY_ALIASES.get(raw, raw)
+    if raw in _STOCK_INTRADAY_INTERVALS:
+        return raw
+    logger.warning(
+        "Unsupported stock intraday interval %r; defaulting to 5min (expected one of %s)",
+        interval,
+        ", ".join(sorted(_STOCK_INTRADAY_INTERVALS)),
+    )
+    return "5min"
+
+
+def _request_options(params: Mapping[str, Any], default_cache: bool) -> tuple[dict[str, Any], bool, float | None]:
+    """Split AQP-private transport controls from Alpha Vantage query params."""
+    query = dict(params)
+    cache_raw = query.pop("_cache", default_cache)
+    cache_ttl_raw = query.pop("_cache_ttl", None)
+    try:
+        cache_ttl = float(cache_ttl_raw) if cache_ttl_raw is not None else None
+    except (TypeError, ValueError):
+        cache_ttl = None
+    return query, bool(cache_raw), cache_ttl
+
+
+__all__ = ["BaseEndpoint", "_prune", "coerce_stock_intraday_interval"]

@@ -17,6 +17,7 @@ import {
   Descriptions,
   Form,
   Input,
+  InputNumber,
   List,
   Modal,
   Row,
@@ -53,6 +54,9 @@ interface IngestForm {
   range: [Dayjs, Dayjs];
   interval: string;
   source: string;
+  avFunction: string;
+  outputsize: string;
+  month?: string;
 }
 
 interface UniverseEntry {
@@ -65,6 +69,10 @@ interface UniverseEntry {
 interface UniverseResponse {
   items?: UniverseEntry[];
   source?: string;
+  count?: number;
+  total?: number;
+  next_offset?: number | null;
+  has_more?: boolean;
 }
 
 interface SourceRow {
@@ -133,6 +141,13 @@ export function DataExplorer() {
   const [exportName, setExportName] = useState("data_browser_pipeline");
   const [exportOpen, setExportOpen] = useState(false);
   const [streamChannel, setStreamChannel] = useState<string | null>(null);
+  const [universeSource, setUniverseSource] = useState("managed_snapshot");
+  const [universeState, setUniverseState] = useState("active");
+  const [includeOtc, setIncludeOtc] = useState(false);
+  const [universeSearch, setUniverseSearch] = useState("");
+  const [universeOffset, setUniverseOffset] = useState(0);
+  const [universePageSize, setUniversePageSize] = useState(1000);
+  const [universeItems, setUniverseItems] = useState<UniverseEntry[]>([]);
 
   const catalog = useApiQuery<CatalogRow[]>({
     queryKey: ["data", "catalog"],
@@ -141,9 +156,26 @@ export function DataExplorer() {
   });
 
   const universe = useApiQuery<UniverseResponse>({
-    queryKey: ["data", "universe", "explorer"],
+    queryKey: [
+      "data",
+      "universe",
+      "explorer",
+      universeSource,
+      universeState,
+      includeOtc,
+      universeSearch,
+      universeOffset,
+      universePageSize,
+    ],
     path: "/data/universe",
-    query: { limit: 500 },
+    query: {
+      limit: universePageSize,
+      offset: universeOffset,
+      query: universeSearch || undefined,
+      source: universeSource,
+      state: universeState,
+      include_otc: includeOtc,
+    },
     staleTime: 60_000,
   });
 
@@ -168,12 +200,30 @@ export function DataExplorer() {
 
   const liveStream = useLiveStream({ channelId: streamChannel, bufferSize: 200 });
 
-  const universeOptions = useMemo(() => {
-    return (universe.data?.items ?? []).map((it) => {
-      const vt = it.vt_symbol ?? `${it.ticker ?? ""}.NASDAQ`;
-      return { value: vt, label: vt };
+  useEffect(() => {
+    const items = universe.data?.items ?? [];
+    setUniverseItems((previous) => {
+      const merged = universeOffset === 0 ? items : [...previous, ...items];
+      const bySymbol = new Map<string, UniverseEntry>();
+      for (const item of merged) {
+        const key = item.vt_symbol ?? item.ticker;
+        if (key) bySymbol.set(key, item);
+      }
+      return Array.from(bySymbol.values());
     });
-  }, [universe.data]);
+  }, [universe.data, universeOffset]);
+
+  useEffect(() => {
+    setUniverseOffset(0);
+    setUniverseItems([]);
+  }, [universeSource, universeState, includeOtc, universeSearch, universePageSize]);
+
+  const universeOptions = useMemo(() => {
+    return universeItems.map((it) => {
+      const vt = it.vt_symbol ?? `${it.ticker ?? ""}.NASDAQ`;
+      return { value: vt, label: it.name ? `${vt} — ${it.name}` : vt };
+    });
+  }, [universeItems]);
 
   const sourceOptions = useMemo(() => {
     return (sourcesQuery.data ?? []).map((s) => ({
@@ -227,9 +277,26 @@ export function DataExplorer() {
       return;
     }
     try {
-      const res = await apiFetch<{ task_id: string }>("/data/ingest", {
+      const endpoint = values.source === "alpha_vantage" ? "/pipelines/alpha-vantage/history" : "/data/ingest";
+      const resolvedAvFunction =
+        values.avFunction || (payload.interval === "1d" ? "daily_adjusted" : "intraday");
+      const mappedAvInterval = toAlphaVantageInterval(payload.interval);
+      const body = values.source === "alpha_vantage"
+        ? {
+            symbols: payload.symbols,
+            start: payload.start,
+            end: payload.end,
+            function: resolvedAvFunction,
+            interval:
+              mappedAvInterval ?? (resolvedAvFunction === "intraday" ? "5min" : undefined),
+            outputsize: values.outputsize || "full",
+            month: values.month || undefined,
+            cache: true,
+          }
+        : payload;
+      const res = await apiFetch<{ task_id: string }>(endpoint, {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
       setTaskId(res.task_id);
       setStep(2);
@@ -260,6 +327,33 @@ export function DataExplorer() {
     } catch (err) {
       message.error((err as Error).message);
     }
+  }
+
+  async function syncUniverse() {
+    try {
+      const res = await apiFetch<{ task_id: string }>("/data/universe/sync", {
+        method: "POST",
+        body: JSON.stringify({
+          state: universeState,
+          limit: null,
+          include_otc: includeOtc,
+          query: universeSearch || null,
+        }),
+      });
+      setTaskId(res.task_id);
+      message.success(`Universe sync queued: ${res.task_id}`);
+    } catch (err) {
+      message.error((err as Error).message);
+    }
+  }
+
+  function useSelectedUniverseSymbols() {
+    if (symbols.length === 0) {
+      message.warning("Pick at least one security first");
+      return;
+    }
+    form.setFieldValue("symbols", symbols.join(", "));
+    message.success(`Copied ${symbols.length} selected securities into the ingest form`);
   }
 
   async function stopStreamPreview() {
@@ -333,25 +427,70 @@ export function DataExplorer() {
             <div style={{ marginBottom: 4 }}>
               <Text strong>Securities</Text>
             </div>
+            <Space wrap style={{ marginBottom: 8 }}>
+              <Select
+                size="small"
+                value={universeSource}
+                onChange={setUniverseSource}
+                style={{ width: 180 }}
+                options={[
+                  { value: "managed_snapshot", label: "Managed snapshot" },
+                  { value: "alpha_vantage", label: "AlphaVantage live" },
+                  { value: "catalog", label: "Data catalog" },
+                  { value: "config", label: "Config fallback" },
+                ]}
+              />
+              <Select
+                size="small"
+                value={universeState}
+                onChange={setUniverseState}
+                style={{ width: 110 }}
+                options={[
+                  { value: "active", label: "Active" },
+                  { value: "delisted", label: "Delisted" },
+                ]}
+              />
+              <Select
+                size="small"
+                value={includeOtc ? "yes" : "no"}
+                onChange={(value) => setIncludeOtc(value === "yes")}
+                style={{ width: 110 }}
+                options={[
+                  { value: "no", label: "No OTC" },
+                  { value: "yes", label: "Include OTC" },
+                ]}
+              />
+              <Button size="small" onClick={syncUniverse}>
+                Sync AV
+              </Button>
+            </Space>
             <Select
               mode="multiple"
-              placeholder="Pick symbols from the universe"
+              placeholder="Search and pick symbols from the universe"
               value={symbols}
               onChange={setSymbols}
+              onSearch={setUniverseSearch}
               options={universeOptions}
               style={{ width: "100%" }}
               maxTagCount={4}
               showSearch
-              filterOption={(input, option) =>
-                String(option?.label ?? "")
-                  .toLowerCase()
-                  .includes(input.toLowerCase())
-              }
+              filterOption={false}
             />
-            <Text type="secondary" style={{ fontSize: 11 }}>
-              {(universe.data?.items ?? []).length} symbols indexed (source:{" "}
-              {universe.data?.source ?? "—"})
-            </Text>
+            <Space wrap style={{ marginTop: 6 }}>
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                {universeItems.length} loaded of {universe.data?.total ?? "?"} symbols (source:{" "}
+                {universe.data?.source ?? "—"})
+              </Text>
+              {universe.data?.has_more ? (
+                <Button
+                  size="small"
+                  onClick={() => setUniverseOffset(universe.data?.next_offset ?? universeItems.length)}
+                  loading={universe.isFetching}
+                >
+                  Load more
+                </Button>
+              ) : null}
+            </Space>
           </Col>
           <Col xs={24} md={12} lg={8}>
             <div style={{ marginBottom: 4 }}>
@@ -458,6 +597,8 @@ export function DataExplorer() {
                 symbols: "SPY, AAPL, MSFT",
                 interval: "1d",
                 source: "yahoo",
+                avFunction: "daily_adjusted",
+                outputsize: "full",
                 range: [dayjs().subtract(2, "year"), dayjs()],
               }}
               onValuesChange={() => setStep((s) => Math.max(s, 1))}
@@ -469,8 +610,11 @@ export function DataExplorer() {
               >
                 <Input.TextArea autoSize placeholder="SPY, AAPL, MSFT" />
               </Form.Item>
+              <Button size="small" onClick={useSelectedUniverseSymbols} style={{ marginBottom: 12 }}>
+                Use selected universe symbols
+              </Button>
               <Form.Item
-                label="Range"
+                label="History range"
                 name="range"
                 rules={[{ required: true, message: "Required" }]}
               >
@@ -483,6 +627,8 @@ export function DataExplorer() {
                       options={[
                         { value: "1d", label: "Daily" },
                         { value: "1h", label: "Hourly" },
+                        { value: "30m", label: "30-minute" },
+                        { value: "15m", label: "15-minute" },
                         { value: "5m", label: "5-minute" },
                         { value: "1m", label: "1-minute" },
                       ]}
@@ -494,9 +640,47 @@ export function DataExplorer() {
                     <Select
                       options={[
                         { value: "yahoo", label: "yfinance" },
+                        { value: "alpha_vantage", label: "AlphaVantage → Iceberg" },
                         { value: "alpaca", label: "Alpaca" },
                         { value: "ibkr", label: "IBKR" },
                       ]}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Row gutter={12}>
+                <Col span={8}>
+                  <Form.Item label="AlphaVantage function" name="avFunction">
+                    <Select
+                      options={[
+                        { value: "daily_adjusted", label: "Daily adjusted" },
+                        { value: "daily", label: "Daily raw" },
+                        { value: "intraday", label: "Intraday" },
+                        { value: "weekly_adjusted", label: "Weekly adjusted" },
+                        { value: "monthly_adjusted", label: "Monthly adjusted" },
+                      ]}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item label="Output size" name="outputsize">
+                    <Select
+                      options={[
+                        { value: "compact", label: "Compact" },
+                        { value: "full", label: "Full" },
+                      ]}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item label="Page size">
+                    <InputNumber
+                      min={100}
+                      max={5000}
+                      step={100}
+                      value={universePageSize}
+                      onChange={(value) => setUniversePageSize(Number(value ?? 1000))}
+                      style={{ width: "100%" }}
                     />
                   </Form.Item>
                 </Col>
@@ -612,4 +796,15 @@ export function DataExplorer() {
       </Modal>
     </PageContainer>
   );
+}
+
+function toAlphaVantageInterval(interval: string): string | null {
+  const mapping: Record<string, string> = {
+    "1m": "1min",
+    "5m": "5min",
+    "15m": "15min",
+    "30m": "30min",
+    "1h": "60min",
+  };
+  return mapping[interval] ?? null;
 }

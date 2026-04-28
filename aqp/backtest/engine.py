@@ -42,8 +42,10 @@ from aqp.core.types import (
     Symbol,
     TradeData,
 )
+from aqp.observability import get_tracer
 
 logger = logging.getLogger(__name__)
+_tracer = get_tracer("aqp.backtest.engine")
 
 
 @dataclass
@@ -230,6 +232,26 @@ class EventDrivenBacktester:
         )
 
     def run(self, strategy: IStrategy, bars: pd.DataFrame) -> BacktestResult:
+        # Trace the backtest at the entry point so the entire run shows up as a
+        # single span in Jaeger; downstream broker/strategy spans become children
+        # via the active context.  Attributes are kept low-cardinality.
+        with _tracer.start_as_current_span("backtest.run") as span:
+            try:
+                span.set_attribute("backtest.engine", "EventDrivenBacktester")
+                span.set_attribute("backtest.strategy", type(strategy).__name__)
+                span.set_attribute("backtest.bars_count", int(len(bars)))
+                span.set_attribute("backtest.initial_cash", float(self.initial_cash))
+            except Exception:  # noqa: BLE001 - tracing must never affect logic
+                pass
+            return self._run_impl(strategy, bars, span=span)
+
+    def _run_impl(
+        self,
+        strategy: IStrategy,
+        bars: pd.DataFrame,
+        *,
+        span: Any | None = None,
+    ) -> BacktestResult:
         if bars.empty:
             raise ValueError("No bars provided to backtester.")
 

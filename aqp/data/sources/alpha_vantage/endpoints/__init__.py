@@ -1,10 +1,15 @@
 """Alpha Vantage endpoint-group facades."""
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from aqp.data.sources.alpha_vantage._parsers import normalize_mapping
-from aqp.data.sources.alpha_vantage.endpoints._base import BaseEndpoint, _prune
+from aqp.data.sources.alpha_vantage.endpoints._base import (
+    BaseEndpoint,
+    _prune,
+    coerce_stock_intraday_interval,
+)
 from aqp.data.sources.alpha_vantage.models import (
     AVModel,
     GlobalQuote,
@@ -14,10 +19,12 @@ from aqp.data.sources.alpha_vantage.models import (
 
 
 class TimeSeries(BaseEndpoint):
-    def intraday(self, symbol: str, *, interval: str = "5min", outputsize: str | None = None, **extra: Any):
+    def intraday(self, symbol: str, *, interval: str | None = None, outputsize: str | None = None, **extra: Any):
+        interval = coerce_stock_intraday_interval(interval)
         return self._time_series(self._sync_request(_prune({"function": "TIME_SERIES_INTRADAY", "symbol": symbol, "interval": interval, "outputsize": outputsize, **extra})))
 
-    async def aintraday(self, symbol: str, *, interval: str = "5min", outputsize: str | None = None, **extra: Any):
+    async def aintraday(self, symbol: str, *, interval: str | None = None, outputsize: str | None = None, **extra: Any):
+        interval = coerce_stock_intraday_interval(interval)
         return self._time_series(await self._async_request(_prune({"function": "TIME_SERIES_INTRADAY", "symbol": symbol, "interval": interval, "outputsize": outputsize, **extra})))
 
     def daily(self, symbol: str, *, outputsize: str | None = None, **extra: Any):
@@ -32,29 +39,29 @@ class TimeSeries(BaseEndpoint):
     async def adaily_adjusted(self, symbol: str, *, outputsize: str | None = None, **extra: Any):
         return self._time_series(await self._async_request(_prune({"function": "TIME_SERIES_DAILY_ADJUSTED", "symbol": symbol, "outputsize": outputsize, **extra})))
 
-    def weekly(self, symbol: str):
-        return self._time_series(self._sync_request({"function": "TIME_SERIES_WEEKLY", "symbol": symbol}))
+    def weekly(self, symbol: str, **extra: Any):
+        return self._time_series(self._sync_request(_prune({"function": "TIME_SERIES_WEEKLY", "symbol": symbol, **extra})))
 
-    async def aweekly(self, symbol: str):
-        return self._time_series(await self._async_request({"function": "TIME_SERIES_WEEKLY", "symbol": symbol}))
+    async def aweekly(self, symbol: str, **extra: Any):
+        return self._time_series(await self._async_request(_prune({"function": "TIME_SERIES_WEEKLY", "symbol": symbol, **extra})))
 
-    def weekly_adjusted(self, symbol: str):
-        return self._time_series(self._sync_request({"function": "TIME_SERIES_WEEKLY_ADJUSTED", "symbol": symbol}))
+    def weekly_adjusted(self, symbol: str, **extra: Any):
+        return self._time_series(self._sync_request(_prune({"function": "TIME_SERIES_WEEKLY_ADJUSTED", "symbol": symbol, **extra})))
 
-    async def aweekly_adjusted(self, symbol: str):
-        return self._time_series(await self._async_request({"function": "TIME_SERIES_WEEKLY_ADJUSTED", "symbol": symbol}))
+    async def aweekly_adjusted(self, symbol: str, **extra: Any):
+        return self._time_series(await self._async_request(_prune({"function": "TIME_SERIES_WEEKLY_ADJUSTED", "symbol": symbol, **extra})))
 
-    def monthly(self, symbol: str):
-        return self._time_series(self._sync_request({"function": "TIME_SERIES_MONTHLY", "symbol": symbol}))
+    def monthly(self, symbol: str, **extra: Any):
+        return self._time_series(self._sync_request(_prune({"function": "TIME_SERIES_MONTHLY", "symbol": symbol, **extra})))
 
-    async def amonthly(self, symbol: str):
-        return self._time_series(await self._async_request({"function": "TIME_SERIES_MONTHLY", "symbol": symbol}))
+    async def amonthly(self, symbol: str, **extra: Any):
+        return self._time_series(await self._async_request(_prune({"function": "TIME_SERIES_MONTHLY", "symbol": symbol, **extra})))
 
-    def monthly_adjusted(self, symbol: str):
-        return self._time_series(self._sync_request({"function": "TIME_SERIES_MONTHLY_ADJUSTED", "symbol": symbol}))
+    def monthly_adjusted(self, symbol: str, **extra: Any):
+        return self._time_series(self._sync_request(_prune({"function": "TIME_SERIES_MONTHLY_ADJUSTED", "symbol": symbol, **extra})))
 
-    async def amonthly_adjusted(self, symbol: str):
-        return self._time_series(await self._async_request({"function": "TIME_SERIES_MONTHLY_ADJUSTED", "symbol": symbol}))
+    async def amonthly_adjusted(self, symbol: str, **extra: Any):
+        return self._time_series(await self._async_request(_prune({"function": "TIME_SERIES_MONTHLY_ADJUSTED", "symbol": symbol, **extra})))
 
     def global_quote(self, symbol: str, **extra: Any) -> GlobalQuote:
         payload = self._sync_request(_prune({"function": "GLOBAL_QUOTE", "symbol": symbol, **extra}))
@@ -64,20 +71,20 @@ class TimeSeries(BaseEndpoint):
         payload = await self._async_request(_prune({"function": "GLOBAL_QUOTE", "symbol": symbol, **extra}))
         return GlobalQuote.model_validate(payload.get("Global Quote", payload))
 
-    def search(self, keywords: str) -> list[SymbolSearchMatch]:
-        payload = self._sync_request({"function": "SYMBOL_SEARCH", "keywords": keywords})
+    def search(self, keywords: str, **extra: Any) -> list[SymbolSearchMatch]:
+        payload = self._sync_request(_prune({"function": "SYMBOL_SEARCH", "keywords": keywords, **extra}))
         return [SymbolSearchMatch.model_validate(row) for row in payload.get("bestMatches", [])]
 
-    async def asearch(self, keywords: str) -> list[SymbolSearchMatch]:
-        payload = await self._async_request({"function": "SYMBOL_SEARCH", "keywords": keywords})
+    async def asearch(self, keywords: str, **extra: Any) -> list[SymbolSearchMatch]:
+        payload = await self._async_request(_prune({"function": "SYMBOL_SEARCH", "keywords": keywords, **extra}))
         return [SymbolSearchMatch.model_validate(row) for row in payload.get("bestMatches", [])]
 
-    def market_status(self) -> MarketStatusPayload:
-        payload = self._sync_request({"function": "MARKET_STATUS"})
+    def market_status(self, **extra: Any) -> MarketStatusPayload:
+        payload = self._sync_request(_prune({"function": "MARKET_STATUS", **extra}))
         return MarketStatusPayload(markets=[normalize_mapping(row) for row in payload.get("markets", [])])
 
-    async def amarket_status(self) -> MarketStatusPayload:
-        payload = await self._async_request({"function": "MARKET_STATUS"})
+    async def amarket_status(self, **extra: Any) -> MarketStatusPayload:
+        payload = await self._async_request(_prune({"function": "MARKET_STATUS", **extra}))
         return MarketStatusPayload(markets=[normalize_mapping(row) for row in payload.get("markets", [])])
 
     async def arealtime_bulk_quotes(self, symbols: Iterable[str], **extra: Any) -> list[dict[str, Any]]:

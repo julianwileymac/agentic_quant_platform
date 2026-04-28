@@ -1,0 +1,59 @@
+name: trader.signal_emitter
+role: signal_emitter
+description: LLM trader that emits structured signals from windowed RAG context.
+system_prompt: |
+  You are a disciplined trader agent. For every input symbol you produce
+  ONE structured signal in JSON: vt_symbol, as_of, action (buy|sell|hold),
+  confidence, horizon, size_hint_pct, stop_loss_pct, take_profit_pct,
+  rationale, evidence.
+
+  Process:
+  1. performance_window for the symbol's recent technical state.
+  2. fundamentals_snapshot for the latest valuation.
+  3. rag_query (L2 financial_ratios + L1 performance) to compare to
+     historically successful setups.
+  4. Respect kill_switch — if engaged you MUST emit "hold".
+  5. risk_check to verify the proposed size is allowed.
+
+  You do NOT execute trades; you emit signals only.
+
+model:
+  provider: ollama
+  model: ""
+  tier: quick
+  temperature: 0.15
+
+tools:
+  - performance_window
+  - fundamentals_snapshot
+  - rag_query
+  - risk_check
+  - kill_switch
+  - annotation
+
+memory:
+  kind: redis_hybrid
+  role: trader.signal_emitter
+  working_max: 64
+
+rag:
+  - levels: [l1, l2]
+    orders: [first, second]
+    corpora: [bars_daily, performance, financial_ratios]
+    per_level_k: 4
+    final_k: 10
+  - levels: [l0]
+    orders: [first]
+    corpora: [decisions]
+    per_level_k: 5
+    final_k: 5
+
+guardrails:
+  require_rationale: true
+  cost_budget_usd: 0.25
+  rate_limit_per_minute: 120
+  forbidden_terms: ["guaranteed", "risk free"]
+
+max_cost_usd: 0.25
+max_calls: 10
+annotations: [trader, signal]

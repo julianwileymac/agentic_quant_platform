@@ -30,6 +30,18 @@ celery_app = Celery(
         "aqp.tasks.feature_set_tasks",
         "aqp.tasks.equity_report_tasks",
         "aqp.tasks.llm_tasks",
+        # New: regulatory data ingestion (CFPB / FDA / USPTO)
+        "aqp.tasks.regulatory_tasks",
+        # New: hierarchical RAG indexing + Raptor summarisation
+        "aqp.tasks.rag_tasks",
+        # New: agent-team runners (research / selection / trader / analysis)
+        "aqp.tasks.research_tasks",
+        "aqp.tasks.selection_tasks",
+        "aqp.tasks.analysis_tasks",
+        # Data fabric expansion: entity registry + DataHub sync.
+        "aqp.tasks.entity_tasks",
+        "aqp.tasks.datahub_tasks",
+        "aqp.tasks.airbyte_tasks",
     ],
 )
 
@@ -47,6 +59,11 @@ celery_app.conf.update(
         "aqp.tasks.agentic_backtest_tasks.*": {"queue": "agents"},
         "aqp.tasks.finetune_tasks.*": {"queue": "training"},
         "aqp.tasks.ingestion_tasks.*": {"queue": "ingestion"},
+        "aqp.tasks.regulatory_tasks.*": {"queue": "ingestion"},
+        "aqp.tasks.rag_tasks.*": {"queue": "rag"},
+        "aqp.tasks.research_tasks.*": {"queue": "agents"},
+        "aqp.tasks.selection_tasks.*": {"queue": "agents"},
+        "aqp.tasks.analysis_tasks.*": {"queue": "agents"},
         "aqp.tasks.paper_tasks.*": {"queue": "paper"},
         "aqp.tasks.factor_tasks.*": {"queue": "factors"},
         "aqp.tasks.ml_tasks.*": {"queue": "ml"},
@@ -54,11 +71,18 @@ celery_app.conf.update(
         "aqp.tasks.feature_set_tasks.*": {"queue": "ml"},
         "aqp.tasks.equity_report_tasks.*": {"queue": "agents"},
         "aqp.tasks.llm_tasks.*": {"queue": "default"},
+        "aqp.tasks.entity_tasks.*": {"queue": "agents"},
+        "aqp.tasks.datahub_tasks.*": {"queue": "ingestion"},
+        "aqp.tasks.airbyte_tasks.*": {"queue": "ingestion"},
     },
     beat_schedule={
         "drift-check": {
             "task": "aqp.tasks.agent_tasks.drift_check",
             "schedule": 3600.0,
+        },
+        "rag-refresh-l0-alpha-base": {
+            "task": "aqp.tasks.rag_tasks.refresh_l0_alpha_base",
+            "schedule": 6 * 3600.0,
         },
     },
     timezone="UTC",

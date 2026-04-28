@@ -8,6 +8,9 @@ import pandas as pd
 from aqp.core.interfaces import IAlphaModel
 from aqp.core.registry import register
 from aqp.core.types import Direction, Signal, Symbol
+from aqp.observability import get_tracer
+
+_tracer = get_tracer("aqp.strategies.momentum")
 
 
 @register("MomentumAlpha")
@@ -27,6 +30,21 @@ class MomentumAlpha(IAlphaModel):
         self.allow_short = bool(allow_short)
 
     def generate_signals(
+        self,
+        bars: pd.DataFrame,
+        universe: list[Symbol],
+        context: dict[str, Any],
+    ) -> list[Signal]:
+        with _tracer.start_as_current_span("strategy.momentum.generate_signals") as span:
+            try:
+                span.set_attribute("strategy.lookback", self.lookback)
+                span.set_attribute("strategy.universe_size", len(universe))
+                span.set_attribute("strategy.bars_count", int(len(bars)))
+            except Exception:
+                pass
+            return self._generate_signals_impl(bars, universe, context)
+
+    def _generate_signals_impl(
         self,
         bars: pd.DataFrame,
         universe: list[Symbol],

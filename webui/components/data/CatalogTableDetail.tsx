@@ -30,6 +30,9 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { CatalogDataHubTab } from "@/components/data/CatalogDataHubTab";
+import { CatalogEntitiesTab } from "@/components/data/CatalogEntitiesTab";
+import { CatalogLineageTab } from "@/components/data/CatalogLineageTab";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { apiFetch } from "@/lib/api/client";
 import { useApiQuery } from "@/lib/api/hooks";
@@ -94,6 +97,31 @@ interface GroupingSuggestion {
   score?: number;
 }
 
+interface IdentifierSuggestion {
+  column: string;
+  scheme: string;
+  confidence: number;
+  non_null: number;
+  distinct_values: number;
+  matched_values: number;
+  sample_values?: string[];
+  reason?: string | null;
+}
+
+interface DatasetProfile {
+  iceberg_identifier: string;
+  sample_size: number;
+  row_count_estimate: number;
+  columns: Array<{
+    name: string;
+    type: string;
+    non_null: number;
+    distinct_values: number;
+    sample_values?: string[];
+  }>;
+  identifier_suggestions: IdentifierSuggestion[];
+}
+
 interface CatalogTableDetailProps {
   namespace: string;
   name: string;
@@ -109,6 +137,12 @@ export function CatalogTableDetail({ namespace, name }: CatalogTableDetailProps)
     path: `/datasets/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`,
     query: { sample_rows: 10 },
     staleTime: 5_000,
+  });
+  const profile = useApiQuery<DatasetProfile>({
+    queryKey: ["dataset", namespace, name, "profile"],
+    path: `/datasets/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/profile`,
+    query: { sample_rows: 1000 },
+    staleTime: 15_000,
   });
 
   const [editingDescription, setEditingDescription] = useState(false);
@@ -328,6 +362,62 @@ export function CatalogTableDetail({ namespace, name }: CatalogTableDetailProps)
     });
   }
 
+  async function applyIdentifierSuggestion(suggestion: IdentifierSuggestion) {
+    const vtColumn = detail.data?.fields.some((field) => field.name === "vt_symbol")
+      ? "vt_symbol"
+      : suggestion.scheme === "vt_symbol"
+        ? suggestion.column
+        : undefined;
+    try {
+      await apiFetch(
+        `/datasets/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/identifier-mappings/apply`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            mappings: [
+              {
+                column: suggestion.column,
+                scheme: suggestion.scheme,
+                vt_symbol_column: vtColumn,
+                confidence: suggestion.confidence,
+              },
+            ],
+          }),
+        },
+      );
+      message.success(`Applied ${suggestion.scheme} mapping from ${suggestion.column}`);
+      profile.refetch();
+    } catch (err) {
+      message.error((err as Error).message);
+    }
+  }
+
+  async function refreshDataLinks() {
+    try {
+      const vtColumn = detail.data?.fields.some((field) => field.name === "vt_symbol")
+        ? "vt_symbol"
+        : "vt_symbol";
+      const res = await apiFetch<{
+        symbols_scanned: number;
+        links_written: number;
+        resolved_instruments: number;
+        unresolved_symbols: string[];
+      }>(
+        `/datasets/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/data-links/refresh`,
+        {
+          method: "POST",
+          body: JSON.stringify({ vt_symbol_column: vtColumn, sample_rows: 5000 }),
+        },
+      );
+      message.success(
+        `Linked ${res.resolved_instruments}/${res.symbols_scanned} symbols (${res.links_written} link rows written)`,
+      );
+      profile.refetch();
+    } catch (err) {
+      message.error((err as Error).message);
+    }
+  }
+
   function confirmDelete() {
     modal.confirm({
       title: "Drop this Iceberg table?",
@@ -483,6 +573,88 @@ export function CatalogTableDetail({ namespace, name }: CatalogTableDetailProps)
                 ) : (
                   <Empty description="No rows ingested yet" />
                 )}
+              </Card>
+            ),
+          },
+          {
+            key: "profile",
+            label: "Profile",
+            children: (
+              <Card size="small">
+                <Paragraph>
+                  Profile sampled rows to locate identifier columns and map them back to the
+                  instrument master.
+                </Paragraph>
+                {profile.error ? (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message="Profile unavailable"
+                    description={(profile.error as Error).message}
+                    style={{ marginBottom: 12 }}
+                  />
+                ) : null}
+                <Space style={{ marginBottom: 12 }}>
+                  <Button onClick={refreshDataLinks}>Refresh data links</Button>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Walks the table&apos;s vt_symbol column and writes DataLink rows for the latest dataset version.
+                  </Text>
+                </Space>
+                <Card size="small" title="Identifier suggestions" loading={profile.isLoading}>
+                  <Table
+                    size="small"
+                    rowKey={(row) => `${row.column}-${row.scheme}`}
+                    dataSource={profile.data?.identifier_suggestions ?? []}
+                    pagination={false}
+                    columns={[
+                      { title: "Column", dataIndex: "column", key: "column" },
+                      { title: "Scheme", dataIndex: "scheme", key: "scheme" },
+                      {
+                        title: "Confidence",
+                        dataIndex: "confidence",
+                        key: "confidence",
+                        render: (value: number) => `${Math.round(value * 100)}%`,
+                      },
+                      { title: "Distinct", dataIndex: "distinct_values", key: "distinct_values" },
+                      { title: "Matched", dataIndex: "matched_values", key: "matched_values" },
+                      {
+                        title: "Reason",
+                        dataIndex: "reason",
+                        key: "reason",
+                        render: (value?: string | null) => value ?? "—",
+                      },
+                      {
+                        title: "Action",
+                        key: "action",
+                        render: (_value: unknown, row: IdentifierSuggestion) => (
+                          <Button size="small" onClick={() => applyIdentifierSuggestion(row)}>
+                            Apply
+                          </Button>
+                        ),
+                      },
+                    ]}
+                  />
+                </Card>
+                <Card size="small" title="Column profile" style={{ marginTop: 16 }}>
+                  <Table
+                    size="small"
+                    rowKey={(row) => row.name}
+                    dataSource={profile.data?.columns ?? []}
+                    pagination={{ pageSize: 10 }}
+                    columns={[
+                      { title: "Name", dataIndex: "name", key: "name" },
+                      { title: "Type", dataIndex: "type", key: "type" },
+                      { title: "Non-null", dataIndex: "non_null", key: "non_null" },
+                      { title: "Distinct", dataIndex: "distinct_values", key: "distinct_values" },
+                      {
+                        title: "Sample",
+                        dataIndex: "sample_values",
+                        key: "sample_values",
+                        render: (values?: string[]) => (values ?? []).slice(0, 5).join(", ") || "—",
+                      },
+                    ]}
+                  />
+                </Card>
               </Card>
             ),
           },
@@ -775,6 +947,21 @@ export function CatalogTableDetail({ namespace, name }: CatalogTableDetailProps)
                 </Card>
               </Card>
             ),
+          },
+          {
+            key: "lineage",
+            label: "Lineage",
+            children: <CatalogLineageTab namespace={namespace} name={name} />,
+          },
+          {
+            key: "entities",
+            label: "Entities",
+            children: <CatalogEntitiesTab iceberg_identifier={`${namespace}.${name}`} />,
+          },
+          {
+            key: "datahub",
+            label: "DataHub",
+            children: <CatalogDataHubTab iceberg_identifier={`${namespace}.${name}`} />,
           },
         ]}
       />

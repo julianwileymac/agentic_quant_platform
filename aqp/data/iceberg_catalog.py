@@ -31,13 +31,16 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Iterable
+import time
+from collections.abc import Callable, Iterable
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from aqp.config import settings
+from aqp.observability import get_tracer
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     import duckdb  # noqa: F401
@@ -46,13 +49,72 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from pyiceberg.table import Table  # noqa: F401
 
 logger = logging.getLogger(__name__)
+_tracer = get_tracer("aqp.data.iceberg_catalog")
 
 
 class IcebergUnavailableError(RuntimeError):
-    """Raised when the optional pyiceberg extra is missing."""
+    """Raised when the optional pyiceberg extra is missing or the catalog is unreachable."""
+
+
+class IcebergTableNotFoundError(IcebergUnavailableError):
+    """Raised when a table identifier is not present in the catalog."""
 
 
 _LOCK = threading.Lock()
+
+
+_TABLE_NOT_FOUND_MARKERS = (
+    "no such table",
+    "nosuchtable",
+    "tablenotfound",
+    "table_not_found",
+)
+
+_SQLITE_LOCK_MARKERS = (
+    "database is locked",
+    "database table is locked",
+    "sqlite_busy",
+)
+
+
+def _is_table_not_found(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    if any(marker in msg for marker in _TABLE_NOT_FOUND_MARKERS):
+        return True
+    return type(exc).__name__ in {"NoSuchTableError", "TableNotFoundError"}
+
+
+def _is_sqlite_locked(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    if any(marker in msg for marker in _SQLITE_LOCK_MARKERS):
+        return True
+    return type(exc).__name__ in {"OperationalError"} and "locked" in msg
+
+
+def _retry_on_sqlite_lock(
+    func: Callable[[], Any],
+    *,
+    attempts: int = 5,
+    base_delay: float = 0.25,
+    label: str = "operation",
+) -> Any:
+    """Retry an operation that may hit a transient SQLite ``database is locked`` error."""
+    delay = float(base_delay)
+    for attempt in range(1, attempts + 1):
+        try:
+            return func()
+        except Exception as exc:
+            if attempt >= attempts or not _is_sqlite_locked(exc):
+                raise
+            logger.warning(
+                "Iceberg sqlite catalog locked during %s (attempt %d/%d); retrying in %.2fs",
+                label,
+                attempt,
+                attempts,
+                delay,
+            )
+            time.sleep(delay)
+            delay = min(delay * 2, 4.0)
 
 
 def _require_pyiceberg() -> None:
@@ -113,8 +175,16 @@ def get_catalog() -> "Catalog":
 
 
 def reset_catalog_cache() -> None:
-    """Invalidate the cached catalog handle (used by tests)."""
-    get_catalog.cache_clear()
+    """Invalidate the cached catalog handle (used by tests).
+
+    Defensive against monkeypatching: if ``get_catalog`` has been replaced
+    with a plain function (e.g. via :class:`pytest.MonkeyPatch`), it will
+    not have an ``lru_cache`` ``cache_clear`` attribute. Skipping silently
+    is correct because the patched function has no cache to clear.
+    """
+    cache_clear = getattr(get_catalog, "cache_clear", None)
+    if callable(cache_clear):
+        cache_clear()
 
 
 def split_identifier(identifier: str | tuple[str, ...]) -> tuple[str, str]:
@@ -136,7 +206,10 @@ def ensure_namespace(namespace: str) -> None:
     ns_tuple = tuple(namespace.split("."))
     with _LOCK:
         try:
-            catalog.create_namespace(ns_tuple)
+            _retry_on_sqlite_lock(
+                lambda: catalog.create_namespace(ns_tuple),
+                label=f"create_namespace({namespace!r})",
+            )
         except Exception as exc:  # noqa: BLE001
             msg = str(exc).lower()
             if "already exists" in msg or "alreadyexists" in msg or "namespacealreadyexists" in msg:
@@ -173,30 +246,62 @@ def list_tables(namespace: str | None = None) -> list[str]:
                     items.append(".".join(str(p) for p in ident))
                 else:
                     items.append(str(ident))
-        except Exception:  # noqa: BLE001
-            logger.debug("list_tables(%s) failed", ns, exc_info=True)
+        except Exception as exc:  # noqa: BLE001
+            if _is_table_not_found(exc):
+                continue
+            logger.warning("list_tables(%s) failed: %s", ns, exc)
     return sorted(items)
 
 
 def load_table(identifier: str | tuple[str, ...]) -> "Table | None":
+    """Return the loaded Iceberg table or ``None`` if the table does not exist.
+
+    Real catalog failures (sqlite locked, REST timeouts, missing
+    pyiceberg-core, etc.) propagate as exceptions instead of being silently
+    swallowed — callers that previously relied on ``None`` for "anything went
+    wrong" must now distinguish "not found" from "engine error".
+    """
     catalog = get_catalog()
     ns, name = split_identifier(identifier)
     try:
         return catalog.load_table((*ns.split("."), name))
-    except Exception:  # noqa: BLE001
-        logger.debug("load_table(%s.%s) miss", ns, name)
-        return None
+    except Exception as exc:
+        if _is_table_not_found(exc):
+            logger.debug("load_table(%s.%s) miss", ns, name)
+            return None
+        raise
 
 
 def drop_table(identifier: str | tuple[str, ...]) -> bool:
     catalog = get_catalog()
     ns, name = split_identifier(identifier)
     try:
-        catalog.drop_table((*ns.split("."), name))
+        _retry_on_sqlite_lock(
+            lambda: catalog.drop_table((*ns.split("."), name)),
+            label=f"drop_table({identifier!r})",
+        )
         return True
-    except Exception:  # noqa: BLE001
-        logger.debug("drop_table(%s.%s) failed", ns, name, exc_info=True)
+    except Exception as exc:  # noqa: BLE001
+        if _is_table_not_found(exc):
+            return False
+        logger.warning("drop_table(%s.%s) failed: %s", ns, name, exc)
         return False
+
+
+def _iceberg_schema_from_arrow(arrow_schema: "pa.Schema") -> "Any":
+    """Convert a PyArrow schema to an Iceberg :class:`Schema` with stable field ids.
+
+    PyIceberg 0.11+ rejects ``pyarrow_to_schema(..., name_mapping=None)`` for
+    Arrow schemas without embedded Parquet field ids (the error about
+    ``schema.name-mapping.default``). The catalog uses the same path as
+    ``Catalog._convert_schema_if_needed`` plus ``assign_fresh_schema_ids`` for
+    new tables.
+    """
+    from pyiceberg.catalog import Catalog
+    from pyiceberg.schema import assign_fresh_schema_ids
+
+    proto = Catalog._convert_schema_if_needed(arrow_schema)
+    return assign_fresh_schema_ids(proto)
 
 
 def create_or_replace_table(
@@ -204,14 +309,23 @@ def create_or_replace_table(
     arrow_schema: "pa.Schema",
     *,
     properties: dict[str, str] | None = None,
+    partition_spec: "Any" = None,
 ) -> "Table":
     """Drop ``identifier`` if present, then create a fresh table from ``arrow_schema``.
 
-    PyIceberg's ``Catalog.create_table`` accepts a :class:`pyarrow.Schema`
-    directly and assigns field ids on the way in, so we hand the Arrow
-    schema through unchanged rather than pre-converting via
-    ``pyarrow_to_schema`` (which only supports schemas already carrying
-    Iceberg field-id metadata).
+    PyIceberg's ``Catalog.create_table`` accepts either a :class:`pyarrow.Schema`
+    or an Iceberg :class:`~pyiceberg.schema.Schema`. For **unpartitioned** tables
+    we pass Arrow through unchanged. For **dict-based** partition specs we pass a
+    pre-assigned Iceberg schema so partition ``source_id`` values match what
+    ``new_table_metadata`` expects (see :func:`_resolve_partition_spec`).
+
+    ``partition_spec`` may be either:
+    - a :class:`pyiceberg.partitioning.PartitionSpec` instance (used as-is); or
+    - a list/tuple of partition descriptor dicts of the form
+      ``{"source_column": str, "transform": str, "name": str}``, in which case
+      it is compiled into a :class:`PartitionSpec` against the given Arrow
+      schema. Supported transforms: ``identity``, ``year``, ``month``,
+      ``day``, ``hour``, ``bucket[N]``, ``truncate[N]``.
     """
     _require_pyiceberg()
 
@@ -220,11 +334,121 @@ def create_or_replace_table(
     ensure_namespace(ns)
     full_id = (*ns.split("."), name)
     drop_table(identifier)
-    return catalog.create_table(
-        full_id,
-        schema=arrow_schema,
-        properties=dict(properties or {}),
+
+    spec = _resolve_partition_spec(partition_spec, arrow_schema)
+    partitioned_from_dicts = isinstance(partition_spec, (list, tuple)) and len(partition_spec) > 0
+    schema_for_create: Any = arrow_schema
+    if partitioned_from_dicts:
+        schema_for_create = _iceberg_schema_from_arrow(arrow_schema)
+
+    create_kwargs: dict[str, Any] = {
+        "schema": schema_for_create,
+        "properties": dict(properties or {}),
+    }
+    if spec is not None:
+        create_kwargs["partition_spec"] = spec
+    return _retry_on_sqlite_lock(
+        lambda: catalog.create_table(full_id, **create_kwargs),
+        label=f"create_table({identifier!r})",
     )
+
+
+def _resolve_partition_spec(spec: "Any", arrow_schema: "pa.Schema") -> "Any":
+    """Coerce a list-of-dicts partition descriptor into a PyIceberg PartitionSpec.
+
+    Returns ``None`` for ``spec is None`` or the unchanged spec when it
+    already looks like a PyIceberg ``PartitionSpec``. Errors raise
+    :class:`ValueError` so callers can surface configuration mistakes.
+    """
+    if spec is None:
+        return None
+    try:
+        from pyiceberg.partitioning import PartitionField, PartitionSpec
+        from pyiceberg.transforms import (
+            BucketTransform,
+            DayTransform,
+            HourTransform,
+            IdentityTransform,
+            MonthTransform,
+            TruncateTransform,
+            YearTransform,
+        )
+    except ImportError:  # pragma: no cover - exercised when iceberg extra is missing
+        return None
+
+    if isinstance(spec, PartitionSpec):
+        return spec
+    if not isinstance(spec, (list, tuple)):
+        raise ValueError(f"unsupported partition_spec value: {type(spec).__name__}")
+    if len(spec) == 0:
+        return None
+
+    # PyIceberg 0.11+: pyarrow_to_schema(..., name_mapping=None) raises for plain
+    # Arrow schemas. Use the same id assignment path as Catalog.create_table.
+    iceberg_schema = _iceberg_schema_from_arrow(arrow_schema)
+
+    fields: list[PartitionField] = []
+    for idx, descriptor in enumerate(spec, start=1000):
+        if isinstance(descriptor, dict):
+            source_column = str(descriptor.get("source_column") or descriptor.get("column") or "")
+            transform_raw = str(descriptor.get("transform") or "identity").strip().lower()
+            field_name = str(
+                descriptor.get("name")
+                or f"{source_column}_{transform_raw.split('[')[0]}"
+            )
+        else:
+            source_column = str(getattr(descriptor, "source_column", ""))
+            transform_raw = str(getattr(descriptor, "transform", "identity")).strip().lower()
+            field_name = str(
+                getattr(descriptor, "name", None)
+                or f"{source_column}_{transform_raw.split('[')[0]}"
+            )
+        if not source_column:
+            raise ValueError(f"partition descriptor missing source_column: {descriptor!r}")
+        try:
+            source_id = iceberg_schema.find_field(source_column).field_id
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(
+                f"partition source column {source_column!r} not found in schema"
+            ) from exc
+        transform: Any
+        if transform_raw == "identity":
+            transform = IdentityTransform()
+        elif transform_raw == "year":
+            transform = YearTransform()
+        elif transform_raw == "month":
+            transform = MonthTransform()
+        elif transform_raw == "day":
+            transform = DayTransform()
+        elif transform_raw == "hour":
+            transform = HourTransform()
+        elif transform_raw.startswith("bucket"):
+            n = _parse_transform_arg(transform_raw, "bucket")
+            transform = BucketTransform(num_buckets=n)
+        elif transform_raw.startswith("truncate"):
+            n = _parse_transform_arg(transform_raw, "truncate")
+            transform = TruncateTransform(width=n)
+        else:
+            raise ValueError(f"unsupported partition transform: {transform_raw!r}")
+        fields.append(
+            PartitionField(
+                source_id=source_id,
+                field_id=idx,
+                transform=transform,
+                name=field_name,
+            )
+        )
+    return PartitionSpec(*fields)
+
+
+def _parse_transform_arg(transform_raw: str, prefix: str) -> int:
+    body = transform_raw.removeprefix(prefix).strip()
+    if body.startswith("[") and body.endswith("]"):
+        body = body[1:-1]
+    try:
+        return int(body)
+    except ValueError as exc:
+        raise ValueError(f"invalid {prefix} transform: {transform_raw!r}") from exc
 
 
 def _table_exists(identifier: str | tuple[str, ...]) -> bool:
@@ -237,24 +461,59 @@ def append_arrow(
     *,
     create_if_missing: bool = True,
     properties: dict[str, str] | None = None,
+    partition_spec: "Any" = None,
 ) -> "Table":
-    """Append ``table`` (pyarrow) to an Iceberg table, creating it on first call."""
-    _require_pyiceberg()
-    if table.num_rows == 0:
-        existing = load_table(identifier)
-        if existing is not None:
-            return existing
-        if create_if_missing:
-            return create_or_replace_table(identifier, table.schema, properties=properties)
-        raise ValueError(f"refused to create empty table {identifier!r} with create_if_missing=False")
+    """Append ``table`` (pyarrow) to an Iceberg table, creating it on first call.
 
-    existing = load_table(identifier)
-    if existing is None:
-        if not create_if_missing:
-            raise ValueError(f"table {identifier!r} does not exist and create_if_missing=False")
-        existing = create_or_replace_table(identifier, table.schema, properties=properties)
-    existing.append(table)
-    return existing
+    ``partition_spec`` is forwarded to :func:`create_or_replace_table` when
+    the table is created on first append; existing tables ignore it (Iceberg
+    schema/partition evolution lives outside this helper).
+
+    The whole operation is wrapped in an OpenTelemetry span so Jaeger shows
+    every Iceberg write attached to the calling pipeline.
+    """
+    table_id = identifier if isinstance(identifier, str) else ".".join(identifier)
+    with _tracer.start_as_current_span("iceberg.append_arrow") as span:
+        try:
+            span.set_attribute("iceberg.table", table_id)
+            span.set_attribute("iceberg.row_count", int(table.num_rows))
+            span.set_attribute("iceberg.create_if_missing", create_if_missing)
+        except Exception:  # noqa: BLE001
+            pass
+
+        _require_pyiceberg()
+        if table.num_rows == 0:
+            existing = load_table(identifier)
+            if existing is not None:
+                return existing
+            if create_if_missing:
+                return create_or_replace_table(
+                    identifier,
+                    table.schema,
+                    properties=properties,
+                    partition_spec=partition_spec,
+                )
+            raise ValueError(
+                f"refused to create empty table {identifier!r} with create_if_missing=False"
+            )
+
+        existing = load_table(identifier)
+        if existing is None:
+            if not create_if_missing:
+                raise ValueError(
+                    f"table {identifier!r} does not exist and create_if_missing=False"
+                )
+            existing = create_or_replace_table(
+                identifier,
+                table.schema,
+                properties=properties,
+                partition_spec=partition_spec,
+            )
+        _retry_on_sqlite_lock(
+            lambda: existing.append(table),
+            label=f"append_arrow({table_id!r})",
+        )
+        return existing
 
 
 def read_arrow(
@@ -262,16 +521,185 @@ def read_arrow(
     *,
     columns: Iterable[str] | None = None,
     limit: int | None = None,
+    row_filter: Any = None,
 ) -> "pa.Table | None":
+    """Scan an Iceberg table and return a PyArrow table.
+
+    Returns ``None`` only when the table does not exist. Other failures
+    (sqlite lock, S3 timeout, missing pyiceberg-core, etc.) propagate to the
+    caller — silent ``None`` returns made it impossible to tell "no data" from
+    "catalog is broken".
+    """
     table = load_table(identifier)
     if table is None:
         return None
-    scan = table.scan(selected_fields=tuple(columns) if columns else ("*",), limit=limit)
+    scan_kwargs: dict[str, Any] = {
+        "selected_fields": tuple(columns) if columns else ("*",),
+    }
+    if limit is not None:
+        scan_kwargs["limit"] = int(limit)
+    if row_filter is not None:
+        scan_kwargs["row_filter"] = row_filter
+    scan = table.scan(**scan_kwargs)
+    return scan.to_arrow()
+
+
+def health_check(*, timeout: float | None = None) -> dict[str, Any]:
+    """Probe the catalog with a bounded read-only operation.
+
+    Returns a status dict with ``ok``, ``type``, ``uri``, ``warehouse``,
+    ``namespace_count``, ``elapsed_seconds``, and ``error`` keys. Never
+    raises — callers can use the returned dict to decide whether to proceed.
+    """
+    timeout_value = (
+        float(timeout)
+        if timeout is not None
+        else float(getattr(settings, "iceberg_health_check_timeout_seconds", 5.0) or 0.0)
+    )
+    deadline = (time.monotonic() + timeout_value) if timeout_value > 0 else None
+    started = time.monotonic()
+    info: dict[str, Any] = {
+        "ok": False,
+        "type": "unknown",
+        "uri": "",
+        "warehouse": "",
+        "namespace_count": 0,
+        "table_count": None,
+        "elapsed_seconds": 0.0,
+        "error": None,
+    }
     try:
-        return scan.to_arrow()
-    except Exception:  # noqa: BLE001
-        logger.debug("read_arrow(%s) failed", identifier, exc_info=True)
-        return None
+        props = _build_properties()
+        info["type"] = str(props.get("type", "unknown"))
+        info["uri"] = str(props.get("uri", ""))
+        info["warehouse"] = str(props.get("warehouse", ""))
+    except Exception as exc:  # noqa: BLE001
+        info["error"] = f"properties: {type(exc).__name__}: {exc}"
+        info["elapsed_seconds"] = time.monotonic() - started
+        return info
+
+    try:
+        catalog = get_catalog()
+        if deadline is not None and time.monotonic() > deadline:
+            raise TimeoutError("catalog load exceeded health-check deadline")
+        namespaces = list(catalog.list_namespaces())
+        info["namespace_count"] = len(namespaces)
+        if deadline is not None and time.monotonic() > deadline:
+            raise TimeoutError("list_namespaces exceeded health-check deadline")
+        info["ok"] = True
+    except Exception as exc:  # noqa: BLE001
+        info["error"] = f"{type(exc).__name__}: {exc}"
+    info["elapsed_seconds"] = round(time.monotonic() - started, 4)
+    return info
+
+
+def _build_in_expression(column: str, values: Iterable[str]) -> Any:
+    """Build a PyIceberg ``In`` predicate or fall back to a string filter."""
+    items = list({str(v) for v in values if v is not None and str(v) != ""})
+    if not items:
+        raise ValueError("cannot build In expression with no values")
+    try:
+        from pyiceberg.expressions import In  # type: ignore[import-not-found]
+
+        return In(column, items)
+    except Exception:  # pragma: no cover - exercised when pyiceberg API differs
+        quoted = ",".join("'" + value.replace("'", "''") + "'" for value in items)
+        return f"{column} IN ({quoted})"
+
+
+def latest_timestamps_for_symbols(
+    identifier: str | tuple[str, ...],
+    symbols: Iterable[str],
+    *,
+    group_col: str = "vt_symbol",
+    time_col: str = "timestamp",
+) -> dict[str, datetime]:
+    """Return ``{vt_symbol: max(time_col)}`` using a predicate-pushdown scan.
+
+    The Iceberg row filter prunes data files by partition (typically
+    ``bucket(vt_symbol)``) so the scan is bounded by the size of the
+    requested symbol slice — not the entire table. Returns ``{}`` when the
+    table is missing or no rows match.
+    """
+    sym_list = sorted({str(s) for s in symbols if s})
+    if not sym_list:
+        return {}
+    table = load_table(identifier)
+    if table is None:
+        return {}
+    expr = _build_in_expression(group_col, sym_list)
+    arrow = table.scan(
+        row_filter=expr,
+        selected_fields=(group_col, time_col),
+    ).to_arrow()
+    if arrow is None or arrow.num_rows == 0:
+        return {}
+
+    import pandas as pd
+
+    pdf = arrow.to_pandas()
+    pdf[time_col] = pd.to_datetime(pdf[time_col], errors="coerce")
+    pdf = pdf.dropna(subset=[time_col])
+    if pdf.empty:
+        return {}
+    grouped = pdf.groupby(group_col)[time_col].max()
+    out: dict[str, datetime] = {}
+    for key, value in grouped.items():
+        if hasattr(value, "to_pydatetime"):
+            out[str(key)] = value.to_pydatetime()
+        else:
+            out[str(key)] = value
+    return out
+
+
+def existing_keys_for_window(
+    identifier: str | tuple[str, ...],
+    symbols: Iterable[str],
+    time_min: Any,
+    time_max: Any,
+    *,
+    group_col: str = "vt_symbol",
+    time_col: str = "timestamp",
+) -> set[tuple[str, Any]]:
+    """Return the set of ``(group_col, time_col)`` keys already in the table.
+
+    Filters by ``In(group_col, symbols)`` via Iceberg push-down, then bounds
+    the result to ``[time_min, time_max]`` client-side. Designed for batch
+    de-duplication so callers can drop already-loaded rows without scanning
+    the whole table.
+    """
+    sym_list = sorted({str(s) for s in symbols if s})
+    if not sym_list or time_min is None or time_max is None:
+        return set()
+    table = load_table(identifier)
+    if table is None:
+        return set()
+    expr = _build_in_expression(group_col, sym_list)
+    arrow = table.scan(
+        row_filter=expr,
+        selected_fields=(group_col, time_col),
+    ).to_arrow()
+    if arrow is None or arrow.num_rows == 0:
+        return set()
+
+    import pandas as pd
+
+    pdf = arrow.to_pandas()
+    pdf[time_col] = pd.to_datetime(pdf[time_col], errors="coerce")
+    pdf = pdf.dropna(subset=[time_col])
+    if pdf.empty:
+        return set()
+    lower = pd.to_datetime(time_min, errors="coerce")
+    upper = pd.to_datetime(time_max, errors="coerce")
+    if pd.isna(lower) or pd.isna(upper):
+        return set()
+    pdf = pdf[(pdf[time_col] >= lower) & (pdf[time_col] <= upper)]
+    if pdf.empty:
+        return set()
+    return {
+        (str(row[0]), row[1])
+        for row in pdf[[group_col, time_col]].itertuples(index=False, name=None)
+    }
 
 
 def iceberg_to_duckdb_view(

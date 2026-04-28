@@ -1,8 +1,18 @@
-"""Hybrid agent memory — BM25 for outcome-based recall, Chroma for metadata.
+"""Hybrid agent memory — BM25 + Chroma + Redis hierarchical RAG.
 
-Inspired by TradingAgents' ``FinancialSituationMemory``: lexical BM25 avoids
-per-reflection embedding cost for the high-volume trade-outcome feedback
-loop, while ChromaDB handles the slower-changing research corpus.
+Three layered backends:
+
+- :class:`BM25Memory` — cheap, offline, per-role memory with outcome-based recall.
+- :class:`HybridMemory` — BM25 + ChromaDB (legacy hybrid, kept for parity).
+- :class:`RedisHybridMemory` — BM25 + Redis (working) + Hierarchical RAG L0
+  (episodic / reflection). This is the binding the new ``AgentRuntime``
+  uses by default; it falls back to the BM25 + Chroma path whenever
+  Redis or the RAG hierarchy isn't reachable.
+
+Inspired by TradingAgents' ``FinancialSituationMemory``: lexical BM25
+avoids per-reflection embedding cost for the high-volume trade-outcome
+feedback loop, while RediSearch / ChromaDB handle the slower-changing
+research corpus.
 """
 from __future__ import annotations
 
@@ -146,3 +156,200 @@ class HybridMemory:
         except Exception:  # pragma: no cover
             chroma_hits = []
         return bm25_hits + chroma_hits
+
+
+class RedisHybridMemory:
+    """Per-role memory backed by Redis (working / reflections) + BM25 + RAG L0.
+
+    Three logical layers (matching the agent runtime contract):
+
+    - **working** — short-lived per-run context kept in a Redis list; gives
+      the LLM access to its own most recent observations within a single
+      agent run. Trimmed to ``working_max`` entries.
+    - **episodic** — durable per-role recollections (situation + lesson +
+      outcome). Always written to BM25 for lexical recall and to the
+      :class:`HierarchicalRAG` ``decisions`` corpus for semantic recall
+      across the platform (paper RAG#0 alpha base).
+    - **reflection** — post-outcome lessons fed back into the L0 alpha
+      base and surfaced to the next run via :meth:`recall_reflections`
+      (TradingAgents-style deferred outcome reflection).
+
+    Falls back to BM25 + the existing ``ChromaStore`` whenever Redis or
+    the RAG hierarchy isn't reachable, so behaviour stays identical for
+    environments that haven't switched on Redis Stack yet.
+    """
+
+    def __init__(
+        self,
+        role: str,
+        *,
+        working_max: int = 64,
+        rag=None,
+    ) -> None:
+        self.role = role
+        self.bm25 = BM25Memory(role)
+        self.working_max = max(1, int(working_max))
+        self._rag = rag
+        self._redis = self._make_redis()
+
+    # ------------------------------------------------------------------ wiring
+    def _make_redis(self):
+        try:
+            import redis  # type: ignore[import-not-found]
+
+            client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+            client.ping()
+            return client
+        except Exception:  # pragma: no cover
+            logger.debug("Redis unavailable for memory; using in-process fallback.", exc_info=True)
+            return None
+
+    @property
+    def rag(self):
+        if self._rag is not None:
+            return self._rag
+        try:
+            from aqp.rag import get_default_rag
+
+            self._rag = get_default_rag()
+        except Exception:  # pragma: no cover
+            self._rag = None
+        return self._rag
+
+    # ------------------------------------------------------------------ keys
+    def _working_key(self, run_id: str) -> str:
+        return f"aqp:mem:work:{self.role}:{run_id}"
+
+    def _episode_key(self) -> str:
+        return f"aqp:mem:episode:{self.role}"
+
+    def _reflection_key(self) -> str:
+        return f"aqp:mem:reflect:{self.role}"
+
+    # ------------------------------------------------------------------ working
+    def working_push(self, run_id: str, message: str, *, role: str = "agent") -> None:
+        if self._redis is None or not run_id:
+            return
+        try:
+            payload = json.dumps({"role": role, "content": message}, default=str)
+            self._redis.lpush(self._working_key(run_id), payload)
+            self._redis.ltrim(self._working_key(run_id), 0, self.working_max - 1)
+        except Exception:  # pragma: no cover
+            logger.debug("Working memory push failed", exc_info=True)
+
+    def working_recent(self, run_id: str, limit: int | None = None) -> list[dict[str, Any]]:
+        if self._redis is None or not run_id:
+            return []
+        n = max(1, int(limit or self.working_max))
+        try:
+            raw = self._redis.lrange(self._working_key(run_id), 0, n - 1)
+        except Exception:  # pragma: no cover
+            return []
+        out: list[dict[str, Any]] = []
+        for item in raw:
+            try:
+                out.append(json.loads(item))
+            except Exception:
+                out.append({"role": "agent", "content": item})
+        return out
+
+    def working_clear(self, run_id: str) -> None:
+        if self._redis is None or not run_id:
+            return
+        try:
+            self._redis.delete(self._working_key(run_id))
+        except Exception:  # pragma: no cover
+            pass
+
+    # ------------------------------------------------------------------ episodic
+    def remember_episode(
+        self,
+        situation: str,
+        lesson: str,
+        outcome: float | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        eid = self.bm25.add(situation, lesson, outcome, metadata or {})
+        if self._redis is not None:
+            try:
+                payload = json.dumps(
+                    {
+                        "id": eid,
+                        "situation": situation,
+                        "lesson": lesson,
+                        "outcome": outcome,
+                        "metadata": metadata or {},
+                    },
+                    default=str,
+                )
+                self._redis.zadd(self._episode_key(), {payload: float(outcome or 0.0)})
+            except Exception:  # pragma: no cover
+                pass
+        if self.rag is not None:
+            try:
+                from aqp.rag.indexers.decisions_indexer import index_decision_payloads
+
+                index_decision_payloads(
+                    [
+                        {
+                            "id": eid,
+                            "vt_symbol": (metadata or {}).get("vt_symbol", ""),
+                            "as_of": (metadata or {}).get("as_of", ""),
+                            "text": f"Situation: {situation}\nLesson: {lesson}\nOutcome: {outcome}",
+                        }
+                    ],
+                    rag=self.rag,
+                )
+            except Exception:  # pragma: no cover
+                logger.debug("Skip RAG indexing of episode", exc_info=True)
+        return eid
+
+    def recall_episodes(self, query: str, k: int = 5) -> list[MemoryEntry]:
+        return self.bm25.recall(query, k=k)
+
+    # ------------------------------------------------------------------ reflections
+    def reflect(
+        self,
+        lesson: str,
+        *,
+        situation: str = "reflection",
+        outcome: float | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        eid = self.bm25.add(situation, lesson, outcome, metadata or {})
+        if self._redis is not None:
+            try:
+                payload = json.dumps(
+                    {"id": eid, "lesson": lesson, "outcome": outcome, "metadata": metadata or {}},
+                    default=str,
+                )
+                self._redis.lpush(self._reflection_key(), payload)
+                self._redis.ltrim(self._reflection_key(), 0, 256)
+            except Exception:  # pragma: no cover
+                pass
+        return eid
+
+    def recall_reflections(self, query: str, k: int = 5) -> list[str]:
+        out = [e.lesson for e in self.bm25.recall(query, k)]
+        if self.rag is not None:
+            try:
+                hits = self.rag.query(query, level="l0", corpus="decisions", k=k)
+                out.extend(h.text for h in hits)
+            except Exception:  # pragma: no cover
+                pass
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for s in out:
+            if s in seen:
+                continue
+            seen.add(s)
+            deduped.append(s)
+        return deduped[:k]
+
+
+__all__ = [
+    "BM25Memory",
+    "HybridMemory",
+    "MemoryEntry",
+    "RedisHybridMemory",
+]

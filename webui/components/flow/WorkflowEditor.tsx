@@ -26,6 +26,7 @@ export interface WorkflowEditorProps {
   /** Optional accent overrides for known kinds. */
   accentByKind?: Record<string, string>;
   toolbarExtras?: React.ReactNode;
+  height?: string | number;
 }
 
 interface ContextMenuState {
@@ -42,6 +43,7 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
     onRun,
     accentByKind,
     toolbarExtras,
+    height = "calc(100vh - 100px)",
   } = props;
   const { message } = App.useApp();
   const [graph, setGraph] = useState<FlowGraph>(
@@ -114,7 +116,7 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
   }
 
   return (
-    <div style={{ display: "flex", height: "calc(100vh - 100px)", overflow: "hidden", borderRadius: 8 }}>
+    <div style={{ display: "flex", height, overflow: "hidden", borderRadius: 8 }}>
       <Palette sections={paletteSections} />
       <div style={{ flex: 1, position: "relative" }}>
         <FlowCanvas

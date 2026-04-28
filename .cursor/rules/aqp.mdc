@@ -49,6 +49,22 @@ that applies on every change.
    [aqp/core/registry.py](mdc:aqp/core/registry.py).
 9. Tests live under [tests/](mdc:tests/) mirroring the source path
    and must run hermetically (no network, no host filesystem).
+10. All RAG retrievals + writes go through
+    [aqp/rag/HierarchicalRAG](mdc:aqp/rag/hierarchy.py). Don't query
+    Redis vector indexes directly. Don't write embeddings outside
+    [aqp/rag/indexers/](mdc:aqp/rag/indexers/). Adding a new corpus =
+    new indexer + new entry in
+    [aqp/rag/orders.py](mdc:aqp/rag/orders.py)'s `OrderCatalog`.
+11. All spec-driven agent runs go through
+    [aqp/agents/runtime.py::AgentRuntime](mdc:aqp/agents/runtime.py).
+    Telemetry, guardrails, cost caps, and `agent_runs_v2` rely on it.
+    Don't call `router_complete` directly inside an agent module —
+    declare the model in `AgentSpec.model` and let the runtime drive
+    the call.
+12. `agent_spec_versions` rows are immutable, hash-locked. Never
+    update them in place; re-snapshotting via
+    [aqp/agents/registry.py::persist_spec](mdc:aqp/agents/registry.py)
+    creates a new version row automatically.
 
 ## Style
 
@@ -70,6 +86,10 @@ that applies on every change.
 | Backtest engine | [aqp/backtest/](mdc:aqp/backtest/) |
 | ORM model | [aqp/persistence/models*.py](mdc:aqp/persistence/) |
 | Ingestion | [aqp/data/pipelines/](mdc:aqp/data/pipelines/) |
+| Hierarchical RAG | [aqp/rag/](mdc:aqp/rag/) |
+| Spec-driven agent | [aqp/agents/spec.py](mdc:aqp/agents/spec.py) + [configs/agents/](mdc:configs/agents/) |
+| LangGraph orchestration | [aqp/agents/graph/](mdc:aqp/agents/graph/) |
+| Regulatory adapter | [aqp/data/sources/{cfpb,fda,uspto}/](mdc:aqp/data/sources/) |
 
 ## Doc references
 
@@ -79,6 +99,9 @@ that applies on every change.
 - [docs/data-dictionary.md](mdc:docs/data-dictionary.md) — column reference
 - [docs/flows.md](mdc:docs/flows.md) — sequence diagrams
 - [docs/glossary.md](mdc:docs/glossary.md) — terms
+- [docs/rag.md](mdc:docs/rag.md) — hierarchical RAG design
+- [docs/agents.md](mdc:docs/agents.md) — spec-driven agent surface
+- [docs/regulatory-data.md](mdc:docs/regulatory-data.md) — CFPB / FDA / USPTO
 
 ## Don't
 
@@ -91,3 +114,14 @@ that applies on every change.
 - Don't break the progress-bus payload shape
   (`{task_id, stage, message, timestamp, **extras}`).
 - Don't add new diagram formats. Mermaid only.
+- Don't query Redis vector indexes directly. Use `HierarchicalRAG`.
+- Don't write embeddings outside `aqp.rag.indexers.*`.
+- Don't replace [aqp/data/chroma_store.py](mdc:aqp/data/chroma_store.py).
+  Chroma stays for dataset/code metadata; Redis is the agent RAG.
+- Don't mutate `agent_spec_versions` rows. They are immutable.
+- Don't bypass `AgentRuntime.run` for spec-driven agents.
+- Don't call `router_complete` from inside an agent body — declare the
+  model in `AgentSpec.model`.
+- Don't write decision/episode/reflection rows to Redis from agent
+  code. Use `RedisHybridMemory` from
+  [aqp/llm/memory.py](mdc:aqp/llm/memory.py).

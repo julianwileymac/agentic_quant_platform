@@ -1,8 +1,19 @@
-"""OpenTelemetry bootstrap — wires an OTLP exporter and auto-instrumentation.
+"""OpenTelemetry bootstrap for AQP - delegates to ``rpi_k8s_sdk`` when present.
 
-All imports are lazy so the base install stays lean. When the ``otel`` extra
-is missing every function short-circuits to a no-op, which keeps
-``from aqp.observability import traced`` safe everywhere.
+History
+-------
+AQP previously maintained its own copy of the OTel bootstrap logic.  That
+created two divergent code paths with different env-var conventions
+(``AQP_OTEL_*`` vs ``OTEL_*``), different sampling defaults, and different
+instrumentor lists.  This module now delegates to the canonical helper in
+``rpi_k8s_sdk.tracing`` whenever the SDK is installed - the SDK ships with
+matching no-op fallbacks so the behavior degrades gracefully when the SDK
+or the OpenTelemetry packages are missing.
+
+The legacy ``AQP_OTEL_ENDPOINT`` / ``AQP_OTEL_PROTOCOL`` /
+``AQP_OTEL_SAMPLE_RATIO`` env vars remain honored: the SDK's
+``_default_otlp_endpoint`` /  ``_default_protocol`` /
+``_default_sample_ratio`` helpers explicitly look them up as fallbacks.
 """
 from __future__ import annotations
 
@@ -17,7 +28,18 @@ _tracer_provider: Any = None
 _instrumented: set[str] = set()
 
 
+def _sdk_available() -> bool:
+    """Return True iff the rpi_k8s_sdk tracing helper can be imported."""
+    try:
+        import rpi_k8s_sdk.tracing  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 def _otel_available() -> bool:
+    """Return True iff the OpenTelemetry SDK can be imported."""
     try:
         import opentelemetry  # noqa: F401
         import opentelemetry.sdk  # noqa: F401
@@ -28,10 +50,10 @@ def _otel_available() -> bool:
 
 
 def configure_tracing(service_name: str | None = None) -> Any:
-    """Initialise the global TracerProvider and OTLP exporter.
+    """Initialise the global TracerProvider via the canonical SDK helper.
 
-    Idempotent and safe to call repeatedly. Returns the ``TracerProvider`` or
-    ``None`` when the OTel SDK is missing / disabled.
+    Idempotent and safe to call repeatedly.  Returns the ``TracerProvider``
+    or ``None`` when both the SDK and the OTel SDK are missing/disabled.
     """
     global _tracer_provider
 
@@ -40,13 +62,34 @@ def configure_tracing(service_name: str | None = None) -> Any:
     if not settings.otel_enabled:
         logger.debug("OTEL disabled (AQP_OTEL_ENDPOINT empty); skipping tracer setup")
         return None
+
+    name = service_name or settings.otel_service_name
+
+    if _sdk_available():
+        from rpi_k8s_sdk.tracing import configure_tracing as _sdk_configure
+
+        provider = _sdk_configure(
+            service_name=name,
+            endpoint=settings.otel_endpoint,
+            protocol=settings.otel_protocol,
+            namespace="aqp",
+            sample_ratio=settings.otel_sample_ratio,
+            instrument_kafka=False,
+            instrument_httpx=True,
+        )
+        _tracer_provider = provider
+        return provider
+
     if not _otel_available():
         logger.warning(
-            "AQP_OTEL_ENDPOINT is set but opentelemetry-sdk is not installed; "
-            'install with `pip install -e ".[otel]"`'
+            "AQP_OTEL_ENDPOINT is set but neither rpi_k8s_sdk nor opentelemetry-sdk "
+            'is installed; install with `pip install -e ".[otel]"`'
         )
         return None
 
+    # Last-resort fallback: the SDK is missing but raw OTel packages are
+    # available.  Replicate a minimal subset of the SDK's behaviour so AQP
+    # can still trace in environments where rpi-k8s-sdk has not been pinned.
     from opentelemetry import trace
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
@@ -55,7 +98,7 @@ def configure_tracing(service_name: str | None = None) -> Any:
 
     resource = Resource.create(
         {
-            "service.name": service_name or settings.otel_service_name,
+            "service.name": name,
             "service.namespace": "aqp",
             "deployment.environment": settings.env,
         }
@@ -70,8 +113,8 @@ def configure_tracing(service_name: str | None = None) -> Any:
     trace.set_tracer_provider(provider)
     _tracer_provider = provider
     logger.info(
-        "OTEL tracing initialised: service=%s endpoint=%s sample_ratio=%.2f",
-        service_name or settings.otel_service_name,
+        "OTEL tracing initialised (no SDK): service=%s endpoint=%s sample_ratio=%.2f",
+        name,
         settings.otel_endpoint,
         settings.otel_sample_ratio,
     )
@@ -98,6 +141,10 @@ def _build_exporter() -> Any:
 
 def get_tracer(name: str = "aqp") -> Any:
     """Return an OpenTelemetry tracer, or a silent no-op if disabled."""
+    if _sdk_available():
+        from rpi_k8s_sdk.tracing import get_tracer as _sdk_get_tracer
+
+        return _sdk_get_tracer(name)
     if not _otel_available():
         return _NoopTracer()
     from opentelemetry import trace
@@ -174,6 +221,12 @@ def shutdown_tracing() -> None:
     """Flush + shutdown the global provider (called on service exit)."""
     global _tracer_provider
     if _tracer_provider is None:
+        return
+    if _sdk_available():
+        from rpi_k8s_sdk.tracing import shutdown_tracing as _sdk_shutdown
+
+        _sdk_shutdown()
+        _tracer_provider = None
         return
     try:
         _tracer_provider.shutdown()

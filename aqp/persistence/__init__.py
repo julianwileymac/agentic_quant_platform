@@ -1,28 +1,5 @@
 """Execution Ledger, domain tables, and session persistence.
 
-Submodules:
-
-- :mod:`aqp.persistence.models` — original ledger + dataset + ml-plan tables
-  plus the polymorphic ``Instrument`` parent.
-- :mod:`aqp.persistence.models_instruments` — joined-table subclasses
-  (``InstrumentEquity``, ``InstrumentOption``, ``InstrumentFuture``…).
-- :mod:`aqp.persistence.models_entities` — issuer / entity graph
-  (``Issuer``, ``Sector``, ``Industry``, ``EntityRelationship``,
-  ``KeyExecutive``, ``ExecutiveCompensation``, ``Location``…).
-- :mod:`aqp.persistence.models_fundamentals` — financial statements,
-  ratios, metrics, historicals, transcripts.
-- :mod:`aqp.persistence.models_events` — corporate / calendar / analyst /
-  regulatory / ESG event tables.
-- :mod:`aqp.persistence.models_ownership` — insider / institutional /
-  13F / short interest / float / politician trades / fund holdings.
-- :mod:`aqp.persistence.models_news` — news items + entity M2M +
-  sentiment.
-- :mod:`aqp.persistence.models_macro` — economic series +
-  observations + CoT + BLS + treasury/yield-curve + options/futures
-  snapshots + market microstructure.
-- :mod:`aqp.persistence.models_taxonomy` — taxonomy schemes + nodes +
-  polymorphic entity tags + entity crosswalk.
-
 Importing this package triggers SQLAlchemy registration for every table
 so ``Base.metadata`` and Alembic's autogenerate pick them up.
 """
@@ -64,6 +41,27 @@ from aqp.persistence.models import (
     SplitArtifact,
     SplitPlan,
     Strategy,
+)
+from aqp.persistence.models_agents import (
+    AgentAnnotation,
+    AgentEvalMetric,
+    AgentEvaluation,
+    AgentRunArtifact,
+    AgentRunStep,
+    AgentRunV2,
+    AgentSpecRow,
+    AgentSpecVersion,
+)
+from aqp.persistence.models_airbyte import (
+    AirbyteConnectionRow,
+    AirbyteConnectorRow,
+    AirbyteSyncRunRow,
+)
+from aqp.persistence.models_dbt import (
+    DbtModelVersionRow,
+    DbtProjectRow,
+    DbtRunRow,
+    DbtSourceMappingRow,
 )
 from aqp.persistence.models_entities import (
     EntityRelationship,
@@ -129,6 +127,11 @@ from aqp.persistence.models_macro import (
     TreasuryRateRow,
     YieldCurveRow,
 )
+from aqp.persistence.models_memory import (
+    MemoryEpisode,
+    MemoryOutcome,
+    MemoryReflection,
+)
 from aqp.persistence.models_news import NewsItemEntity, NewsItemRow, NewsSentiment
 from aqp.persistence.models_ownership import (
     Form13FHoldingRow,
@@ -139,11 +142,42 @@ from aqp.persistence.models_ownership import (
     SharesFloatSnapshot,
     ShortInterestSnapshot,
 )
+from aqp.persistence.models_rag import (
+    RagChunkAudit,
+    RagCorpus,
+    RagDocument,
+    RagEvalRun,
+    RagQuery,
+    RagSummary,
+)
+from aqp.persistence.models_regulatory import (
+    CfpbComplaint,
+    FdaAdverseEvent,
+    FdaApplication,
+    FdaRecall,
+    UsptoAssignment,
+    UsptoPatent,
+    UsptoTrademark,
+)
 from aqp.persistence.models_taxonomy import (
     EntityCrosswalk,
     EntityTag,
     TaxonomyNode,
     TaxonomyScheme,
+)
+from aqp.persistence.models_pipelines import (
+    DatahubSyncLog,
+    DatasetProfile,
+    FetcherRun,
+    PipelineManifestRow,
+    PipelineRunRow,
+)
+from aqp.persistence.models_entity_registry import (
+    EntityAnnotation,
+    EntityDatasetLink,
+    EntityIdentifier,
+    EntityRelation,
+    EntityRow,
 )
 
 __all__ = [
@@ -253,6 +287,55 @@ __all__ = [
     "EntityTag",
     "TaxonomyNode",
     "TaxonomyScheme",
+    # Agents (Phase 3)
+    "AgentAnnotation",
+    "AgentEvalMetric",
+    "AgentEvaluation",
+    "AgentRunArtifact",
+    "AgentRunStep",
+    "AgentRunV2",
+    "AgentSpecRow",
+    "AgentSpecVersion",
+    # Airbyte data fabric
+    "AirbyteConnectionRow",
+    "AirbyteConnectorRow",
+    "AirbyteSyncRunRow",
+    # dbt local modeling
+    "DbtModelVersionRow",
+    "DbtProjectRow",
+    "DbtRunRow",
+    "DbtSourceMappingRow",
+    # RAG (Phase 3)
+    "RagChunkAudit",
+    "RagCorpus",
+    "RagDocument",
+    "RagEvalRun",
+    "RagQuery",
+    "RagSummary",
+    # Memory (Phase 3)
+    "MemoryEpisode",
+    "MemoryOutcome",
+    "MemoryReflection",
+    # Regulatory (Phase 2)
+    "CfpbComplaint",
+    "FdaAdverseEvent",
+    "FdaApplication",
+    "FdaRecall",
+    "UsptoAssignment",
+    "UsptoPatent",
+    "UsptoTrademark",
+    # Data engine pipelines (Phase 3 — data-fabric expansion)
+    "DatahubSyncLog",
+    "DatasetProfile",
+    "FetcherRun",
+    "PipelineManifestRow",
+    "PipelineRunRow",
+    # Unified entity registry (Phase 4 — data-fabric expansion)
+    "EntityAnnotation",
+    "EntityDatasetLink",
+    "EntityIdentifier",
+    "EntityRelation",
+    "EntityRow",
     # DB utilities
     "async_engine",
     "async_session_dep",

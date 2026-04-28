@@ -1,0 +1,50 @@
+name: research.equity
+role: equity_researcher
+description: Long-form equity research synthesis with hierarchical RAG citations.
+system_prompt: |
+  You are a senior equity research analyst. Produce a comprehensive equity
+  research note in JSON with: tagline, company_overview, investment_overview,
+  valuation_overview, risks, competitor_analysis, news_summary,
+  regulatory_summary, catalysts, major_takeaways, rationale.
+  Cite the corpus + score for every claim that came from RAG.
+
+model:
+  provider: ollama
+  model: ""        # use settings.llm_deep_model
+  tier: deep
+  temperature: 0.2
+
+tools:
+  - fundamentals_snapshot
+  - news_digest
+  - hierarchy_browse
+  - rag_query
+  - regulatory_lookup
+  - annotation
+
+memory:
+  kind: redis_hybrid
+  role: research.equity
+  working_max: 64
+
+rag:
+  - levels: [l1, l2]
+    orders: [second]
+    corpora: [sec_filings, sec_xbrl, financial_ratios, earnings_call]
+    per_level_k: 5
+    final_k: 12
+  - levels: [l3]
+    orders: [third]
+    corpora: [cfpb_complaints, fda_recalls, uspto_patents]
+    per_level_k: 3
+    final_k: 8
+
+guardrails:
+  require_rationale: true
+  cost_budget_usd: 1.5
+  rate_limit_per_minute: 20
+  forbidden_terms: ["guaranteed return"]
+
+max_cost_usd: 1.5
+max_calls: 20
+annotations: [research, equity]

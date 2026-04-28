@@ -1,0 +1,1 @@
+{"ok":true,"type":"sql","uri":"sqlite:////warehouse/iceberg/catalog.db","warehouse":"file:///warehouse/iceberg","namespace_count":6,"table_count":null,"elapsed_seconds":0.0025,"error":null}
