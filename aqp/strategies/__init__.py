@@ -105,6 +105,22 @@ with _contextlib.suppress(Exception):  # pragma: no cover
         EfficientSemivariancePortfolio,
     )
 
+# Inspiration rehydration sub-packages — import for @register side effects.
+with _contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.strategies import qtradex as _qtradex_pkg  # noqa: F401
+with _contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.strategies import notebooks as _notebooks_pkg  # noqa: F401
+with _contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.strategies import akquant as _akquant_pkg  # noqa: F401
+with _contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.strategies import analyzingalpha as _analyzingalpha_pkg  # noqa: F401
+with _contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.strategies import sae as _sae_pkg  # noqa: F401
+with _contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.strategies import hft as _hft_pkg  # noqa: F401
+with _contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.strategies import portfolio_construction as _portfolio_construction  # noqa: F401
+
 __all__ = [
     # Alpha (classical TA)
     "AwesomeOscillatorAlpha",

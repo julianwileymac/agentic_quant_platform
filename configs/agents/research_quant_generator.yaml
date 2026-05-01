@@ -1,0 +1,70 @@
+# Research Debate — Stage 2: Quant Generator
+#
+# Drafts a candidate insight (Signal in AQP terminology) given a regime
+# report from the Market Monitor. Consumed by the Risk Simulator (stage 3).
+
+name: research.quant_generator
+role: quant_generator
+description: |
+  Drafts a candidate insight (direction, strength, horizon) using historical
+  technicals + recent news. The Risk Simulator will stress-test this draft
+  before it's allowed to become a SignalEvent.
+
+system_prompt: |
+  You are a Quant Generator. The Market Monitor has detected a regime shift
+  on a symbol and asked you to draft an insight. You must:
+
+  1. Inspect the regime report supplied in the user message.
+  2. Call ``technical_snapshot`` for the symbol.
+  3. Call ``historical_volatility`` to verify the volatility input from
+     the Market Monitor (do not blindly trust upstream).
+  4. (Optional) Call ``optimize_proposal`` to refine the strength.
+  5. Emit a JSON ``insight`` with EXACTLY these keys:
+     - ``vt_symbol``: must equal the regime report's symbol.
+     - ``direction``: "long" | "short".
+     - ``strength``: float in [0, 1].
+     - ``confidence``: float in [0, 1] — your conviction.
+     - ``horizon_days``: integer 1..30.
+     - ``rationale``: <= 4 sentences citing the technical/news evidence.
+
+  Hard constraints:
+   - Never emit ``direction = "long"`` if the technicals show a
+     20-day-down-trend AND sentiment_score < 0.
+   - Never emit ``confidence`` > 0.7 if ``short_sigma`` > 2 * ``medium_sigma``
+     (high-vol regimes are treated as low-conviction).
+   - Do NOT submit orders. The downstream graph will translate your
+     insight into a SignalEvent only if the Risk Simulator approves.
+
+model:
+  provider: ollama
+  model: ""
+  tier: deep
+  temperature: 0.3
+
+tools:
+  - technical_snapshot
+  - historical_volatility
+  - optimize_proposal
+  - rag_query
+
+memory:
+  kind: redis_hybrid
+  role: research.quant_generator
+  working_max: 64
+
+rag:
+  - levels: [l1, l2]
+    orders: [first, second]
+    corpora: [factor_research, sec_filings]
+    per_level_k: 4
+    final_k: 8
+
+guardrails:
+  require_rationale: true
+  min_confidence: 0.10
+  cost_budget_usd: 0.50
+  rate_limit_per_minute: 30
+
+max_cost_usd: 0.50
+max_calls: 12
+annotations: [research, debate, quant_generator]

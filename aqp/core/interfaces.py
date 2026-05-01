@@ -145,7 +145,7 @@ class IUniverseSelectionModel(ABC):
 
 
 class IAlphaModel(ABC):
-    """Lean stage 2 — turn data into alpha ``Signal`` objects."""
+    """Core reasoning layer: generates standardized Insight (Signal) objects."""
 
     @abstractmethod
     def generate_signals(
@@ -153,40 +153,48 @@ class IAlphaModel(ABC):
         bars: pd.DataFrame,
         universe: list[Symbol],
         context: dict[str, Any],
-    ) -> list[Signal]: ...
+    ) -> list[Signal]:
+        """Produce a list of alpha insights for the given market slice."""
+        ...
 
 
 class IPortfolioConstructionModel(ABC):
-    """Lean stage 3 — convert signals into target weights."""
+    """Strategy layer: determines target position sizes from alpha insights."""
 
     @abstractmethod
     def construct(
         self,
         signals: list[Signal],
         context: dict[str, Any],
-    ) -> list[PortfolioTarget]: ...
+    ) -> list[PortfolioTarget]:
+        """Translate alpha insights into target weights/quantities."""
+        ...
 
 
 class IRiskManagementModel(ABC):
-    """Lean stage 4 — adjust/reject targets that breach risk limits."""
+    """Constraint layer: intercepts and adjusts portfolio targets."""
 
     @abstractmethod
     def evaluate(
         self,
         targets: list[PortfolioTarget],
         context: dict[str, Any],
-    ) -> list[PortfolioTarget]: ...
+    ) -> list[PortfolioTarget]:
+        """Apply risk limits (drawdown, exposure, etc.) to target set."""
+        ...
 
 
 class IExecutionModel(ABC):
-    """Lean stage 5 — turn targets into ``OrderRequest`` instances."""
+    """Deterministic layer: translates risk-adjusted targets into broker orders."""
 
     @abstractmethod
     def execute(
         self,
         targets: list[PortfolioTarget],
         context: dict[str, Any],
-    ) -> list[OrderRequest]: ...
+    ) -> list[OrderRequest]:
+        """Optimize entry/exit and generate broker-ready order requests."""
+        ...
 
 
 class IStrategy(ABC):

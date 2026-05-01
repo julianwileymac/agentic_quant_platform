@@ -78,8 +78,40 @@ def has_kill_switch(state: AgentState) -> bool:
         return False
 
 
+def risk_simulator_approves(
+    state: AgentState,
+    *,
+    emit_node: str = "emit_signal_event",
+    reject_node: str = "reject_decision_log",
+) -> str:
+    """Consensus-gate predicate for ``build_research_debate_graph``.
+
+    Returns ``emit_node`` when the Risk Simulator explicitly set
+    ``simulation_verdict["approved"] == True``; otherwise routes to
+    ``reject_node``. The gate fails closed: a missing or malformed
+    verdict is treated as rejection so an agent crash can never sneak
+    a bad SignalEvent past the deterministic engine.
+    """
+    verdict = state.get("simulation_verdict") or {}
+    if not isinstance(verdict, dict):
+        return reject_node
+    if not bool(verdict.get("approved")):
+        return reject_node
+    insight_impact = verdict.get("insight_impact") or {}
+    if isinstance(insight_impact, dict) and insight_impact.get("approved") is False:
+        return reject_node
+    margin = verdict.get("margin_check") or {}
+    if isinstance(margin, dict) and margin.get("has_headroom") is False:
+        return reject_node
+    breaches = verdict.get("risk_breaches") or []
+    if isinstance(breaches, list) and breaches:
+        return reject_node
+    return emit_node
+
+
 __all__ = [
     "has_kill_switch",
+    "risk_simulator_approves",
     "should_consult_rag",
     "should_continue_debate",
     "should_continue_risk",

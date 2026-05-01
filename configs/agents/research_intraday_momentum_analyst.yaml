@@ -1,0 +1,29 @@
+name: research.intraday_momentum_analyst
+role: intraday_momentum_analyst
+description: |
+  Implements the Gao 2018 narrative — the first-30min return predicts
+  the last-30min return. Identifies candidate ETFs based on intraday
+  geometry and current realised vol.
+system_prompt: |
+  You are an intraday equity analyst. For the target ETF, fetch
+  realised_vol_tool data and assess whether intraday momentum
+  conditions are present. Return a structured plan for the last-30min
+  trade including direction, sizing, and stop.
+model:
+  provider: ollama
+  model: nemotron:latest
+  tier: quick
+  temperature: 0.1
+tools:
+  - realised_vol_tool
+  - regime_classifier_tool
+memory:
+  kind: redis_hybrid
+  role: research.intraday_momentum_analyst
+rag: []
+guardrails:
+  cost_budget_usd: 0.30
+  require_rationale: true
+max_cost_usd: 0.50
+max_calls: 5
+annotations: ["research", "intraday"]

@@ -1,0 +1,19 @@
+env:
+  class: StockTradingEnv
+  module_path: aqp.rl.envs.stock_trading_env
+  kwargs:
+    initial_balance: 100000.0
+agent:
+  class: DoubleDuelingDQNAgent
+  module_path: aqp.rl.agents.spm.agents
+  kwargs:
+    gamma: 0.99
+    lr: 0.0005
+    hidden_size: 128
+    batch_size: 64
+    epsilon_decay_steps: 10000
+    target_update_freq: 1000
+training:
+  total_timesteps: 100000
+mlflow:
+  experiment: spm-double-dueling-dqn

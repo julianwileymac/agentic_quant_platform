@@ -1,0 +1,16 @@
+env:
+  class: StockTradingEnv
+  module_path: aqp.rl.envs.stock_trading_env
+  kwargs:
+    initial_balance: 100000.0
+agent:
+  class: A3CAgent
+  module_path: aqp.rl.agents.spm.agents
+  kwargs:
+    gamma: 0.99
+    lr: 0.0007
+    hidden_size: 64
+training:
+  total_timesteps: 100000
+mlflow:
+  experiment: spm-a3c

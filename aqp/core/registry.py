@@ -33,12 +33,26 @@ _kind_index: dict[str, dict[str, type]] = {}
 _class_tags: dict[type, set[str]] = {}
 
 
-def register(name: str | None = None, *, kind: str | None = None, tags: tuple[str, ...] = ()):
+_class_metadata: dict[type, dict[str, Any]] = {}
+
+
+def register(
+    name: str | None = None,
+    *,
+    kind: str | None = None,
+    tags: tuple[str, ...] = (),
+    source: str | None = None,
+    category: str | None = None,
+):
     """Decorator to register a class under a short alias (optional).
 
     ``kind`` buckets the class into a component-kind index (``model``,
     ``strategy``, ``env``, ``agent``, ``forecaster``, ``processor``, ...).
     ``tags`` are free-form and surface in the Strategy Browser filters.
+    ``source`` identifies the inspiration repo this asset was extracted
+    from (e.g. ``"qtradex"``, ``"notebooks"``, ``"akquant"``); ``category``
+    is a short subtype tag (e.g. ``"momentum"``, ``"market_making"``)
+    used by the UI's faceted browsers.
     """
 
     def wrap(cls: type) -> type:
@@ -51,9 +65,35 @@ def register(name: str | None = None, *, kind: str | None = None, tags: tuple[st
             class_tags.add(f"kind:{kind}")
         for t in tags:
             class_tags.add(t)
+        if source:
+            class_tags.add(f"source:{source}")
+        if category:
+            class_tags.add(f"category:{category}")
+        meta = _class_metadata.setdefault(cls, {})
+        if source:
+            meta["source"] = source
+        if category:
+            meta["category"] = category
+        if name:
+            meta["alias"] = name
         return cls
 
     return wrap
+
+
+def get_metadata(cls: type) -> dict[str, Any]:
+    """Return the registration metadata for ``cls`` (source, category, alias)."""
+    return dict(_class_metadata.get(cls, {}))
+
+
+def list_by_source(source: str) -> list[type]:
+    """Return every class registered with ``source=...``."""
+    return list_by_tag(f"source:{source}")
+
+
+def list_by_category(category: str) -> list[type]:
+    """Return every class registered with ``category=...``."""
+    return list_by_tag(f"category:{category}")
 
 
 # ---------------------------------------------------------------------------

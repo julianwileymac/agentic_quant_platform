@@ -63,6 +63,17 @@ class AgentState(TypedDict, total=False):
     risk_debate: RiskDebateState
     past_context: list[str]
 
+    # Research Debate (Phase 4 — build_research_debate_graph):
+    # populated sequentially by Market Monitor → Quant Generator →
+    # Risk Simulator. ``signal_event_emitted`` is set by the
+    # ``emit_signal_event`` node when the consensus gate releases the
+    # decision into the Phase-1 event-driven engine.
+    regime_report: dict[str, Any]
+    proposed_alpha: dict[str, Any]
+    simulation_verdict: dict[str, Any]
+    consensus_status: str
+    signal_event_emitted: dict[str, Any]
+
     # Telemetry
     cost_usd: float
     n_calls: int
@@ -98,6 +109,11 @@ def empty_state(**overrides: Any) -> AgentState:
             "count": 0,
         },
         "past_context": [],
+        "regime_report": {},
+        "proposed_alpha": {},
+        "simulation_verdict": {},
+        "consensus_status": "pending",
+        "signal_event_emitted": {},
         "cost_usd": 0.0,
         "n_calls": 0,
         "n_rag_hits": 0,

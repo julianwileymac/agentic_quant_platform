@@ -58,6 +58,18 @@ with contextlib.suppress(Exception):  # pragma: no cover
 with contextlib.suppress(Exception):  # pragma: no cover
     from aqp.ml.models.ensemble import DEnsembleModel  # noqa: F401
 
+# Inspiration rehydration sub-packages (SPM / notebooks / SAE) — import for
+# @register side effects. Lazy ``contextlib.suppress`` so missing torch /
+# statsmodels / arch don't break the whole package.
+with contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.ml.models import spm as _spm_pkg  # noqa: F401
+with contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.ml.models import notebooks as _notebooks_ml_pkg  # noqa: F401
+with contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.ml.models import sae as _sae_ml_pkg  # noqa: F401
+with contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.ml.walk_forward import WalkForwardSplitter, WalkForwardTrainer, SimpleSliceDataset  # noqa: F401
+
 __all__ = [
     "BaseModel",
     "DK_I",

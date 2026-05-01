@@ -27,6 +27,7 @@ from aqp.api.routes import (
     data_pipelines,
     datalinks,
     datasets,
+    dataset_presets,
     dbt,
     entities,
     factors,
@@ -170,6 +171,9 @@ app.include_router(dagster_routes.router)
 app.include_router(datahub_routes.router)
 app.include_router(compute_routes.router)
 app.include_router(airbyte.router)
+
+# --- Inspiration rehydration: dataset presets library ------------------
+app.include_router(dataset_presets.router)
 
 
 # ---------------------------------------------------------------------------

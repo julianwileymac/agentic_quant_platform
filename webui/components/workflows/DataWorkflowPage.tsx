@@ -131,7 +131,7 @@ export function DataWorkflowPage() {
         const preferred = data.find((template) => template.id === DEFAULT_TEMPLATE_ID) ?? data[0];
         if (preferred) {
           setSelectedTemplateId(preferred.id);
-          form.setFieldsValue(defaultFormValues(preferred));
+          form.setFieldsValue(defaultFormValues(preferred) as Parameters<typeof form.setFieldsValue>[0]);
           setGraph(graphFromTemplate(preferred, {}));
           setEditorKey((key) => key + 1);
         }
@@ -153,7 +153,7 @@ export function DataWorkflowPage() {
     setSelectedTemplateId(templateId);
     const template = templates.find((candidate) => candidate.id === templateId);
     if (!template) return;
-    form.setFieldsValue(defaultFormValues(template));
+    form.setFieldsValue(defaultFormValues(template) as Parameters<typeof form.setFieldsValue>[0]);
     setGraph(graphFromTemplate(template, {}));
     setEditorKey((key) => key + 1);
   }

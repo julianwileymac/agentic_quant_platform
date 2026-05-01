@@ -18,6 +18,7 @@ deploy/k8s/
 │   ├── jaeger.yaml
 │   ├── api.yaml
 │   ├── worker.yaml
+│   ├── beat-deployment.yaml   # Phase 5 — Celery beat singleton + FinOps RBAC
 │   ├── paper-trader.yaml
 │   ├── ibgateway.yaml         # in-cluster IB Gateway for the streaming pipeline
 │   ├── ingester-ibkr.yaml     # 24/7 IBKR -> Kafka ingester
@@ -27,6 +28,31 @@ deploy/k8s/
     ├── dev/                # debug-level sampling, single worker
     └── prod/               # reduced sampling, 2 workers
 ```
+
+## FinOps governance (Phase 5)
+
+The `kustomization.yaml` `commonLabels` block stamps four mandatory tags on
+every resource:
+
+| Label | Source | Default |
+| --- | --- | --- |
+| `project` | `AQP_PROJECT_TAG` / `Settings.project_tag` | `aqp-default` |
+| `cost_center` | `AQP_COST_CENTER` / `Settings.cost_center` | `quant-research-01` |
+| `owner` | `AQP_OWNER` / `Settings.owner` | `system-orchestrator` |
+| `data_classification` | `AQP_DATA_CLASSIFICATION` / `Settings.data_classification` | `proprietary-alpha` |
+
+The Kyverno [`require-finops-tags` ClusterPolicy](../../../rpi_kubernetes/kubernetes/policies/finops/require-finops-tags.yaml)
+in `rpi_kubernetes` enforces these as `validationFailureAction: Enforce` —
+any Pod / Job / CronJob / Deployment / StatefulSet missing one is denied at
+admission time.
+
+The `aqp-beat` singleton in `beat-deployment.yaml` runs the
+[`aqp.tasks.finops_tasks.audit`](../../aqp/tasks/finops_tasks.py) task every
+6 hours as a backstop in case the policy is bypassed (e.g. a Helm chart
+that pre-dates this repo). The accompanying ClusterRole grants the beat
+ServiceAccount read-only access to Pods / Jobs / CronJobs / Deployments
+cluster-wide so the scan can attribute every workload back to a strategy
+or agent run.
 
 ## Build + push images
 

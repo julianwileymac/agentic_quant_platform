@@ -50,4 +50,13 @@ with _contextlib.suppress(Exception):  # pragma: no cover
         NeuroEvolutionNoveltyAgent,
     )
 
+# SPM agent ports (re-tagging existing classes + 4 net-new agents).
+with _contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.rl.agents.spm import (  # noqa: F401
+        A3CAgent,
+        ActorCriticExperienceReplayAgent,
+        DoubleDuelingDQNAgent,
+        PolicyGradientAgent,
+    )
+
 __all__ = ["SB3Adapter"]

@@ -117,6 +117,10 @@ class PaperTradingSession:
         self._history: list[dict[str, Any]] = []
         self._known_order_ids: set[str] = set()
         self._started_at = self.clock.now()
+        # Peak/last close per symbol — fed to risk models that need
+        # ``context["peak_prices"]`` (e.g. TrailingStopRiskManagementModel).
+        self._last_prices: dict[str, float] = {}
+        self._peak_prices: dict[str, float] = {}
         # Runner can set this before calling ``run()`` so ``_connect`` can
         # subscribe the feed for the entire desired universe in one call.
         self.pending_universe: list[Any] = []
@@ -233,11 +237,21 @@ class PaperTradingSession:
     @traced("paper.session.bar")
     async def _on_bar(self, bar: BarData) -> None:
         self._append_history(bar)
+        # Track per-symbol peaks so trailing-stop / drawdown-per-security
+        # risk models work in live paper sessions the same way they do in
+        # the event-driven backtester.
+        close = float(bar.close)
+        vt = bar.symbol.vt_symbol
+        self._last_prices[vt] = close
+        prev_peak = self._peak_prices.get(vt, close)
+        self._peak_prices[vt] = max(prev_peak, close)
         context = {
             "history": self._history_frame(),
             "current_time": bar.timestamp,
             "account": self._account_snapshot(),
             "positions": self._positions_snapshot(),
+            "prices": dict(self._last_prices),
+            "peak_prices": dict(self._peak_prices),
             "strategy_id": getattr(self.strategy, "strategy_id", None),
         }
         try:

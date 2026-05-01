@@ -19,9 +19,20 @@ resources:
   - ingester-alpaca.yaml
   # Model-serving (MLflow Serve / Ray Serve / TorchServe + Prometheus).
   - serving
+  # Phase 5 — Celery beat scheduler + RBAC for the FinOps audit task.
+  - beat-deployment.yaml
 
+# Phase 5 (FinOps Governance). The four mandatory tags below are stamped
+# on every resource so the Kyverno require-finops-tags ClusterPolicy in
+# rpi_kubernetes/kubernetes/policies/finops/ never rejects an AQP
+# workload at admission time. Source of truth: Settings.finops_labels()
+# in aqp/config.py — keep these values in sync with .env.example.
 commonLabels:
   app.kubernetes.io/part-of: agentic-quant-platform
+  project: aqp-default
+  cost_center: quant-research-01
+  owner: system-orchestrator
+  data_classification: proprietary-alpha
 
 images:
   - name: aqp

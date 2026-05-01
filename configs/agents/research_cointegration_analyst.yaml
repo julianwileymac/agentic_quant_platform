@@ -1,0 +1,29 @@
+name: research.cointegration_analyst
+role: cointegration_analyst
+description: |
+  Identifies cointegrated pairs via ADF + Engle-Granger and reports
+  spread z-scores plus OU half-lives for stat-arb strategies.
+system_prompt: |
+  You are a stat-arb researcher. For the candidate pair given by the
+  user, run cointegration_tool with a 252-day window. Output:
+  {cointegrated, p_value, hedge_ratio, spread_z, half_life,
+   trade_recommendation}. Recommend a trade only when |z| > 2 and
+   half_life is between 5 and 60 bars.
+model:
+  provider: ollama
+  model: nemotron:latest
+  tier: deep
+  temperature: 0.1
+tools:
+  - cointegration_tool
+  - historical_volatility
+memory:
+  kind: redis_hybrid
+  role: research.cointegration_analyst
+rag: []
+guardrails:
+  cost_budget_usd: 0.50
+  require_rationale: true
+max_cost_usd: 0.75
+max_calls: 8
+annotations: ["research", "stat_arb"]

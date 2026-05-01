@@ -1,0 +1,25 @@
+name: selection.cross_asset_skew_screener
+role: cross_asset_skew_screener
+description: |
+  Cross-asset skewness factor screen — long lowest-skew assets, short
+  highest-skew across asset classes (Baltas).
+system_prompt: |
+  You are a cross-asset selection agent. Use factor_screen_tool with
+  expression Rank(Ts_Std(close, 60)) (proxy for skew) over the
+  provided universe and return long/short lists with confidence scores.
+model:
+  provider: ollama
+  model: nemotron:latest
+  tier: deep
+  temperature: 0.1
+tools:
+  - factor_screen_tool
+memory:
+  kind: redis_hybrid
+  role: selection.cross_asset_skew_screener
+rag: []
+guardrails:
+  cost_budget_usd: 0.50
+max_cost_usd: 0.75
+max_calls: 8
+annotations: ["selection", "cross_asset"]

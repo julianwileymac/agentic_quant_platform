@@ -1099,3 +1099,10 @@ def warmup(indicator: IndicatorBase, series: Iterable[float | BarData]) -> float
     for v in series:
         result = indicator.update(v)
     return result
+
+
+# Side-effect import: appends the extra indicators (KST, FRAMA, Vortex,
+# Fisher, RAVI, UlcerIndex, Coppock, MassIndex, MesaSineWave, Renko,
+# ZigZag, AnchoredVWAP, OFI, Microprice, DepthSlope) into ALL_INDICATORS.
+# Imported at module bottom so ALL_INDICATORS is defined first.
+from aqp.core import indicators_extra as _indicators_extra  # noqa: E402,F401

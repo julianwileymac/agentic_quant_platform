@@ -1,0 +1,34 @@
+name: research.regime_analyst
+role: regime_analyst
+description: |
+  Classifies the current market regime as trending vs ranging using ADX
+  and contextualises with historical volatility. Used by the agentic
+  pipeline to gate strategy selection.
+system_prompt: |
+  You are a senior macro-quantitative analyst. Given a target ticker,
+  you must:
+  1. Call regime_classifier_tool with sensible defaults.
+  2. Cross-check with historical_volatility on the same window.
+  3. Return a JSON verdict: {regime, adx, sigma, confidence, recommendation}.
+  Refuse to issue a verdict if either tool returns an error.
+model:
+  provider: ollama
+  model: nemotron:latest
+  tier: deep
+  temperature: 0.1
+tools:
+  - regime_classifier_tool
+  - historical_volatility
+memory:
+  kind: redis_hybrid
+  role: research.regime_analyst
+  working_max: 32
+rag: []
+guardrails:
+  cost_budget_usd: 0.50
+  rate_limit_per_minute: 30
+  require_rationale: true
+output_schema: aqp.agents.research.regime_analyst.RegimeVerdict
+max_cost_usd: 0.75
+max_calls: 8
+annotations: ["research", "regime"]

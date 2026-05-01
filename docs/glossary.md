@@ -190,6 +190,66 @@ mismatch between this glossary and the code, file an issue.
   `docker-compose.yml` exposing the user's local `Downloads/`
   directory for CLI ingest jobs.
 
+## Inspiration rehydration (Phase 2026-04-29)
+
+- **Microprice** — `(P_ask * Q_bid + P_bid * Q_ask) / (Q_bid + Q_ask)`.
+  Volume-weighted refinement of mid-price; converges to the deeper side
+  of the book. Implemented in
+  [aqp/data/microstructure.py](../aqp/data/microstructure.py).
+- **OBI (Order Book Imbalance)** — `(Q_bid - Q_ask) / (Q_bid + Q_ask)`,
+  range `[-1, +1]`. Positive = bid-side pressure. Used as a quote skew
+  signal in the LOB market-making strategies under
+  [aqp/strategies/hft/](../aqp/strategies/hft/).
+- **VPIN** — Volume-synchronized probability of informed trading
+  (Easley/López/O'Hara). Re-buckets trade flow by equal-volume buckets;
+  rolling mean of |buy-sell|/|buy+sell|. See
+  [aqp/data/microstructure.py](../aqp/data/microstructure.py).
+- **Sample-aware Sharpe** — Annualised Sharpe ratio that uses the
+  actual sample frequency of a returns series instead of the assumed
+  252 trading days. Required for HFT strategies with sub-daily bars.
+  See [aqp/backtest/hft_metrics.py](../aqp/backtest/hft_metrics.py).
+- **Walk-forward** — Training scheme where the model is re-fit on a
+  rolling (or anchored) window and tested on the immediately following
+  slice. Implemented in
+  [aqp/ml/walk_forward.py](../aqp/ml/walk_forward.py).
+- **Bachelier (Normal) model** — Options pricing model assuming the
+  underlying follows arithmetic Brownian motion (`dF = sigma dW`).
+  Appropriate for low-priced or near-zero underlyings (rates, basis
+  spreads). See [aqp/options/normal_model.py](../aqp/options/normal_model.py).
+- **Inverse option** — Option settled in the underlying asset (e.g.
+  BTC) rather than quote currency (USD). Common on crypto venues like
+  Deribit. See
+  [aqp/options/inverse_options.py](../aqp/options/inverse_options.py).
+- **Regime classifier** — Lightweight classifier that labels each bar
+  as trending vs ranging using ADX threshold (default 25) or as
+  bull/bear/neutral via multi-MA slope vote. See
+  [aqp/data/regime.py](../aqp/data/regime.py).
+- **Factor expression** — Tiny Polars-based DSL covering Alpha101
+  primitives (`Ts_Mean`, `Ts_Std`, `Rank`, `Decay_Linear`, `Delta`,
+  `Ts_Corr`). See [aqp/data/factor_expression.py](../aqp/data/factor_expression.py).
+- **Engle-Granger cointegration** — Two-step test for cointegrated
+  pairs: OLS hedge ratio + ADF test on the residual. See
+  [aqp/data/cointegration.py](../aqp/data/cointegration.py).
+- **Triple-barrier label** — Lopez de Prado labeling: look forward
+  ``horizon`` bars, label `+1` if upper barrier hit first, `-1` if
+  lower, `0` if horizon reached. See
+  [aqp/data/labels.py](../aqp/data/labels.py).
+- **Yang-Zhang volatility** — OHLC vol estimator combining overnight,
+  open-to-close, and Rogers-Satchell components. The most efficient of
+  the OHLC family. See
+  [aqp/data/realised_volatility.py](../aqp/data/realised_volatility.py).
+- **LobStrategy** — ABC for limit-order-book strategies; subclasses
+  emit `OrderIntent` lists in response to `LobState` updates. Engine
+  integration is deferred — see
+  [extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md](../extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md).
+- **Dataset preset** — Curated declarative spec for a one-click
+  ingestion (e.g. `intraday_momentum_etf`, `crypto_majors_intraday`).
+  See [aqp/data/dataset_presets.py](../aqp/data/dataset_presets.py).
+- **Inspiration source** — One of seven external repos under
+  `inspiration/` from which strategies / models / agents were
+  rehydrated. Tracked via the `source` kwarg on
+  `aqp.core.registry.register` and surfaced as the `source:*` tag.
+
 ## Testing
 
 - **`tests/data/test_pipelines_smoke.py`** — Reference test for the

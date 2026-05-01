@@ -42,7 +42,8 @@ dependencies = [
     # Data tier
     "duckdb>=0.10",
     "pandas>=2.1",
-    "pyarrow>=15.0",
+    "polars>=1.0",
+    "pyarrow>=16.0",
     "numpy>=1.26",
     "yfinance>=0.2.37",
     "chromadb>=0.4.22",

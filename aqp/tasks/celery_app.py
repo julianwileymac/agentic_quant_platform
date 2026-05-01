@@ -4,12 +4,19 @@ from __future__ import annotations
 import logging
 
 from celery import Celery
-from celery.signals import worker_process_init
+from celery.signals import (
+    before_task_publish,
+    task_prerun,
+    worker_process_init,
+)
 
 from aqp.config import settings
 from aqp.observability import configure_tracing, instrument_celery
 
 logger = logging.getLogger(__name__)
+
+
+_FINOPS_HEADER_KEY = "x-aqp-finops"
 
 
 celery_app = Celery(
@@ -42,6 +49,10 @@ celery_app = Celery(
         "aqp.tasks.entity_tasks",
         "aqp.tasks.datahub_tasks",
         "aqp.tasks.airbyte_tasks",
+        # Phase 5 — FinOps governance audit task.
+        "aqp.tasks.finops_tasks",
+        # Inspiration rehydration — dataset preset ingestion tasks.
+        "aqp.tasks.dataset_preset_tasks",
     ],
 )
 
@@ -74,6 +85,8 @@ celery_app.conf.update(
         "aqp.tasks.entity_tasks.*": {"queue": "agents"},
         "aqp.tasks.datahub_tasks.*": {"queue": "ingestion"},
         "aqp.tasks.airbyte_tasks.*": {"queue": "ingestion"},
+        "aqp.tasks.finops_tasks.*": {"queue": "default"},
+        "aqp.tasks.dataset_preset_tasks.*": {"queue": "ingestion"},
     },
     beat_schedule={
         "drift-check": {
@@ -84,9 +97,78 @@ celery_app.conf.update(
             "task": "aqp.tasks.rag_tasks.refresh_l0_alpha_base",
             "schedule": 6 * 3600.0,
         },
+        # Phase 5 — FinOps governance audit. Scans the cluster for any
+        # workload missing the mandatory project / cost_center / owner /
+        # data_classification labels and emits an alert so the spend chain
+        # back to a strategy_id stays unbroken.
+        "finops-tag-audit": {
+            "task": "aqp.tasks.finops_tasks.audit",
+            "schedule": 6 * 3600.0,
+        },
     },
     timezone="UTC",
 )
+
+
+# ---------------------------------------------------------------- FinOps signals
+@before_task_publish.connect
+def _attach_finops_headers(sender=None, headers=None, body=None, **_kwargs):
+    """Stamp every dispatch with :meth:`Settings.finops_labels`.
+
+    Triggered by ``task.delay()`` / ``task.apply_async()`` before the
+    Celery transport puts the message on the broker. The headers travel
+    with the task so the worker can echo them on its progress emits and
+    OTEL spans.
+
+    Application code never has to remember to attach tags — calling
+    ``some_task.delay(...)`` is enough; the labels show up downstream
+    automatically.
+    """
+    if headers is None:
+        return
+    try:
+        labels = settings.finops_labels(task_name=str(sender))
+    except Exception:  # noqa: BLE001
+        return
+    # Celery deep-merges this dict; never overwrite caller-supplied keys.
+    existing = headers.get(_FINOPS_HEADER_KEY) or {}
+    if isinstance(existing, dict):
+        labels.update(existing)
+    headers[_FINOPS_HEADER_KEY] = labels
+
+
+@task_prerun.connect
+def _record_finops_on_span(sender=None, task_id=None, task=None, **_kwargs):
+    """Mirror the FinOps headers onto the active OTEL span and the task obj.
+
+    Hook runs inside the worker just before the task body executes, so
+    progress emits + the FastAPI tracing middleware see consistent tags.
+    """
+    if task is None:
+        return
+    request = getattr(task, "request", None)
+    if request is None:
+        return
+    headers = getattr(request, "headers", None) or {}
+    finops = headers.get(_FINOPS_HEADER_KEY) if isinstance(headers, dict) else None
+    if not isinstance(finops, dict) or not finops:
+        # Worker received the task without the dispatch hook (e.g. an external
+        # producer). Re-stamp from local Settings as a defence-in-depth.
+        finops = settings.finops_labels(task_name=str(sender))
+    # Make the labels available to ``aqp.tasks._progress.emit`` via attribute.
+    try:
+        setattr(task, "_aqp_finops", dict(finops))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from opentelemetry import trace  # type: ignore[import-not-found]
+
+        span = trace.get_current_span()
+        if span is not None and span.is_recording():
+            for k, v in finops.items():
+                span.set_attribute(f"aqp.finops.{k}", str(v))
+    except Exception:  # pragma: no cover — OTEL is optional
+        return
 
 
 # Tracing must be initialised per worker subprocess (not at module import),

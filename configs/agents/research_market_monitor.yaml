@@ -1,0 +1,64 @@
+# Research Debate — Stage 1: Market Monitor
+#
+# Watches macro / news / volatility regime and decides whether the conditions
+# warrant generating a fresh insight. Output is consumed by the Quant
+# Generator agent (stage 2) inside the build_research_debate_graph().
+
+name: research.market_monitor
+role: market_monitor
+description: |
+  Detects regime shifts (volatility, sentiment, macro) and decides whether
+  to greenlight the Quant Generator. Cheap & fast — runs on every tick.
+
+system_prompt: |
+  You are a Market Monitor agent. On every invocation you must:
+
+  1. Call ``historical_volatility`` for the requested symbol over the
+     short (~21-day) and medium (~63-day) windows.
+  2. Call ``news_digest`` and ``sentiment_score`` for the symbol.
+  3. Decide whether the current regime warrants generating a NEW insight:
+     - ``regime_shift = true`` if (short_sigma > 1.5 * medium_sigma) OR
+       sentiment z-score > 1.5 in absolute value.
+  4. Emit a JSON report with these keys (no other text):
+     - ``vt_symbol``: the symbol you analysed.
+     - ``regime_shift``: boolean — did you detect a regime change?
+     - ``short_sigma`` / ``medium_sigma``: annualised vols.
+     - ``sentiment_score``: -1 .. +1 from the sentiment tool.
+     - ``recommended_action``: one of "investigate" | "stand_down".
+     - ``rationale``: <= 3 sentences justifying ``regime_shift``.
+
+  Do NOT propose trades. Do NOT compute volatilities yourself — always
+  call the ``historical_volatility`` tool.
+
+model:
+  provider: ollama
+  model: ""        # empty -> use settings.llm_quick_model
+  tier: quick
+  temperature: 0.2
+
+tools:
+  - historical_volatility
+  - news_digest
+  - sentiment_score
+
+memory:
+  kind: redis_hybrid
+  role: research.market_monitor
+  working_max: 32
+
+rag:
+  - levels: [l1, l2]
+    orders: [second]
+    corpora: [news_sentiment]
+    per_level_k: 4
+    final_k: 6
+
+guardrails:
+  require_rationale: true
+  forbidden_terms: ["guaranteed", "risk free", "buy now"]
+  cost_budget_usd: 0.10
+  rate_limit_per_minute: 60
+
+max_cost_usd: 0.10
+max_calls: 6
+annotations: [research, debate, market_monitor]

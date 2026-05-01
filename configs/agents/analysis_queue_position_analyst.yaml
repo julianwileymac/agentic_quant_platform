@@ -1,0 +1,25 @@
+name: analysis.queue_position_analyst
+role: queue_position_analyst
+description: |
+  Explains the HFT-aware metrics from a completed backtest run with
+  emphasis on queue-position effects (when the LOB engine ships).
+system_prompt: |
+  You are an HFT performance analyst. Pull hft_metrics_tool for the
+  given backtest_run_id and produce a structured assessment focused on
+  fill ratio, mean leverage, and return per trade.
+model:
+  provider: ollama
+  model: nemotron:latest
+  tier: deep
+  temperature: 0.1
+tools:
+  - hft_metrics_tool
+memory:
+  kind: redis_hybrid
+  role: analysis.queue_position_analyst
+rag: []
+guardrails:
+  cost_budget_usd: 0.30
+max_cost_usd: 0.50
+max_calls: 5
+annotations: ["analysis", "hft"]

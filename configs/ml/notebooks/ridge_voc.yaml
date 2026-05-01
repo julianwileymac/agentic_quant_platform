@@ -1,0 +1,23 @@
+model:
+  class: RidgeVoCForecaster
+  module_path: aqp.ml.models.notebooks.ridge_voc
+  kwargs:
+    p_features: 256
+    alpha: 1.0
+    random_state: 42
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 252
+      test_periods: 63
+dataset_preset: commodity_futures_panel
+features: ["close"]
+target:
+  class: n_step_return
+  module_path: aqp.data.labels
+  kwargs:
+    n: 21
+mlflow:
+  experiment: voc-ridge

@@ -1,0 +1,39 @@
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: ["SPY.NASDAQ", "AGG.NASDAQ"]
+    alpha_model:
+      class: SixtyFortyRebalanceStrategy
+      module_path: aqp.strategies.akquant.alphas
+      kwargs:
+        equity_symbol: "SPY.NASDAQ"
+        bond_symbol: "AGG.NASDAQ"
+    portfolio_model:
+      class: SixtyForty
+      module_path: aqp.strategies.portfolio_construction
+      kwargs:
+        equity_symbol: "SPY.NASDAQ"
+        bond_symbol: "AGG.NASDAQ"
+        equity_weight: 0.60
+        bond_weight: 0.40
+    risk_model:
+      class: NoOpRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: {}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+    rebalance_every: 21
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    start: "2023-01-01"
+    end: "2024-12-31"

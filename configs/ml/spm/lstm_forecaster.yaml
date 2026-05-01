@@ -1,0 +1,29 @@
+model:
+  class: LSTMForecaster
+  module_path: aqp.ml.models.spm.forecasters
+  kwargs:
+    seq_len: 20
+    hidden_size: 64
+    num_layers: 1
+    dropout: 0.0
+    lr: 0.001
+    epochs: 30
+    batch_size: 32
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 252
+      test_periods: 21
+      step_periods: 21
+      anchored: false
+dataset_preset: equity_universe_sp500_daily
+features: ["close"]
+target:
+  class: next_bar_binary
+  module_path: aqp.data.labels
+  kwargs:
+    threshold: 0.0
+mlflow:
+  experiment: spm-lstm

@@ -29,6 +29,7 @@ from aqp.backtest.metrics import (
     turnover_report,
 )
 from aqp.backtest.monte_carlo import run_monte_carlo
+from aqp.backtest.replay import diff_event_logs, replay_event_log
 from aqp.backtest.runner import run_backtest_from_config
 from aqp.backtest.vectorized import vector_backtest
 from aqp.backtest.walk_forward import run_walk_forward
@@ -43,11 +44,13 @@ __all__ = [
     "BacktestResult",
     "EventDrivenBacktester",
     "SimulatedBrokerage",
+    "diff_event_logs",
     "indicator_analysis",
     "max_drawdown",
     "plot_drawdown",
     "plot_equity_curve",
     "plot_returns_histogram",
+    "replay_event_log",
     "risk_analysis",
     "run_backtest_from_config",
     "run_monte_carlo",

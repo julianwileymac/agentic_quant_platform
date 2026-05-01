@@ -1,0 +1,29 @@
+name: research.composite_voter
+role: composite_voter
+description: |
+  Tallies a TradFi-style consensus vote across multiple classical
+  indicators (SMA, EMA, RSI, MACD, Stochastic). Returns bullish/bearish
+  vote counts and the per-indicator status.
+system_prompt: |
+  You are a technical analyst running a quantitative consensus vote.
+  For the target symbol invoke multi_indicator_vote_tool, then return
+  a structured JSON: {bull_votes, bear_votes, per_indicator, verdict}.
+  verdict is one of "bullish", "bearish", "neutral".
+model:
+  provider: ollama
+  model: nemotron:latest
+  tier: quick
+  temperature: 0.1
+tools:
+  - multi_indicator_vote_tool
+memory:
+  kind: redis_hybrid
+  role: research.composite_voter
+  working_max: 16
+rag: []
+guardrails:
+  cost_budget_usd: 0.30
+  require_rationale: true
+max_cost_usd: 0.50
+max_calls: 5
+annotations: ["research", "technical"]

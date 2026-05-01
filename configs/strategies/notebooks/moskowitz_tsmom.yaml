@@ -1,0 +1,39 @@
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: ["ES=F.CME", "NQ=F.CME", "ZN=F.CME", "GC=F.CME", "CL=F.NYM"]
+    alpha_model:
+      class: MoskowitzTSMOMAlpha
+      module_path: aqp.strategies.notebooks.alphas
+      kwargs:
+        lookback_months: 12
+        target_vol: 0.40
+        vol_window: 60
+        position_cap: 2.0
+    portfolio_model:
+      class: SignalWeightedPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs:
+        max_positions: 5
+    risk_model:
+      class: VolTargetingRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        target_vol: 0.20
+        max_weight: 0.50
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 1000000.0
+    start: "2020-01-01"
+    end: "2024-12-31"

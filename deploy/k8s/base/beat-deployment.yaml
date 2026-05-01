@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aqp-beat
+  labels:
+    app.kubernetes.io/component: beat
+    # Explicit FinOps labels so this manifest satisfies the Kyverno
+    # require-finops-tags policy even when applied directly via
+    # ``kubectl apply -f beat-deployment.yaml`` (without Kustomize).
+    project: aqp-default
+    cost_center: quant-research-01
+    owner: system-orchestrator
+    data_classification: proprietary-alpha
+spec:
+  # Beat is a singleton — never run more than one replica or scheduled
+  # tasks (drift-check, rag-refresh-l0-alpha-base, finops-tag-audit) fire
+  # multiple times per period.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aqp
+      app.kubernetes.io/component: beat
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aqp
+        app.kubernetes.io/component: beat
+        project: aqp-default
+        cost_center: quant-research-01
+        owner: system-orchestrator
+        data_classification: proprietary-alpha
+    spec:
+      serviceAccountName: aqp-beat
+      containers:
+        - name: aqp-beat
+          image: ghcr.io/agentic-quant-platform/aqp-worker:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - celery
+            - -A
+            - aqp.tasks.celery_app
+            - beat
+            - --loglevel=INFO
+          envFrom:
+            - configMapRef:
+                name: aqp-config
+            - secretRef:
+                name: aqp-secrets
+          env:
+            - name: AQP_PROJECT_TAG
+              value: aqp-default
+            - name: AQP_COST_CENTER
+              value: quant-research-01
+            - name: AQP_OWNER
+              value: system-orchestrator
+            - name: AQP_DATA_CLASSIFICATION
+              value: proprietary-alpha
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aqp-beat
+  labels:
+    project: aqp-default
+    cost_center: quant-research-01
+    owner: system-orchestrator
+    data_classification: proprietary-alpha
+---
+# RBAC for the FinOps audit task — read-only access to Pods / Jobs /
+# CronJobs / Deployments cluster-wide so the beat-scheduled audit can
+# detect untagged workloads in any namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aqp-finops-reader
+  labels:
+    project: aqp-default
+    cost_center: quant-research-01
+    owner: system-orchestrator
+    data_classification: proprietary-alpha
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: aqp-finops-reader
+  labels:
+    project: aqp-default
+    cost_center: quant-research-01
+    owner: system-orchestrator
+    data_classification: proprietary-alpha
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aqp-finops-reader
+subjects:
+  - kind: ServiceAccount
+    name: aqp-beat
+    namespace: aqp

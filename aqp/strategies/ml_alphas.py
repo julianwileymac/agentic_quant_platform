@@ -97,6 +97,14 @@ class _MLBaseAlpha(IAlphaModel):
     # ----------------------------------------------------------- features --
 
     def _features_for(self, bars: pd.DataFrame) -> pd.DataFrame:
+        """Compute the feature panel for ``bars``.
+
+        Pandas remains on the public surface (the indicator zoo and feature-set
+        service are pandas-native today) but the per-bar slice operations
+        downstream — sort, group_by, last-row pick, fill-null — happen via
+        Polars in :meth:`_latest_features_polars` to avoid the
+        ``sort_values + groupby + tail`` pandas hot path.
+        """
         if self.feature_set_name:
             try:
                 from aqp.data.feature_sets import FeatureSetService
@@ -117,6 +125,53 @@ class _MLBaseAlpha(IAlphaModel):
         specs = self.feature_specs if self.feature_specs else None
         return zoo.transform(bars, indicators=specs)
 
+    @staticmethod
+    def _latest_features_polars(
+        feats: pd.DataFrame,
+        feature_cols: list[str],
+    ) -> tuple[list[str], list[Any], np.ndarray]:
+        """Sort, group, take-last and fill-null using Polars lazy expressions.
+
+        Returns ``(vt_symbols, timestamps, X_matrix)`` for the most recent
+        observation of every symbol. The lazy plan is collected with
+        ``streaming=True`` so wide universes don't blow up RAM.
+        """
+        import polars as pl
+
+        # Pandas → Polars is zero-copy when the underlying buffers are Arrow-
+        # backed (most modern pandas dtypes). The cast guards against object
+        # columns that would otherwise abort the lazy collect.
+        plf = pl.from_pandas(feats).lazy()
+        keep = ["vt_symbol", "timestamp", *feature_cols]
+        present = [c for c in keep if c in plf.collect_schema().names()]
+        latest = (
+            plf.select(present)
+            .sort("timestamp")
+            .group_by("vt_symbol", maintain_order=True)
+            .last()
+            .with_columns(
+                [
+                    pl.col(c).fill_null(0).cast(pl.Float64, strict=False)
+                    for c in feature_cols
+                    if c in present
+                ]
+            )
+            .collect(streaming=True)
+        )
+        if latest.height == 0:
+            return [], [], np.zeros((0, len(feature_cols)), dtype=np.float64)
+        vt_syms = latest.get_column("vt_symbol").to_list()
+        if "timestamp" in latest.columns:
+            ts_col = latest.get_column("timestamp").to_list()
+        else:
+            ts_col = [None] * latest.height
+        cols_present = [c for c in feature_cols if c in latest.columns]
+        if not cols_present:
+            x = np.zeros((latest.height, 0), dtype=np.float64)
+        else:
+            x = latest.select(cols_present).to_numpy()
+        return vt_syms, ts_col, x
+
     # ------------------------------------------------------------ signals --
 
     def generate_signals(
@@ -130,11 +185,24 @@ class _MLBaseAlpha(IAlphaModel):
         feats = self._features_for(bars)
         universe_set = {s.vt_symbol for s in universe}
         now = context.get("current_time")
-        latest = feats.sort_values("timestamp").groupby("vt_symbol").tail(1)
-        if latest.empty:
+
+        feature_cols = [
+            c for c in feats.columns if c.lower() not in _NON_FEATURE_COLS
+        ]
+        if not feature_cols:
             return []
-        feature_cols = [c for c in latest.columns if c.lower() not in _NON_FEATURE_COLS]
-        x = latest[feature_cols].fillna(0).values
+        try:
+            vt_syms, timestamps, x = self._latest_features_polars(feats, feature_cols)
+        except Exception:
+            logger.exception("polars latest-features collapsed; falling back to pandas")
+            latest = feats.sort_values("timestamp").groupby("vt_symbol").tail(1)
+            if latest.empty:
+                return []
+            vt_syms = latest["vt_symbol"].tolist()
+            timestamps = latest["timestamp"].tolist()
+            x = latest[feature_cols].fillna(0).to_numpy()
+        if len(vt_syms) == 0:
+            return []
         try:
             preds = self._predict(x)
         except Exception:
@@ -142,17 +210,15 @@ class _MLBaseAlpha(IAlphaModel):
             return []
         preds = np.asarray(preds, dtype=float).reshape(-1)
 
-        # Map predictions back to symbols + pick top-K if configured.
-        rows = list(latest.iterrows())
-        if self.top_k:
+        if self.top_k and len(preds) > self.top_k:
             order = np.argsort(-preds)
-            kept = set(order[: self.top_k])
-            rows = [rows[i] for i in range(len(rows)) if i in kept]
-            preds = np.asarray([preds[i] for i in range(len(preds)) if i in kept])
+            keep_idx = order[: self.top_k]
+            vt_syms = [vt_syms[i] for i in keep_idx]
+            timestamps = [timestamps[i] for i in keep_idx]
+            preds = preds[keep_idx]
 
         signals: list[Signal] = []
-        for (_, row), pred in zip(rows, preds, strict=False):
-            vt = row["vt_symbol"]
+        for vt, ts, pred in zip(vt_syms, timestamps, preds, strict=False):
             if vt not in universe_set:
                 continue
             pred = float(pred)
@@ -168,7 +234,7 @@ class _MLBaseAlpha(IAlphaModel):
                     symbol=Symbol.parse(vt),
                     strength=float(min(1.0, abs(pred) * 10)),
                     direction=direction,
-                    timestamp=now or row["timestamp"],
+                    timestamp=now or ts,
                     confidence=float(min(1.0, abs(pred) * 20)),
                     source=type(self).__name__,
                     rationale=f"pred={pred:.4f}",

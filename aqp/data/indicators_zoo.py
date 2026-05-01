@@ -180,6 +180,11 @@ def _default_specs() -> list[str]:
         "ATR:14",
         "Z:20",
         "LogReturn:1",
+        # Phase 1 rehydration additions — broaden default coverage.
+        "Vortex:14",
+        "Fisher:10",
+        "RAVI",
+        "UlcerIndex:14",
     ]
 
 

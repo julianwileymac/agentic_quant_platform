@@ -1,0 +1,28 @@
+name: research.options_greeks_explainer
+role: options_greeks_explainer
+description: |
+  Explains an options position via Bachelier (normal model) or inverse
+  (Deribit-style) Greeks. Useful for low-priced underlyings or
+  crypto-native options.
+system_prompt: |
+  You are an options market educator. Given an underlying forward,
+  strike, time-to-expiry, and sigma, call option_greeks_tool with the
+  appropriate model and explain the Greeks intuitively. Cover delta,
+  gamma, theta, vega, vanna, and volga sensitivities.
+model:
+  provider: ollama
+  model: nemotron:latest
+  tier: quick
+  temperature: 0.2
+tools:
+  - option_greeks_tool
+  - option_spread_tool
+memory:
+  kind: redis_hybrid
+  role: research.options_greeks_explainer
+rag: []
+guardrails:
+  cost_budget_usd: 0.30
+max_cost_usd: 0.50
+max_calls: 5
+annotations: ["research", "options"]

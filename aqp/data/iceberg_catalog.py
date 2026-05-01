@@ -544,6 +544,38 @@ def read_arrow(
     return scan.to_arrow()
 
 
+def read_polars(
+    identifier: str | tuple[str, ...],
+    *,
+    columns: Iterable[str] | None = None,
+    limit: int | None = None,
+    row_filter: Any = None,
+):
+    """Scan an Iceberg table and return a :class:`polars.DataFrame`.
+
+    This is the canonical Polars entry point used by the event-driven
+    backtester and ``_MLBaseAlpha`` feature pipeline. Built on top of
+    :func:`read_arrow` so the underlying Arrow buffers are shared (Polars
+    constructs zero-copy views over Arrow chunked arrays whenever the
+    column dtype maps cleanly).
+
+    Returns ``None`` only when the table does not exist; matches the
+    ``read_arrow`` contract so callers can switch between the two without
+    branching on missing data semantics.
+    """
+    arrow = read_arrow(
+        identifier,
+        columns=columns,
+        limit=limit,
+        row_filter=row_filter,
+    )
+    if arrow is None:
+        return None
+    import polars as pl  # local import keeps the heavy dep optional at module load
+
+    return pl.from_arrow(arrow)
+
+
 def health_check(*, timeout: float | None = None) -> dict[str, Any]:
     """Probe the catalog with a bounded read-only operation.
 
@@ -635,20 +667,38 @@ def latest_timestamps_for_symbols(
     if arrow is None or arrow.num_rows == 0:
         return {}
 
-    import pandas as pd
+    # Arrow-native group-by + max — keeps the data in columnar Arrow
+    # buffers and avoids the round-trip through Pandas. Falls back to
+    # Polars only if the time column carries an unusual dtype.
+    import pyarrow.compute as pc
 
-    pdf = arrow.to_pandas()
-    pdf[time_col] = pd.to_datetime(pdf[time_col], errors="coerce")
-    pdf = pdf.dropna(subset=[time_col])
-    if pdf.empty:
+    try:
+        grouped = arrow.group_by(group_col).aggregate([(time_col, "max")])
+    except Exception:
+        # Polars fallback handles odd dtypes (e.g. string timestamps).
+        import polars as pl
+
+        df = pl.from_arrow(arrow).with_columns(
+            pl.col(time_col).cast(pl.Datetime, strict=False)
+        )
+        df = df.drop_nulls(subset=[time_col])
+        if df.height == 0:
+            return {}
+        agg = df.group_by(group_col).agg(pl.col(time_col).max())
+        return {str(row[group_col]): row[time_col] for row in agg.iter_rows(named=True)}
+
+    if grouped.num_rows == 0:
         return {}
-    grouped = pdf.groupby(group_col)[time_col].max()
+    keys = grouped.column(group_col).to_pylist()
+    times_col = grouped.column(f"{time_col}_max")
+    # Drop nulls without dragging in pandas/polars.
+    times_py = times_col.to_pylist()
     out: dict[str, datetime] = {}
-    for key, value in grouped.items():
-        if hasattr(value, "to_pydatetime"):
-            out[str(key)] = value.to_pydatetime()
-        else:
-            out[str(key)] = value
+    for key, ts in zip(keys, times_py, strict=False):
+        if ts is None:
+            continue
+        # PyArrow returns ``datetime`` objects for timestamp arrays.
+        out[str(key)] = ts
     return out
 
 
@@ -682,23 +732,38 @@ def existing_keys_for_window(
     if arrow is None or arrow.num_rows == 0:
         return set()
 
-    import pandas as pd
+    # Polars-native window filter — single linear scan, no Pandas DataFrame
+    # construction. Polars accepts heterogenous time inputs (str, np.datetime64,
+    # python datetime) so the upstream callers don't need to pre-coerce.
+    import polars as pl
 
-    pdf = arrow.to_pandas()
-    pdf[time_col] = pd.to_datetime(pdf[time_col], errors="coerce")
-    pdf = pdf.dropna(subset=[time_col])
-    if pdf.empty:
+    df = pl.from_arrow(arrow)
+    if df.height == 0:
         return set()
-    lower = pd.to_datetime(time_min, errors="coerce")
-    upper = pd.to_datetime(time_max, errors="coerce")
-    if pd.isna(lower) or pd.isna(upper):
+    if df.schema[time_col] != pl.Datetime:
+        df = df.with_columns(pl.col(time_col).cast(pl.Datetime, strict=False))
+    df = df.drop_nulls(subset=[time_col])
+    if df.height == 0:
         return set()
-    pdf = pdf[(pdf[time_col] >= lower) & (pdf[time_col] <= upper)]
-    if pdf.empty:
+    try:
+        lower = pl.lit(time_min).cast(pl.Datetime)
+        upper = pl.lit(time_max).cast(pl.Datetime)
+    except Exception:
+        # Pandas Timestamps or strings — let pandas coerce, then Polars consume.
+        import pandas as pd
+
+        lower_ts = pd.to_datetime(time_min, errors="coerce")
+        upper_ts = pd.to_datetime(time_max, errors="coerce")
+        if pd.isna(lower_ts) or pd.isna(upper_ts):
+            return set()
+        lower = pl.lit(lower_ts.to_pydatetime()).cast(pl.Datetime)
+        upper = pl.lit(upper_ts.to_pydatetime()).cast(pl.Datetime)
+    df = df.filter((pl.col(time_col) >= lower) & (pl.col(time_col) <= upper))
+    if df.height == 0:
         return set()
     return {
-        (str(row[0]), row[1])
-        for row in pdf[[group_col, time_col]].itertuples(index=False, name=None)
+        (str(row[group_col]), row[time_col])
+        for row in df.select([group_col, time_col]).iter_rows(named=True)
     }
 
 

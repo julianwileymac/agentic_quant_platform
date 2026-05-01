@@ -4,3 +4,12 @@ metadata:
   name: aqp
   labels:
     app.kubernetes.io/part-of: agentic-quant-platform
+    # Phase 5 (FinOps Governance) — Kyverno require-finops-tags
+    # ClusterPolicy in rpi_kubernetes/kubernetes/policies/finops/ denies
+    # any workload whose namespace metadata lacks these four labels.
+    # The kustomize commonLabels block in this dir's kustomization.yaml
+    # propagates the same values to every resource in the namespace.
+    project: aqp-default
+    cost_center: quant-research-01
+    owner: system-orchestrator
+    data_classification: proprietary-alpha

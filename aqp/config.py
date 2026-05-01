@@ -23,6 +23,14 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    # --- FinOps / Cloud Governance ---
+    # These tags are mandatory for all cloud-deployed resources.
+    # They are used for cost allocation, forecasting, and ROI analysis.
+    project_tag: str = Field(default="aqp-default")
+    cost_center: str = Field(default="quant-research-01")
+    owner: str = Field(default="system-orchestrator")
+    data_classification: str = Field(default="proprietary-alpha")
+
     # --- runtime ---
     env: str = Field(default="dev")
     log_level: str = Field(default="INFO")
@@ -511,6 +519,36 @@ class Settings(BaseSettings):
         if env_name:
             return str(os.environ.get(env_name, "") or "").strip()
         return ""
+
+    def finops_labels(self, **extra: str) -> dict[str, str]:
+        """Return the canonical FinOps tag map for any cloud-bound resource.
+
+        Every Celery dispatch (via the ``before_task_publish`` signal in
+        :mod:`aqp.tasks.celery_app`), Kubernetes pod (via Helm /
+        Kustomize ``commonLabels``), and MLflow run (via
+        :mod:`aqp.mlops.mlflow_client`) calls this helper so the same
+        five keys appear everywhere — making the cost-attribution chain
+        from Grafana panel → cAdvisor pod label → Settings field
+        unbroken.
+
+        Pass ``strategy_id`` / ``agent_run_id`` / ``backtest_id`` etc. as
+        ``**extra`` to enrich the base tags for the specific dispatch.
+        """
+        labels: dict[str, str] = {
+            "project": str(self.project_tag or "aqp-default"),
+            "cost_center": str(self.cost_center or "quant-research-01"),
+            "owner": str(self.owner or "system-orchestrator"),
+            "data_classification": str(self.data_classification or "proprietary-alpha"),
+            "environment": str(self.env or "dev"),
+        }
+        for k, v in extra.items():
+            if v is None:
+                continue
+            sval = str(v).strip()
+            if not sval:
+                continue
+            labels[k] = sval
+        return labels
 
 
 @lru_cache(maxsize=1)

@@ -1,0 +1,28 @@
+model:
+  class: TransformerForecaster
+  module_path: aqp.ml.models.spm.forecasters
+  kwargs:
+    seq_len: 30
+    hidden_size: 64
+    num_layers: 2
+    dropout: 0.1
+    lr: 0.0005
+    epochs: 50
+    batch_size: 32
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 504
+      test_periods: 21
+      step_periods: 21
+dataset_preset: equity_universe_sp500_daily
+features: ["close", "volume"]
+target:
+  class: n_step_return
+  module_path: aqp.data.labels
+  kwargs:
+    n: 5
+mlflow:
+  experiment: spm-transformer

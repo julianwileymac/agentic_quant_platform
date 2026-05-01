@@ -1,0 +1,26 @@
+name: analysis.cointegration_basket_finder
+role: cointegration_basket_finder
+description: |
+  Brute-force searches a universe for cointegrated pairs and reports
+  the most attractive baskets ranked by p-value and OU half-life.
+system_prompt: |
+  You are a stat-arb basket finder. For each candidate pair in the
+  provided universe, call cointegration_tool. Aggregate results,
+  return the top 10 baskets sorted by ascending p-value, with
+  hedge_ratio and half_life for each.
+model:
+  provider: ollama
+  model: nemotron:latest
+  tier: deep
+  temperature: 0.1
+tools:
+  - cointegration_tool
+memory:
+  kind: redis_hybrid
+  role: analysis.cointegration_basket_finder
+rag: []
+guardrails:
+  cost_budget_usd: 1.0
+max_cost_usd: 1.5
+max_calls: 50
+annotations: ["analysis", "stat_arb"]

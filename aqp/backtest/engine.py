@@ -15,6 +15,7 @@ order lifecycle.
 from __future__ import annotations
 
 import logging
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -30,15 +31,26 @@ from aqp.backtest.interrupts import (
     find_first_matching_rule,
 )
 from aqp.backtest.metrics import summarise
-from aqp.core.interfaces import IStrategy
+from aqp.core.interfaces import (
+    IAlphaModel,
+    IExecutionModel,
+    IPortfolioConstructionModel,
+    IRiskManagementModel,
+    IStrategy,
+)
 from aqp.core.registry import register
 from aqp.core.slice import Slice
 from aqp.core.types import (
     BarData,
+    EventType,
+    FillEvent_Msg,
     Interval,
+    MarketEvent,
     OrderEvent,
+    OrderEvent_Msg,
     OrderRequest,
     OrderTicket,
+    SignalEvent,
     Symbol,
     TradeData,
 )
@@ -60,6 +72,11 @@ class BacktestResult:
     end: datetime | None = None
     initial_cash: float = 0.0
     final_equity: float = 0.0
+    # Phase 1: append-only stream of every Event consumed by the engine bus.
+    # Carries enough context (MarketEvent.data, SignalEvent.signals,
+    # OrderEvent_Msg.request, FillEvent_Msg.trade) to fully reconstruct the
+    # run via :func:`aqp.backtest.replay.replay_event_log`.
+    event_log: list[Any] = field(default_factory=list)
 
 
 @register("EventDrivenBacktester")
@@ -215,7 +232,7 @@ class EventDrivenBacktester:
         broker: SimulatedBrokerage,
         request: OrderRequest,
         tickets: dict[str, OrderTicket],
-    ) -> None:
+    ) -> Any:
         order = broker.submit_order(request)
         tickets[order.order_id] = OrderTicket(
             order=order,
@@ -230,6 +247,7 @@ class EventDrivenBacktester:
                 )
             ],
         )
+        return order
 
     def run(self, strategy: IStrategy, bars: pd.DataFrame) -> BacktestResult:
         # Trace the backtest at the entry point so the entire run shows up as a
@@ -252,6 +270,18 @@ class EventDrivenBacktester:
         *,
         span: Any | None = None,
     ) -> BacktestResult:
+        """Drain a ``deque[Event]`` per the Lean-style five-stage flow.
+
+        Per timestamp ``ts`` the engine seeds ``MarketEvent``s for every bar
+        in ``ts``, then drains the queue: each ``MarketEvent`` is fanned out
+        to the strategy which may emit ``Signal`` rows; those are wrapped
+        into a single ``SignalEvent`` per-timestamp and converted into one
+        ``OrderEvent_Msg`` per ``OrderRequest``. The simulated broker fills
+        at the next ``ts``'s open prices and surfaces ``FillEvent_Msg``s
+        which are also drained from the same queue. Every event consumed is
+        appended to ``event_log`` so :func:`aqp.backtest.replay.replay_event_log`
+        can reconstruct the run deterministically.
+        """
         if bars.empty:
             raise ValueError("No bars provided to backtester.")
 
@@ -274,7 +304,10 @@ class EventDrivenBacktester:
         timestamps = frame["timestamp"].unique()
         equity_records: list[tuple[pd.Timestamp, float]] = []
         last_close_prices: dict[str, float] = {}
+        peak_prices: dict[str, float] = {}
         tickets: dict[str, OrderTicket] = {}
+        event_log: list[Any] = []
+        signal_records: list[dict[str, Any]] = []
 
         use_slice_api = hasattr(strategy, "on_data") and callable(
             getattr(strategy, "on_data", None)
@@ -282,81 +315,145 @@ class EventDrivenBacktester:
 
         history_mask = pd.Series(False, index=frame.index)
 
+        # Outer chronological loop drives the queue; each iteration processes
+        # one timestamp's MarketEvents (and the SignalEvent/OrderEvent_Msg/
+        # FillEvent_Msg cascades they trigger) before advancing time.
         for ts in timestamps:
             day_mask = frame["timestamp"] == ts
             history_mask |= day_mask
             day_bars = frame[day_mask]
 
-            open_prices = {row.vt_symbol: float(row.open) for row in day_bars.itertuples()}
+            open_prices = {
+                row.vt_symbol: float(row.open) for row in day_bars.itertuples()
+            }
 
+            queue: deque[Any] = deque()
+
+            # Stage 0: drain pending fills using THIS bar's open prices.
             fills: list[TradeData] = broker.fill_open_orders(open_prices, ts)
-            if fills:
-                logger.debug("[%s] %d fills", ts, len(fills))
-                _apply_fills_to_tickets(tickets, fills, ts)
+            for trade in fills:
+                queue.append(FillEvent_Msg(trade=trade))
+
+            # Stage 1: seed one MarketEvent per (ts, symbol). Order is stable
+            # so deterministic replay reproduces the same handler sequence.
+            ts_pydt = pd.Timestamp(ts).to_pydatetime()
+            bars_by_symbol: dict[str, BarData] = {}
+            for row in day_bars.itertuples():
+                bar = BarData(
+                    symbol=Symbol.parse(row.vt_symbol),
+                    timestamp=row.timestamp.to_pydatetime(),
+                    open=float(row.open),
+                    high=float(row.high),
+                    low=float(row.low),
+                    close=float(row.close),
+                    volume=float(row.volume),
+                    interval=Interval.DAY,
+                )
+                bars_by_symbol[row.vt_symbol] = bar
+                queue.append(MarketEvent(data=bar))
 
             history_view = frame[history_mask]
+            close_prices = {
+                vt: float(b.close) for vt, b in bars_by_symbol.items()
+            }
+            for vt, close in close_prices.items():
+                prev_peak = peak_prices.get(vt, close)
+                peak_prices[vt] = max(prev_peak, close)
             context = {
                 "history": history_view,
                 "equity": broker.equity,
                 "cash": broker.cash,
                 "positions": dict(broker.positions),
-                "prices": {
-                    row.vt_symbol: float(row.close) for row in day_bars.itertuples()
-                },
+                "prices": close_prices,
+                "peak_prices": dict(peak_prices),
                 "drawdown": _current_drawdown(equity_records),
+                "current_time": ts_pydt,
             }
 
-            if use_slice_api:
-                # Single Slice for the whole timestamp — Lean-style dispatch.
-                bars_by_symbol = {
-                    row.vt_symbol: BarData(
-                        symbol=Symbol.parse(row.vt_symbol),
-                        timestamp=row.timestamp.to_pydatetime(),
-                        open=float(row.open),
-                        high=float(row.high),
-                        low=float(row.low),
-                        close=float(row.close),
-                        volume=float(row.volume),
-                        interval=Interval.DAY,
-                    )
-                    for row in day_bars.itertuples()
-                }
+            # The strategy is dispatched once per timestamp — the queue is
+            # the canonical event bus, MarketEvents are just the seed.  This
+            # mirrors Lean's OnFrameworkData ordering: drain MarketEvents
+            # into a single Slice, then run alpha/portfolio/risk/execution.
+            seen_market_events: list[MarketEvent] = []
+            deferred: deque[Any] = deque()
+            while queue:
+                event = queue.popleft()
+                if event.type == EventType.MARKET:
+                    event_log.append(event)
+                    seen_market_events.append(event)
+                elif event.type == EventType.FILL:
+                    event_log.append(event)
+                    _apply_fills_to_tickets(tickets, [event.trade], ts)
+                else:
+                    # Defer Signal / Order events until after the strategy
+                    # has had a chance to emit its own.
+                    deferred.append(event)
+
+            requests: list[OrderRequest] = []
+            if use_slice_api and seen_market_events:
                 slice_ = Slice(
-                    timestamp=pd.Timestamp(ts).to_pydatetime(),
-                    bars=bars_by_symbol,
+                    timestamp=ts_pydt,
+                    bars={
+                        ev.data.symbol.vt_symbol: ev.data
+                        for ev in seen_market_events
+                    },
                 )
                 requests = list(strategy.on_data(slice_, context))
-                requests = self._maybe_interrupt(
-                    requests,
-                    timestamp=pd.Timestamp(ts).to_pydatetime(),
-                    context=context,
-                )
-                for request in requests:
-                    self._submit_order(broker, request, tickets)
-                for row in day_bars.itertuples():
-                    last_close_prices[row.vt_symbol] = float(row.close)
-            else:
-                for row in day_bars.itertuples():
-                    bar = BarData(
-                        symbol=Symbol.parse(row.vt_symbol),
-                        timestamp=row.timestamp.to_pydatetime(),
-                        open=float(row.open),
-                        high=float(row.high),
-                        low=float(row.low),
-                        close=float(row.close),
-                        volume=float(row.volume),
-                        interval=Interval.DAY,
-                    )
-                    requests = list(strategy.on_bar(bar, context))
-                    requests = self._maybe_interrupt(
-                        requests,
-                        timestamp=bar.timestamp,
-                        context=context,
-                    )
-                    for request in requests:
-                        self._submit_order(broker, request, tickets)
-                    last_close_prices[row.vt_symbol] = float(row.close)
+            elif seen_market_events:
+                for ev in seen_market_events:
+                    requests.extend(strategy.on_bar(ev.data, context))
 
+            requests = self._maybe_interrupt(
+                requests,
+                timestamp=ts_pydt,
+                context=context,
+            )
+
+            queue = deferred
+
+            captured_signals: list[Any] = getattr(strategy, "_last_signals", None) or []
+            if captured_signals:
+                queue.append(
+                    SignalEvent(signals=list(captured_signals), timestamp=ts_pydt)
+                )
+                strategy._last_signals = []  # type: ignore[attr-defined]
+
+            for request in requests:
+                queue.append(OrderEvent_Msg(request=request, timestamp=ts_pydt))
+
+            # Drain the cascade.  OrderEvent_Msg → broker.submit_order;
+            # SignalEvent → metadata only (signals already drove requests).
+            # Logging happens after dispatch so the OrderEvent_Msg captures
+            # the broker-assigned ``order_id`` (required by the replay path).
+            while queue:
+                event = queue.popleft()
+                if event.type == EventType.SIGNAL:
+                    event_log.append(event)
+                    for sig in event.signals:
+                        signal_records.append(
+                            {
+                                "timestamp": event.timestamp,
+                                "vt_symbol": sig.symbol.vt_symbol,
+                                "direction": sig.direction.value
+                                if hasattr(sig.direction, "value")
+                                else str(sig.direction),
+                                "strength": float(sig.strength),
+                                "confidence": float(sig.confidence),
+                                "horizon_days": int(sig.horizon_days),
+                                "source": sig.source,
+                            }
+                        )
+                elif event.type == EventType.ORDER:
+                    order = self._submit_order(broker, event.request, tickets)
+                    event.order_id = order.order_id
+                    event_log.append(event)
+                elif event.type == EventType.FILL:
+                    event_log.append(event)
+                    _apply_fills_to_tickets(tickets, [event.trade], ts)
+
+            # End-of-bar accounting (not on the bus — pure broker bookkeeping).
+            for vt, close in close_prices.items():
+                last_close_prices[vt] = close
             broker.mark_to_market(last_close_prices)
             equity_records.append((ts, broker.equity))
 
@@ -396,17 +493,24 @@ class EventDrivenBacktester:
         )
 
         summary = summarise(equity, trades)
+        signals_df = (
+            pd.DataFrame(signal_records)
+            if signal_records
+            else pd.DataFrame()
+        )
 
         return BacktestResult(
             equity_curve=equity,
             trades=trades,
             orders=orders,
+            signals=signals_df,
             tickets=list(tickets.values()),
             summary=summary,
             start=pd.Timestamp(timestamps[0]).to_pydatetime() if len(timestamps) else None,
             end=pd.Timestamp(timestamps[-1]).to_pydatetime() if len(timestamps) else None,
             initial_cash=self.initial_cash,
             final_equity=broker.equity,
+            event_log=event_log,
         )
 
 

@@ -63,6 +63,11 @@ class Strategy(Base):
     created_by = Column(String(120), nullable=False, default="system")
     status = Column(String(32), nullable=False, default="draft")  # draft|backtesting|paper|live|retired
     meta = Column(JSON, default=dict)
+    # Inspiration rehydration metadata (Alembic 0016).
+    source_repo = Column(String(200), nullable=True)
+    source_path = Column(String(1024), nullable=True)
+    category = Column(String(120), nullable=True)
+    extracted_at = Column(DateTime, nullable=True)
 
 
 class BacktestRun(Base):
@@ -178,6 +183,11 @@ class ModelVersion(Base):
     experiment_plan_id = Column(String(36), ForeignKey("experiment_plans.id"), nullable=True, index=True)
     metrics = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    # Inspiration rehydration metadata (Alembic 0016).
+    source_repo = Column(String(200), nullable=True)
+    source_path = Column(String(1024), nullable=True)
+    category = Column(String(120), nullable=True)
+    extracted_at = Column(DateTime, nullable=True)
 
 
 class RLEpisode(Base):

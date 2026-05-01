@@ -1,0 +1,26 @@
+model:
+  class: KerasMLPRegressor
+  module_path: aqp.ml.models.sae.keras_mlp_regressor
+  kwargs:
+    hidden_sizes: [8, 6]
+    dropout: 0.2
+    use_minmax: true
+    seq_len: 1
+    epochs: 50
+    batch_size: 32
+    lr: 0.001
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 252
+      test_periods: 21
+dataset_preset: equity_universe_sp500_daily
+features: ["close", "volume"]
+target:
+  class: next_bar_binary
+  module_path: aqp.data.labels
+  kwargs: {}
+mlflow:
+  experiment: sae-mlp

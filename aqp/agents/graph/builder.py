@@ -1,11 +1,17 @@
 """Graph builders that compose registered :class:`AgentSpec`s.
 
-Three canonical pipelines are exposed:
+Four canonical pipelines are exposed:
 
 - :func:`build_research_graph` — news_miner → equity_researcher → universe_selector.
 - :func:`build_trader_graph` — trader.signal_emitter → analysis.run.
 - :func:`build_full_pipeline_graph` — research → selection → trader →
   analysis (Alpha-GPT three-stage loop).
+- :func:`build_research_debate_graph` — Phase 4 multi-agent consensus:
+  Market Monitor → Quant Generator → Risk Simulator → consensus gate
+  → emit_signal_event (or reject_decision_log). The only node that
+  produces a SignalEvent on the Phase-1 event-driven engine bus is
+  ``emit_signal_event``, and it ONLY runs when the Risk Simulator
+  agent's ``simulation_verdict["approved"]`` is True.
 
 When LangGraph is installed each builder returns a compiled
 ``StateGraph``; when it isn't (or the ``langgraph`` extra is omitted)
@@ -218,6 +224,167 @@ def build_full_pipeline_graph(
     return _maybe_langgraph(nodes, use_langgraph=use_langgraph, checkpointer=checkpointer)
 
 
+def _emit_signal_event_node(state: AgentState) -> AgentState:
+    """Translate the approved Quant-Generator insight into a Signal/SignalEvent.
+
+    This is the ONLY node in any AQP graph that produces a SignalEvent for
+    the Phase-1 event-driven engine. It refuses to emit if the consensus
+    gate has not approved the insight (defence-in-depth — the gate
+    predicate already routes around this node, but we re-check here so a
+    direct-call failure mode also fails closed).
+    """
+    verdict = state.get("simulation_verdict") or {}
+    if not isinstance(verdict, dict) or not bool(verdict.get("approved")):
+        state["consensus_status"] = "rejected"
+        return state
+
+    insight = state.get("proposed_alpha") or {}
+    if not isinstance(insight, dict) or "vt_symbol" not in insight:
+        state["consensus_status"] = "malformed_insight"
+        errs = list(state.get("errors") or [])
+        errs.append("emit_signal_event: malformed proposed_alpha")
+        state["errors"] = errs
+        return state
+
+    try:
+        from datetime import datetime
+
+        from aqp.core.types import Direction, Signal, SignalEvent, Symbol
+
+        direction_str = str(insight.get("direction", "long")).lower()
+        direction = Direction.LONG if direction_str == "long" else Direction.SHORT
+        signal = Signal(
+            symbol=Symbol.parse(insight["vt_symbol"]),
+            strength=float(insight.get("strength", 0.5)),
+            direction=direction,
+            timestamp=datetime.utcnow(),
+            confidence=float(insight.get("confidence", 0.5)),
+            horizon_days=int(insight.get("horizon_days", 1)),
+            source="research_debate",
+            rationale=str(insight.get("rationale", "")),
+        )
+        event = SignalEvent(signals=[signal], timestamp=signal.timestamp)
+        state["signal_event_emitted"] = {
+            "vt_symbol": signal.symbol.vt_symbol,
+            "direction": direction.value,
+            "strength": signal.strength,
+            "confidence": signal.confidence,
+            "horizon_days": signal.horizon_days,
+            "rationale": signal.rationale,
+            "timestamp": str(signal.timestamp),
+            "event_type": event.type.value,
+        }
+        state["consensus_status"] = "approved_emitted"
+        # Mirror to the trader_signal slot so existing downstream consumers
+        # (decision log, audit dashboards) see the same shape they're used to.
+        state["trader_signal"] = state["signal_event_emitted"]
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("emit_signal_event failed")
+        errs = list(state.get("errors") or [])
+        errs.append(f"emit_signal_event: {exc}")
+        state["errors"] = errs
+        state["consensus_status"] = "emit_failed"
+    return state
+
+
+def _reject_decision_log_node(state: AgentState) -> AgentState:
+    """Record a rejection on the decision log and short-circuit the graph.
+
+    Carries enough rationale that the next loop's Quant Generator can
+    incorporate the rejection feedback (e.g. "lower confidence next time
+    because tvar_95 was 0.12, max 0.10").
+    """
+    state["consensus_status"] = "rejected"
+    state["signal_event_emitted"] = {}
+    verdict = state.get("simulation_verdict") or {}
+    insight = state.get("proposed_alpha") or {}
+    rationale = "no verdict"
+    if isinstance(verdict, dict):
+        rationale = str(verdict.get("rationale", "no rationale"))[:500]
+    if isinstance(insight, dict) and insight.get("vt_symbol"):
+        try:
+            append_pending_decision(
+                run_id=state.get("run_id") or "",
+                spec_name="research.risk_simulator",
+                vt_symbol=str(insight.get("vt_symbol", "")),
+                as_of=state.get("as_of") or datetime.utcnow().isoformat(),
+                decision={
+                    "approved": False,
+                    "consensus_status": "rejected",
+                    "rationale": rationale,
+                    "insight": insight,
+                    "verdict": verdict,
+                },
+            )
+        except Exception:  # noqa: BLE001
+            logger.debug("reject_decision_log: append failed", exc_info=True)
+    return state
+
+
+def build_research_debate_graph(
+    *,
+    use_langgraph: bool | None = None,
+    checkpointer: RedisCheckpointer | None = None,
+):
+    """Multi-agent consensus pipeline: monitor → generator → simulator → gate.
+
+    State flow (slots in :class:`AgentState`):
+
+    - ``regime_report``      ← ``research.market_monitor``
+    - ``proposed_alpha``     ← ``research.quant_generator``
+    - ``simulation_verdict`` ← ``research.risk_simulator``
+    - ``signal_event_emitted`` ← ``emit_signal_event`` (only when approved)
+    - ``consensus_status``   ← either ``"approved_emitted"`` or ``"rejected"``
+
+    The LangGraph build wires a conditional edge after the Risk Simulator
+    that routes to ``emit_signal_event`` only when
+    :func:`risk_simulator_approves` returns ``"emit_signal_event"``;
+    otherwise the graph short-circuits to ``reject_decision_log`` so the
+    Phase-1 engine never sees an unverified insight.
+
+    When LangGraph isn't installed the :class:`SequentialGraph` fallback
+    runs every node in order — the conditional gate is implemented inside
+    ``_emit_signal_event_node`` itself (it no-ops when the verdict isn't
+    approved), so the same approval semantics hold.
+    """
+    nodes: list[tuple[str, NodeFn]] = [
+        ("market_monitor", _agent_node("research.market_monitor", output_slot="regime_report")),
+        ("quant_generator", _agent_node("research.quant_generator", output_slot="proposed_alpha")),
+        ("risk_simulator", _agent_node("research.risk_simulator", output_slot="simulation_verdict")),
+        ("emit_signal_event", _emit_signal_event_node),
+        ("reject_decision_log", _reject_decision_log_node),
+    ]
+    if use_langgraph is False:
+        return SequentialGraph(nodes, checkpointer=checkpointer)
+    try:
+        from langgraph.graph import END, START, StateGraph  # type: ignore[import-not-found]
+
+        from aqp.agents.graph.conditions import risk_simulator_approves
+    except Exception:  # pragma: no cover
+        return SequentialGraph(nodes, checkpointer=checkpointer)
+    graph = StateGraph(dict)
+    for name, fn in nodes:
+        graph.add_node(name, fn)
+    graph.add_edge(START, "market_monitor")
+    graph.add_edge("market_monitor", "quant_generator")
+    graph.add_edge("quant_generator", "risk_simulator")
+    graph.add_conditional_edges(
+        "risk_simulator",
+        risk_simulator_approves,
+        {
+            "emit_signal_event": "emit_signal_event",
+            "reject_decision_log": "reject_decision_log",
+        },
+    )
+    graph.add_edge("emit_signal_event", END)
+    graph.add_edge("reject_decision_log", END)
+    try:
+        compiled = graph.compile(checkpointer=checkpointer if checkpointer else None)
+    except TypeError:
+        compiled = graph.compile()
+    return compiled
+
+
 # ---------------------------------------------------------------------- LangGraph wiring (optional)
 def _maybe_langgraph(
     nodes: list[tuple[str, NodeFn]],
@@ -247,9 +414,65 @@ def _maybe_langgraph(
     return compiled
 
 
+def build_quant_research_pipeline_graph(
+    *,
+    use_langgraph: bool | None = None,
+    checkpointer: RedisCheckpointer | None = None,
+):
+    """Composite quant-research pipeline using the new rehydrated agents.
+
+    Sequence:
+    1. ``research.composite_voter`` — multi-indicator consensus.
+    2. ``research.regime_analyst`` — ADX trend/range gate.
+    3. ``research.cointegration_analyst`` — pair candidate analysis.
+    4. ``research.risk_simulator`` — existing risk gate.
+    5. Conditional emit (only when risk simulator approves).
+    """
+    nodes: list[tuple[str, NodeFn]] = [
+        ("composite_voter", _agent_node("research.composite_voter", output_slot="vote_report")),
+        ("regime_analyst", _agent_node("research.regime_analyst", output_slot="regime_report")),
+        ("cointegration_analyst", _agent_node("research.cointegration_analyst", output_slot="cointegration_report")),
+        ("risk_simulator", _agent_node("research.risk_simulator", output_slot="simulation_verdict")),
+        ("emit_signal_event", _emit_signal_event_node),
+        ("reject_decision_log", _reject_decision_log_node),
+    ]
+    if use_langgraph is False:
+        return SequentialGraph(nodes, checkpointer=checkpointer)
+    try:
+        from langgraph.graph import END, START, StateGraph  # type: ignore[import-not-found]
+
+        from aqp.agents.graph.conditions import risk_simulator_approves
+    except Exception:  # pragma: no cover
+        return SequentialGraph(nodes, checkpointer=checkpointer)
+    graph = StateGraph(dict)
+    for name, fn in nodes:
+        graph.add_node(name, fn)
+    graph.add_edge(START, "composite_voter")
+    graph.add_edge("composite_voter", "regime_analyst")
+    graph.add_edge("regime_analyst", "cointegration_analyst")
+    graph.add_edge("cointegration_analyst", "risk_simulator")
+    graph.add_conditional_edges(
+        "risk_simulator",
+        risk_simulator_approves,
+        {
+            "emit_signal_event": "emit_signal_event",
+            "reject_decision_log": "reject_decision_log",
+        },
+    )
+    graph.add_edge("emit_signal_event", END)
+    graph.add_edge("reject_decision_log", END)
+    try:
+        compiled = graph.compile(checkpointer=checkpointer if checkpointer else None)
+    except TypeError:
+        compiled = graph.compile()
+    return compiled
+
+
 __all__ = [
     "SequentialGraph",
     "build_full_pipeline_graph",
+    "build_quant_research_pipeline_graph",
+    "build_research_debate_graph",
     "build_research_graph",
     "build_trader_graph",
 ]

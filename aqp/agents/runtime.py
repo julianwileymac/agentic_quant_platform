@@ -409,46 +409,273 @@ class AgentRuntime:
             {"role": "user", "content": user_prompt},
         ]
 
+    # ----------------------------------------------------------------- tools
+    _MAX_TOOL_TURNS = 5
+
+    def _resolve_tools(self) -> list[Any]:
+        """Materialise the spec's declared tools through TOOL_REGISTRY.
+
+        The spec carries declarative ``ToolRef`` objects only; the runtime
+        instantiates them lazily so a missing optional dep (crewai, pyiceberg,
+        etc.) doesn't blow up at module import time. Cached on ``self._tool_cache``
+        per-run so successive ``_invoke_llm`` turns reuse the same instances.
+        """
+        if self._tool_cache:
+            return list(self._tool_cache.values())
+        if not self.spec.tools:
+            return []
+        try:
+            from aqp.agents.tools import TOOL_REGISTRY
+        except Exception:
+            logger.debug("tool registry unavailable; running tool-less", exc_info=True)
+            return []
+        resolved: list[Any] = []
+        for ref in self.spec.tools:
+            cls = TOOL_REGISTRY.get(ref.name)
+            if cls is None:
+                logger.warning("AgentRuntime: skipping unknown tool '%s'", ref.name)
+                continue
+            try:
+                inst = cls(**(ref.kwargs or {}))
+            except Exception:
+                logger.exception("AgentRuntime: tool %s instantiation failed", ref.name)
+                continue
+            self._tool_cache[ref.name] = inst
+            resolved.append(inst)
+        return resolved
+
+    @staticmethod
+    def _tool_to_openai_schema(tool: Any) -> dict[str, Any]:
+        """Convert a :class:`crewai.tools.BaseTool` to the OpenAI tool schema.
+
+        ``router_complete`` forwards ``tools=`` straight to LiteLLM which
+        expects the OpenAI ``{"type":"function","function":{...}}`` shape.
+        """
+        params: dict[str, Any] = {"type": "object", "properties": {}}
+        try:
+            schema_cls = getattr(tool, "args_schema", None)
+            if schema_cls is not None:
+                schema = schema_cls.model_json_schema()
+                params = {
+                    "type": schema.get("type", "object"),
+                    "properties": schema.get("properties", {}),
+                    "required": schema.get("required", []),
+                }
+        except Exception:
+            logger.debug("tool schema introspection failed", exc_info=True)
+        return {
+            "type": "function",
+            "function": {
+                "name": getattr(tool, "name", type(tool).__name__),
+                "description": getattr(tool, "description", "") or "",
+                "parameters": params,
+            },
+        }
+
+    @staticmethod
+    def _extract_tool_calls(res: Any) -> list[dict[str, Any]]:
+        """Pull tool-call entries off a router_complete LLMResult.
+
+        Handles both the OpenAI-style nested dict response and the LiteLLM
+        ModelResponse object that exposes attributes via ``__getitem__``.
+        Returns ``[]`` when the model didn't request a tool.
+        """
+        raw = getattr(res, "raw", None)
+        if raw is None:
+            return []
+        try:
+            choice = raw["choices"][0]
+            msg = choice.get("message", choice) if isinstance(choice, dict) else choice["message"]
+            tool_calls = (
+                msg.get("tool_calls") if isinstance(msg, dict) else getattr(msg, "tool_calls", None)
+            )
+        except (KeyError, IndexError, TypeError, AttributeError):
+            return []
+        if not tool_calls:
+            return []
+        out: list[dict[str, Any]] = []
+        for call in tool_calls:
+            if isinstance(call, dict):
+                fn = call.get("function") or {}
+                out.append(
+                    {
+                        "id": call.get("id", ""),
+                        "name": fn.get("name") or call.get("name") or "",
+                        "arguments_json": fn.get("arguments") or call.get("arguments") or "{}",
+                    }
+                )
+            else:
+                fn = getattr(call, "function", None)
+                out.append(
+                    {
+                        "id": getattr(call, "id", ""),
+                        "name": getattr(fn, "name", "") if fn else "",
+                        "arguments_json": getattr(fn, "arguments", "{}") if fn else "{}",
+                    }
+                )
+        return out
+
+    def _execute_tool_call(self, tool: Any, arguments: dict[str, Any]) -> str:
+        """Run ``tool._run(**arguments)`` and stringify the result.
+
+        Catches every exception so a misbehaving tool can never crash the
+        runtime — the error message goes back to the LLM as the tool result
+        so it can recover (or surrender via the guardrail).
+        """
+        try:
+            result = tool._run(**arguments)
+        except TypeError:
+            # Pydantic-validated kwargs may include keys the underlying _run
+            # doesn't expect (e.g. when the schema field has a default).
+            result = tool._run(**{k: v for k, v in arguments.items() if v is not None})
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("tool %s raised", getattr(tool, "name", type(tool).__name__))
+            return json.dumps({"error": str(exc)})
+        if isinstance(result, str):
+            return result
+        try:
+            return json.dumps(result, default=str)
+        except Exception:  # noqa: BLE001
+            return str(result)
+
     def _invoke_llm(self, messages: list[dict[str, str]]) -> Any:
-        start = time.perf_counter()
+        """Drive a tool-call loop up to :attr:`_MAX_TOOL_TURNS` rounds.
+
+        On every iteration:
+
+        1. Call ``router_complete`` with the spec's ``tools=`` advertised.
+        2. If the model returns ``tool_calls`` and we still have budget,
+           execute each tool, append the assistant + tool messages, and
+           loop. Otherwise return the final ``LLMResult``.
+
+        Tools are advertised only when the spec actually declares some, so
+        cheap models without tool-call support stay on the original
+        zero-arg path.
+        """
         provider = self.spec.model.provider or settings.llm_provider
         model = self.spec.model.model or (
             settings.llm_quick_model if self.spec.model.tier == "quick" else settings.llm_deep_model
         )
-        try:
-            res = router_complete(
-                provider=provider,
-                model=model,
-                messages=messages,
-                temperature=self.spec.model.temperature,
-                max_tokens=self.spec.model.max_tokens,
-                tier=self.spec.model.tier,
-                **self.spec.model.extras,
-            )
-        except Exception as exc:  # noqa: BLE001
-            self._add_step(
-                kind="llm",
-                name=f"{provider}:{model}",
-                inputs={"messages": messages[-2:]},
-                output={},
-                duration_ms=(time.perf_counter() - start) * 1000.0,
-                error=str(exc),
-            )
-            raise
-        self._calls += 1
-        self._cost += float(getattr(res, "cost_usd", 0.0) or 0.0)
-        self._add_step(
-            kind="llm",
-            name=f"{provider}:{model}",
-            inputs={"messages": messages[-2:]},
-            output={
-                "content": (getattr(res, "content", "") or "")[:8000],
-                "tokens": int(getattr(res, "total_tokens", 0) or 0),
-            },
-            cost_usd=float(getattr(res, "cost_usd", 0.0) or 0.0),
-            duration_ms=(time.perf_counter() - start) * 1000.0,
-        )
-        return res
+        tools = self._resolve_tools()
+        tool_schemas = [self._tool_to_openai_schema(t) for t in tools] if tools else None
+        tool_lookup = {getattr(t, "name", type(t).__name__): t for t in tools}
+        working: list[dict[str, Any]] = list(messages)
+        last_result: Any = None
+        for turn in range(self._MAX_TOOL_TURNS + 1):
+            start = time.perf_counter()
+            try:
+                res = router_complete(
+                    provider=provider,
+                    model=model,
+                    messages=working,
+                    temperature=self.spec.model.temperature,
+                    max_tokens=self.spec.model.max_tokens,
+                    tier=self.spec.model.tier,
+                    tools=tool_schemas,
+                    **self.spec.model.extras,
+                )
+            except Exception as exc:  # noqa: BLE001
+                self._add_step(
+                    kind="llm",
+                    name=f"{provider}:{model}",
+                    inputs={"messages": working[-2:], "turn": turn},
+                    output={},
+                    duration_ms=(time.perf_counter() - start) * 1000.0,
+                    error=str(exc),
+                )
+                raise
+            self._calls += 1
+            self._cost += float(getattr(res, "cost_usd", 0.0) or 0.0)
+            last_result = res
+
+            # Cost-cap check inside the tool loop so a runaway debate can't
+            # blow past ``cost_budget_usd``.
+            if (
+                self.spec.guardrails.cost_budget_usd > 0
+                and self._cost > self.spec.guardrails.cost_budget_usd
+            ):
+                self._add_step(
+                    kind="llm",
+                    name=f"{provider}:{model}",
+                    inputs={"messages": working[-2:], "turn": turn},
+                    output={"content": (getattr(res, "content", "") or "")[:1000]},
+                    cost_usd=float(getattr(res, "cost_usd", 0.0) or 0.0),
+                    duration_ms=(time.perf_counter() - start) * 1000.0,
+                    error="cost budget exceeded mid-tool-loop",
+                )
+                raise GuardrailViolation(
+                    f"Cost {self._cost:.4f} exceeded budget {self.spec.guardrails.cost_budget_usd:.4f}"
+                )
+
+            calls = self._extract_tool_calls(res) if tool_schemas else []
+            if not calls or turn == self._MAX_TOOL_TURNS:
+                # Terminal response — log and return.
+                self._add_step(
+                    kind="llm",
+                    name=f"{provider}:{model}",
+                    inputs={"messages": working[-2:], "turn": turn},
+                    output={
+                        "content": (getattr(res, "content", "") or "")[:8000],
+                        "tokens": int(getattr(res, "total_tokens", 0) or 0),
+                        "tool_calls": len(calls),
+                    },
+                    cost_usd=float(getattr(res, "cost_usd", 0.0) or 0.0),
+                    duration_ms=(time.perf_counter() - start) * 1000.0,
+                )
+                return res
+
+            # Append the assistant turn that requested tools so the model
+            # sees its own tool_call ids in the next round.
+            assistant_msg = {
+                "role": "assistant",
+                "content": getattr(res, "content", "") or "",
+                "tool_calls": [
+                    {
+                        "id": c["id"],
+                        "type": "function",
+                        "function": {
+                            "name": c["name"],
+                            "arguments": c["arguments_json"],
+                        },
+                    }
+                    for c in calls
+                ],
+            }
+            working.append(assistant_msg)
+
+            # Execute every requested tool and feed the results back as
+            # ``tool``-role messages.
+            for call in calls:
+                self._tool_calls += 1
+                tool = tool_lookup.get(call["name"])
+                if tool is None:
+                    tool_payload = json.dumps(
+                        {"error": f"unknown tool {call['name']!r}"}
+                    )
+                else:
+                    try:
+                        args = json.loads(call.get("arguments_json") or "{}")
+                    except json.JSONDecodeError:
+                        args = {}
+                    tool_payload = self._execute_tool_call(tool, args)
+                self._add_step(
+                    kind="tool",
+                    name=call["name"],
+                    inputs={"arguments": call.get("arguments_json", "")},
+                    output={"result": tool_payload[:4000]},
+                    duration_ms=0.0,
+                )
+                working.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call["id"],
+                        "content": tool_payload,
+                    }
+                )
+
+        # Defensive: should never fall through (return inside loop), but keep
+        # mypy happy and handle the impossible.
+        return last_result
 
     def _parse_output(self, llm_result: Any) -> dict[str, Any]:
         text = (getattr(llm_result, "content", "") or "").strip()

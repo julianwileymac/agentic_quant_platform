@@ -648,6 +648,77 @@ class AccountData:
 # ---------------------------------------------------------------------------
 
 
+class EventType(StrEnum):
+    MARKET = "MARKET"
+    SIGNAL = "SIGNAL"
+    ORDER = "ORDER"
+    FILL = "FILL"
+
+
+@dataclass
+class Event:
+    """Base event for the central engine queue."""
+    timestamp: datetime
+    type: EventType
+
+
+@dataclass
+class MarketEvent(Event):
+    """Encapsulates a market data update (Bar or Tick)."""
+    data: BarData | TickData | QuoteBar
+
+    def __init__(self, data: BarData | TickData | QuoteBar):
+        self.timestamp = data.timestamp if hasattr(data, "timestamp") else datetime.utcnow()
+        self.type = EventType.MARKET
+        self.data = data
+
+
+@dataclass
+class SignalEvent(Event):
+    """Emitted by an Alpha model when it has an Insight."""
+    signals: list[Signal]
+
+    def __init__(self, signals: list[Signal], timestamp: datetime | None = None):
+        self.timestamp = timestamp or (signals[0].timestamp if signals else datetime.utcnow())
+        self.type = EventType.SIGNAL
+        self.signals = signals
+
+
+@dataclass
+class OrderEvent_Msg(Event):  # Renamed slightly to avoid clash with existing OrderEvent (which is a state change)
+    """Emitted by the execution layer to request an order.
+
+    ``order_id`` is populated by the broker after :meth:`IBrokerage.submit_order`
+    and surfaces here so the event log carries enough state for
+    :func:`aqp.backtest.replay.replay_event_log` to correlate downstream
+    ``FillEvent_Msg`` rows back to their originating order.
+    """
+    request: OrderRequest
+    order_id: str | None = None
+
+    def __init__(
+        self,
+        request: OrderRequest,
+        timestamp: datetime | None = None,
+        order_id: str | None = None,
+    ):
+        self.timestamp = timestamp or datetime.utcnow()
+        self.type = EventType.ORDER
+        self.request = request
+        self.order_id = order_id
+
+
+@dataclass
+class FillEvent_Msg(Event):
+    """Emitted by the brokerage when a trade occurs."""
+    trade: TradeData
+
+    def __init__(self, trade: TradeData, timestamp: datetime | None = None):
+        self.timestamp = timestamp or trade.timestamp
+        self.type = EventType.FILL
+        self.trade = trade
+
+
 @dataclass
 class Signal:
     """Alpha-level intent before portfolio construction (Lean ``Insight``)."""

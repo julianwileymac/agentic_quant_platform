@@ -30,6 +30,30 @@ runtime; both register routes under `/agents/*` in the FastAPI gateway.
 | Trader | `trader.signal_emitter` | [docs/trader-agents.md](trader-agents.md) |
 | Analysis | `analysis.step`, `analysis.run`, `analysis.portfolio` (+ reflector) | [docs/analysis-agents.md](analysis-agents.md) |
 
+## Inspiration-rehydration personas (Phase 2026-04-29)
+
+Nine new spec-driven agents added by the rehydration. Each ships as a
+YAML in [configs/agents/](../configs/agents/) and uses one or more of
+the new analytics tools in [aqp/agents/tools/analytics_tools.py](../aqp/agents/tools/analytics_tools.py).
+
+| Spec name | Role | Tools |
+| --- | --- | --- |
+| `research.regime_analyst` | ADX trend/range gate | `regime_classifier_tool`, `historical_volatility` |
+| `research.composite_voter` | TradFi-style indicator consensus | `multi_indicator_vote_tool` |
+| `research.basis_momentum_analyst` | Commodity basis screening | `factor_screen_tool`, `realised_vol_tool` |
+| `research.cointegration_analyst` | Pair stat-arb | `cointegration_tool`, `historical_volatility` |
+| `research.intraday_momentum_analyst` | Gao 2018 intraday plays | `realised_vol_tool`, `regime_classifier_tool` |
+| `selection.cross_asset_skew_screener` | Cross-asset skew factor | `factor_screen_tool` |
+| `analysis.queue_position_analyst` | HFT metric explainer | `hft_metrics_tool` |
+| `analysis.cointegration_basket_finder` | Universe-wide pair search | `cointegration_tool` |
+| `research.options_greeks_explainer` | Bachelier + inverse Greeks | `option_greeks_tool`, `option_spread_tool` |
+
+Composite pipeline: see
+[aqp/agents/graph/builder.py::build_quant_research_pipeline_graph](../aqp/agents/graph/builder.py)
+which chains `composite_voter → regime_analyst → cointegration_analyst →
+risk_simulator → emit_signal_event/reject_decision_log` with the
+existing risk-simulator approval gate.
+
 ## Run lifecycle
 
 ```mermaid
