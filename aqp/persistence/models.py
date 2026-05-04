@@ -28,7 +28,16 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
-class Session(Base):
+# Tenancy mixins live in their own module to avoid circular imports;
+# every ORM file in this package imports them from the shared shim below.
+from aqp.persistence._tenancy_mixins import (  # noqa: E402
+    LabScopedMixin,
+    ProjectScopedMixin,
+    TenantOwnedMixin,
+)
+
+
+class Session(Base, TenantOwnedMixin):
     __tablename__ = "sessions"
     id = Column(String(36), primary_key=True, default=_uuid)
     user = Column(String(120), nullable=False, default="local")
@@ -41,7 +50,7 @@ class Session(Base):
     agent_runs = relationship("AgentRun", back_populates="session", cascade="all,delete")
 
 
-class ChatMessage(Base):
+class ChatMessage(Base, TenantOwnedMixin):
     __tablename__ = "chat_messages"
     id = Column(String(36), primary_key=True, default=_uuid)
     session_id = Column(String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False)
@@ -53,7 +62,7 @@ class ChatMessage(Base):
     session = relationship("Session", back_populates="messages")
 
 
-class Strategy(Base):
+class Strategy(Base, ProjectScopedMixin):
     __tablename__ = "strategies"
     id = Column(String(36), primary_key=True, default=_uuid)
     name = Column(String(120), nullable=False)
@@ -70,7 +79,7 @@ class Strategy(Base):
     extracted_at = Column(DateTime, nullable=True)
 
 
-class BacktestRun(Base):
+class BacktestRun(Base, ProjectScopedMixin):
     __tablename__ = "backtest_runs"
     id = Column(String(36), primary_key=True, default=_uuid)
     strategy_id = Column(String(36), ForeignKey("strategies.id"), nullable=True)
@@ -90,9 +99,35 @@ class BacktestRun(Base):
     completed_at = Column(DateTime, nullable=True)
     metrics = Column(JSON, default=dict)
     error = Column(Text, nullable=True)
+    # Alembic 0025 — link a backtest back to the ML model + run that produced
+    # the alpha. All four FKs are nullable so legacy rows remain valid.
+    model_version_id = Column(
+        String(36),
+        ForeignKey("model_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    ml_experiment_run_id = Column(
+        String(36),
+        ForeignKey("ml_experiment_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    experiment_plan_id = Column(
+        String(36),
+        ForeignKey("experiment_plans.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    model_deployment_id = Column(
+        String(36),
+        ForeignKey("model_deployments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
 
-class SignalEntry(Base):
+class SignalEntry(Base, ProjectScopedMixin):
     __tablename__ = "signals"
     id = Column(String(36), primary_key=True, default=_uuid)
     strategy_id = Column(String(36), ForeignKey("strategies.id"), nullable=True)
@@ -107,7 +142,7 @@ class SignalEntry(Base):
     __table_args__ = (Index("ix_signals_symbol_ts", "vt_symbol", "created_at"),)
 
 
-class OrderRecord(Base):
+class OrderRecord(Base, ProjectScopedMixin):
     __tablename__ = "orders"
     id = Column(String(36), primary_key=True, default=_uuid)
     backtest_id = Column(String(36), ForeignKey("backtest_runs.id"), nullable=True)
@@ -122,7 +157,7 @@ class OrderRecord(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
-class Fill(Base):
+class Fill(Base, ProjectScopedMixin):
     __tablename__ = "fills"
     id = Column(String(36), primary_key=True, default=_uuid)
     order_id = Column(String(36), ForeignKey("orders.id"), nullable=True)
@@ -135,7 +170,7 @@ class Fill(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
-class LedgerEntry(Base):
+class LedgerEntry(Base, ProjectScopedMixin):
     """The canonical Execution Ledger — every action, fill, and risk event."""
 
     __tablename__ = "ledger_entries"
@@ -151,7 +186,7 @@ class LedgerEntry(Base):
     __table_args__ = (Index("ix_ledger_type_ts", "entry_type", "created_at"),)
 
 
-class AgentRun(Base):
+class AgentRun(Base, ProjectScopedMixin):
     __tablename__ = "agent_runs"
     id = Column(String(36), primary_key=True, default=_uuid)
     session_id = Column(String(36), ForeignKey("sessions.id"), nullable=True)
@@ -169,7 +204,7 @@ class AgentRun(Base):
     session = relationship("Session", back_populates="agent_runs")
 
 
-class ModelVersion(Base):
+class ModelVersion(Base, ProjectScopedMixin):
     __tablename__ = "model_versions"
     id = Column(String(36), primary_key=True, default=_uuid)
     registry_name = Column(String(120), nullable=False, index=True)
@@ -190,7 +225,152 @@ class ModelVersion(Base):
     extracted_at = Column(DateTime, nullable=True)
 
 
-class RLEpisode(Base):
+class MLExperimentRun(Base, ProjectScopedMixin):
+    """One executable ML experiment or interactive test run."""
+
+    __tablename__ = "ml_experiment_runs"
+    id = Column(String(36), primary_key=True, default=_uuid)
+    task_id = Column(String(120), nullable=True, index=True)
+    run_name = Column(String(240), nullable=False, default="ml-experiment")
+    experiment_type = Column(String(40), nullable=False, default="alpha", index=True)
+    status = Column(String(32), nullable=False, default="queued", index=True)
+    framework = Column(String(80), nullable=True, index=True)
+    model_class = Column(String(120), nullable=True, index=True)
+    model_version_id = Column(String(36), ForeignKey("model_versions.id"), nullable=True, index=True)
+    experiment_plan_id = Column(String(36), ForeignKey("experiment_plans.id"), nullable=True, index=True)
+    dataset_version_id = Column(String(36), ForeignKey("dataset_versions.id"), nullable=True, index=True)
+    split_plan_id = Column(String(36), ForeignKey("split_plans.id"), nullable=True, index=True)
+    pipeline_recipe_id = Column(String(36), ForeignKey("pipeline_recipes.id"), nullable=True, index=True)
+    dataset_hash = Column(String(64), nullable=True, index=True)
+    mlflow_run_id = Column(String(120), nullable=True, index=True)
+    params = Column(JSON, default=dict)
+    metrics = Column(JSON, default=dict)
+    artifacts = Column(JSON, default=dict)
+    prediction_sample = Column(JSON, default=list)
+    error = Column(Text, nullable=True)
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    model_version = relationship("ModelVersion")
+    experiment_plan = relationship("ExperimentPlan")
+    dataset_version = relationship("DatasetVersion")
+    split_plan = relationship("SplitPlan")
+    pipeline_recipe = relationship("PipelineRecipe")
+
+    __table_args__ = (
+        Index("ix_ml_experiment_runs_type_status", "experiment_type", "status"),
+        Index("ix_ml_experiment_runs_model_created", "model_class", "created_at"),
+    )
+
+
+class MLAlphaBacktestRun(Base, ProjectScopedMixin):
+    """Combined experiment row joining ML training to a downstream backtest.
+
+    An ``MLAlphaBacktestRun`` is the unit of work for the
+    ``AlphaBacktestExperiment`` orchestrator: it trains a model
+    (``ml_experiment_run_id``), registers a ``ModelVersion``
+    (``model_version_id``), wires that version into a strategy via a
+    ``ModelDeployment`` (``model_deployment_id``), and runs a backtest
+    (``backtest_run_id``). The combined ML and trading metrics are stored
+    here under one MLflow parent run (``mlflow_run_id``).
+    """
+
+    __tablename__ = "ml_alpha_backtest_runs"
+    id = Column(String(36), primary_key=True, default=_uuid)
+    task_id = Column(String(120), nullable=True, index=True)
+    run_name = Column(
+        String(240), nullable=False, default="alpha-backtest", index=True
+    )
+    status = Column(String(32), nullable=False, default="queued", index=True)
+    ml_experiment_run_id = Column(
+        String(36),
+        ForeignKey("ml_experiment_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    backtest_run_id = Column(
+        String(36),
+        ForeignKey("backtest_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    model_version_id = Column(
+        String(36),
+        ForeignKey("model_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    model_deployment_id = Column(
+        String(36),
+        ForeignKey("model_deployments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    experiment_plan_id = Column(
+        String(36),
+        ForeignKey("experiment_plans.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    mlflow_run_id = Column(String(120), nullable=True, index=True)
+    dataset_hash = Column(String(64), nullable=True, index=True)
+    ml_metrics = Column(JSON, default=dict)
+    trading_metrics = Column(JSON, default=dict)
+    combined_metrics = Column(JSON, default=dict)
+    attribution = Column(JSON, default=dict)
+    params = Column(JSON, default=dict)
+    error = Column(Text, nullable=True)
+    started_at = Column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True
+    )
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    ml_experiment_run = relationship("MLExperimentRun")
+    backtest_run = relationship("BacktestRun")
+    model_version = relationship("ModelVersion")
+    model_deployment = relationship("ModelDeployment")
+    experiment_plan = relationship("ExperimentPlan")
+
+
+class MLPredictionAudit(Base, ProjectScopedMixin):
+    """Per-bar prediction sample for an alpha-backtest run.
+
+    Opt-in via ``settings.ml_prediction_audit_enabled``. Capped (default
+    1000 rows per run) to keep the table small; full prediction history
+    lives in MLflow artifacts and Iceberg.
+    """
+
+    __tablename__ = "ml_prediction_audit"
+    id = Column(String(36), primary_key=True, default=_uuid)
+    alpha_backtest_run_id = Column(
+        String(36),
+        ForeignKey("ml_alpha_backtest_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    vt_symbol = Column(String(40), nullable=False, index=True)
+    ts = Column(DateTime, nullable=False, index=True)
+    prediction = Column(Float, nullable=False)
+    label = Column(Float, nullable=True)
+    position_after = Column(Float, nullable=True)
+    pnl_after_bar = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    alpha_backtest_run = relationship("MLAlphaBacktestRun")
+
+    __table_args__ = (
+        Index("ix_ml_prediction_audit_run_ts", "alpha_backtest_run_id", "ts"),
+        Index(
+            "ix_ml_prediction_audit_run_symbol",
+            "alpha_backtest_run_id",
+            "vt_symbol",
+        ),
+    )
+
+
+class RLEpisode(Base, ProjectScopedMixin):
     """Snapshot of a single RL training episode for dashboards."""
 
     __tablename__ = "rl_episodes"
@@ -203,7 +383,7 @@ class RLEpisode(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
-class StrategyVersion(Base):
+class StrategyVersion(Base, ProjectScopedMixin):
     """Immutable YAML snapshot of a strategy at a point in time."""
 
     __tablename__ = "strategy_versions"
@@ -221,7 +401,7 @@ class StrategyVersion(Base):
     )
 
 
-class StrategyTest(Base):
+class StrategyTest(Base, ProjectScopedMixin):
     """A test run of a strategy version against a specific window."""
 
     __tablename__ = "strategy_tests"
@@ -243,7 +423,7 @@ class StrategyTest(Base):
     engine = Column(String(64), nullable=True)
 
 
-class OptimizationRun(Base):
+class OptimizationRun(Base, ProjectScopedMixin):
     """Parent record for a parameter-sweep backtest job.
 
     The individual trials live in :class:`OptimizationTrial`. We keep metadata
@@ -272,7 +452,7 @@ class OptimizationRun(Base):
     error = Column(Text, nullable=True)
 
 
-class OptimizationTrial(Base):
+class OptimizationTrial(Base, ProjectScopedMixin):
     """Single parameter draw + backtest outcome inside an ``OptimizationRun``."""
 
     __tablename__ = "optimization_trials"
@@ -293,7 +473,7 @@ class OptimizationTrial(Base):
     completed_at = Column(DateTime, nullable=True)
 
 
-class CrewRun(Base):
+class CrewRun(Base, ProjectScopedMixin):
     """Lightweight index of agent-crew runs.
 
     ``AgentRun`` already stores the result payload but is keyed on
@@ -323,7 +503,7 @@ class CrewRun(Base):
     cost_usd = Column(Float, nullable=False, default=0.0)
 
 
-class PaperTradingRun(Base):
+class PaperTradingRun(Base, ProjectScopedMixin):
     """One row per paper / live trading session.
 
     Orders, fills, and ledger entries already live in their own tables and
@@ -411,7 +591,7 @@ class Instrument(Base):
     }
 
 
-class DatasetCatalog(Base):
+class DatasetCatalog(Base, ProjectScopedMixin):
     """Logical dataset descriptor (provider/domain/schema family)."""
 
     __tablename__ = "dataset_catalogs"
@@ -448,7 +628,7 @@ class DatasetCatalog(Base):
     )
 
 
-class DatasetVersion(Base):
+class DatasetVersion(Base, ProjectScopedMixin):
     """Materialized snapshot of a dataset at a point in time."""
 
     __tablename__ = "dataset_versions"
@@ -487,7 +667,7 @@ class DatasetVersion(Base):
     )
 
 
-class SplitPlan(Base):
+class SplitPlan(Base, ProjectScopedMixin):
     """Deterministic split design and metadata."""
 
     __tablename__ = "split_plans"
@@ -506,7 +686,7 @@ class SplitPlan(Base):
     artifacts = relationship("SplitArtifact", back_populates="split_plan", cascade="all,delete")
 
 
-class SplitArtifact(Base):
+class SplitArtifact(Base, ProjectScopedMixin):
     """Materialized fold/segment boundaries and integer index sets."""
 
     __tablename__ = "split_artifacts"
@@ -531,7 +711,7 @@ class SplitArtifact(Base):
     )
 
 
-class PipelineRecipe(Base):
+class PipelineRecipe(Base, ProjectScopedMixin):
     """Configurable preprocessing recipe for learn/infer parity."""
 
     __tablename__ = "pipeline_recipes"
@@ -555,7 +735,7 @@ class PipelineRecipe(Base):
     )
 
 
-class ExperimentPlan(Base):
+class ExperimentPlan(Base, ProjectScopedMixin):
     """Research plan tying data lineage, split and pipeline to model config."""
 
     __tablename__ = "experiment_plans"
@@ -578,7 +758,7 @@ class ExperimentPlan(Base):
     pipeline_recipe = relationship("PipelineRecipe")
 
 
-class ModelDeployment(Base):
+class ModelDeployment(Base, ProjectScopedMixin):
     """Deploy a trained model version as a reusable strategy alpha profile."""
 
     __tablename__ = "model_deployments"
@@ -613,7 +793,7 @@ class ModelDeployment(Base):
 # ---------------------------------------------------------------------------
 
 
-class AgentDecision(Base):
+class AgentDecision(Base, ProjectScopedMixin):
     """One structured LLM-trader decision for a ``(symbol, timestamp)``.
 
     Produced by :func:`aqp.agents.trading.propagate.propagate` and consumed
@@ -649,7 +829,7 @@ class AgentDecision(Base):
     )
 
 
-class DebateTurn(Base):
+class DebateTurn(Base, ProjectScopedMixin):
     """A single Bull/Bear utterance captured during a trader crew run."""
 
     __tablename__ = "debate_turns"
@@ -671,7 +851,7 @@ class DebateTurn(Base):
     __table_args__ = (Index("ix_debate_turns_crew_round", "crew_run_id", "round"),)
 
 
-class AgentBacktest(Base):
+class AgentBacktest(Base, ProjectScopedMixin):
     """Sidecar row per ``BacktestRun`` for runs powered by an LLM trader.
 
     The main ``BacktestRun`` row still owns equity/metrics; this table
@@ -703,7 +883,7 @@ class AgentBacktest(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
-class AgentJudgeReport(Base):
+class AgentJudgeReport(Base, ProjectScopedMixin):
     """LLM/agent-as-judge critique over a backtest's decision trace.
 
     Written by the ``run_agentic_judge`` Celery task and read by the
@@ -736,7 +916,7 @@ class AgentJudgeReport(Base):
     )
 
 
-class AgentReplayRun(Base):
+class AgentReplayRun(Base, ProjectScopedMixin):
     """Counterfactual replay linking an original backtest to its child.
 
     Written when the user applies one or more :class:`Finding` edits via
@@ -774,7 +954,7 @@ class AgentReplayRun(Base):
     completed_at = Column(DateTime, nullable=True)
 
 
-class BacktestInterrupt(Base):
+class BacktestInterrupt(Base, ProjectScopedMixin):
     """Pending HITL interrupt raised mid-backtest.
 
     Phase-2 scaffold for live pause/resume. The engine writes one row
@@ -803,7 +983,7 @@ class BacktestInterrupt(Base):
     resolved_at = Column(DateTime, nullable=True)
 
 
-class FeatureSet(Base):
+class FeatureSet(Base, ProjectScopedMixin):
     """Named, versioned bundle of indicator / model-prediction specs.
 
     A ``FeatureSet`` is the canonical way to describe "the feature panel
@@ -829,7 +1009,7 @@ class FeatureSet(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
-class FeatureSetVersion(Base):
+class FeatureSetVersion(Base, ProjectScopedMixin):
     """Historical snapshot — one row per ``PUT /feature-sets/{id}`` bump."""
 
     __tablename__ = "feature_set_versions"
@@ -851,7 +1031,7 @@ class FeatureSetVersion(Base):
     )
 
 
-class FeatureSetUsage(Base):
+class FeatureSetUsage(Base, ProjectScopedMixin):
     """Lineage row written when a consumer (backtest / train / live / rl) uses a feature set."""
 
     __tablename__ = "feature_set_usages"
@@ -870,7 +1050,7 @@ class FeatureSetUsage(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
-class EquityReport(Base):
+class EquityReport(Base, ProjectScopedMixin):
     """FinRobot-style section-agent equity research report.
 
     One row per generated report — the ``sections`` JSON carries the
@@ -947,6 +1127,8 @@ class DataSource(Base):
     endpoints_json = Column(JSON, default=list)
     health_status = Column(String(32), nullable=False, default="unknown")
     last_probe_at = Column(DateTime, nullable=True)
+    tags = Column(JSON, default=list)
+    version = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

@@ -20,7 +20,13 @@ from aqp.core.types import BarData, Direction, Signal, Symbol
 STRATEGY_TAGS = ("trend", "quant-trading")
 
 
-@register("ParabolicSARAlpha")
+@register(
+    "ParabolicSARAlpha",
+    kind="strategy",
+    tags=STRATEGY_TAGS,
+    source="quant_trading",
+    category="trend",
+)
 class ParabolicSARAlpha(IAlphaModel):
     def __init__(
         self,

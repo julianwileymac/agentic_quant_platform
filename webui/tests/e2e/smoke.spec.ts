@@ -6,6 +6,7 @@ const ROUTES = [
   { path: "/strategies", title: /Strategies/i },
   { path: "/backtest", title: /Backtest/i },
   { path: "/data/explorer", title: /Data Explorer/i },
+  { path: "/visualizations", title: /Visualization Layer/i },
   { path: "/data/sources", title: /Sources/i },
   { path: "/workflows/agent", title: /Agent Crew/i },
   { path: "/workflows/data", title: /Data pipeline/i },

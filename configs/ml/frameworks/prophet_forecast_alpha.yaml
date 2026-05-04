@@ -1,0 +1,28 @@
+name: prophet_forecast_alpha
+description: Prophet-backed DatasetH forecast model for label forecasting.
+dataset:
+  class: DatasetH
+  module_path: aqp.ml.dataset
+  kwargs:
+    handler:
+      class: Alpha158
+      module_path: aqp.ml.features.alpha158
+      kwargs:
+        instruments: [SPY.NASDAQ]
+        start_time: "2019-01-01"
+        end_time: "2024-12-31"
+    segments:
+      train: ["2019-01-01", "2022-12-31"]
+      test: ["2023-01-01", "2024-12-31"]
+model:
+  class: ProphetForecastModel
+  module_path: aqp.ml.models.forecasting
+  kwargs:
+    horizon: 252
+    forecaster_kwargs:
+      weekly_seasonality: auto
+      yearly_seasonality: auto
+records:
+  - class: SigAnaRecord
+    module_path: aqp.ml.recorder
+    kwargs: {}

@@ -52,6 +52,11 @@ from aqp.persistence.models_agents import (
     AgentSpecRow,
     AgentSpecVersion,
 )
+from aqp.persistence.models_bots import (
+    Bot,
+    BotDeployment,
+    BotVersion,
+)
 from aqp.persistence.models_airbyte import (
     AirbyteConnectionRow,
     AirbyteConnectorRow,
@@ -165,6 +170,16 @@ from aqp.persistence.models_taxonomy import (
     TaxonomyNode,
     TaxonomyScheme,
 )
+from aqp.persistence.models_tenancy import (
+    ConfigOverlayRow,
+    Lab,
+    Membership,
+    Organization,
+    Project,
+    Team,
+    User,
+    Workspace,
+)
 from aqp.persistence.models_pipelines import (
     DatahubSyncLog,
     DatasetProfile,
@@ -179,6 +194,18 @@ from aqp.persistence.models_entity_registry import (
     EntityRelation,
     EntityRow,
 )
+from aqp.persistence.models_data_control import (
+    DatasetPipelineConfigRow,
+    SourceLibraryEntry,
+    SourceMetadataVersion,
+)
+from aqp.persistence.models_extraction import (
+    DatasetPresetRow,
+    ExtractionAuditRow,
+)
+from aqp.persistence.models_sinks import SinkRow, SinkVersionRow
+from aqp.persistence.models_producers import MarketDataProducerRow
+from aqp.persistence.models_streaming_links import StreamingDatasetLink
 
 __all__ = [
     # Original core
@@ -287,6 +314,15 @@ __all__ = [
     "EntityTag",
     "TaxonomyNode",
     "TaxonomyScheme",
+    # Tenancy (multi-tenant resource ownership)
+    "ConfigOverlayRow",
+    "Lab",
+    "Membership",
+    "Organization",
+    "Project",
+    "Team",
+    "User",
+    "Workspace",
     # Agents (Phase 3)
     "AgentAnnotation",
     "AgentEvalMetric",
@@ -296,6 +332,10 @@ __all__ = [
     "AgentRunV2",
     "AgentSpecRow",
     "AgentSpecVersion",
+    # Bots (Bot Entity Refactor)
+    "Bot",
+    "BotDeployment",
+    "BotVersion",
     # Airbyte data fabric
     "AirbyteConnectionRow",
     "AirbyteConnectorRow",
@@ -336,6 +376,18 @@ __all__ = [
     "EntityIdentifier",
     "EntityRelation",
     "EntityRow",
+    # Data control plane (source library + project pipeline configs)
+    "DatasetPipelineConfigRow",
+    "SourceLibraryEntry",
+    "SourceMetadataVersion",
+    # Inspiration rehydration / dataset preset library
+    "DatasetPresetRow",
+    "ExtractionAuditRow",
+    # Sinks / producers / streaming linkage (data layer expansion)
+    "MarketDataProducerRow",
+    "SinkRow",
+    "SinkVersionRow",
+    "StreamingDatasetLink",
     # DB utilities
     "async_engine",
     "async_session_dep",

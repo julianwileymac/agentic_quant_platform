@@ -1,0 +1,33 @@
+name: "HuggingFace PatchTST forecast"
+description: >
+  Time-series transformer (PatchTST flavor) forecast for univariate
+  series. Requires AQP_HF_TIMESERIES_ENABLED=true and the
+  ml-transformers extra.
+
+dataset_preset: intraday_momentum_etf
+features: ["close"]
+target:
+  class: n_step_return
+  module_path: aqp.data.labels
+  kwargs:
+    horizon: 1
+
+model:
+  class: HuggingFaceTimeSeriesModel
+  module_path: aqp.ml.models.huggingface
+  kwargs:
+    flavor: patchtst
+    prediction_length: 10
+    context_length: 60
+
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 504
+      test_periods: 63
+      step_periods: 63
+
+mlflow:
+  experiment: hf-patchtst-forecast

@@ -4,7 +4,7 @@ Takes a YAML config dict and:
 
 1. Instantiates the strategy via ``build_from_config``.
 2. Loads bars from the DuckDB history provider.
-3. Dispatches to one of three interchangeable engines (event / vectorbt /
+3. Dispatches to interchangeable engines (event / vectorbt Pro / vectorbt /
    backtesting.py) based on a ``backtest.engine`` key or the ``class``.
 4. Persists a ``BacktestRun`` row + ledger entries + an MLflow run, and
    writes the resulting ``mlflow_run_id`` back onto the DB row so the
@@ -35,14 +35,47 @@ logger = logging.getLogger(__name__)
 
 
 _ENGINE_SHORTCUTS: dict[str, tuple[str, str]] = {
+    # Event-driven (per-bar Python; preserved for backward compatibility and
+    # for true async agent dispatch).
     "event": ("EventDrivenBacktester", "aqp.backtest.engine"),
     "event-driven": ("EventDrivenBacktester", "aqp.backtest.engine"),
     "default": ("EventDrivenBacktester", "aqp.backtest.engine"),
+    # vectorbt-pro (primary vectorised engine; multi-mode).
+    "vectorbt-pro": ("VectorbtProEngine", "aqp.backtest.vectorbtpro_engine"),
+    "vbt-pro": ("VectorbtProEngine", "aqp.backtest.vectorbtpro_engine"),
+    "vectorbtpro": ("VectorbtProEngine", "aqp.backtest.vectorbtpro_engine"),
+    "vbtpro": ("VectorbtProEngine", "aqp.backtest.vectorbtpro_engine"),
+    "primary": ("VectorbtProEngine", "aqp.backtest.vectorbtpro_engine"),
+    # Mode-specific shortcuts — pick the right vbt-pro constructor.
+    "vbt-pro:signals": ("VectorbtProEngine", "aqp.backtest.vectorbtpro_engine"),
+    "vbt-pro:orders": ("VectorbtProEngine", "aqp.backtest.vectorbtpro_engine"),
+    "vbt-pro:optimizer": ("VectorbtProEngine", "aqp.backtest.vectorbtpro_engine"),
+    "vbt-pro:holding": ("VectorbtProEngine", "aqp.backtest.vectorbtpro_engine"),
+    "vbt-pro:random": ("VectorbtProEngine", "aqp.backtest.vectorbtpro_engine"),
+    # OSS vectorbt fallback.
     "vectorbt": ("VectorbtEngine", "aqp.backtest.vectorbt_engine"),
     "vbt": ("VectorbtEngine", "aqp.backtest.vectorbt_engine"),
+    # Fallback cascade.
+    "fallback": ("FallbackBacktestEngine", "aqp.backtest.fallback_engine"),
+    "cascade": ("FallbackBacktestEngine", "aqp.backtest.fallback_engine"),
+    # backtesting.py single-symbol path.
     "backtesting": ("BacktestingPyEngine", "aqp.backtest.bt_engine"),
     "backtesting.py": ("BacktestingPyEngine", "aqp.backtest.bt_engine"),
     "bt": ("BacktestingPyEngine", "aqp.backtest.bt_engine"),
+    # Permissive-licence fallback adapters (lazy imports).
+    "zvt": ("ZvtBacktestEngine", "aqp.backtest.zvt_engine"),
+    "aat": ("AatBacktestEngine", "aqp.backtest.aat_engine"),
+}
+
+
+# Mode-suffixed shortcuts inject ``mode=...`` into the engine kwargs so the
+# user can pick a vbt-pro constructor without writing the full kwargs block.
+_MODE_INJECTIONS: dict[str, str] = {
+    "vbt-pro:signals": "signals",
+    "vbt-pro:orders": "orders",
+    "vbt-pro:optimizer": "optimizer",
+    "vbt-pro:holding": "holding",
+    "vbt-pro:random": "random",
 }
 
 
@@ -83,7 +116,14 @@ def _resolve_backtest_cfg(backtest_cfg: dict[str, Any]) -> tuple[dict[str, Any],
                 f"Unknown engine '{engine_hint}'. Options: {sorted(set(_ENGINE_SHORTCUTS))}"
             )
         cls_name, module_path = _ENGINE_SHORTCUTS[key]
-        cfg = {"class": cls_name, "module_path": module_path, "kwargs": cfg.get("kwargs", {})}
+        explicit_kwargs = dict(cfg.pop("kwargs", {}) or {})
+        if cls_name == "FallbackBacktestEngine":
+            explicit_kwargs = {**cfg, **explicit_kwargs}
+        # Inject ``mode`` for the ``vbt-pro:<mode>`` shortcuts unless the
+        # user already specified one explicitly.
+        if key in _MODE_INJECTIONS:
+            explicit_kwargs.setdefault("mode", _MODE_INJECTIONS[key])
+        cfg = {"class": cls_name, "module_path": module_path, "kwargs": explicit_kwargs}
         label = cls_name
     else:
         cfg = {
@@ -96,8 +136,12 @@ def _resolve_backtest_cfg(backtest_cfg: dict[str, Any]) -> tuple[dict[str, Any],
     # Short names to human-friendly labels for metrics.
     label_map = {
         "EventDrivenBacktester": "event",
+        "VectorbtProEngine": "vectorbt-pro",
         "VectorbtEngine": "vectorbt",
+        "FallbackBacktestEngine": "fallback",
         "BacktestingPyEngine": "backtesting",
+        "ZvtBacktestEngine": "zvt",
+        "AatBacktestEngine": "aat",
     }
     return cfg, label_map.get(label, label)
 
@@ -122,6 +166,32 @@ def _deployment_id_from_strategy_cfg(strategy_cfg: dict[str, Any]) -> str | None
         return None
     deployment_id = alpha_kwargs.get("deployment_id")
     return str(deployment_id) if deployment_id else None
+
+
+def _ml_linkage_from_strategy_cfg(
+    strategy_cfg: dict[str, Any], deployment_id: str | None
+) -> dict[str, Any]:
+    """Extract ML linkage hints (Alembic 0025) injected by AlphaBacktestExperiment.
+
+    The orchestrator stamps a ``ml_linkage`` block on ``strategy.kwargs`` so
+    the runner can populate the four new FKs on ``BacktestRun`` without
+    bloating the public ``run_backtest_from_config`` signature.
+    """
+    out: dict[str, Any] = {}
+    kwargs = strategy_cfg.get("kwargs", {}) if isinstance(strategy_cfg, dict) else {}
+    linkage = kwargs.get("ml_linkage", {}) if isinstance(kwargs, dict) else {}
+    if isinstance(linkage, dict):
+        for key in (
+            "model_version_id",
+            "ml_experiment_run_id",
+            "experiment_plan_id",
+            "model_deployment_id",
+        ):
+            if linkage.get(key):
+                out[key] = str(linkage[key])
+    if deployment_id and "model_deployment_id" not in out:
+        out["model_deployment_id"] = str(deployment_id)
+    return out
 
 
 def _dataset_hash_for_deployment(deployment_id: str | None) -> str | None:
@@ -301,12 +371,16 @@ def run_backtest_from_config(
     result = backtester.run(strategy, bars)
 
     summary = result.summary
-    summary["engine"] = engine_label
+    actual_engine = summary.get("selected_engine") or summary.get("engine") or engine_label
+    summary["engine"] = actual_engine
     summary["data_source"] = source_meta
     deployment_id = _deployment_id_from_strategy_cfg(strategy_cfg)
     if deployment_id:
         summary["model_deployment_id"] = deployment_id
     dataset_hash = _dataset_hash_for_deployment(deployment_id)
+    ml_linkage = _ml_linkage_from_strategy_cfg(strategy_cfg, deployment_id)
+    if ml_linkage:
+        summary["ml_linkage"] = ml_linkage
     equity_dict = {str(idx): float(v) for idx, v in result.equity_curve.items()}
 
     mlflow_run_id: str | None = None
@@ -321,7 +395,7 @@ def run_backtest_from_config(
                 equity_curve=result.equity_curve,
                 dataset_hash=dataset_hash,
                 strategy_id=strategy_id,
-                engine=engine_label,
+                engine=str(actual_engine),
             )
         except Exception as e:
             logger.warning("MLflow logging skipped: %s", e)
@@ -335,16 +409,17 @@ def run_backtest_from_config(
             strategy_cfg=strategy_cfg,
             equity_dict=equity_dict,
             mlflow_run_id=mlflow_run_id,
-            engine_label=engine_label,
+            engine_label=str(actual_engine),
             dataset_hash=dataset_hash,
             strategy_id=strategy_id,
+            ml_linkage=ml_linkage,
         )
 
     return {
         "run_id": row_id,
         "mlflow_run_id": mlflow_run_id,
         "run_name": run_name,
-        "engine": engine_label,
+        "engine": actual_engine,
         "model_deployment_id": deployment_id,
         "dataset_hash": dataset_hash,
         "sharpe": summary.get("sharpe"),
@@ -368,7 +443,9 @@ def _persist_run(
     engine_label: str | None = None,
     dataset_hash: str | None = None,
     strategy_id: str | None = None,
+    ml_linkage: dict[str, Any] | None = None,
 ) -> str:
+    linkage = dict(ml_linkage or {})
     row = BacktestRun(
         strategy_id=strategy_id,
         status="completed",
@@ -382,6 +459,10 @@ def _persist_run(
         total_return=summary.get("total_return"),
         mlflow_run_id=mlflow_run_id,
         dataset_hash=dataset_hash,
+        model_version_id=linkage.get("model_version_id"),
+        ml_experiment_run_id=linkage.get("ml_experiment_run_id"),
+        experiment_plan_id=linkage.get("experiment_plan_id"),
+        model_deployment_id=linkage.get("model_deployment_id"),
         created_at=datetime.utcnow(),
         completed_at=datetime.utcnow(),
         metrics={

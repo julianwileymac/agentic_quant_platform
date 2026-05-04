@@ -14,6 +14,8 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from aqp.data.entities import registry as entity_registry
+from aqp.data.entities.sync import active_instruments, sync_active_instruments_to_graph
+from aqp.persistence.db import get_session
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/registry/entities", tags=["entity-registry"])
@@ -103,6 +105,16 @@ class EnrichRequest(BaseModel):
     enricher_kwargs: dict[str, Any] = Field(default_factory=dict)
 
 
+class InstrumentLoadRequest(BaseModel):
+    vt_symbols: list[str] = Field(default_factory=list)
+    provider: str = "auto"
+    start: str | None = None
+    end: str | None = None
+    interval: str | None = None
+    dataset_template: str = "market_bars_by_instrument"
+    dry_run: bool = False
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -132,6 +144,61 @@ def search_entities(
     limit: int = Query(default=25, ge=1, le=100),
 ) -> list[dict[str, Any]]:
     return entity_registry.search_entities(q, kind=kind, limit=limit)
+
+
+@router.get("/graph/explorer")
+def graph_explorer(
+    root_id: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    depth: int = Query(default=2, ge=1, le=4),
+    limit: int = Query(default=200, ge=1, le=500),
+) -> dict[str, Any]:
+    """Return normalized graph nodes/edges for the canonical entity graph explorer."""
+    return entity_registry.entity_graph(root_id=root_id, query=q, depth=depth, limit=limit)
+
+
+@router.get("/instruments/active")
+def list_active_instruments(
+    refresh: bool = Query(default=False),
+    limit: int = Query(default=5000, ge=1, le=20000),
+) -> dict[str, Any]:
+    """Return the cached active instrument universe used by graph and load flows."""
+    with get_session() as session:
+        rows = active_instruments(session=session, refresh=refresh, limit=limit)
+    return {"count": len(rows), "instruments": rows}
+
+
+@router.post("/instruments/sync")
+def sync_instrument_graph(limit: int = Query(default=5000, ge=1, le=20000)) -> dict[str, Any]:
+    """Seed active instruments into the configured entity graph store."""
+    with get_session() as session:
+        return sync_active_instruments_to_graph(session=session, limit=limit)
+
+
+@router.post("/instruments/load-template")
+def instrument_load_template(payload: InstrumentLoadRequest) -> dict[str, Any]:
+    """Return a reusable manifest-style template for instrument-level data loading."""
+    symbols = [str(v).strip().upper() for v in payload.vt_symbols if str(v).strip()]
+    return {
+        "template": payload.dataset_template,
+        "provider": payload.provider,
+        "dry_run": payload.dry_run,
+        "manifest": {
+            "kind": "instrument_data_load",
+            "dataset_template": payload.dataset_template,
+            "symbols": symbols,
+            "params": {
+                "start": payload.start,
+                "end": payload.end,
+                "interval": payload.interval,
+                "provider": payload.provider,
+            },
+            "entity_edges": [
+                {"entity_kind": "security", "identifier_scheme": "vt_symbol", "identifier": symbol}
+                for symbol in symbols
+            ],
+        },
+    }
 
 
 @router.post("", response_model=EntitySummary)

@@ -1,0 +1,26 @@
+name: "Tutorial 01 — Quick Ridge in the workbench"
+description: >
+  Smallest possible flow that shows how the lightweight
+  ``aqp.ml.flows.run_linear_flow`` returns IC / RMSE / MAE without
+  training a full model. Drop this dataset_cfg into the Interactive
+  Workbench drawer and pick "linear" as the flow.
+
+flow: linear
+payload:
+  estimator: ridge
+  alpha: 1.0
+  segment: test
+  dataset_cfg:
+    class: DatasetH
+    module_path: aqp.ml.dataset
+    kwargs:
+      handler:
+        class: Alpha158
+        module_path: aqp.ml.features.alpha158
+        kwargs:
+          instruments: ["SPY"]
+          start_time: "2022-01-01"
+          end_time: "2024-06-30"
+      segments:
+        train: ["2022-01-01", "2024-03-31"]
+        test: ["2024-04-01", "2024-06-30"]

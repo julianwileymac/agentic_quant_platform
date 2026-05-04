@@ -1,0 +1,362 @@
+# Visualization profile overlay.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.viz.yml --profile visualization up -d
+#
+# This overlay switches AQP's Iceberg catalog to the REST + MinIO path so Trino,
+# Superset, and the FastAPI/worker containers all see the same tables.
+
+services:
+  minio:
+    profiles: ["visualization"]
+
+  minio-init:
+    profiles: ["visualization"]
+
+  iceberg-rest:
+    profiles: ["legacy"]
+
+  polaris:
+    image: apache/polaris:1.4.0
+    container_name: aqp-polaris
+    profiles: ["visualization"]
+    environment:
+      AWS_REGION: "${AQP_S3_REGION:-us-east-1}"
+      AWS_ACCESS_KEY_ID: "${AQP_S3_ACCESS_KEY:-aqpminio}"
+      AWS_SECRET_ACCESS_KEY: "${AQP_S3_SECRET_KEY:-aqpminiosecret}"
+      POLARIS_BOOTSTRAP_CREDENTIALS: "POLARIS,${POLARIS_CLIENT_ID:-root},${POLARIS_CLIENT_SECRET:-s3cr3t}"
+      polaris.realm-context.realms: "POLARIS"
+      polaris.features."SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION": "true"
+      polaris.features."ALLOW_SETTING_S3_ENDPOINTS": "true"
+      quarkus.otel.sdk.disabled: "true"
+    # Host 8183 avoids clashing with ``iceberg-rest`` (8181) when both profiles run.
+    ports:
+      - "8183:8181"
+      - "8182:8182"
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8181' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  api:
+    environment:
+      AQP_ICEBERG_REST_URI: http://polaris:8181/api/catalog
+      AQP_ICEBERG_REST_CREDENTIAL: "${POLARIS_CLIENT_ID:-root}:${POLARIS_CLIENT_SECRET:-s3cr3t}"
+      AQP_ICEBERG_REST_SCOPE: "PRINCIPAL_ROLE:ALL"
+      # PyIceberg REST clients must send the Polaris realm header (see tests/test_iceberg_catalog_engine.py).
+      AQP_ICEBERG_REST_EXTRA_PROPERTIES_JSON: '{"header.Polaris-Realm":"POLARIS"}'
+      AQP_ICEBERG_S3_WAREHOUSE: "${POLARIS_CATALOG:-quickstart_catalog}"
+      AQP_ICEBERG_WAREHOUSE: /warehouse/iceberg
+      AQP_ICEBERG_STAGING_DIR: /warehouse/staging
+      AQP_S3_ENDPOINT_URL: http://minio:9000
+      AQP_S3_ACCESS_KEY: "${AQP_S3_ACCESS_KEY:-aqpminio}"
+      AQP_S3_SECRET_KEY: "${AQP_S3_SECRET_KEY:-aqpminiosecret}"
+      AQP_S3_REGION: "${AQP_S3_REGION:-us-east-1}"
+      AQP_SUPERSET_BASE_URL: http://superset:8088
+      AQP_SUPERSET_PUBLIC_URL: http://localhost:8088
+      AQP_TRINO_URI: trino://trino@trino:8080/iceberg
+      # REST /v1/info probes must use the in-compose hostname (not localhost from .env).
+      AQP_TRINO_HTTP_URL: http://trino:8080
+      AQP_POLARIS_BASE_URL: http://polaris:8181
+      AQP_AIRBYTE_ENABLED: "true"
+      AQP_AIRBYTE_BASE_URL: http://airbyte-server:8001
+      AQP_AIRBYTE_API_URL: http://airbyte-server:8001
+      AQP_AIRBYTE_WORKSPACE_ID: local-aqp-workspace
+      AQP_DAGSTER_WEBSERVER_URL: http://dagster-webserver:3001
+      AQP_DAGSTER_GRAPHQL_URL: http://dagster-webserver:3001/graphql
+      AQP_AQP_API_URL_INTERNAL: http://api:8000
+      AQP_ICEBERG_AUTO_BOOTSTRAP: "${AQP_ICEBERG_AUTO_BOOTSTRAP:-true}"
+      AQP_ICEBERG_CATALOG_WAREHOUSE_NAME: "${POLARIS_CATALOG:-quickstart_catalog}"
+      AQP_ICEBERG_CATALOG_STORAGE_TYPE: "${AQP_ICEBERG_CATALOG_STORAGE_TYPE:-S3}"
+      AQP_ICEBERG_DEFAULT_BASE_LOCATION: "${AQP_ICEBERG_DEFAULT_BASE_LOCATION:-s3://aqp-iceberg/quickstart_catalog}"
+      AQP_ICEBERG_PRINCIPAL_NAME: "${AQP_ICEBERG_PRINCIPAL_NAME:-aqp_runtime}"
+      AQP_ICEBERG_PRINCIPAL_ROLE: "${AQP_ICEBERG_PRINCIPAL_ROLE:-aqp_runtime_role}"
+      AQP_ICEBERG_CATALOG_ROLE: "${AQP_ICEBERG_CATALOG_ROLE:-aqp_runtime_catalog_role}"
+      AQP_POLARIS_REALM: "${AQP_POLARIS_REALM:-POLARIS}"
+      AQP_POLARIS_CLIENT_ID: "${POLARIS_CLIENT_ID:-root}"
+      AQP_POLARIS_CLIENT_SECRET: "${POLARIS_CLIENT_SECRET:-s3cr3t}"
+      AQP_BOOTSTRAP_STATE_DIR: /app/data/bootstrap
+      AQP_TRINO_ADMIN_USER: aqp
+      AQP_TRINO_ADMIN_SOURCE: aqp-service-manager
+    depends_on:
+      polaris:
+        condition: service_healthy
+      superset:
+        condition: service_started
+      airbyte-server:
+        condition: service_started
+      dagster-webserver:
+        condition: service_started
+
+  worker:
+    environment:
+      AQP_ICEBERG_REST_URI: http://polaris:8181/api/catalog
+      AQP_ICEBERG_REST_CREDENTIAL: "${POLARIS_CLIENT_ID:-root}:${POLARIS_CLIENT_SECRET:-s3cr3t}"
+      AQP_ICEBERG_REST_SCOPE: "PRINCIPAL_ROLE:ALL"
+      AQP_ICEBERG_REST_EXTRA_PROPERTIES_JSON: '{"header.Polaris-Realm":"POLARIS"}'
+      AQP_ICEBERG_S3_WAREHOUSE: "${POLARIS_CATALOG:-quickstart_catalog}"
+      AQP_ICEBERG_WAREHOUSE: /warehouse/iceberg
+      AQP_ICEBERG_STAGING_DIR: /warehouse/staging
+      AQP_S3_ENDPOINT_URL: http://minio:9000
+      AQP_S3_ACCESS_KEY: "${AQP_S3_ACCESS_KEY:-aqpminio}"
+      AQP_S3_SECRET_KEY: "${AQP_S3_SECRET_KEY:-aqpminiosecret}"
+      AQP_S3_REGION: "${AQP_S3_REGION:-us-east-1}"
+      AQP_SUPERSET_BASE_URL: http://superset:8088
+      AQP_SUPERSET_PUBLIC_URL: http://localhost:8088
+      AQP_TRINO_URI: trino://trino@trino:8080/iceberg
+      AQP_TRINO_HTTP_URL: http://trino:8080
+      AQP_POLARIS_BASE_URL: http://polaris:8181
+      AQP_AIRBYTE_ENABLED: "true"
+      AQP_AIRBYTE_BASE_URL: http://airbyte-server:8001
+      AQP_AIRBYTE_API_URL: http://airbyte-server:8001
+      AQP_AIRBYTE_WORKSPACE_ID: local-aqp-workspace
+      AQP_DAGSTER_WEBSERVER_URL: http://dagster-webserver:3001
+      AQP_DAGSTER_GRAPHQL_URL: http://dagster-webserver:3001/graphql
+      AQP_AQP_API_URL_INTERNAL: http://api:8000
+      AQP_ICEBERG_AUTO_BOOTSTRAP: "false"
+      AQP_ICEBERG_CATALOG_WAREHOUSE_NAME: "${POLARIS_CATALOG:-quickstart_catalog}"
+      AQP_ICEBERG_PRINCIPAL_NAME: "${AQP_ICEBERG_PRINCIPAL_NAME:-aqp_runtime}"
+      AQP_ICEBERG_PRINCIPAL_ROLE: "${AQP_ICEBERG_PRINCIPAL_ROLE:-aqp_runtime_role}"
+      AQP_ICEBERG_CATALOG_ROLE: "${AQP_ICEBERG_CATALOG_ROLE:-aqp_runtime_catalog_role}"
+      AQP_POLARIS_REALM: "${AQP_POLARIS_REALM:-POLARIS}"
+      AQP_POLARIS_CLIENT_ID: "${POLARIS_CLIENT_ID:-root}"
+      AQP_POLARIS_CLIENT_SECRET: "${POLARIS_CLIENT_SECRET:-s3cr3t}"
+      AQP_BOOTSTRAP_STATE_DIR: /app/data/bootstrap
+      AQP_TRINO_ADMIN_USER: aqp
+      AQP_TRINO_ADMIN_SOURCE: aqp-service-manager
+    depends_on:
+      polaris:
+        condition: service_healthy
+      superset:
+        condition: service_started
+      airbyte-server:
+        condition: service_started
+      dagster-webserver:
+        condition: service_started
+
+  webui:
+    build:
+      args:
+        NEXT_PUBLIC_SUPERSET_URL: http://localhost:8088
+    environment:
+      NEXT_PUBLIC_SUPERSET_URL: http://localhost:8088
+    depends_on:
+      - api
+      - superset
+
+  trino:
+    # 465+ exposes iceberg.rest-catalog.oauth2.server-uri for Polaris token exchange.
+    # Bump together with deploy/trino/catalog/iceberg.properties when upgrading.
+    image: trinodb/trino:470
+    container_name: aqp-trino
+    profiles: ["visualization"]
+    env_file: .env
+    environment:
+      AQP_S3_ENDPOINT_URL: "${AQP_S3_ENDPOINT_URL:-http://minio:9000}"
+      AQP_S3_ACCESS_KEY: "${AQP_S3_ACCESS_KEY:-aqpminio}"
+      AQP_S3_SECRET_KEY: "${AQP_S3_SECRET_KEY:-aqpminiosecret}"
+      AQP_S3_REGION: "${AQP_S3_REGION:-us-east-1}"
+      POLARIS_CATALOG: "${POLARIS_CATALOG:-quickstart_catalog}"
+      POLARIS_CLIENT_ID: "${POLARIS_CLIENT_ID:-root}"
+      POLARIS_CLIENT_SECRET: "${POLARIS_CLIENT_SECRET:-s3cr3t}"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./deploy/trino/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+    depends_on:
+      polaris:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  airbyte-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aqp-airbyte-server
+    profiles: ["visualization"]
+    command: uvicorn aqp.services.airbyte_dev_server:app --host 0.0.0.0 --port 8001
+    environment:
+      AQP_ENV: dev
+    ports:
+      - "8002:8001"
+
+  dagster-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aqp-dagster-webserver
+    profiles: ["visualization"]
+    env_file: .env
+    user: "0:0"
+    command: dagster dev -h 0.0.0.0 -p 3001 -m aqp.dagster.definitions
+    environment:
+      DAGSTER_HOME: /app/data/dagster_home
+      AQP_REDIS_URL: redis://redis:6379/0
+      AQP_REDIS_PUBSUB_URL: redis://redis:6379/1
+      AQP_POSTGRES_DSN: postgresql+psycopg2://aqp:aqp@postgres:5432/aqp
+      AQP_POSTGRES_ASYNC_DSN: postgresql+asyncpg://aqp:aqp@postgres:5432/aqp
+      AQP_GRAPH_STORE: "${AQP_GRAPH_STORE:-neo4j}"
+      AQP_NEO4J_URI: bolt://neo4j:7687
+      AQP_NEO4J_USER: "${AQP_NEO4J_USER:-neo4j}"
+      AQP_NEO4J_PASSWORD: "${AQP_NEO4J_PASSWORD:-aqpneo4j}"
+      AQP_NEO4J_DATABASE: "${AQP_NEO4J_DATABASE:-neo4j}"
+      AQP_ICEBERG_REST_URI: http://polaris:8181/api/catalog
+      AQP_ICEBERG_REST_CREDENTIAL: "${POLARIS_CLIENT_ID:-root}:${POLARIS_CLIENT_SECRET:-s3cr3t}"
+      AQP_ICEBERG_REST_SCOPE: "PRINCIPAL_ROLE:ALL"
+      AQP_ICEBERG_REST_EXTRA_PROPERTIES_JSON: '{"header.Polaris-Realm":"POLARIS"}'
+      AQP_ICEBERG_S3_WAREHOUSE: "${POLARIS_CATALOG:-quickstart_catalog}"
+      AQP_ICEBERG_WAREHOUSE: /warehouse/iceberg
+      AQP_ICEBERG_STAGING_DIR: /warehouse/staging
+      AQP_S3_ENDPOINT_URL: http://minio:9000
+      AQP_S3_ACCESS_KEY: "${AQP_S3_ACCESS_KEY:-aqpminio}"
+      AQP_S3_SECRET_KEY: "${AQP_S3_SECRET_KEY:-aqpminiosecret}"
+      AQP_S3_REGION: "${AQP_S3_REGION:-us-east-1}"
+      AQP_AIRBYTE_ENABLED: "true"
+      AQP_AIRBYTE_BASE_URL: http://airbyte-server:8001
+      AQP_AIRBYTE_API_URL: http://airbyte-server:8001
+      AQP_AIRBYTE_WORKSPACE_ID: local-aqp-workspace
+      AQP_AQP_API_URL_INTERNAL: http://api:8000
+    ports:
+      - "3001:3001"
+    volumes:
+      - .:/app
+      - "C:/aqp-warehouse:/warehouse"
+      - dagster-home:/app/data/dagster_home
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      polaris:
+        condition: service_healthy
+      airbyte-server:
+        condition: service_started
+
+  superset-postgres:
+    image: postgres:16-alpine
+    container_name: aqp-superset-postgres
+    profiles: ["visualization"]
+    environment:
+      POSTGRES_USER: superset
+      POSTGRES_PASSWORD: superset
+      POSTGRES_DB: superset
+    volumes:
+      - superset-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U superset -d superset"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  superset-init:
+    build:
+      context: ./deploy/superset
+      dockerfile: Dockerfile
+    container_name: aqp-superset-init
+    profiles: ["visualization"]
+    env_file: .env
+    environment:
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+      SUPERSET__SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://superset:superset@superset-postgres:5432/superset
+      SUPERSET_REDIS_URL: redis://redis:6379/4
+      SUPERSET_RESULTS_REDIS_URL: redis://redis:6379/5
+      SUPERSET_SECRET_KEY: "${SUPERSET_SECRET_KEY:-aqp_superset_dev_secret_change_me}"
+      SUPERSET_GUEST_TOKEN_JWT_SECRET: "${SUPERSET_GUEST_TOKEN_JWT_SECRET:-aqp_superset_guest_secret_change_me}"
+      SUPERSET_ADMIN_USERNAME: "${SUPERSET_ADMIN_USERNAME:-admin}"
+      SUPERSET_ADMIN_PASSWORD: "${SUPERSET_ADMIN_PASSWORD:-admin}"
+      SUPERSET_ADMIN_FIRSTNAME: AQP
+      SUPERSET_ADMIN_LASTNAME: Admin
+      SUPERSET_ADMIN_EMAIL: admin@aqp.local
+    volumes:
+      - ./deploy/superset/superset_config.py:/app/pythonpath/superset_config.py:ro
+      - superset-home:/app/superset_home
+    command: ["/app/bootstrap.sh"]
+    depends_on:
+      superset-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  superset:
+    build:
+      context: ./deploy/superset
+      dockerfile: Dockerfile
+    container_name: aqp-superset
+    profiles: ["visualization"]
+    env_file: .env
+    environment:
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+      SUPERSET__SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://superset:superset@superset-postgres:5432/superset
+      SUPERSET_REDIS_URL: redis://redis:6379/4
+      SUPERSET_RESULTS_REDIS_URL: redis://redis:6379/5
+      SUPERSET_SECRET_KEY: "${SUPERSET_SECRET_KEY:-aqp_superset_dev_secret_change_me}"
+      SUPERSET_GUEST_TOKEN_JWT_SECRET: "${SUPERSET_GUEST_TOKEN_JWT_SECRET:-aqp_superset_guest_secret_change_me}"
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./deploy/superset/superset_config.py:/app/pythonpath/superset_config.py:ro
+      - superset-home:/app/superset_home
+    command: ["superset", "run", "-h", "0.0.0.0", "-p", "8088", "--with-threads"]
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+      trino:
+        condition: service_started
+
+  superset-worker:
+    build:
+      context: ./deploy/superset
+      dockerfile: Dockerfile
+    container_name: aqp-superset-worker
+    profiles: ["visualization"]
+    env_file: .env
+    environment:
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+      SUPERSET__SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://superset:superset@superset-postgres:5432/superset
+      SUPERSET_REDIS_URL: redis://redis:6379/4
+      SUPERSET_RESULTS_REDIS_URL: redis://redis:6379/5
+      SUPERSET_SECRET_KEY: "${SUPERSET_SECRET_KEY:-aqp_superset_dev_secret_change_me}"
+      SUPERSET_GUEST_TOKEN_JWT_SECRET: "${SUPERSET_GUEST_TOKEN_JWT_SECRET:-aqp_superset_guest_secret_change_me}"
+    volumes:
+      - ./deploy/superset/superset_config.py:/app/pythonpath/superset_config.py:ro
+      - superset-home:/app/superset_home
+    command: ["celery", "--app=superset.tasks.celery_app:app", "worker", "-O", "fair", "-l", "INFO", "--concurrency=2"]
+    depends_on:
+      superset:
+        condition: service_started
+
+  superset-beat:
+    build:
+      context: ./deploy/superset
+      dockerfile: Dockerfile
+    container_name: aqp-superset-beat
+    profiles: ["visualization"]
+    env_file: .env
+    environment:
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+      SUPERSET__SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://superset:superset@superset-postgres:5432/superset
+      SUPERSET_REDIS_URL: redis://redis:6379/4
+      SUPERSET_RESULTS_REDIS_URL: redis://redis:6379/5
+      SUPERSET_SECRET_KEY: "${SUPERSET_SECRET_KEY:-aqp_superset_dev_secret_change_me}"
+      SUPERSET_GUEST_TOKEN_JWT_SECRET: "${SUPERSET_GUEST_TOKEN_JWT_SECRET:-aqp_superset_guest_secret_change_me}"
+    volumes:
+      - ./deploy/superset/superset_config.py:/app/pythonpath/superset_config.py:ro
+      - superset-home:/app/superset_home
+    command: ["celery", "--app=superset.tasks.celery_app:app", "beat", "-l", "INFO", "-s", "/app/superset_home/celerybeat-schedule"]
+    depends_on:
+      superset:
+        condition: service_started
+
+volumes:
+  superset-postgres-data:
+  superset-home:
+  dagster-home:

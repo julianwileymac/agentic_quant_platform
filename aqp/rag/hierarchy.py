@@ -205,6 +205,7 @@ class HierarchicalRAG:
         rerank: bool = True,
         compress: bool = True,
         compress_threshold: float = 0.15,
+        context: Any | None = None,
     ) -> list[RAGHit]:
         """Direct vector search at one level, with optional rerank."""
         qvec = self.embedder.embed_one(query)
@@ -248,10 +249,11 @@ class HierarchicalRAG:
             ranked = get_reranker().rerank(query, searched)
             searched = [h for h, _ in ranked]
         hits = [RAGHit.from_vector(h) for h in searched[:k]]
-        self._audit(query, hits, plan_level=level, plan_corpus=corpus or "")
+        hits = self._filter_for_context(hits, context)
+        self._audit(query, hits, plan_level=level, plan_corpus=corpus or "", context=context)
         return hits
 
-    def walk(self, plan: RAGPlan) -> list[RAGHit]:
+    def walk(self, plan: RAGPlan, *, context: Any | None = None) -> list[RAGHit]:
         """Top-down navigation L0 → L1 → L2 → L3 (paper Section 3.2).
 
         At each level we pick the highest-scoring few hits, narrow the
@@ -296,7 +298,8 @@ class HierarchicalRAG:
         if plan.compress and all_hits:
             all_hits = filter_candidates(plan.query, all_hits, threshold=0.12) or all_hits
         out = all_hits[: plan.final_k]
-        self._audit(plan.query, out, plan_level="walk", plan_corpus="*")
+        out = self._filter_for_context(out, context)
+        self._audit(plan.query, out, plan_level="walk", plan_corpus="*", context=context)
         return out
 
     def recall_for_prompt(
@@ -361,6 +364,59 @@ class HierarchicalRAG:
             out[c.name] = self.store.count(corpus=c.name)
         return out
 
+    # ------------------------------------------------------------------ tenancy
+    def _filter_for_context(
+        self, hits: list[RAGHit], context: Any | None
+    ) -> list[RAGHit]:
+        """Filter hits to corpora the user can see.
+
+        With the current data model every RAG corpus row stores
+        ``owner_user_id`` / ``workspace_id`` / ``lab_id``. We look up the
+        rows for the corpora referenced in *hits* and keep only those
+        whose lab is in the user's accessible-labs set (or whose
+        workspace is accessible). When *context* is the local-first
+        default — or no context is supplied — we return hits unchanged
+        so existing single-tenant flows keep working.
+        """
+        if context is None or getattr(context, "user_id", None) in (None, "00000000-0000-0000-0000-000000000003"):
+            return hits
+        try:
+            corpus_names = {h.corpus for h in hits}
+            if not corpus_names:
+                return hits
+            from aqp.auth.user import accessible_labs, accessible_workspaces, resolve_user
+            from aqp.persistence.db import SessionLocal
+            from aqp.persistence.models_rag import RagCorpus
+
+            user = resolve_user(user_id=context.user_id)
+            allowed_workspaces = set(accessible_workspaces(user))
+            allowed_labs = set(accessible_labs(user))
+            with SessionLocal() as session:
+                rows = (
+                    session.query(
+                        RagCorpus.name,
+                        RagCorpus.workspace_id,
+                        RagCorpus.lab_id,
+                    )
+                    .filter(RagCorpus.name.in_(corpus_names))
+                    .all()
+                )
+                visible: set[str] = set()
+                for name, ws, lab in rows:
+                    # No tenancy stamp = legacy default-bucket = visible to everyone.
+                    if not ws and not lab:
+                        visible.add(name)
+                    elif ws in allowed_workspaces or lab in allowed_labs:
+                        visible.add(name)
+                # Corpora not present in the table (cache miss / fresh corpus)
+                # default to visible — denial-by-omission would silently
+                # drop legitimate results.
+                visible.update(corpus_names - {r[0] for r in rows})
+            return [h for h in hits if h.corpus in visible]
+        except Exception:
+            logger.debug("RAG workspace filter skipped", exc_info=True)
+            return hits
+
     # ------------------------------------------------------------------ audit
     def _audit(
         self,
@@ -369,6 +425,7 @@ class HierarchicalRAG:
         *,
         plan_level: str,
         plan_corpus: str,
+        context: Any | None = None,
     ) -> None:
         try:
             from aqp.persistence.db import SessionLocal
@@ -389,16 +446,22 @@ class HierarchicalRAG:
                 }
                 for h in hits
             ]
+            row = RagQuery(
+                query=query[:8000],
+                plan_level=plan_level,
+                plan_corpus=plan_corpus,
+                results=payload,
+                result_count=len(hits),
+            )
+            if context is not None:
+                if getattr(context, "user_id", None):
+                    row.owner_user_id = context.user_id
+                if getattr(context, "workspace_id", None):
+                    row.workspace_id = context.workspace_id
+                if getattr(context, "lab_id", None):
+                    row.lab_id = context.lab_id
             with SessionLocal() as session:
-                session.add(
-                    RagQuery(
-                        query=query[:8000],
-                        plan_level=plan_level,
-                        plan_corpus=plan_corpus,
-                        results=payload,
-                        result_count=len(hits),
-                    )
-                )
+                session.add(row)
                 session.commit()
         except Exception:  # noqa: BLE001
             logger.debug("RAG audit log skipped (table likely not yet migrated).", exc_info=True)

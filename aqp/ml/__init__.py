@@ -35,14 +35,27 @@ from aqp.ml.planning import PlannedSplit, artifacts_to_segments, build_split_pla
 from aqp.ml.processors import (
     CSRankNorm,
     CSZScoreNorm,
+    CoerceNumericColumns,
     DropnaLabel,
     Fillna,
     FilterCol,
+    LagFeatureGenerator,
     MinMaxNorm,
+    PanelForwardFill,
     PreprocessingSpec,
     Processor,
+    RollingFeatureGenerator,
+    SeasonalDecomposeFeatures,
+    SklearnTransformerProcessor,
+    WinsorizeByQuantile,
 )
 from aqp.ml.recorder import PortAnaRecord, RecordTemplate, SigAnaRecord, SignalRecord
+from aqp.ml.splits import (
+    TrainValTestWindow,
+    chronological_train_val_test_split,
+    quarterly_point_in_time_split,
+    rolling_train_val_test_windows,
+)
 
 # Feature factories (Alpha158 / Alpha360) — expose for convenient imports.
 with contextlib.suppress(Exception):  # pragma: no cover
@@ -57,6 +70,24 @@ with contextlib.suppress(Exception):  # pragma: no cover
     from aqp.ml.models.linear import LinearModel  # noqa: F401
 with contextlib.suppress(Exception):  # pragma: no cover
     from aqp.ml.models.ensemble import DEnsembleModel  # noqa: F401
+with contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.ml.models.sklearn import (  # noqa: F401
+        SklearnClassifierModel,
+        SklearnPipelineModel,
+        SklearnRegressorModel,
+    )
+with contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.ml.models.forecasting import (  # noqa: F401
+        ProphetForecastModel,
+        SktimeForecastModel,
+        SktimeReductionForecastModel,
+    )
+with contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.ml.models.anomaly import PyODAnomalyModel  # noqa: F401
+with contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.ml.models.keras import KerasLSTMModel, KerasMLPModel  # noqa: F401
+with contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.ml.models.huggingface import HuggingFaceTextSignalModel  # noqa: F401
 
 # Inspiration rehydration sub-packages (SPM / notebooks / SAE) — import for
 # @register side effects. Lazy ``contextlib.suppress`` so missing torch /
@@ -87,15 +118,21 @@ __all__ = [
     "EqualWeightReweighter",
     "FilterCol",
     "Fillna",
+    "LagFeatureGenerator",
     "CSRankNorm",
     "CSZScoreNorm",
+    "CoerceNumericColumns",
     "MinMaxNorm",
     "Model",
     "ModelFT",
+    "PanelForwardFill",
     "PortAnaRecord",
     "PlannedSplit",
     "PreprocessingSpec",
     "Processor",
+    "RollingFeatureGenerator",
+    "SeasonalDecomposeFeatures",
+    "SklearnTransformerProcessor",
     "RecordTemplate",
     "Reweighter",
     "Serializable",
@@ -103,6 +140,11 @@ __all__ = [
     "SignalRecord",
     "TSDataSampler",
     "TSDatasetH",
+    "TrainValTestWindow",
+    "WinsorizeByQuantile",
     "artifacts_to_segments",
     "build_split_plan",
+    "chronological_train_val_test_split",
+    "quarterly_point_in_time_split",
+    "rolling_train_val_test_windows",
 ]

@@ -11,12 +11,13 @@ import {
   Tag,
   Typography,
 } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { PageContainer } from "@/components/shell/PageContainer";
-import { apiFetch } from "@/lib/api/client";
+import { useApiQuery } from "@/lib/api/hooks";
 
-const { Title, Paragraph, Text } = Typography;
+const { Paragraph, Text } = Typography;
 
 interface RegistryEntry {
   alias: string;
@@ -28,40 +29,100 @@ interface RegistryEntry {
 }
 
 const SOURCE_OPTIONS = [
-  { value: "all", label: "All sources" },
-  { value: "stock_prediction_models", label: "Stock-Prediction-Models" },
-  { value: "notebooks", label: "Notebooks" },
-  { value: "akquant", label: "Akquant" },
-  { value: "sae", label: "Stock-Analysis-Engine" },
+  { value: "__all__", label: "All sources" },
 ];
 
 export default function MlZooPage() {
-  const [entries, setEntries] = useState<RegistryEntry[]>([]);
-  const [filter, setFilter] = useState("");
-  const [source, setSource] = useState<string>("all");
-  const [loading, setLoading] = useState(true);
+  return (
+    <Suspense
+      fallback={
+        <PageContainer title="ML Model Zoo">
+          <Empty description="Loading..." />
+        </PageContainer>
+      }
+    >
+      <MlZooContents />
+    </Suspense>
+  );
+}
 
-  useEffect(() => {
-    setLoading(true);
-    apiFetch("/registry/model")
-      .then((d) => {
-        const arr: RegistryEntry[] = Array.isArray(d) ? d : Object.values(d ?? {});
-        setEntries(arr);
-      })
-      .catch(() => setEntries([]))
-      .finally(() => setLoading(false));
-  }, []);
+function MlZooContents() {
+  const searchParams = useSearchParams();
+  const sourceFromQuery = searchParams.get("source") ?? "__all__";
+  const categoryFromQuery = searchParams.get("category") ?? "__all__";
+  const tagFromQuery = searchParams.get("tag") ?? "__all__";
+  const [filter, setFilter] = useState("");
+  const [source, setSource] = useState<string>(sourceFromQuery);
+  const [category, setCategory] = useState<string>(categoryFromQuery);
+  const [tag, setTag] = useState<string>(tagFromQuery);
+
+  const catalog = useApiQuery<RegistryEntry[]>({
+    queryKey: ["ml-zoo", "catalog"],
+    path: "/registry/model",
+    staleTime: 60_000,
+    select: (d) => (Array.isArray(d) ? (d as RegistryEntry[]) : []),
+  });
+
+  const list = useApiQuery<RegistryEntry[]>({
+    queryKey: ["ml-zoo", "list", source, category, tag],
+    path: "/registry/model",
+    query: {
+      source: source === "__all__" ? undefined : source,
+      category: category === "__all__" ? undefined : category,
+      tag: tag === "__all__" ? undefined : tag,
+    },
+    staleTime: 20_000,
+    select: (d) => (Array.isArray(d) ? (d as RegistryEntry[]) : []),
+  });
+
+  const sourceOptions = useMemo(() => {
+    const srcs = new Set<string>();
+    for (const e of catalog.data ?? []) {
+      if (e.source) srcs.add(e.source);
+    }
+    return [...SOURCE_OPTIONS, ...Array.from(srcs).sort().map((s) => ({ value: s, label: s }))];
+  }, [catalog.data]);
+
+  const categoryOptions = useMemo(() => {
+    const cats = new Set<string>();
+    for (const e of catalog.data ?? []) {
+      if (source !== "__all__" && e.source !== source) continue;
+      if (e.category) cats.add(e.category);
+    }
+    return [{ value: "__all__", label: "All categories" }, ...Array.from(cats).sort().map((c) => ({ value: c, label: c }))];
+  }, [catalog.data, source]);
+
+  const tagOptions = useMemo(() => {
+    const tags = new Set<string>();
+    for (const e of catalog.data ?? []) {
+      if (source !== "__all__" && e.source !== source) continue;
+      if (category !== "__all__" && e.category !== category) continue;
+      for (const t of e.tags ?? []) {
+        if (t.startsWith("source:") || t.startsWith("category:")) continue;
+        tags.add(t);
+      }
+    }
+    return [{ value: "__all__", label: "All tags" }, ...Array.from(tags).sort().map((t) => ({ value: t, label: t }))];
+  }, [catalog.data, source, category]);
 
   const filtered = useMemo(() => {
-    return entries.filter((e) => {
+    return (list.data ?? []).filter((e) => {
       const matchesText =
         !filter ||
         e.alias.toLowerCase().includes(filter.toLowerCase()) ||
-        (e.module ?? "").toLowerCase().includes(filter.toLowerCase());
-      const matchesSource = source === "all" || e.source === source;
-      return matchesText && matchesSource;
+        (e.module ?? "").toLowerCase().includes(filter.toLowerCase()) ||
+        (e.doc ?? "").toLowerCase().includes(filter.toLowerCase());
+      return matchesText;
     });
-  }, [entries, filter, source]);
+  }, [list.data, filter]);
+
+  const loading = list.isLoading || catalog.isLoading;
+
+  useEffect(() => {
+    setSource(sourceFromQuery);
+    setCategory(categoryFromQuery);
+    setTag(tagFromQuery);
+  }, [sourceFromQuery, categoryFromQuery, tagFromQuery]);
 
   return (
     <PageContainer title="ML Model Zoo">
@@ -80,11 +141,34 @@ export default function MlZooPage() {
         />
         <Select
           value={source}
-          onChange={setSource}
+          onChange={(v) => {
+            setSource(v);
+            setCategory("__all__");
+            setTag("__all__");
+          }}
           style={{ width: 240 }}
-          options={SOURCE_OPTIONS}
+          options={sourceOptions}
+        />
+        <Select
+          value={category}
+          onChange={(v) => {
+            setCategory(v);
+            setTag("__all__");
+          }}
+          style={{ width: 220 }}
+          options={categoryOptions}
+        />
+        <Select
+          value={tag}
+          onChange={setTag}
+          style={{ width: 220 }}
+          options={tagOptions}
         />
       </Space>
+      <Paragraph type="secondary" style={{ marginBottom: 12 }}>
+        Showing {filtered.length} models
+        {source !== "__all__" ? ` from ${source}` : ""}.
+      </Paragraph>
 
       {loading ? (
         <Empty description="Loading..." />
@@ -103,6 +187,12 @@ export default function MlZooPage() {
                     href={`/ml/training?model=${encodeURIComponent(e.alias)}`}
                   >
                     Train from this template
+                  </a>,
+                  <a
+                    key="backtest"
+                    href={`/backtest/new?alpha=${encodeURIComponent(e.alias)}&source=${encodeURIComponent(e.source ?? "")}`}
+                  >
+                    Open backtest wizard
                   </a>,
                 ]}
               >

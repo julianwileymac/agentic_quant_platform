@@ -1,0 +1,56 @@
+# Walk-forward + AgenticVbtAlpha — agents run per WFO window.
+#
+# Drive this file through `aqp.backtest.vbtpro.wfo.WalkForwardHarness`.
+# The harness re-instantiates the strategy on every window so the agent
+# (loaded fresh) sees only that window's train slice when warming its
+# RAG / memory before the test backtest runs.
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols:
+          - AAPL.NASDAQ
+          - MSFT.NASDAQ
+          - SPY.NYSE
+    alpha_model:
+      class: AgenticVbtAlpha
+      module_path: aqp.strategies.vbtpro.agentic_alpha
+      kwargs:
+        spec_name: trader.signal_emitter
+        strategy_id: vbtpro_wfo_agentic
+        mode: per_window
+        min_confidence: 0.5
+        use_size_in_signals: true
+    portfolio_model:
+      class: EqualWeightPortfolioModel
+      module_path: aqp.strategies.portfolios
+      kwargs: {}
+    risk_model:
+      class: NullRiskModel
+      module_path: aqp.strategies.risk
+      kwargs: {}
+    execution_model:
+      class: ImmediateExecutionModel
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: vbt-pro:signals
+  kwargs:
+    initial_cash: 100000.0
+    fees: 0.001
+    slippage: 0.0005
+    cash_sharing: true
+    group_by: true
+    start: "2018-01-01"
+    end: "2024-12-31"
+
+wfo:
+  splitter: rolling
+  n_splits: 8
+  train_size: 504
+  test_size: 126

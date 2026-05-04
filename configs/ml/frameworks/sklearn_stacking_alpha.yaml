@@ -1,0 +1,56 @@
+name: "Sklearn stacking ensemble"
+description: >
+  Stacking ensemble of heterogeneous sklearn estimators with a Ridge
+  meta-learner. Useful when individual learners disagree on different
+  market regimes.
+
+dataset_preset: finrl_fundamentals_panel_sample
+features: ["close", "volume", "revenue_growth", "gross_margin", "debt_to_equity"]
+target:
+  class: next_bar_binary
+  module_path: aqp.data.labels
+  kwargs:
+    threshold: 0.0
+
+model:
+  class: SklearnStackingModel
+  module_path: aqp.ml.models.sklearn
+  kwargs:
+    estimators:
+      - name: ridge
+        estimator_cfg:
+          class: Ridge
+          module_path: sklearn.linear_model
+          kwargs:
+            alpha: 1.0
+      - name: gbr
+        estimator_cfg:
+          class: GradientBoostingRegressor
+          module_path: sklearn.ensemble
+          kwargs:
+            n_estimators: 200
+            max_depth: 3
+      - name: rf
+        estimator_cfg:
+          class: RandomForestRegressor
+          module_path: sklearn.ensemble
+          kwargs:
+            n_estimators: 200
+    final_estimator_cfg:
+      class: Ridge
+      module_path: sklearn.linear_model
+      kwargs:
+        alpha: 0.5
+    cv: 5
+
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 504
+      test_periods: 63
+      step_periods: 63
+
+mlflow:
+  experiment: sklearn-stacking-alpha

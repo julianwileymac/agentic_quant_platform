@@ -1,6 +1,8 @@
 "use client";
 
 import { Card, Col, Empty, Row, Skeleton, Space, Table, Tabs, Tag, Typography } from "antd";
+import { useSearchParams } from "next/navigation";
+import { useMemo } from "react";
 
 import { PageContainer } from "@/components/shell/PageContainer";
 import { useApiQuery } from "@/lib/api/hooks";
@@ -42,6 +44,18 @@ interface TaxonomyAll {
   rl_envs?: TaxonomySection;
   rl_algos?: TaxonomySection;
   rl_applications?: TaxonomySection;
+}
+
+interface RegistrySummaryRow {
+  alias: string;
+  source?: string | null;
+}
+
+interface SourceLibraryRow {
+  source: string;
+  strategies: number;
+  models: number;
+  agents: number;
 }
 
 function GroupSection({ section }: { section: TaxonomySection }) {
@@ -104,11 +118,67 @@ function GroupSection({ section }: { section: TaxonomySection }) {
 }
 
 export function TaxonomyExplorer() {
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const defaultTab = useMemo(() => {
+    const valid = new Set([
+      "models",
+      "forecasters",
+      "paradigms",
+      "ts",
+      "rl_envs",
+      "rl_algos",
+      "rl_apps",
+      "sources",
+    ]);
+    return requestedTab && valid.has(requestedTab) ? requestedTab : "models";
+  }, [requestedTab]);
   const { data, isLoading } = useApiQuery<TaxonomyAll>({
     queryKey: ["registry", "taxonomy", "all"],
     path: "/registry/taxonomy/all",
     staleTime: 60_000,
   });
+  const strategyRows = useApiQuery<RegistrySummaryRow[]>({
+    queryKey: ["registry", "strategy", "sources"],
+    path: "/registry/strategy",
+    staleTime: 60_000,
+    select: (raw) => (Array.isArray(raw) ? (raw as RegistrySummaryRow[]) : []),
+  });
+  const modelRows = useApiQuery<RegistrySummaryRow[]>({
+    queryKey: ["registry", "model", "sources"],
+    path: "/registry/model",
+    staleTime: 60_000,
+    select: (raw) => (Array.isArray(raw) ? (raw as RegistrySummaryRow[]) : []),
+  });
+  const agentRows = useApiQuery<RegistrySummaryRow[]>({
+    queryKey: ["registry", "agent", "sources"],
+    path: "/registry/agent",
+    staleTime: 60_000,
+    select: (raw) => (Array.isArray(raw) ? (raw as RegistrySummaryRow[]) : []),
+  });
+
+  const sourceLibraryRows = useMemo<SourceLibraryRow[]>(() => {
+    const counts = new Map<string, SourceLibraryRow>();
+    const ensure = (source: string) => {
+      if (!counts.has(source)) {
+        counts.set(source, { source, strategies: 0, models: 0, agents: 0 });
+      }
+      return counts.get(source)!;
+    };
+    for (const row of strategyRows.data ?? []) {
+      const source = row.source || "unattributed";
+      ensure(source).strategies += 1;
+    }
+    for (const row of modelRows.data ?? []) {
+      const source = row.source || "unattributed";
+      ensure(source).models += 1;
+    }
+    for (const row of agentRows.data ?? []) {
+      const source = row.source || "unattributed";
+      ensure(source).agents += 1;
+    }
+    return Array.from(counts.values()).sort((a, b) => a.source.localeCompare(b.source));
+  }, [strategyRows.data, modelRows.data, agentRows.data]);
 
   return (
     <PageContainer
@@ -119,6 +189,7 @@ export function TaxonomyExplorer() {
         <Skeleton active />
       ) : (
         <Tabs
+          defaultActiveKey={defaultTab}
           items={[
             {
               key: "models",
@@ -202,6 +273,51 @@ export function TaxonomyExplorer() {
                 </>
               ) : (
                 <Empty />
+              ),
+            },
+            {
+              key: "sources",
+              label: "Source libraries",
+              children: (
+                <>
+                  <Title level={4}>Source library coverage</Title>
+                  <Paragraph type="secondary">
+                    Counts below come from registry metadata (`source`) and back
+                    the source-aware filters in the Model Zoo, RL Zoo, and
+                    Dataset Library.
+                  </Paragraph>
+                  <Table
+                    size="small"
+                    rowKey="source"
+                    dataSource={sourceLibraryRows}
+                    pagination={false}
+                    loading={
+                      strategyRows.isLoading || modelRows.isLoading || agentRows.isLoading
+                    }
+                    columns={[
+                      {
+                        title: "Source",
+                        dataIndex: "source",
+                        render: (value: string) => <Tag color="blue">{value}</Tag>,
+                      },
+                      { title: "Strategies", dataIndex: "strategies", width: 120 },
+                      { title: "Models", dataIndex: "models", width: 120 },
+                      { title: "Agents", dataIndex: "agents", width: 120 },
+                      {
+                        title: "Explore",
+                        render: (_, row) => (
+                          <Space>
+                            <a href={`/ml/zoo?source=${encodeURIComponent(row.source)}`}>ML Zoo</a>
+                            <a href={`/rl/zoo?source=${encodeURIComponent(row.source)}`}>RL Zoo</a>
+                            <a href={`/data/datasets/library?source=${encodeURIComponent(row.source)}`}>
+                              Datasets
+                            </a>
+                          </Space>
+                        ),
+                      },
+                    ]}
+                  />
+                </>
               ),
             },
           ]}

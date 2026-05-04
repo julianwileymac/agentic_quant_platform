@@ -1,0 +1,40 @@
+name: "TF Estimator DNN regressor"
+description: >
+  Native TensorFlow tf.estimator.DNNRegressor for tabular alpha
+  experiments. Requires AQP_TF_NATIVE_ENABLED=true and the
+  ml-tensorflow extra.
+
+dataset_preset: finrl_fundamentals_panel_sample
+features: ["close", "volume", "revenue_growth", "gross_margin", "debt_to_equity"]
+target:
+  class: next_bar_binary
+  module_path: aqp.data.labels
+  kwargs:
+    threshold: 0.0
+
+model:
+  class: TFEstimatorModel
+  module_path: aqp.ml.models.tensorflow
+  kwargs:
+    estimator: dnn
+    hidden_units: [128, 64, 32]
+    steps: 2000
+    batch_size: 256
+
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 504
+      test_periods: 63
+      step_periods: 63
+  preprocessing:
+    - class: PanelForwardFill
+      module_path: aqp.ml.processors
+      kwargs:
+        symbol_col: vt_symbol
+        timestamp_col: timestamp
+
+mlflow:
+  experiment: tf-estimator-dnn

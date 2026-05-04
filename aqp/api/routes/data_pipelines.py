@@ -176,6 +176,8 @@ class IngestPathRequest(BaseModel):
     annotate: bool = Field(default=True, description="Run the LLM annotation step after materialization")
     max_rows_per_dataset: int | None = Field(default=None, ge=1)
     max_files_per_dataset: int | None = Field(default=None, ge=1)
+    director_enabled: bool | None = Field(default=None, description="Override Director planning for this ingest")
+    allowed_namespaces: list[str] | None = Field(default=None, description="Optional namespace allow-list for Director planning")
 
 
 class AlphaVantageHistoryIngestRequest(BaseModel):
@@ -211,6 +213,8 @@ def ingest_path(req: IngestPathRequest) -> TaskAccepted:
         bool(req.annotate),
         req.max_rows_per_dataset,
         req.max_files_per_dataset,
+        req.director_enabled,
+        req.allowed_namespaces,
     )
     return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
 
@@ -338,6 +342,8 @@ def run_loading_template(template_id: str, req: LoadingTemplateRunRequest) -> di
             bool(payload.get("annotate", True)),
             payload.get("max_rows_per_dataset"),
             payload.get("max_files_per_dataset"),
+            payload.get("director_enabled"),
+            payload.get("allowed_namespaces"),
         )
     else:  # pragma: no cover - protects future template additions
         raise HTTPException(500, f"unsupported loading template run kind: {template.run_kind}")

@@ -36,7 +36,13 @@ def _heikin_ashi(bars: pd.DataFrame) -> pd.DataFrame:
     return ha
 
 
-@register("HeikinAshiAlpha")
+@register(
+    "HeikinAshiAlpha",
+    kind="strategy",
+    tags=STRATEGY_TAGS,
+    source="quant_trading",
+    category="candlestick",
+)
 class HeikinAshiAlpha(IAlphaModel):
     def __init__(
         self,

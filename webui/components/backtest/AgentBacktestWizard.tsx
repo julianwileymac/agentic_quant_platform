@@ -24,7 +24,7 @@ import {
   Typography,
 } from "antd";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -56,12 +56,6 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react").then((m) => m.
 });
 
 const { Text, Paragraph, Title } = Typography;
-
-interface JudgeListItem {
-  alias: string;
-  qualname: string;
-  tags: string[];
-}
 
 interface SubmitResp {
   task_id: string;
@@ -422,6 +416,10 @@ function buildResolvedConfig({
 
 export function AgentBacktestWizard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const prefillAlpha = searchParams.get("alpha");
+  const prefillAgent = searchParams.get("agent");
+  const prefillDatasetPreset = searchParams.get("datasetPreset");
   const { message } = App.useApp();
   const [stepIdx, setStepIdx] = useState(0);
   const [runName, setRunName] = useState("agent-backtest");
@@ -506,6 +504,27 @@ export function AgentBacktestWizard() {
     };
     return init;
   });
+
+  useEffect(() => {
+    if (prefillAlpha) {
+      setSteps((prev) => ({
+        ...prev,
+        alpha: { alias: prefillAlpha, kind: "strategy", values: {} },
+      }));
+      setStepIdx(2);
+    } else if (prefillAgent) {
+      setSteps((prev) => ({
+        ...prev,
+        alpha: { alias: prefillAgent, kind: "agent", values: {} },
+      }));
+      setStepIdx(2);
+    }
+    if (prefillDatasetPreset) {
+      setRunName((prev) =>
+        prev === "agent-backtest" ? `preset-${prefillDatasetPreset}` : prev,
+      );
+    }
+  }, [prefillAgent, prefillAlpha, prefillDatasetPreset]);
 
   useEffect(() => {
     if (!providerControl.data) return;
@@ -657,6 +676,21 @@ export function AgentBacktestWizard() {
           <Card size="small" style={{ marginTop: 16 }}>
             {stepKey === "metadata" && (
               <Form layout="vertical">
+                {prefillAlpha || prefillAgent || prefillDatasetPreset ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 12 }}
+                    message="Prefilled from source library"
+                    description={[
+                      prefillAlpha ? `alpha=${prefillAlpha}` : null,
+                      prefillAgent ? `agent=${prefillAgent}` : null,
+                      prefillDatasetPreset ? `datasetPreset=${prefillDatasetPreset}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  />
+                ) : null}
                 <Form.Item label="Run name">
                   <Input value={runName} onChange={(e) => setRunName(e.target.value)} />
                 </Form.Item>

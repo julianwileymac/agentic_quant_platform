@@ -1,8 +1,9 @@
 "use client";
 
+import { CloudUploadOutlined, DatabaseOutlined, FundOutlined } from "@ant-design/icons";
 import { Layout, Menu, Tooltip, Typography } from "antd";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { useUiStore } from "@/lib/store/ui";
 
@@ -13,41 +14,97 @@ const { Text } = Typography;
 
 const GROUP_ORDER: NavItem["group"][] = [
   "Workspace",
+  "Bots",
+  "Tenancy",
   "Agents",
   "RAG",
   "Research",
   "Lab",
   "Execution",
   "Workflows",
+  "Admin",
   "System",
 ];
+
+type SubmenuGroup = NonNullable<NavItem["submenu"]>;
+
+const SUBMENU_ORDER: SubmenuGroup[] = ["Data Pipelines", "Data Management", "ML"];
+
+const SUBMENU_ICONS: Record<SubmenuGroup, ReactNode> = {
+  "Data Pipelines": <CloudUploadOutlined />,
+  ML: <FundOutlined />,
+  "Data Management": <DatabaseOutlined />,
+};
+
+function submenuKey(group: NavItem["group"], submenu: SubmenuGroup): string {
+  return `submenu-${group}-${submenu.replace(/\s+/g, "-").toLowerCase()}`;
+}
 
 export function Sidebar() {
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
   const pathname = usePathname();
   const router = useRouter();
 
+  const defaultOpenKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const item of NAV_ITEMS) {
+      if (!item.submenu) continue;
+      keys.add(submenuKey(item.group, item.submenu));
+    }
+    return [...keys];
+  }, []);
+
   const items = useMemo(() => {
-    return GROUP_ORDER.map((group) => ({
-      key: `group-${group}`,
-      type: "group" as const,
-      label: collapsed ? null : (
-        <Text type="secondary" style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase" }}>
-          {group}
-        </Text>
-      ),
-      children: NAV_ITEMS.filter((n) => n.group === group).map((n) => ({
+    const withTooltip = (label: string, icon: ReactNode) =>
+      collapsed ? (
+        <Tooltip title={label} placement="right">
+          <span>{icon}</span>
+        </Tooltip>
+      ) : (
+        icon
+      );
+
+    return GROUP_ORDER.map((group) => {
+      const groupItems = NAV_ITEMS.filter((n) => n.group === group);
+      if (!groupItems.length) return null;
+
+      const baseItems = groupItems.filter((n) => !n.submenu).map((n) => ({
         key: n.href,
-        icon: collapsed ? (
-          <Tooltip title={n.label} placement="right">
-            <span>{n.icon}</span>
-          </Tooltip>
-        ) : (
-          n.icon
-        ),
+        icon: withTooltip(n.label, n.icon),
         label: n.label,
-      })),
-    }));
+      }));
+
+      const submenuItems = SUBMENU_ORDER.flatMap((submenu) => {
+        const entries = groupItems.filter((n) => n.submenu === submenu);
+        if (!entries.length) return [];
+        return [
+          {
+            key: submenuKey(group, submenu),
+            icon: withTooltip(submenu, SUBMENU_ICONS[submenu]),
+            label: submenu,
+            children: entries.map((n) => ({
+              key: n.href,
+              icon: withTooltip(n.label, n.icon),
+              label: n.label,
+            })),
+          },
+        ];
+      });
+
+      return {
+        key: `group-${group}`,
+        type: "group" as const,
+        label: collapsed ? null : (
+          <Text
+            type="secondary"
+            style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase" }}
+          >
+            {group}
+          </Text>
+        ),
+        children: [...baseItems, ...submenuItems],
+      };
+    }).filter((group): group is NonNullable<typeof group> => group !== null);
   }, [collapsed]);
 
   const selected = useMemo(() => {
@@ -108,6 +165,7 @@ export function Sidebar() {
         <Menu
           mode="inline"
           inlineCollapsed={collapsed}
+          defaultOpenKeys={defaultOpenKeys}
           selectedKeys={selected}
           onClick={({ key }) => router.push(key as string)}
           items={items}

@@ -1,0 +1,38 @@
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: SectorETFUniverse
+      module_path: aqp.strategies.etf_baskets
+      kwargs: {}
+    alpha_model:
+      class: SectorRSIAlpha
+      module_path: aqp.strategies.analyzingalpha.alphas
+      kwargs:
+        period: 14
+        oversold: 30.0
+        overbought: 70.0
+    portfolio_model:
+      class: MomentumRotationConstruction
+      module_path: aqp.strategies.portfolio_construction
+      kwargs:
+        top_k: 3
+        bottom_k: 0
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        max_position_pct: 0.34
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+    rebalance_every: 5
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    start: "2023-01-01"
+    end: "2024-12-31"

@@ -47,7 +47,28 @@ def _current_finops_tags() -> dict[str, str]:
         return {}
 
 
-def emit(task_id: str, stage: str, message: str, **extra: Any) -> None:
+def _context_extras(ctx: Any | None) -> dict[str, str]:
+    """Project a :class:`RequestContext` into FinOps-friendly extras.
+
+    Lazy + best-effort so this module stays importable in environments
+    that haven't loaded the auth package (Celery worker boot, e.g.).
+    """
+    if ctx is None:
+        return {}
+    try:
+        if hasattr(ctx, "to_finops_extras"):
+            return dict(ctx.to_finops_extras())
+    except Exception:  # pragma: no cover
+        pass
+    out: dict[str, str] = {}
+    for key in ("user_id", "org_id", "team_id", "workspace_id", "project_id", "lab_id", "run_id"):
+        value = getattr(ctx, key, None)
+        if value:
+            out[key] = str(value)
+    return out
+
+
+def emit(task_id: str, stage: str, message: str, *, context: Any | None = None, **extra: Any) -> None:
     payload: dict[str, Any] = {
         "task_id": task_id,
         "stage": stage,
@@ -57,13 +78,20 @@ def emit(task_id: str, stage: str, message: str, **extra: Any) -> None:
     tags = _current_finops_tags()
     if tags:
         payload["tags"] = tags
+    ctx_extras = _context_extras(context)
+    if ctx_extras:
+        # Merge into tags so existing SSE consumers that filter by tags
+        # automatically pick up workspace/project filters.
+        payload.setdefault("tags", {})
+        payload["tags"].update(ctx_extras)
+        payload["context"] = ctx_extras
     payload.update(extra)
     publish(task_id, payload)
 
 
-def emit_done(task_id: str, result: Any, **extra: Any) -> None:
-    emit(task_id, "done", "Task complete", result=result, **extra)
+def emit_done(task_id: str, result: Any, *, context: Any | None = None, **extra: Any) -> None:
+    emit(task_id, "done", "Task complete", context=context, result=result, **extra)
 
 
-def emit_error(task_id: str, error: str, **extra: Any) -> None:
-    emit(task_id, "error", error, **extra)
+def emit_error(task_id: str, error: str, *, context: Any | None = None, **extra: Any) -> None:
+    emit(task_id, "error", error, context=context, **extra)

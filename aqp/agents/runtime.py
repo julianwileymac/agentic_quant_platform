@@ -96,11 +96,24 @@ class AgentRuntime:
         run_id: str | None = None,
         task_id: str | None = None,
         session_id: str | None = None,
+        context: Any | None = None,
     ) -> None:
         self.spec = spec
         self.run_id = run_id or str(uuid.uuid4())
         self.task_id = task_id
         self.session_id = session_id
+        # Tenancy context — stamped onto every persisted agent_runs_v2 /
+        # agent_run_steps / agent_run_artifacts row so downstream pages can
+        # filter by workspace/project. Fall back to the local-first default
+        # for legacy callers.
+        if context is None:
+            try:
+                from aqp.auth.context import default_context
+
+                context = default_context()
+            except Exception:
+                context = None
+        self.context = context
         self._steps: list[StepRecord] = []
         self._cost = 0.0
         self._calls = 0
@@ -151,21 +164,37 @@ class AgentRuntime:
             from aqp.persistence.models_agents import AgentRunV2
 
             with SessionLocal() as session:
-                session.add(
-                    AgentRunV2(
-                        id=self.run_id,
-                        spec_name=self.spec.name,
-                        spec_version_id=spec_version_id,
-                        task_id=self.task_id,
-                        session_id=self.session_id,
-                        status="running",
-                        inputs=inputs,
-                        started_at=datetime.utcnow(),
-                    )
+                row = AgentRunV2(
+                    id=self.run_id,
+                    spec_name=self.spec.name,
+                    spec_version_id=spec_version_id,
+                    task_id=self.task_id,
+                    session_id=self.session_id,
+                    status="running",
+                    inputs=inputs,
+                    started_at=datetime.utcnow(),
                 )
+                self._stamp_tenancy(row)
+                session.add(row)
                 session.commit()
         except Exception:  # noqa: BLE001
             logger.debug("Could not open agent_runs_v2 row", exc_info=True)
+
+    def _stamp_tenancy(self, row: Any) -> None:
+        """Copy ``owner_user_id``/``workspace_id``/``project_id`` from the
+        active context onto the row when those columns exist and are unset.
+        """
+        ctx = self.context
+        if ctx is None:
+            return
+        for attr_ctx, attr_row in (
+            ("user_id", "owner_user_id"),
+            ("workspace_id", "workspace_id"),
+            ("project_id", "project_id"),
+        ):
+            value = getattr(ctx, attr_ctx, None)
+            if value and hasattr(row, attr_row) and getattr(row, attr_row, None) in (None, ""):
+                setattr(row, attr_row, value)
 
     def _persist_step(self, step: StepRecord) -> None:
         try:
@@ -173,19 +202,19 @@ class AgentRuntime:
             from aqp.persistence.models_agents import AgentRunStep
 
             with SessionLocal() as session:
-                session.add(
-                    AgentRunStep(
-                        run_id=self.run_id,
-                        seq=step.seq,
-                        kind=step.kind,
-                        name=step.name,
-                        inputs=_safe_json(step.inputs),
-                        output=_safe_json(step.output),
-                        cost_usd=step.cost_usd,
-                        duration_ms=step.duration_ms,
-                        error=step.error,
-                    )
+                row = AgentRunStep(
+                    run_id=self.run_id,
+                    seq=step.seq,
+                    kind=step.kind,
+                    name=step.name,
+                    inputs=_safe_json(step.inputs),
+                    output=_safe_json(step.output),
+                    cost_usd=step.cost_usd,
+                    duration_ms=step.duration_ms,
+                    error=step.error,
                 )
+                self._stamp_tenancy(row)
+                session.add(row)
                 session.commit()
         except Exception:  # noqa: BLE001
             logger.debug("Could not persist agent_run_step", exc_info=True)
@@ -572,6 +601,7 @@ class AgentRuntime:
                     max_tokens=self.spec.model.max_tokens,
                     tier=self.spec.model.tier,
                     tools=tool_schemas,
+                    context=self.context,
                     **self.spec.model.extras,
                 )
             except Exception as exc:  # noqa: BLE001

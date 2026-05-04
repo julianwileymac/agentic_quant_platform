@@ -1,0 +1,50 @@
+# Vbt-pro optimizer mode — mean-variance allocation.
+#
+# Demonstrates the optimizer mode: no signals or alphas, just a
+# PortfolioOptimizer that emits target weights at each rebalance. vbt-pro
+# converts the weights into orders via Portfolio.from_optimizer.
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols:
+          - SPY.NYSE
+          - TLT.NASDAQ
+          - GLD.NYSE
+          - QQQ.NASDAQ
+    alpha_model:
+      class: NullAlpha
+      module_path: aqp.strategies.alphas.null
+      kwargs: {}
+    portfolio_model:
+      class: EqualWeightPortfolioModel
+      module_path: aqp.strategies.portfolios
+      kwargs: {}
+    risk_model:
+      class: NullRiskModel
+      module_path: aqp.strategies.risk
+      kwargs: {}
+    execution_model:
+      class: ImmediateExecutionModel
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: vbt-pro:optimizer
+  kwargs:
+    initial_cash: 1000000.0
+    fees: 0.0005
+    slippage: 0.0001
+    cash_sharing: true
+    group_by: true
+    start: "2018-01-01"
+    end: "2024-12-31"
+    optimizer:
+      class: MeanVarianceOptimizer
+      module_path: aqp.backtest.vbtpro.optimizer_adapter
+      kwargs:
+        every: "M"

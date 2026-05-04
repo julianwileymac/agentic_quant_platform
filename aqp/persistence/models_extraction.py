@@ -21,10 +21,11 @@ from sqlalchemy import (
     Text,
 )
 
+from aqp.persistence._tenancy_mixins import ProjectScopedMixin
 from aqp.persistence.models import Base, _uuid
 
 
-class DatasetPresetRow(Base):
+class DatasetPresetRow(Base, ProjectScopedMixin):
     __tablename__ = "dataset_presets"
 
     name = Column(String(120), primary_key=True)
@@ -47,7 +48,7 @@ Index("ix_dataset_presets_namespace", DatasetPresetRow.namespace)
 Index("ix_dataset_presets_source_kind", DatasetPresetRow.source_kind)
 
 
-class ExtractionAuditRow(Base):
+class ExtractionAuditRow(Base, ProjectScopedMixin):
     __tablename__ = "extraction_audit"
 
     id = Column(String(36), primary_key=True, default=_uuid)

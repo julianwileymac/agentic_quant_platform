@@ -165,3 +165,80 @@ def trigger_assets(payload: TriggerRequest) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         logger.warning("dagster trigger failed: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
+# Schedules and sensors
+# ---------------------------------------------------------------------------
+def _graphql(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+    url = _graphql_url()
+    if not url:
+        raise HTTPException(
+            status_code=503,
+            detail="Dagster GraphQL endpoint not configured.",
+        )
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post(url, json={"query": query, "variables": variables or {}})
+            resp.raise_for_status()
+            return resp.json().get("data") or {}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get("/schedules")
+def list_schedules() -> dict[str, Any]:
+    """List Dagster schedules + their status."""
+    query = (
+        "query { schedulesOrError { __typename ... on Schedules { results { name "
+        "cronSchedule executionTimezone scheduleState { status } } } } }"
+    )
+    data = _graphql(query)
+    schedules = (data.get("schedulesOrError") or {}).get("results") or []
+    return {"schedules": schedules}
+
+
+@router.post("/schedules/{name}/start")
+def start_schedule(name: str) -> dict[str, Any]:
+    mutation = (
+        "mutation Start($name: String!) { startSchedule(scheduleSelector: "
+        "{ scheduleName: $name, repositoryName: \"__repository__\", "
+        "repositoryLocationName: \"__repository__\" }) { __typename } }"
+    )
+    return _graphql(mutation, {"name": name})
+
+
+@router.post("/schedules/{name}/stop")
+def stop_schedule(name: str) -> dict[str, Any]:
+    mutation = (
+        "mutation Stop($name: String!) { stopRunningSchedule(scheduleOriginId: $name) { __typename } }"
+    )
+    return _graphql(mutation, {"name": name})
+
+
+@router.get("/sensors")
+def list_sensors() -> dict[str, Any]:
+    query = (
+        "query { sensorsOrError { __typename ... on Sensors { results { name "
+        "sensorState { status } } } } }"
+    )
+    data = _graphql(query)
+    return {"sensors": (data.get("sensorsOrError") or {}).get("results") or []}
+
+
+@router.post("/sensors/{name}/start")
+def start_sensor(name: str) -> dict[str, Any]:
+    mutation = (
+        "mutation Start($name: String!) { startSensor(sensorSelector: "
+        "{ sensorName: $name, repositoryName: \"__repository__\", "
+        "repositoryLocationName: \"__repository__\" }) { __typename } }"
+    )
+    return _graphql(mutation, {"name": name})
+
+
+@router.post("/sensors/{name}/stop")
+def stop_sensor(name: str) -> dict[str, Any]:
+    mutation = (
+        "mutation Stop($name: String!) { stopSensor(jobOriginId: $name) { __typename } }"
+    )
+    return _graphql(mutation, {"name": name})

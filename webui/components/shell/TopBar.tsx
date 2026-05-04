@@ -15,6 +15,7 @@ import { useEffect } from "react";
 import { useUiStore } from "@/lib/store/ui";
 
 import { NAV_ITEMS } from "./nav-config";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 const { Header } = Layout;
 const { Text } = Typography;
@@ -73,6 +74,8 @@ export function TopBar() {
       <Text strong style={{ fontSize: 15 }}>
         {matched?.label ?? "Workspace"}
       </Text>
+      <div style={{ width: 16 }} />
+      <WorkspaceSwitcher />
       <div style={{ flex: 1 }} />
       <Space size={4}>
         <Tooltip title="Command palette (Ctrl/Cmd+K)">

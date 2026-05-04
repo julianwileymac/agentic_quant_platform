@@ -287,6 +287,132 @@ def log_alpha_training(
         return None
 
 
+def log_ml_experiment_run(
+    *,
+    run_name: str,
+    experiment_type: str,
+    params: dict[str, Any] | None = None,
+    metrics: dict[str, Any] | None = None,
+    tags: dict[str, Any] | None = None,
+    prediction_sample: pd.DataFrame | None = None,
+    feature_importance: dict[str, float] | None = None,
+    artifacts: dict[str, Any] | None = None,
+) -> str | None:
+    """Log a full ML-ops experiment run with metrics and compact artifacts."""
+    try:
+        mlflow = _client()
+        ensure_experiment(settings.mlflow_experiment)
+        with mlflow.start_run(run_name=run_name) as run:
+            mlflow.set_tag("aqp.component", "ml_experiment")
+            mlflow.set_tag("aqp.experiment_type", experiment_type)
+            for key, value in (tags or {}).items():
+                if value is not None:
+                    with contextlib.suppress(Exception):
+                        mlflow.set_tag(str(key)[:250], str(value)[:500])
+            if params:
+                mlflow.log_params(_flatten_params(params))
+            for key, value in (metrics or {}).items():
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    with contextlib.suppress(Exception):
+                        mlflow.log_metric(str(key)[:250], float(value))
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp)
+                if prediction_sample is not None and not prediction_sample.empty:
+                    pred_path = path / "predictions.csv"
+                    prediction_sample.to_csv(pred_path, index=False)
+                    mlflow.log_artifact(str(pred_path))
+                if feature_importance:
+                    fi_path = path / "feature_importance.json"
+                    fi_path.write_text(json.dumps(feature_importance, default=str, indent=2), encoding="utf-8")
+                    mlflow.log_artifact(str(fi_path))
+                if artifacts:
+                    art_path = path / "artifacts.json"
+                    art_path.write_text(json.dumps(artifacts, default=str, indent=2), encoding="utf-8")
+                    mlflow.log_artifact(str(art_path))
+            return run.info.run_id
+    except Exception:
+        logger.exception("log_ml_experiment_run failed")
+        return None
+
+
+class AlphaBacktestParentRun:
+    """Context manager owning an MLflow parent run for an AlphaBacktestExperiment.
+
+    The parent run carries the rolled-up combined metrics; child runs for
+    ``ml_train`` and ``backtest`` are opened by the orchestrator's helpers
+    via :func:`log_ml_experiment_run` / :func:`log_backtest`. Best-effort:
+    if MLflow isn't reachable, the context manager still yields a stub
+    object that no-ops ``log_metrics``.
+    """
+
+    def __init__(
+        self,
+        run_name: str,
+        lineage: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> None:
+        self.run_name = run_name
+        self.lineage = dict(lineage or {})
+        self.params = dict(params or {})
+        self._mlflow: Any | None = None
+        self._run: Any | None = None
+        self.run_id: str | None = None
+
+    def __enter__(self) -> "AlphaBacktestParentRun":
+        try:
+            self._mlflow = _client()
+            ensure_experiment(
+                experiment_name_for_strategy(self.lineage.get("strategy_id"))
+            )
+            self._run = self._mlflow.start_run(run_name=self.run_name)
+            self.run_id = self._run.info.run_id
+            with contextlib.suppress(Exception):
+                self._mlflow.set_tag("aqp.component", "alpha_backtest")
+                self._mlflow.set_tag("aqp.experiment_type", "alpha_backtest")
+                for key, value in self.lineage.items():
+                    if value is not None:
+                        self._mlflow.set_tag(str(key)[:250], str(value)[:500])
+                if self.params:
+                    self._mlflow.log_params(_flatten_params(self.params))
+        except Exception:
+            logger.debug("AlphaBacktestParentRun open skipped", exc_info=True)
+            self._mlflow = None
+            self._run = None
+            self.run_id = None
+        return self
+
+    def log_metrics(self, metrics: dict[str, Any]) -> None:
+        if not self._mlflow:
+            return
+        for key, value in (metrics or {}).items():
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                with contextlib.suppress(Exception):
+                    self._mlflow.log_metric(str(key)[:250], float(value))
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if self._mlflow is None or self._run is None:
+            return
+        try:
+            self._mlflow.end_run("FINISHED" if exc_type is None else "FAILED")
+        except Exception:
+            logger.debug("AlphaBacktestParentRun close skipped", exc_info=True)
+
+
+def log_alpha_backtest_parent(
+    run_name: str,
+    lineage: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> AlphaBacktestParentRun:
+    """Open a parent MLflow run for an ``AlphaBacktestExperiment``.
+
+    Use as a context manager:
+
+    >>> with log_alpha_backtest_parent("my-run", lineage={...}) as parent:
+    ...     parent.log_metrics({"sharpe": 1.2})
+    """
+    return AlphaBacktestParentRun(run_name=run_name, lineage=lineage, params=params)
+
+
 def log_feature_engineering(
     features_df: pd.DataFrame,
     dataset_hash: str | None = None,

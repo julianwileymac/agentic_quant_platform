@@ -24,6 +24,7 @@ from sqlalchemy import (
     Text,
 )
 
+from aqp.persistence._tenancy_mixins import LabScopedMixin, ProjectScopedMixin
 from aqp.persistence.models import Base
 
 
@@ -31,7 +32,7 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
-class AgentSpecRow(Base):
+class AgentSpecRow(Base, ProjectScopedMixin):
     """Logical agent — the latest active version of a named spec."""
 
     __tablename__ = "agent_specs"
@@ -45,7 +46,7 @@ class AgentSpecRow(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
-class AgentSpecVersion(Base):
+class AgentSpecVersion(Base, ProjectScopedMixin):
     """Immutable, hash-locked snapshot of an :class:`AgentSpec`."""
 
     __tablename__ = "agent_spec_versions"
@@ -67,7 +68,7 @@ class AgentSpecVersion(Base):
 Index("ix_agent_spec_versions_spec_version", AgentSpecVersion.spec_id, AgentSpecVersion.version)
 
 
-class AgentRunV2(Base):
+class AgentRunV2(Base, ProjectScopedMixin):
     """One execution of a spec via :class:`AgentRuntime`."""
 
     __tablename__ = "agent_runs_v2"
@@ -93,7 +94,7 @@ class AgentRunV2(Base):
     completed_at = Column(DateTime, nullable=True)
 
 
-class AgentRunStep(Base):
+class AgentRunStep(Base, ProjectScopedMixin):
     """One step inside a v2 run (tool call / LLM call / RAG retrieval / memory op)."""
 
     __tablename__ = "agent_run_steps"
@@ -118,7 +119,7 @@ class AgentRunStep(Base):
 Index("ix_agent_run_steps_run_seq", AgentRunStep.run_id, AgentRunStep.seq)
 
 
-class AgentRunArtifact(Base):
+class AgentRunArtifact(Base, ProjectScopedMixin):
     """Sidecar artifact (file / large blob) referenced by a run/step."""
 
     __tablename__ = "agent_run_artifacts"
@@ -143,7 +144,7 @@ class AgentRunArtifact(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
-class AgentEvaluation(Base):
+class AgentEvaluation(Base, ProjectScopedMixin):
     """One evaluation harness execution (golden replay, judge, eval set)."""
 
     __tablename__ = "agent_evaluations"
@@ -159,7 +160,7 @@ class AgentEvaluation(Base):
     completed_at = Column(DateTime, nullable=True)
 
 
-class AgentEvalMetric(Base):
+class AgentEvalMetric(Base, ProjectScopedMixin):
     """One metric row inside an :class:`AgentEvaluation`."""
 
     __tablename__ = "agent_eval_metrics"
@@ -178,7 +179,7 @@ class AgentEvalMetric(Base):
     meta = Column(JSON, default=dict)
 
 
-class AgentAnnotation(Base):
+class AgentAnnotation(Base, LabScopedMixin):
     """User / agent annotation persisted for reproducibility / optimisation."""
 
     __tablename__ = "agent_annotations"

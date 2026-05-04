@@ -1,8 +1,15 @@
 "use client";
 
-import { ExportOutlined, LineChartOutlined, ReloadOutlined } from "@ant-design/icons";
+import {
+  ExportOutlined,
+  LineChartOutlined,
+  PlayCircleOutlined,
+  ReloadOutlined,
+  StopOutlined,
+} from "@ant-design/icons";
 import {
   Alert,
+  App,
   Badge,
   Button,
   Card,
@@ -10,6 +17,7 @@ import {
   Descriptions,
   Empty,
   List,
+  Popconfirm,
   Row,
   Space,
   Statistic,
@@ -24,6 +32,7 @@ import { Suspense, useMemo, useState } from "react";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { useApiQuery } from "@/lib/api/hooks";
 import { apiFetch } from "@/lib/api/client";
+import { useChatStream } from "@/lib/ws";
 import { useLiveStream } from "@/lib/ws/useLiveStream";
 
 const { Text } = Typography;
@@ -95,12 +104,50 @@ interface SubscribeResponse {
   ws_url: string;
 }
 
+interface TaskAccepted {
+  task_id: string;
+  status?: string;
+  stream_url?: string | null;
+}
+
+type MonitoringRunPosition = "active" | "reserved" | "scheduled";
+
+interface MonitoringRun {
+  task_id: string;
+  name: string;
+  state: string;
+  position: MonitoringRunPosition;
+  worker: string;
+  queue?: string | null;
+  args?: string | null;
+  kwargs?: string | null;
+  eta?: string | null;
+  time_start?: number | null;
+  retries?: number | null;
+}
+
+interface MonitoringRunsResponse {
+  generated_at: string;
+  workers_seen: number;
+  active: MonitoringRun[];
+  reserved: MonitoringRun[];
+  scheduled: MonitoringRun[];
+  totals: Record<string, number>;
+  errors?: string[];
+}
+
 function StatusPill({ ok, label }: { ok: boolean; label: string }) {
   return (
     <Tag color={ok ? "green" : "red"} style={{ marginRight: 4 }}>
       {label}: {ok ? "ok" : "down"}
     </Tag>
   );
+}
+
+function positionColor(position: MonitoringRunPosition): string {
+  if (position === "active") return "blue";
+  if (position === "scheduled") return "purple";
+  return "gold";
 }
 
 export function MonitorPage() {
@@ -112,10 +159,14 @@ export function MonitorPage() {
 }
 
 function MonitorPageInner() {
+  const { message } = App.useApp();
   const params = useSearchParams();
   const legacy = params?.get("legacy") === "1";
   const [channelId, setChannelId] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [queueingOhlcv, setQueueingOhlcv] = useState(false);
+  const [revokingTaskId, setRevokingTaskId] = useState<string | null>(null);
 
   const health = useApiQuery<HealthResponse>({
     queryKey: ["health"],
@@ -157,7 +208,14 @@ function MonitorPageInner() {
     refetchInterval: 5000,
   });
 
+  const runs = useApiQuery<MonitoringRunsResponse>({
+    queryKey: ["monitoring", "runs"],
+    path: "/monitoring/runs",
+    refetchInterval: 5000,
+  });
+
   const stream = useLiveStream({ channelId: streaming ? channelId : null, bufferSize: 256 });
+  const taskStream = useChatStream(selectedTaskId);
 
   function asArray<T>(res: { items?: T[] } | T[] | undefined): T[] {
     if (!res) return [];
@@ -168,6 +226,14 @@ function MonitorPageInner() {
   const orderRows = asArray<OrderRow>(orders.data);
   const fillRows = asArray<FillRow>(fills.data);
   const positionRows = asArray<PositionRow>(positions.data);
+  const runRows = useMemo(
+    () => [
+      ...(runs.data?.active ?? []),
+      ...(runs.data?.reserved ?? []),
+      ...(runs.data?.scheduled ?? []),
+    ],
+    [runs.data],
+  );
 
   async function startStream() {
     try {
@@ -199,6 +265,39 @@ function MonitorPageInner() {
     setChannelId(null);
   }
 
+  async function queueActiveDailyOhlcv() {
+    setQueueingOhlcv(true);
+    try {
+      const resp = await apiFetch<TaskAccepted>("/data/ingest/active-daily-ohlcv", {
+        method: "POST",
+        body: JSON.stringify({ years: 5, source: "yahoo" }),
+      });
+      setSelectedTaskId(resp.task_id);
+      message.success(`Queued 5-year daily OHLCV load: ${resp.task_id}`);
+      await runs.refetch();
+    } catch (err) {
+      message.error((err as Error).message);
+    } finally {
+      setQueueingOhlcv(false);
+    }
+  }
+
+  async function revokeRun(taskId: string) {
+    setRevokingTaskId(taskId);
+    try {
+      await apiFetch(`/monitoring/runs/${encodeURIComponent(taskId)}/revoke`, {
+        method: "POST",
+        body: JSON.stringify({ terminate: false }),
+      });
+      message.success(`Revoked ${taskId}`);
+      await runs.refetch();
+    } catch (err) {
+      message.error((err as Error).message);
+    } finally {
+      setRevokingTaskId(null);
+    }
+  }
+
   const sectorBreakdown = useMemo(() => {
     const items = universe.data?.items ?? [];
     const counts: Record<string, number> = {};
@@ -212,14 +311,8 @@ function MonitorPageInner() {
       .map(([sector, count]) => ({ sector, count }));
   }, [universe.data]);
 
-  const totalEquity = positionRows.reduce(
-    (acc, p) => acc + (Number(p.market_value) || 0),
-    0,
-  );
-  const totalUpnl = positionRows.reduce(
-    (acc, p) => acc + (Number(p.unrealized_pnl) || 0),
-    0,
-  );
+  const totalEquity = positionRows.reduce((acc, p) => acc + (Number(p.market_value) || 0), 0);
+  const totalUpnl = positionRows.reduce((acc, p) => acc + (Number(p.unrealized_pnl) || 0), 0);
 
   if (legacy) {
     return (
@@ -252,7 +345,7 @@ function MonitorPageInner() {
   return (
     <PageContainer
       title="Live Monitor"
-      subtitle="Decisions, signals, positions, and universe status in one view."
+      subtitle="Decisions, signals, queued runs, positions, and universe status in one view."
       extra={
         <Space>
           <Switch
@@ -261,7 +354,13 @@ function MonitorPageInner() {
             unCheckedChildren="stream off"
             onChange={(v) => (v ? startStream() : stopStream())}
           />
-          <Button icon={<ReloadOutlined />} onClick={() => decisions.refetch()}>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => {
+              decisions.refetch();
+              runs.refetch();
+            }}
+          >
             Refresh
           </Button>
           <Button href="?legacy=1">Legacy Dash</Button>
@@ -279,15 +378,175 @@ function MonitorPageInner() {
           {stream.error ? <Tag color="red">{stream.error}</Tag> : null}
         </Space>
       </Card>
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col xs={24} xl={16}>
+          <Card
+            title={
+              <Space>
+                Queued runs
+                <Badge count={runs.data?.totals?.all ?? runRows.length} />
+                {runs.data ? <Tag>{runs.data.workers_seen} worker(s)</Tag> : null}
+              </Space>
+            }
+            size="small"
+            extra={
+              <Space>
+                <Button
+                  icon={<PlayCircleOutlined />}
+                  type="primary"
+                  loading={queueingOhlcv}
+                  onClick={queueActiveDailyOhlcv}
+                >
+                  Load 5y daily OHLCV
+                </Button>
+                <Button icon={<ReloadOutlined />} onClick={() => runs.refetch()}>
+                  Refresh
+                </Button>
+              </Space>
+            }
+          >
+            {runs.error ? (
+              <Alert type="error" message={runs.error.message} style={{ marginBottom: 12 }} />
+            ) : null}
+            {runs.data?.errors?.length ? (
+              <Alert
+                type="warning"
+                message="Celery inspect reported errors"
+                description={runs.data.errors.join("; ")}
+                style={{ marginBottom: 12 }}
+              />
+            ) : null}
+            <Table<MonitoringRun>
+              size="small"
+              rowKey={(r) => `${r.position}-${r.task_id}`}
+              loading={runs.isLoading}
+              dataSource={runRows}
+              pagination={{ pageSize: 8 }}
+              locale={{
+                emptyText: "No active, reserved, or scheduled Celery runs reported.",
+              }}
+              columns={[
+                {
+                  title: "status",
+                  width: 170,
+                  render: (_: unknown, row) => (
+                    <Space size={4} wrap>
+                      <Tag color={positionColor(row.position)}>{row.position}</Tag>
+                      <Tag>{row.state}</Tag>
+                    </Space>
+                  ),
+                },
+                {
+                  title: "task",
+                  dataIndex: "name",
+                  render: (name: string, row) => (
+                    <Space direction="vertical" size={0}>
+                      <Text strong>{name}</Text>
+                      <Text code copyable style={{ fontSize: 11 }}>
+                        {row.task_id}
+                      </Text>
+                    </Space>
+                  ),
+                },
+                {
+                  title: "queue",
+                  dataIndex: "queue",
+                  width: 110,
+                  render: (v: string | null) => v ?? "—",
+                },
+                { title: "worker", dataIndex: "worker", ellipsis: true },
+                {
+                  title: "eta",
+                  dataIndex: "eta",
+                  width: 170,
+                  render: (v: string | null) => v ?? "—",
+                },
+                {
+                  title: "actions",
+                  width: 170,
+                  render: (_: unknown, row) => (
+                    <Space>
+                      <Button size="small" onClick={() => setSelectedTaskId(row.task_id)}>
+                        Tail
+                      </Button>
+                      <Popconfirm
+                        title="Revoke run?"
+                        description="This prevents queued work from starting; active tasks must cooperate to stop."
+                        onConfirm={() => revokeRun(row.task_id)}
+                      >
+                        <Button
+                          size="small"
+                          danger
+                          icon={<StopOutlined />}
+                          loading={revokingTaskId === row.task_id}
+                        >
+                          Revoke
+                        </Button>
+                      </Popconfirm>
+                    </Space>
+                  ),
+                },
+              ]}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} xl={8}>
+          <Card
+            title={
+              <Space>
+                Run tail
+                {selectedTaskId ? <Tag>{taskStream.status}</Tag> : null}
+              </Space>
+            }
+            size="small"
+          >
+            {!selectedTaskId ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="Select a run to tail progress."
+              />
+            ) : taskStream.events.length === 0 ? (
+              <Space direction="vertical" size={4}>
+                <Text code copyable>
+                  {selectedTaskId}
+                </Text>
+                <Text type="secondary">Waiting for progress events…</Text>
+              </Space>
+            ) : (
+              <List
+                size="small"
+                dataSource={taskStream.events.slice(-8).reverse()}
+                renderItem={(ev, i) => (
+                  <List.Item style={{ padding: "4px 0" }}>
+                    <Space direction="vertical" size={2}>
+                      <Space size={4} wrap>
+                        <Tag
+                          color={
+                            ev.stage === "error" ? "red" : ev.stage === "done" ? "green" : "blue"
+                          }
+                        >
+                          {String(ev.stage ?? "event")}
+                        </Tag>
+                        {i === 0 ? <Text type="secondary">latest</Text> : null}
+                      </Space>
+                      <Text style={{ fontSize: 12 }}>
+                        {ev.message ?? ev.delta ?? ev.content ?? "—"}
+                      </Text>
+                    </Space>
+                  </List.Item>
+                )}
+              />
+            )}
+            {taskStream.error ? (
+              <Alert type="error" message={taskStream.error} style={{ marginTop: 8 }} />
+            ) : null}
+          </Card>
+        </Col>
+      </Row>
       <Row gutter={16}>
         <Col xs={24} lg={8}>
           <Card title="Portfolio" size="small">
-            <Statistic
-              title="Total market value"
-              value={totalEquity}
-              precision={2}
-              prefix="$"
-            />
+            <Statistic title="Total market value" value={totalEquity} precision={2} prefix="$" />
             <Statistic
               title="Unrealized P/L"
               value={totalUpnl}
@@ -358,7 +617,14 @@ function MonitorPageInner() {
       </Row>
       <Row gutter={16} style={{ marginTop: 16 }}>
         <Col xs={24} lg={12}>
-          <Card title={<Space>Buy/Sell decisions <Badge count={decisions.data?.length ?? 0} /></Space>} size="small">
+          <Card
+            title={
+              <Space>
+                Buy/Sell decisions <Badge count={decisions.data?.length ?? 0} />
+              </Space>
+            }
+            size="small"
+          >
             {decisions.error ? <Alert type="error" message={decisions.error.message} /> : null}
             <Table
               size="small"
@@ -388,7 +654,14 @@ function MonitorPageInner() {
           </Card>
         </Col>
         <Col xs={24} lg={12}>
-          <Card title={<Space>Recent orders <Badge count={orderRows.length} /></Space>} size="small">
+          <Card
+            title={
+              <Space>
+                Recent orders <Badge count={orderRows.length} />
+              </Space>
+            }
+            size="small"
+          >
             <Table
               size="small"
               rowKey={(r) => r.id ?? `${r.vt_symbol}-${r.created_at}`}
@@ -407,7 +680,14 @@ function MonitorPageInner() {
       </Row>
       <Row gutter={16} style={{ marginTop: 16 }}>
         <Col xs={24} lg={12}>
-          <Card title={<Space>Positions <Badge count={positionRows.length} /></Space>} size="small">
+          <Card
+            title={
+              <Space>
+                Positions <Badge count={positionRows.length} />
+              </Space>
+            }
+            size="small"
+          >
             <Table
               size="small"
               rowKey={(r) => r.vt_symbol ?? "—"}
@@ -434,7 +714,9 @@ function MonitorPageInner() {
                   width: 110,
                   render: (v: number) =>
                     v != null ? (
-                      <Text style={{ color: v >= 0 ? "#10b981" : "#ef4444" }}>${Number(v).toFixed(2)}</Text>
+                      <Text style={{ color: v >= 0 ? "#10b981" : "#ef4444" }}>
+                        ${Number(v).toFixed(2)}
+                      </Text>
                     ) : (
                       "—"
                     ),
@@ -444,7 +726,14 @@ function MonitorPageInner() {
           </Card>
         </Col>
         <Col xs={24} lg={12}>
-          <Card title={<Space>Recent fills <Badge count={fillRows.length} /></Space>} size="small">
+          <Card
+            title={
+              <Space>
+                Recent fills <Badge count={fillRows.length} />
+              </Space>
+            }
+            size="small"
+          >
             <Table
               size="small"
               rowKey={(r) => r.id ?? `${r.vt_symbol}-${r.ts ?? r.filled_at ?? Math.random()}`}

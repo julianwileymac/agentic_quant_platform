@@ -21,7 +21,13 @@ from aqp.core.types import Direction, Signal, Symbol
 STRATEGY_TAGS = ("momentum", "oscillator", "quant-trading")
 
 
-@register("AwesomeOscillatorAlpha")
+@register(
+    "AwesomeOscillatorAlpha",
+    kind="strategy",
+    tags=STRATEGY_TAGS,
+    source="quant_trading",
+    category="momentum",
+)
 class AwesomeOscillatorAlpha(IAlphaModel):
     def __init__(
         self,

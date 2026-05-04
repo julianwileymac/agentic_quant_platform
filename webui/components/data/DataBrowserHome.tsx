@@ -26,7 +26,7 @@ interface UniverseResponse {
 export function DataBrowserHome() {
   const router = useRouter();
   const [q, setQ] = useState("");
-  const [source, setSource] = useState("managed_snapshot");
+  const [source, setSource] = useState("lake");
   const [offset, setOffset] = useState(0);
   const [items, setItems] = useState<UniverseEntry[]>([]);
   const universe = useApiQuery<UniverseResponse>({
@@ -64,6 +64,7 @@ export function DataBrowserHome() {
             onChange={setSource}
             style={{ width: 180 }}
             options={[
+              { value: "lake", label: "Parquet lake (on disk)" },
               { value: "managed_snapshot", label: "Managed snapshot" },
               { value: "alpha_vantage", label: "AlphaVantage live" },
               { value: "catalog", label: "Data catalog" },
@@ -83,7 +84,12 @@ export function DataBrowserHome() {
       <Card>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8 }}>
           {items.length === 0 ? (
-            <Text type="secondary">No symbols matched.</Text>
+            <Text type="secondary">
+              No symbols matched.
+              {source === "lake"
+                ? " Ensure bars exist under AQP_PARQUET_DIR/bars, or switch source to Managed snapshot / Data catalog."
+                : null}
+            </Text>
           ) : (
             items.map((it) => {
               const ticker = it.ticker ?? it.vt_symbol?.split(".")[0] ?? "";

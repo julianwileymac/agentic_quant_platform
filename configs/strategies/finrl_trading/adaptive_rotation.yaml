@@ -1,0 +1,45 @@
+name: "FinRL Adaptive Rotation"
+description: >
+  Grouped starter for finrl_trading source. Regime-aware bucket rotation with
+  GICS bucket universe selection.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: GICSBucketUniverseSelector
+      module_path: aqp.strategies.adaptive_rotation.gics_buckets
+      kwargs:
+        base_universe: ["AAPL.NASDAQ", "MSFT.NASDAQ", "NVDA.NASDAQ", "META.NASDAQ", "AMZN.NASDAQ", "JPM.NYSE", "XOM.NYSE", "JNJ.NYSE", "XLP.NYSE", "XLU.NYSE"]
+        per_bucket_target: 3
+        keep_unknown: false
+    alpha_model:
+      class: AdaptiveRotationAlpha
+      module_path: aqp.strategies.adaptive_rotation.rotation_alpha
+      kwargs:
+        benchmark_vt_symbol: "SPY.NYSE"
+        per_bucket_top_k: 2
+        momentum_lookback: 63
+        long_only: true
+    portfolio_model:
+      class: SignalWeightedPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 8}
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: {max_position_pct: 0.20, max_drawdown_pct: 0.20}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+    rebalance_every: 21
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    start: "2021-01-01"
+    end: "2024-12-31"

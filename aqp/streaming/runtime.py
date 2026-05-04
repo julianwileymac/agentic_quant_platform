@@ -141,3 +141,78 @@ async def run_ingester(
             except Exception:
                 logger.exception("metrics server shutdown failed")
         logger.info("ingester shutdown complete")
+
+
+def submit_factor_job(
+    *,
+    name: str,
+    factor_expression: str | None = None,
+    pipeline_export: dict[str, Any] | None = None,
+    namespace: str | None = None,
+    jar_uri: str | None = None,
+    entry_class: str | None = None,
+    args: list[str] | None = None,
+    parallelism: int = 1,
+) -> dict[str, Any]:
+    """Submit a Flink session job that materialises an AQP factor / ML pipeline.
+
+    Renders a :func:`aqp.streaming.templates.render_factor_session_job`
+    manifest from the inputs and applies it via the kubernetes client
+    wrapper in :mod:`aqp.streaming.admin.flink_admin`. This is the
+    long-missing function referenced from
+    :mod:`aqp.api.routes.factors` and :mod:`aqp.api.routes.ml`.
+
+    Returns the rendered manifest's ``status`` once applied. Errors
+    bubble out as :class:`aqp.streaming.admin.FlinkAdminError` so the
+    caller can decide whether to fall back to the cluster-mgmt proxy.
+    """
+    from aqp.streaming.admin import (
+        FlinkAdminError,
+        FlinkAdminUnavailableError,
+        get_flink_session_jobs,
+    )
+    from aqp.streaming.templates import render_factor_session_job
+
+    ns = namespace or getattr(settings, "flink_namespace", None) or "default"
+    jar = jar_uri or getattr(settings, "flink_factor_jar_uri", None) or "s3://flink-jobs/factor_compute.jar"
+    entry = (
+        entry_class
+        or getattr(settings, "flink_factor_entry_class", None)
+        or "io.aqp.flink.factor.FactorJob"
+    )
+    rendered_args: list[str] = list(args or [])
+    if factor_expression and "--factor" not in rendered_args:
+        rendered_args.extend(["--factor", str(factor_expression)])
+    if pipeline_export and "--pipeline" not in rendered_args:
+        rendered_args.extend(["--pipeline", str(pipeline_export)])
+
+    manifest = render_factor_session_job(
+        name=name,
+        namespace=ns,
+        factor_jar_uri=jar,
+        entry_class=entry,
+        args=rendered_args,
+        parallelism=parallelism,
+        state="running",
+    )
+    try:
+        sessions = get_flink_session_jobs()
+    except FlinkAdminUnavailableError:
+        return {
+            "status": "unavailable",
+            "manifest": manifest,
+            "message": "kubernetes client unavailable; manifest returned for manual apply",
+        }
+    try:
+        existing = None
+        try:
+            existing = sessions.get(name, namespace=ns)
+        except FlinkAdminError:
+            existing = None
+        if existing is None:
+            applied = sessions.create(manifest)
+            return {"status": "created", "session_job": applied.to_dict()}
+        applied = sessions.patch(name, manifest, namespace=ns)
+        return {"status": "patched", "session_job": applied.to_dict()}
+    except FlinkAdminError as exc:
+        return {"status": "error", "manifest": manifest, "message": str(exc)}

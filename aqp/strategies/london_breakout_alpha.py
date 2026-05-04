@@ -21,7 +21,13 @@ from aqp.core.types import Direction, Signal, Symbol
 STRATEGY_TAGS = ("breakout", "fx", "quant-trading")
 
 
-@register("LondonBreakoutAlpha")
+@register(
+    "LondonBreakoutAlpha",
+    kind="strategy",
+    tags=STRATEGY_TAGS,
+    source="quant_trading",
+    category="breakout",
+)
 class LondonBreakoutAlpha(IAlphaModel):
     def __init__(
         self,

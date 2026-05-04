@@ -31,8 +31,11 @@ from typing import Any
 
 import pandas as pd
 
+from aqp.backtest.base import BaseBacktestEngine
+from aqp.backtest.capabilities import EngineCapabilities
 from aqp.backtest.engine import BacktestResult
 from aqp.backtest.metrics import summarise
+from aqp.backtest.vectorbt_backend import import_vectorbt_oss
 from aqp.core.interfaces import IAlphaModel, IStrategy
 from aqp.core.registry import register
 from aqp.core.types import Direction, Symbol
@@ -42,13 +45,7 @@ logger = logging.getLogger(__name__)
 
 def _import_vbt():
     """Lazy import guard — vectorbt triggers a heavy numba compile."""
-    try:
-        import vectorbt as vbt
-    except ImportError as e:  # pragma: no cover
-        raise ImportError(
-            "vectorbt is not installed. Install with `pip install -e \".[vectorbt]\"`"
-        ) from e
-    return vbt
+    return import_vectorbt_oss().module
 
 
 def _pivot_close(bars: pd.DataFrame) -> pd.DataFrame:
@@ -73,7 +70,7 @@ def _universe_from_bars(bars: pd.DataFrame) -> list[Symbol]:
 
 
 @register("VectorbtEngine")
-class VectorbtEngine:
+class VectorbtEngine(BaseBacktestEngine):
     """Vectorized backtest engine backed by ``vectorbt``.
 
     The engine replays a strategy's :meth:`IAlphaModel.generate_signals` over a
@@ -81,6 +78,24 @@ class VectorbtEngine:
     decisions as boolean ``entries`` / ``exits`` matrices, which are then fed
     into ``vbt.Portfolio.from_signals``.
     """
+
+    summary_engine = "vectorbt"
+
+    capabilities = EngineCapabilities(
+        name="vectorbt",
+        description=(
+            "Open-source vectorbt adapter; rolls IAlphaModel signals into "
+            "wide entries/exits matrices and runs Portfolio.from_signals."
+        ),
+        supports_signals=True,
+        supports_multi_asset=True,
+        supports_short_selling=True,
+        supports_vectorized=True,
+        supports_walk_forward=True,
+        license="Apache-2.0",
+        requires_optional_dep="vectorbt",
+        notes="Use VectorbtProEngine for the richer kwarg surface and richer hooks.",
+    )
 
     def __init__(
         self,
@@ -93,6 +108,7 @@ class VectorbtEngine:
         start: str | datetime | None = None,
         end: str | datetime | None = None,
         warmup_bars: int = 30,
+        portfolio_kwargs: dict[str, Any] | None = None,
     ) -> None:
         self.initial_cash = float(initial_cash)
         self.fees = float(fees)
@@ -103,11 +119,15 @@ class VectorbtEngine:
         self.start = pd.Timestamp(start) if start else None
         self.end = pd.Timestamp(end) if end else None
         self.warmup_bars = int(warmup_bars)
+        self.portfolio_kwargs = dict(portfolio_kwargs or {})
+
+    def _import_backend(self):
+        return _import_vbt()
 
     def run(self, strategy: IAlphaModel | IStrategy, bars: pd.DataFrame) -> BacktestResult:
         if bars.empty:
             raise ValueError("VectorbtEngine: bars frame is empty.")
-        vbt = _import_vbt()
+        vbt = self._import_backend()
 
         frame = bars.copy()
         frame["timestamp"] = pd.to_datetime(frame["timestamp"])
@@ -187,6 +207,7 @@ class VectorbtEngine:
                     freq=self.freq,
                     group_by=self.group_by,
                     cash_sharing=self.group_by,
+                    **self.portfolio_kwargs,
                 )
             else:
                 pf = vbt.Portfolio.from_signals(
@@ -199,15 +220,27 @@ class VectorbtEngine:
                     freq=self.freq,
                     group_by=self.group_by,
                     cash_sharing=self.group_by,
+                    **self.portfolio_kwargs,
                 )
         except Exception:  # pragma: no cover
             logger.exception("vbt.Portfolio.from_signals failed")
             raise
 
-        return _to_backtest_result(pf, close, self.initial_cash)
+        return _to_backtest_result(
+            pf,
+            close,
+            self.initial_cash,
+            engine=self.summary_engine,
+        )
 
 
-def _to_backtest_result(pf: Any, close: pd.DataFrame, initial_cash: float) -> BacktestResult:
+def _to_backtest_result(
+    pf: Any,
+    close: pd.DataFrame,
+    initial_cash: float,
+    *,
+    engine: str = "vectorbt",
+) -> BacktestResult:
     """Translate a ``vbt.Portfolio`` into an :class:`BacktestResult`."""
     # Equity: portfolio value at portfolio level (sum across columns/groups).
     try:
@@ -282,7 +315,8 @@ def _to_backtest_result(pf: Any, close: pd.DataFrame, initial_cash: float) -> Ba
         orders_df["status"] = "filled"
 
     summary = summarise(equity, trades_df if not trades_df.empty else None)
-    summary["engine"] = "vectorbt"
+    summary["engine"] = engine
+    summary.update(_native_stats(pf))
 
     first_ts = equity.index[0] if len(equity) else None
     last_ts = equity.index[-1] if len(equity) else None
@@ -298,6 +332,26 @@ def _to_backtest_result(pf: Any, close: pd.DataFrame, initial_cash: float) -> Ba
         initial_cash=float(initial_cash),
         final_equity=float(equity.iloc[-1]) if len(equity) else float(initial_cash),
     )
+
+
+def _native_stats(pf: Any) -> dict[str, Any]:
+    """Extract library-native stats with a stable prefix."""
+    try:
+        native = pf.stats()
+    except Exception:
+        return {}
+    if hasattr(native, "to_dict"):
+        native = native.to_dict()
+    if not isinstance(native, dict):
+        return {}
+    out: dict[str, Any] = {}
+    for key, value in native.items():
+        norm_key = str(key).strip().lower().replace(" ", "_").replace("[%]", "pct")
+        try:
+            out[f"vbt_{norm_key}"] = float(value)
+        except (TypeError, ValueError):
+            out[f"vbt_{norm_key}"] = value
+    return out
 
 
 def run_vectorized_signals(

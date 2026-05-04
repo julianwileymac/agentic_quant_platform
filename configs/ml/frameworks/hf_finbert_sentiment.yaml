@@ -1,0 +1,34 @@
+name: "HuggingFace FinBERT sentiment"
+description: >
+  FinBERT-driven sentiment scoring on text-bearing alpha datasets.
+  Returns signed sentiment in [-1, 1] suitable for use as a
+  cross-sectional alpha. Requires the ml-transformers extra.
+
+dataset_preset: news_text_panel_sample
+features: ["headline"]
+target:
+  class: next_bar_binary
+  module_path: aqp.data.labels
+  kwargs:
+    threshold: 0.0
+
+model:
+  class: HuggingFaceFinBertSentimentModel
+  module_path: aqp.ml.models.huggingface
+  kwargs:
+    model_name: "ProsusAI/finbert"
+    text_column: headline
+    batch_size: 32
+    return_signed: true
+
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 252
+      test_periods: 21
+      step_periods: 21
+
+mlflow:
+  experiment: hf-finbert-sentiment

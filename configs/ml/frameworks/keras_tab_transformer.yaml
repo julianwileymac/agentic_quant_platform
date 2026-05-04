@@ -1,0 +1,39 @@
+name: "Keras TabTransformer alpha"
+description: >
+  Lightweight TabTransformer-style attention model in pure Keras.
+  Treats numeric features as a token sequence projected through a
+  stack of self-attention blocks. Modest hyperparameters by default
+  for quick training on small alpha panels.
+
+dataset_preset: finrl_fundamentals_panel_sample
+features: ["close", "volume", "revenue_growth", "gross_margin", "debt_to_equity"]
+target:
+  class: next_bar_binary
+  module_path: aqp.data.labels
+  kwargs:
+    threshold: 0.0
+
+model:
+  class: KerasTabTransformerModel
+  module_path: aqp.ml.models.keras
+  kwargs:
+    embed_dim: 16
+    num_heads: 2
+    num_blocks: 2
+    ff_dim: 32
+    dropout: 0.1
+    epochs: 30
+    batch_size: 128
+    validation_segment: valid
+
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 504
+      test_periods: 63
+      step_periods: 63
+
+mlflow:
+  experiment: keras-tab-transformer

@@ -139,6 +139,34 @@ mismatch between this glossary and the code, file an issue.
   has been registered for inference (rows in
   [aqp/persistence/models.py](../aqp/persistence/models.py)).
 
+## Bots
+
+- **`Bot`** — Smallest self-contained, deployable unit on AQP.
+  Aggregates a universe + data pipeline + strategy + backtest engine +
+  optional ML deployments + optional agent specs + RAG plan + metrics
+  + risk caps + deployment target. Lives under a `Project` and is
+  uniquely identified by `(project_id, slug)`. See
+  [docs/bots.md](bots.md).
+- **`BotSpec`** — Pydantic blueprint for a bot. Hashed via
+  `snapshot_hash()` to drive immutable `bot_versions` snapshots.
+  Defined in [aqp/bots/spec.py](../aqp/bots/spec.py).
+- **`TradingBot` / `ResearchBot`** — Bot subclasses selected by
+  `BotSpec.kind`. `TradingBot` does backtest / paper / deploy;
+  `ResearchBot` does chat (and optional backtest if a `strategy` block
+  is set).
+- **`BotRuntime`** — Single sanctioned execution entry point for any
+  bot lifecycle action. Snapshots specs into `bot_versions`, opens
+  `bot_deployments` rows, and emits progress through
+  [aqp/tasks/_progress.py](../aqp/tasks/_progress.py).
+- **`bot_versions`** — Immutable, hash-locked spec snapshots
+  (mirrors `agent_spec_versions`). Never mutated in place.
+- **`bot_deployments`** — Ledger of every backtest / paper / chat /
+  k8s invocation for a bot. References the `BotVersion` that produced
+  it so a run can be replayed.
+- **Deployment target (`paper_session` / `kubernetes` /
+  `backtest_only`)** — Selected via `BotSpec.deployment.target`.
+  Backed by `aqp/bots/deploy.py::DeploymentDispatcher`.
+
 ## Provider catalog
 
 - **`LLMProvider`** — Lightweight handle around a LiteLLM provider

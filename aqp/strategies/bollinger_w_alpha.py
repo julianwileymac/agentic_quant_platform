@@ -20,7 +20,13 @@ from aqp.core.types import Direction, Signal, Symbol
 STRATEGY_TAGS = ("pattern", "mean-reversion", "quant-trading")
 
 
-@register("BollingerWAlpha")
+@register(
+    "BollingerWAlpha",
+    kind="strategy",
+    tags=STRATEGY_TAGS,
+    source="quant_trading",
+    category="pattern",
+)
 class BollingerWAlpha(IAlphaModel):
     def __init__(
         self,

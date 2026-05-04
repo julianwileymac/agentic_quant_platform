@@ -142,12 +142,37 @@ def router_complete(
     temperature: float = 0.2,
     max_tokens: int | None = None,
     tools: list[dict[str, Any]] | None = None,
+    *,
+    context: Any | None = None,
     **extra: Any,
 ) -> LLMResult:
-    """One-shot completion through LiteLLM that also records USD cost."""
+    """One-shot completion through LiteLLM that also records USD cost.
+
+    When ``context`` is supplied, the layered config stack
+    (global > org > team > user > workspace > project) is consulted via
+    :func:`aqp.config.resolve_config` so per-tenant overrides on the
+    ``llm`` namespace (provider / model / temperature) win over the
+    explicit arguments. Useful when the caller wants to honour
+    workspace-level pinning without rebuilding the call site.
+    """
     import litellm
 
     litellm.drop_params = True
+
+    if context is not None:
+        try:
+            from aqp.config import resolve_config
+
+            overlay = resolve_config("llm", context)
+            if overlay:
+                provider = str(overlay.get("provider") or provider)
+                model = str(overlay.get("model") or overlay.get("deep_model") or model)
+                if "temperature" in overlay:
+                    temperature = float(overlay["temperature"])
+                if "max_tokens" in overlay and max_tokens is None:
+                    max_tokens = int(overlay["max_tokens"])
+        except Exception:
+            logger.debug("Layered config lookup failed; falling back to args", exc_info=True)
 
     handle = get_provider(provider)
     _require_key(handle)

@@ -19,6 +19,7 @@ from sqlalchemy import (
     Text,
 )
 
+from aqp.persistence._tenancy_mixins import LabScopedMixin
 from aqp.persistence.models import Base
 
 
@@ -26,7 +27,7 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
-class MemoryEpisode(Base):
+class MemoryEpisode(Base, LabScopedMixin):
     """One ``situation -> lesson`` recollection per (role, vt_symbol)."""
 
     __tablename__ = "memory_episodes"
@@ -41,7 +42,7 @@ class MemoryEpisode(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
-class MemoryReflection(Base):
+class MemoryReflection(Base, LabScopedMixin):
     """A post-outcome reflection (TradingAgents-style deferred reflector)."""
 
     __tablename__ = "memory_reflections"
@@ -64,7 +65,7 @@ Index(
 )
 
 
-class MemoryOutcome(Base):
+class MemoryOutcome(Base, LabScopedMixin):
     """Resolved outcome paired with its earlier decision (for reflection)."""
 
     __tablename__ = "memory_outcomes"

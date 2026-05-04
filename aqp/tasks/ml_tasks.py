@@ -220,6 +220,224 @@ def evaluate_ml_model(
         raise
 
 
+@celery_app.task(bind=True, name="aqp.tasks.ml_tasks.run_ml_experiment")
+def run_ml_experiment(
+    self,
+    dataset_cfg: dict[str, Any],
+    model_cfg: dict[str, Any],
+    run_name: str = "ml-experiment",
+    experiment_type: str = "alpha",
+    records: list[dict[str, Any]] | None = None,
+    segment: str = "test",
+    experiment_plan_id: str | None = None,
+    split_plan_id: str | None = None,
+    pipeline_recipe_id: str | None = None,
+    dataset_version_id: str | None = None,
+    split_fold: str | None = None,
+) -> dict[str, Any]:
+    task_id = self.request.id or f"local-{uuid.uuid4().hex[:8]}"
+    emit(task_id, "start", f"Running {experiment_type} ML experiment ({model_cfg.get('class')})")
+    try:
+        dataset_cfg, model_cfg, lineage = _resolve_training_inputs(
+            dataset_cfg=dataset_cfg,
+            model_cfg=model_cfg,
+            experiment_plan_id=experiment_plan_id,
+            split_plan_id=split_plan_id,
+            pipeline_recipe_id=pipeline_recipe_id,
+            dataset_version_id=dataset_version_id,
+            split_fold=split_fold,
+        )
+        from aqp.ml.experiments import (
+            AlphaExperiment,
+            AnomalyExperiment,
+            ClassificationExperiment,
+            Experiment,
+            ForecastExperiment,
+        )
+
+        klass = {
+            "alpha": AlphaExperiment,
+            "forecast": ForecastExperiment,
+            "classification": ClassificationExperiment,
+            "anomaly": AnomalyExperiment,
+        }.get(str(experiment_type).lower(), Experiment)
+        exp = klass(
+            dataset_cfg=dataset_cfg,
+            model_cfg=model_cfg,
+            run_name=run_name,
+            records=records or [],
+            segment=segment,
+            lineage=lineage,
+        )
+        emit(task_id, "running", "Fitting model and generating experiment records")
+        result = exp.run(task_id=task_id).to_dict()
+        emit_done(task_id, result)
+        return result
+    except Exception as e:
+        logger.exception("run_ml_experiment failed")
+        emit_error(task_id, str(e))
+        raise
+
+
+@celery_app.task(bind=True, name="aqp.tasks.ml_tasks.run_alpha_backtest_experiment")
+def run_alpha_backtest_experiment(
+    self,
+    *,
+    strategy_cfg: dict[str, Any],
+    backtest_cfg: dict[str, Any],
+    dataset_cfg: dict[str, Any] | None = None,
+    model_cfg: dict[str, Any] | None = None,
+    run_name: str = "alpha-backtest",
+    segment: str = "test",
+    train_first: bool = True,
+    deployment_id: str | None = None,
+    deployment_overrides: dict[str, Any] | None = None,
+    capture_predictions: bool = True,
+    records: list[dict[str, Any]] | None = None,
+    experiment_plan_id: str | None = None,
+    split_plan_id: str | None = None,
+    pipeline_recipe_id: str | None = None,
+    dataset_version_id: str | None = None,
+    split_fold: str | None = None,
+    strategy_id: str | None = None,
+) -> dict[str, Any]:
+    """Drive a combined ML training + backtest experiment.
+
+    Resolves any saved ``ExperimentPlan`` / ``SplitPlan`` / ``PipelineRecipe``
+    just like ``run_ml_experiment``, then hands off to
+    :class:`aqp.ml.alpha_backtest_experiment.AlphaBacktestExperiment`.
+    """
+    task_id = self.request.id or f"local-{uuid.uuid4().hex[:8]}"
+    emit(task_id, "start", f"Running alpha-backtest experiment: {run_name}")
+    try:
+        if train_first:
+            dataset_cfg, model_cfg, lineage = _resolve_training_inputs(
+                dataset_cfg=dataset_cfg,
+                model_cfg=model_cfg,
+                experiment_plan_id=experiment_plan_id,
+                split_plan_id=split_plan_id,
+                pipeline_recipe_id=pipeline_recipe_id,
+                dataset_version_id=dataset_version_id,
+                split_fold=split_fold,
+            )
+        else:
+            lineage = {
+                k: v
+                for k, v in {
+                    "experiment_plan_id": experiment_plan_id,
+                    "split_plan_id": split_plan_id,
+                    "pipeline_recipe_id": pipeline_recipe_id,
+                    "dataset_version_id": dataset_version_id,
+                    "split_fold": split_fold,
+                }.items()
+                if v is not None
+            }
+        if strategy_id:
+            lineage["strategy_id"] = strategy_id
+
+        from aqp.ml.alpha_backtest_experiment import AlphaBacktestExperiment
+
+        emit(task_id, "running", "Training model and dispatching backtest")
+        exp = AlphaBacktestExperiment(
+            dataset_cfg=dataset_cfg or {},
+            model_cfg=model_cfg or {},
+            strategy_cfg=strategy_cfg,
+            backtest_cfg=backtest_cfg,
+            run_name=run_name,
+            segment=segment,
+            train_first=train_first,
+            deployment_id=deployment_id,
+            deployment_overrides=deployment_overrides,
+            capture_predictions=capture_predictions,
+            records=records or [],
+            lineage=lineage,
+        )
+        result = exp.run(task_id=task_id).to_dict()
+        emit_done(task_id, result)
+        return result
+    except Exception as e:
+        logger.exception("run_alpha_backtest_experiment failed")
+        emit_error(task_id, str(e))
+        raise
+
+
+@celery_app.task(bind=True, name="aqp.tasks.ml_tasks.preview_ml_flow")
+def preview_ml_flow(
+    self,
+    flow: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    task_id = self.request.id or f"local-{uuid.uuid4().hex[:8]}"
+    emit(task_id, "start", f"Running lightweight ML flow: {flow}")
+    try:
+        from aqp.ml.flows import run_flow
+
+        result = run_flow(flow, payload or {})
+        emit_done(task_id, result)
+        return result
+    except Exception as e:
+        logger.exception("preview_ml_flow failed")
+        emit_error(task_id, str(e))
+        raise
+
+
+@celery_app.task(bind=True, name="aqp.tasks.ml_tasks.test_ml_deployment")
+def test_ml_deployment(
+    self,
+    deployment_id: str,
+    symbols: list[str] | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    last_n: int = 50,
+) -> dict[str, Any]:
+    task_id = self.request.id or f"local-{uuid.uuid4().hex[:8]}"
+    emit(task_id, "start", f"Testing model deployment {deployment_id}")
+    try:
+        from aqp.config import settings
+        from aqp.core.types import Symbol
+        from aqp.data.duckdb_engine import DuckDBHistoryProvider
+        from aqp.strategies.ml_alphas import DeployedModelAlpha
+
+        parsed = [
+            Symbol.parse(s) if "." in s else Symbol(ticker=s)
+            for s in (symbols or settings.universe_list or [])
+        ]
+        if not parsed:
+            raise ValueError("symbols is required")
+        start_ts = pd.Timestamp(start or settings.default_start)
+        end_ts = pd.Timestamp(end or settings.default_end)
+        bars = DuckDBHistoryProvider().get_bars(parsed, start=start_ts, end=end_ts)
+        alpha = DeployedModelAlpha(deployment_id=deployment_id)
+        signals = alpha.generate_signals(
+            bars=bars,
+            universe=parsed,
+            context={"current_time": end_ts},
+        )
+        rows = [
+            {
+                "vt_symbol": sig.symbol.vt_symbol,
+                "direction": sig.direction.value if hasattr(sig.direction, "value") else str(sig.direction),
+                "strength": float(sig.strength),
+                "confidence": float(sig.confidence),
+                "timestamp": str(sig.timestamp),
+                "rationale": sig.rationale,
+            }
+            for sig in signals[: int(last_n)]
+        ]
+        result = {
+            "deployment_id": deployment_id,
+            "n_bars": int(len(bars)),
+            "n_signals": int(len(signals)),
+            "signals": rows,
+        }
+        emit_done(task_id, result)
+        return result
+    except Exception as e:
+        logger.exception("test_ml_deployment failed")
+        emit_error(task_id, str(e))
+        raise
+
+
 def _resolve_training_inputs(
     *,
     dataset_cfg: dict[str, Any] | None,

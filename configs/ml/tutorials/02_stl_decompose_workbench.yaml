@@ -1,0 +1,23 @@
+name: "Tutorial 02 — STL decomposition in the workbench"
+description: >
+  Decompose a single series into trend / seasonal / residual via STL.
+  The workbench surfaces the row table and a quick metrics panel.
+
+flow: decomposition
+payload:
+  segment: train
+  column: close
+  period: 20
+  dataset_cfg:
+    class: DatasetH
+    module_path: aqp.ml.dataset
+    kwargs:
+      handler:
+        class: Alpha158
+        module_path: aqp.ml.features.alpha158
+        kwargs:
+          instruments: ["SPY"]
+          start_time: "2022-01-01"
+          end_time: "2024-06-30"
+      segments:
+        train: ["2022-01-01", "2024-06-30"]

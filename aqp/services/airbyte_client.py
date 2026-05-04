@@ -50,13 +50,13 @@ class AirbyteClient:
         return self._request("GET", "/api/public/v1/workspaces")
 
     def list_sources(self) -> dict[str, Any]:
-        return self._request("GET", "/api/public/v1/sources", query=self._workspace_query())
+        return self._workspace_request("GET", "/api/public/v1/sources")
 
     def list_destinations(self) -> dict[str, Any]:
-        return self._request("GET", "/api/public/v1/destinations", query=self._workspace_query())
+        return self._workspace_request("GET", "/api/public/v1/destinations")
 
     def list_connections(self) -> dict[str, Any]:
-        return self._request("GET", "/api/public/v1/connections", query=self._workspace_query())
+        return self._workspace_request("GET", "/api/public/v1/connections")
 
     def create_source(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/public/v1/sources", json=self._with_workspace(payload))
@@ -68,11 +68,18 @@ class AirbyteClient:
         return self._request("POST", "/api/public/v1/connections", json=payload)
 
     def discover_source_schema(self, source_id: str) -> dict[str, Any]:
-        return self._request(
-            "POST",
-            f"/api/public/v1/sources/{source_id}/discover_schema",
-            json={},
-        )
+        last_error: AirbyteClientError | None = None
+        for path, body in (
+            (f"/api/public/v1/sources/{source_id}/discover_schema", {}),
+            (f"/api/v1/sources/{source_id}/discover_schema", {}),
+            ("/api/v1/sources/discover_schema", {"sourceId": source_id}),
+        ):
+            try:
+                return self._request("POST", path, json=body)
+            except AirbyteClientError as exc:
+                last_error = exc
+                continue
+        raise last_error or AirbyteClientError(f"schema discovery failed for {source_id}")
 
     def trigger_sync(self, connection_id: str) -> dict[str, Any]:
         return self._request(
@@ -105,6 +112,24 @@ class AirbyteClient:
 
     def _workspace_query(self) -> dict[str, str]:
         return {"workspaceIds": self.workspace_id} if self.workspace_id else {}
+
+    def _workspace_query_candidates(self) -> list[dict[str, str]]:
+        if not self.workspace_id:
+            return [{}]
+        return [
+            {"workspaceIds": self.workspace_id},
+            {"workspaceId": self.workspace_id},
+        ]
+
+    def _workspace_request(self, method: str, path: str) -> dict[str, Any]:
+        last_error: AirbyteClientError | None = None
+        for query in self._workspace_query_candidates():
+            try:
+                return self._request(method, path, query=query)
+            except AirbyteClientError as exc:
+                last_error = exc
+                continue
+        raise last_error or AirbyteClientError(f"{method} {path} failed")
 
     def _with_workspace(self, payload: dict[str, Any]) -> dict[str, Any]:
         body = dict(payload)

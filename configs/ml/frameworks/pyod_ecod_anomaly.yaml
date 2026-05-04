@@ -1,0 +1,33 @@
+name: "PyOD ECOD anomaly"
+description: >
+  Empirical-cumulative-distribution outlier detector (ECOD) wrapped as
+  an alpha. Anomaly scores act as a distress / dislocation signal.
+
+dataset_preset: finrl_fundamentals_panel_sample
+features: ["close", "volume", "revenue_growth", "gross_margin"]
+
+model:
+  class: PyODAnomalyModel
+  module_path: aqp.ml.models.anomaly
+  kwargs:
+    detector: ecod
+    contamination: 0.05
+    invert_score: false
+
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 252
+      test_periods: 21
+      step_periods: 21
+  preprocessing:
+    - class: PanelForwardFill
+      module_path: aqp.ml.processors
+      kwargs:
+        symbol_col: vt_symbol
+        timestamp_col: timestamp
+
+mlflow:
+  experiment: pyod-ecod-anomaly

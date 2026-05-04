@@ -1,11 +1,16 @@
 # Streaming Architecture (IBKR + Alpaca -> Kafka -> Flink -> AQP)
 
-> Doc map: [docs/index.md](index.md) · Live subscription flow: [docs/flows.md#5-bonus-live-data-subscription](flows.md#5-bonus-live-data-subscription).
+> Doc map: [docs/index.md](index.md) · Live subscription flow: [docs/flows.md#5-bonus-live-data-subscription](flows.md#5-bonus-live-data-subscription) · **Admin & UI**: [docs/streaming-admin.md](streaming-admin.md).
 
 This document describes the end-to-end live streaming pipeline that
 turns broker events from Interactive Brokers and Alpaca into normalized
 features + trading signals consumable by strategies, the paper trader,
 and the `/live` API.
+
+> The **`Streaming admin`** layer (Kafka topic CRUD, Flink session-job
+> CRUD, schema-registry, producer start/stop) is documented separately
+> in [docs/streaming-admin.md](streaming-admin.md). UI lives under
+> **Research → Data Pipelines → Kafka / Flink / Producers**.
 
 ## High-level data flow
 

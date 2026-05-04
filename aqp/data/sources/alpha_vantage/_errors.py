@@ -68,12 +68,20 @@ def classify_payload(payload: Any) -> AlphaVantageClientError | None:
         return None
 
     lower = message.lower()
-    if "invalid api call" in lower or "invalid api key" in lower:
+    if (
+        "call frequency" in lower
+        or "rate limit" in lower
+        or "standard api rate limit" in lower
+        or "requests per minute" in lower
+        or "burst pattern" in lower
+    ):
+        return RateLimitError(message, kind=RateLimitKind.RPM)
+    if "invalid api key" in lower:
         return InvalidApiKeyError(message)
+    if "invalid api call" in lower:
+        return InvalidSymbolError(message)
     if "premium" in lower or "entitlement" in lower:
         return PremiumEndpointError(message)
-    if "call frequency" in lower or "rate limit" in lower or "standard api rate limit" in lower:
-        return RateLimitError(message, kind=RateLimitKind.RPM)
     if "symbol" in lower and ("invalid" in lower or "not found" in lower):
         return InvalidSymbolError(message)
     return AlphaVantagePayloadError(message)

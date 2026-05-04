@@ -17,6 +17,8 @@ import logging
 from datetime import datetime
 from typing import Any
 
+import numpy as np
+import pandas as pd
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
@@ -30,6 +32,7 @@ from aqp.persistence.db import get_session
 from aqp.persistence.models import (
     DatasetVersion,
     ExperimentPlan,
+    MLExperimentRun,
     ModelDeployment,
     ModelVersion,
     PipelineRecipe,
@@ -201,6 +204,169 @@ class DeploymentSummary(BaseModel):
     created_at: datetime
 
 
+class ExperimentRunRequest(BaseModel):
+    dataset_cfg: dict[str, Any] = Field(default_factory=dict)
+    model_cfg: dict[str, Any] = Field(default_factory=dict)
+    run_name: str = "ml-experiment"
+    experiment_type: str = Field(default="alpha", description="alpha | forecast | classification | anomaly | generic")
+    records: list[dict[str, Any]] | None = None
+    segment: str = "test"
+    experiment_plan_id: str | None = None
+    split_plan_id: str | None = None
+    pipeline_recipe_id: str | None = None
+    dataset_version_id: str | None = None
+    split_fold: str | None = None
+
+
+class ExperimentRunSummary(BaseModel):
+    id: str
+    task_id: str | None = None
+    run_name: str
+    experiment_type: str
+    status: str
+    framework: str | None = None
+    model_class: str | None = None
+    model_version_id: str | None = None
+    experiment_plan_id: str | None = None
+    dataset_version_id: str | None = None
+    split_plan_id: str | None = None
+    pipeline_recipe_id: str | None = None
+    dataset_hash: str | None = None
+    mlflow_run_id: str | None = None
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    prediction_sample: list[dict[str, Any]] = Field(default_factory=list)
+    error: str | None = None
+    started_at: datetime
+    completed_at: datetime | None = None
+
+
+class FlowPreviewRequest(BaseModel):
+    dataset_cfg: dict[str, Any] = Field(default_factory=dict)
+    segment: str = "test"
+    estimator: str = "ridge"
+    alpha: float = 1.0
+    l1_ratio: float = 0.5
+    backend: str = "prophet"
+    horizon: int = Field(default=20, ge=1, le=500)
+    column: str | None = None
+    period: int = Field(default=20, ge=2, le=500)
+    forecaster_kwargs: dict[str, Any] = Field(default_factory=dict)
+    # Fields used by the diagnostic / statistical flows.
+    max_features: int = Field(default=20, ge=1, le=200)
+    test: str = "all"
+    nlags: int = Field(default=40, ge=1, le=500)
+    cause_column: str | None = None
+    effect_column: str | None = None
+    max_lag: int = Field(default=5, ge=1, le=100)
+    columns: list[str] = Field(default_factory=list)
+    p: int = Field(default=1, ge=0, le=20)
+    q: int = Field(default=1, ge=0, le=20)
+    n_breakpoints: int = Field(default=5, ge=1, le=100)
+    n_clusters: int = Field(default=4, ge=1, le=200)
+    eps: float = 0.5
+    min_samples: int = Field(default=5, ge=1, le=1000)
+    n_components: int = Field(default=10, ge=1, le=200)
+
+
+class DeploymentTestRequest(BaseModel):
+    symbols: list[str] = Field(default_factory=list)
+    start: str | None = None
+    end: str | None = None
+    last_n: int = Field(default=50, ge=1, le=500)
+
+
+class AlphaBacktestRunRequest(BaseModel):
+    """Request body for ``POST /ml/alpha-backtest-runs``.
+
+    The combined ML+backtest experiment requires (at minimum) a
+    ``strategy_cfg`` and ``backtest_cfg``. When ``train_first`` is true
+    (default), ``dataset_cfg`` and ``model_cfg`` are also required and the
+    experiment trains the model up-front. Otherwise an existing
+    ``deployment_id`` must be supplied.
+    """
+
+    strategy_cfg: dict[str, Any]
+    backtest_cfg: dict[str, Any]
+    dataset_cfg: dict[str, Any] | None = None
+    model_cfg: dict[str, Any] | None = None
+    run_name: str = Field(default="alpha-backtest")
+    segment: str = "test"
+    train_first: bool = True
+    deployment_id: str | None = None
+    deployment_overrides: dict[str, Any] | None = None
+    capture_predictions: bool = True
+    records: list[dict[str, Any]] | None = None
+    experiment_plan_id: str | None = None
+    split_plan_id: str | None = None
+    pipeline_recipe_id: str | None = None
+    dataset_version_id: str | None = None
+    split_fold: str | None = None
+    strategy_id: str | None = None
+
+
+class AlphaBacktestRunSummary(BaseModel):
+    id: str
+    run_name: str
+    status: str
+    task_id: str | None = None
+    ml_experiment_run_id: str | None = None
+    backtest_run_id: str | None = None
+    model_version_id: str | None = None
+    model_deployment_id: str | None = None
+    experiment_plan_id: str | None = None
+    mlflow_run_id: str | None = None
+    dataset_hash: str | None = None
+    ml_metrics: dict[str, Any] = Field(default_factory=dict)
+    trading_metrics: dict[str, Any] = Field(default_factory=dict)
+    combined_metrics: dict[str, Any] = Field(default_factory=dict)
+    attribution: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+    started_at: datetime
+    completed_at: datetime | None = None
+
+
+class AlphaBacktestPredictionRow(BaseModel):
+    id: str
+    vt_symbol: str
+    ts: datetime
+    prediction: float
+    label: float | None = None
+    position_after: float | None = None
+    pnl_after_bar: float | None = None
+
+
+class TestSinglePredictRequest(BaseModel):
+    deployment_id: str
+    feature_row: dict[str, Any]
+    vt_symbol: str | None = None
+    sync: bool = True
+
+
+class TestBatchPredictRequest(BaseModel):
+    deployment_id: str
+    symbols: list[str] = Field(default_factory=list)
+    start: str | None = None
+    end: str | None = None
+    last_n: int = Field(default=200, ge=1, le=5000)
+    iceberg_identifier: str | None = None
+
+
+class TestCompareRequest(BaseModel):
+    deployment_id_a: str
+    deployment_id_b: str
+    symbols: list[str] = Field(default_factory=list)
+    start: str | None = None
+    end: str | None = None
+    last_n: int = Field(default=200, ge=1, le=5000)
+
+
+class TestScenarioRequest(BaseModel):
+    deployment_id: str
+    feature_row: dict[str, float]
+    perturbations: list[float] | None = None
+    sync: bool = True
+
+
 @router.post("/train", response_model=TaskAccepted)
 def train_model(req: TrainRequest) -> TaskAccepted:
     """Queue a training run on the ``ml`` Celery queue."""
@@ -223,6 +389,150 @@ def train_model(req: TrainRequest) -> TaskAccepted:
         task_id=async_result.id,
         stream_url=f"/chat/stream/{async_result.id}",
     )
+
+
+@router.post("/experiment-runs", response_model=TaskAccepted)
+def run_experiment(req: ExperimentRunRequest) -> TaskAccepted:
+    from aqp.tasks.ml_tasks import run_ml_experiment
+
+    async_result = run_ml_experiment.delay(
+        req.dataset_cfg,
+        req.model_cfg,
+        req.run_name,
+        req.experiment_type,
+        req.records,
+        req.segment,
+        req.experiment_plan_id,
+        req.split_plan_id,
+        req.pipeline_recipe_id,
+        req.dataset_version_id,
+        req.split_fold,
+    )
+    return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
+
+
+@router.get("/experiment-runs", response_model=list[ExperimentRunSummary])
+def list_experiment_runs(limit: int = 100) -> list[ExperimentRunSummary]:
+    with get_session() as session:
+        rows = session.execute(
+            select(MLExperimentRun).order_by(desc(MLExperimentRun.started_at)).limit(limit)
+        ).scalars().all()
+        return [_experiment_run_summary(row) for row in rows]
+
+
+@router.post("/alpha-backtest-runs", response_model=TaskAccepted)
+def run_alpha_backtest(req: AlphaBacktestRunRequest) -> TaskAccepted:
+    """Queue a combined ML + backtest experiment on the ``ml`` Celery queue.
+
+    Drives :class:`aqp.ml.alpha_backtest_experiment.AlphaBacktestExperiment`
+    end-to-end: trains the model, registers a ``ModelVersion``, optionally
+    provisions a ``ModelDeployment``, runs the backtest with the new model
+    wired in as the alpha source, and persists a ``MLAlphaBacktestRun``
+    that links everything together.
+    """
+    if req.train_first:
+        if not req.dataset_cfg or not req.model_cfg:
+            raise HTTPException(
+                400,
+                "train_first=true requires both dataset_cfg and model_cfg",
+            )
+    else:
+        if not req.deployment_id:
+            raise HTTPException(
+                400, "train_first=false requires an existing deployment_id"
+            )
+    from aqp.tasks.ml_tasks import run_alpha_backtest_experiment
+
+    async_result = run_alpha_backtest_experiment.delay(
+        strategy_cfg=req.strategy_cfg,
+        backtest_cfg=req.backtest_cfg,
+        dataset_cfg=req.dataset_cfg or {},
+        model_cfg=req.model_cfg or {},
+        run_name=req.run_name,
+        segment=req.segment,
+        train_first=req.train_first,
+        deployment_id=req.deployment_id,
+        deployment_overrides=req.deployment_overrides,
+        capture_predictions=req.capture_predictions,
+        records=req.records,
+        experiment_plan_id=req.experiment_plan_id,
+        split_plan_id=req.split_plan_id,
+        pipeline_recipe_id=req.pipeline_recipe_id,
+        dataset_version_id=req.dataset_version_id,
+        split_fold=req.split_fold,
+        strategy_id=req.strategy_id,
+    )
+    return TaskAccepted(
+        task_id=async_result.id,
+        stream_url=f"/chat/stream/{async_result.id}",
+    )
+
+
+@router.get("/alpha-backtest-runs", response_model=list[AlphaBacktestRunSummary])
+def list_alpha_backtest_runs(limit: int = 100) -> list[AlphaBacktestRunSummary]:
+    from aqp.persistence.models import MLAlphaBacktestRun
+
+    with get_session() as session:
+        rows = (
+            session.execute(
+                select(MLAlphaBacktestRun)
+                .order_by(desc(MLAlphaBacktestRun.started_at))
+                .limit(limit)
+            )
+            .scalars()
+            .all()
+        )
+        return [_alpha_backtest_run_summary(row) for row in rows]
+
+
+@router.get(
+    "/alpha-backtest-runs/{run_id}", response_model=AlphaBacktestRunSummary
+)
+def get_alpha_backtest_run(run_id: str) -> AlphaBacktestRunSummary:
+    from aqp.persistence.models import MLAlphaBacktestRun
+
+    with get_session() as session:
+        row = session.get(MLAlphaBacktestRun, run_id)
+        if row is None:
+            raise HTTPException(404, "alpha backtest run not found")
+        return _alpha_backtest_run_summary(row)
+
+
+@router.get(
+    "/alpha-backtest-runs/{run_id}/predictions",
+    response_model=list[AlphaBacktestPredictionRow],
+)
+def list_alpha_backtest_predictions(
+    run_id: str, limit: int = 500, vt_symbol: str | None = None
+) -> list[AlphaBacktestPredictionRow]:
+    from aqp.persistence.models import MLPredictionAudit
+
+    with get_session() as session:
+        stmt = (
+            select(MLPredictionAudit)
+            .where(MLPredictionAudit.alpha_backtest_run_id == run_id)
+            .order_by(MLPredictionAudit.ts)
+            .limit(int(limit))
+        )
+        if vt_symbol:
+            stmt = stmt.where(MLPredictionAudit.vt_symbol == vt_symbol)
+        rows = session.execute(stmt).scalars().all()
+        return [
+            AlphaBacktestPredictionRow(
+                id=str(row.id),
+                vt_symbol=row.vt_symbol,
+                ts=row.ts,
+                prediction=float(row.prediction),
+                label=float(row.label) if row.label is not None else None,
+                position_after=(
+                    float(row.position_after) if row.position_after is not None else None
+                ),
+                pnl_after_bar=(
+                    float(row.pnl_after_bar) if row.pnl_after_bar is not None else None
+                ),
+            )
+            for row in rows
+        ]
 
 
 @router.post("/evaluate", response_model=TaskAccepted)
@@ -485,6 +795,20 @@ def get_deployment_alpha_config(deployment_id: str) -> dict[str, Any]:
                 **(row.deployment_config or {}),
             },
         }
+
+
+@router.post("/deployments/{deployment_id}/test", response_model=TaskAccepted)
+def test_model_deployment(deployment_id: str, req: DeploymentTestRequest) -> TaskAccepted:
+    from aqp.tasks.ml_tasks import test_ml_deployment
+
+    async_result = test_ml_deployment.delay(
+        deployment_id,
+        req.symbols,
+        req.start,
+        req.end,
+        req.last_n,
+    )
+    return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
 
 
 class DeploymentPreviewRequest(BaseModel):
@@ -782,6 +1106,53 @@ def _deployment_summary(row: ModelDeployment) -> DeploymentSummary:
     )
 
 
+def _experiment_run_summary(row: MLExperimentRun) -> ExperimentRunSummary:
+    return ExperimentRunSummary(
+        id=row.id,
+        task_id=row.task_id,
+        run_name=row.run_name,
+        experiment_type=row.experiment_type,
+        status=row.status,
+        framework=row.framework,
+        model_class=row.model_class,
+        model_version_id=row.model_version_id,
+        experiment_plan_id=row.experiment_plan_id,
+        dataset_version_id=row.dataset_version_id,
+        split_plan_id=row.split_plan_id,
+        pipeline_recipe_id=row.pipeline_recipe_id,
+        dataset_hash=row.dataset_hash,
+        mlflow_run_id=row.mlflow_run_id,
+        metrics=row.metrics or {},
+        prediction_sample=row.prediction_sample or [],
+        error=row.error,
+        started_at=row.started_at,
+        completed_at=row.completed_at,
+    )
+
+
+def _alpha_backtest_run_summary(row: Any) -> AlphaBacktestRunSummary:
+    return AlphaBacktestRunSummary(
+        id=str(row.id),
+        run_name=row.run_name,
+        status=row.status,
+        task_id=row.task_id,
+        ml_experiment_run_id=row.ml_experiment_run_id,
+        backtest_run_id=row.backtest_run_id,
+        model_version_id=row.model_version_id,
+        model_deployment_id=row.model_deployment_id,
+        experiment_plan_id=row.experiment_plan_id,
+        mlflow_run_id=row.mlflow_run_id,
+        dataset_hash=row.dataset_hash,
+        ml_metrics=row.ml_metrics or {},
+        trading_metrics=row.trading_metrics or {},
+        combined_metrics=row.combined_metrics or {},
+        attribution=row.attribution or {},
+        error=row.error,
+        started_at=row.started_at,
+        completed_at=row.completed_at,
+    )
+
+
 def _pull_feature_importance(client: Any, run: Any, *, top_k: int) -> list[dict[str, Any]]:
     """Best-effort extraction of a ``feature_importance`` artifact or param.
 
@@ -861,6 +1232,11 @@ def registered_models() -> dict[str, list[str]]:
             "LGBModel", "XGBModel", "CatBoostModel", "DEnsembleModel", "HighFreqGBDT",
         ],
         "linear": ["LinearModel"],
+        "sklearn": ["SklearnRegressorModel", "SklearnClassifierModel", "SklearnPipelineModel"],
+        "forecasting": ["ProphetForecastModel", "SktimeForecastModel", "SktimeReductionForecastModel"],
+        "anomaly": ["PyODAnomalyModel"],
+        "keras": ["KerasMLPModel", "KerasLSTMModel"],
+        "transformers": ["HuggingFaceTextSignalModel"],
         "torch": [
             "DNNModel",
             "LSTMModel",
@@ -1015,6 +1391,44 @@ _PROCESSOR_CATALOG: list[dict[str, Any]] = [
             {"name": "drop", "default": True, "type": "bool"},
         ],
     },
+    {
+        "name": "SklearnTransformerProcessor",
+        "kind": "normalize",
+        "description": "Apply a fit-stateful sklearn transformer to feature columns.",
+        "params": [
+            {"name": "transformer", "default": "standard_scaler", "type": "str"},
+            {"name": "columns", "default": [], "type": "list[str]"},
+            {"name": "fields_group", "default": "feature", "type": "str"},
+        ],
+    },
+    {
+        "name": "LagFeatureGenerator",
+        "kind": "feature",
+        "description": "Add per-symbol lag features for selected numeric columns.",
+        "params": [
+            {"name": "columns", "default": [], "type": "list[str]"},
+            {"name": "lags", "default": [1, 5, 10], "type": "list[int]"},
+        ],
+    },
+    {
+        "name": "RollingFeatureGenerator",
+        "kind": "feature",
+        "description": "Add rolling mean/std/min/max features per symbol.",
+        "params": [
+            {"name": "columns", "default": [], "type": "list[str]"},
+            {"name": "windows", "default": [5, 20], "type": "list[int]"},
+            {"name": "stats", "default": ["mean", "std"], "type": "list[str]"},
+        ],
+    },
+    {
+        "name": "SeasonalDecomposeFeatures",
+        "kind": "feature",
+        "description": "Add STL trend/seasonal/residual components for selected columns.",
+        "params": [
+            {"name": "columns", "default": [], "type": "list[str]"},
+            {"name": "period", "default": 20, "type": "int"},
+        ],
+    },
 ]
 
 
@@ -1022,6 +1436,20 @@ _PROCESSOR_CATALOG: list[dict[str, Any]] = [
 def list_processors() -> list[dict[str, Any]]:
     """Return the catalog of preprocessing classes available to the UI."""
     return _PROCESSOR_CATALOG
+
+
+@router.post("/pipelines/validate")
+def validate_pipeline_recipe(req: PipelineRecipeCreateRequest) -> dict[str, Any]:
+    from aqp.ml.pipeline_recipes import validate_recipe
+
+    return validate_recipe(
+        {
+            "shared_processors": req.shared_processors,
+            "infer_processors": req.infer_processors,
+            "learn_processors": req.learn_processors,
+            "fit_window": req.fit_window,
+        }
+    )
 
 
 class PipelineExportRequest(BaseModel):
@@ -1067,6 +1495,24 @@ def export_pipeline_to_kafka(pipeline_id: str, req: PipelineExportRequest | None
     if error:
         spec["error"] = error
     return spec
+
+
+@router.post("/pipelines/{pipeline_id}/as-node")
+def pipeline_recipe_as_node(
+    pipeline_id: str, overrides: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Resolve a saved ``PipelineRecipe`` into a manifest ``NodeSpec`` fragment.
+
+    Lets the Manifest Builder UI drop a saved ML preprocessing recipe
+    directly onto a data pipeline canvas. Mirrors the
+    ``/sinks/{sink_id}/as-node`` pattern.
+    """
+    from aqp.ml.pipeline_recipes import materialise_node_spec
+
+    try:
+        return materialise_node_spec(pipeline_id, overrides=overrides)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
 
 
 class DatasetPreviewRequest(BaseModel):
@@ -1189,6 +1635,57 @@ def list_recipes() -> list[dict[str, Any]]:
     return out
 
 
+@router.get("/frameworks")
+def list_frameworks() -> dict[str, Any]:
+    return {
+        "frameworks": [
+            {
+                "id": "scikit-learn",
+                "extra": "ml",
+                "models": ["SklearnRegressorModel", "SklearnClassifierModel", "SklearnPipelineModel"],
+            },
+            {
+                "id": "forecasting",
+                "extra": "ml-forecast",
+                "models": ["ProphetForecastModel", "SktimeForecastModel", "SktimeReductionForecastModel"],
+            },
+            {"id": "pyod", "extra": "ml-anomaly", "models": ["PyODAnomalyModel"]},
+            {"id": "keras", "extra": "ml-keras/ml-tensorflow", "models": ["KerasMLPModel", "KerasLSTMModel"]},
+            {"id": "transformers", "extra": "ml-transformers", "models": ["HuggingFaceTextSignalModel"]},
+            {"id": "gbdt", "extra": "ml", "models": ["LGBModel", "XGBModel", "CatBoostModel", "DEnsembleModel"]},
+            {"id": "pytorch", "extra": "ml-torch", "models": ["DNNModel", "LSTMModel", "GRUModel", "TransformerModel", "TCNModel"]},
+        ]
+    }
+
+
+@router.get("/flows")
+def list_ml_flows() -> list[dict[str, Any]]:
+    """Enumerate every workbench flow registered in :mod:`aqp.ml.flows`.
+
+    Used by the webui experiment-builder palette and the interactive
+    workbench drawer to render parameter forms dynamically.
+    """
+    from aqp.ml.flows import list_flows
+
+    return list_flows()
+
+
+@router.post("/flows/{flow}/preview")
+def preview_flow(flow: str, req: FlowPreviewRequest) -> dict[str, Any]:
+    from aqp.ml.flows import run_flow
+
+    payload = req.model_dump()
+    return run_flow(flow, payload)
+
+
+@router.post("/flows/{flow}/preview-task", response_model=TaskAccepted)
+def preview_flow_task(flow: str, req: FlowPreviewRequest) -> TaskAccepted:
+    from aqp.tasks.ml_tasks import preview_ml_flow
+
+    async_result = preview_ml_flow.delay(flow, req.model_dump())
+    return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
+
+
 @router.get("/evaluations/{task_id}")
 def get_evaluation(task_id: str) -> dict[str, Any]:
     """Fetch persisted results from an `evaluate_ml_model` Celery task.
@@ -1234,7 +1731,7 @@ def get_evaluation(task_id: str) -> dict[str, Any]:
             raise HTTPException(404, "no evaluations available")
         return {
             "task_id": task_id,
-            "mlflow_run_id": row.mlflow_run_id,
+            "mlflow_run_id": (row.metrics or {}).get("mlflow_run_id"),
             "metrics": dict(row.metrics or {}),
             "tags": {},
             "status": "completed",
@@ -1252,6 +1749,162 @@ class LiveTestStartRequest(BaseModel):
     venue: str = Field(default="simulated", description="alpaca | ibkr | kafka | simulated")
     symbols: list[str] = Field(default_factory=list)
     poll_cadence_seconds: float = Field(default=5.0, ge=1.0, le=60.0)
+
+
+# ---------------------------------------------------------------------------
+# Interactive ML test workbench (ML expansion)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/test/single")
+def test_single_predict(req: TestSinglePredictRequest) -> dict[str, Any]:
+    """Score a single feature row through a deployed model.
+
+    When ``sync=true`` (default) the prediction runs in-process for
+    sub-second response. Setting ``sync=false`` queues the work on the
+    ``ml`` Celery queue and returns a ``TaskAccepted`` payload.
+    """
+    if not req.sync:
+        from aqp.tasks.ml_test_tasks import predict_single
+
+        async_result = predict_single.delay(
+            deployment_id=req.deployment_id,
+            feature_row=req.feature_row,
+            vt_symbol=req.vt_symbol,
+        )
+        return {
+            "task_id": async_result.id,
+            "stream_url": f"/chat/stream/{async_result.id}",
+        }
+    # Synchronous path — re-use the same worker function for parity.
+    from aqp.tasks.ml_test_tasks import predict_single as _task
+
+    fn = _task.run if hasattr(_task, "run") else _task
+    return fn(
+        deployment_id=req.deployment_id,
+        feature_row=req.feature_row,
+        vt_symbol=req.vt_symbol,
+    )
+
+
+@router.post("/test/batch", response_model=TaskAccepted)
+def test_batch_predict(req: TestBatchPredictRequest) -> TaskAccepted:
+    from aqp.tasks.ml_test_tasks import predict_batch
+
+    async_result = predict_batch.delay(
+        deployment_id=req.deployment_id,
+        symbols=req.symbols,
+        start=req.start,
+        end=req.end,
+        last_n=req.last_n,
+        iceberg_identifier=req.iceberg_identifier,
+    )
+    return TaskAccepted(
+        task_id=async_result.id,
+        stream_url=f"/chat/stream/{async_result.id}",
+    )
+
+
+@router.post("/test/compare", response_model=TaskAccepted)
+def test_compare(req: TestCompareRequest) -> TaskAccepted:
+    if req.deployment_id_a == req.deployment_id_b:
+        raise HTTPException(400, "deployment_id_a and deployment_id_b must differ")
+    from aqp.tasks.ml_test_tasks import compare_models
+
+    async_result = compare_models.delay(
+        deployment_id_a=req.deployment_id_a,
+        deployment_id_b=req.deployment_id_b,
+        symbols=req.symbols,
+        start=req.start,
+        end=req.end,
+        last_n=req.last_n,
+    )
+    return TaskAccepted(
+        task_id=async_result.id,
+        stream_url=f"/chat/stream/{async_result.id}",
+    )
+
+
+@router.post("/test/scenario")
+def test_scenario(req: TestScenarioRequest) -> dict[str, Any]:
+    """Sensitivity perturbation table for a single feature row.
+
+    Synchronous by default (perturbing a single row across N values is
+    cheap). Pass ``sync=false`` to fan-out via Celery for very large
+    perturbation lists.
+    """
+    if not req.sync:
+        from aqp.tasks.ml_test_tasks import scenario_perturbation
+
+        async_result = scenario_perturbation.delay(
+            deployment_id=req.deployment_id,
+            feature_row=req.feature_row,
+            perturbations=req.perturbations,
+        )
+        return {
+            "task_id": async_result.id,
+            "stream_url": f"/chat/stream/{async_result.id}",
+        }
+    from aqp.tasks.ml_test_tasks import scenario_perturbation as _task
+
+    fn = _task.run if hasattr(_task, "run") else _task
+    return fn(
+        deployment_id=req.deployment_id,
+        feature_row=req.feature_row,
+        perturbations=req.perturbations,
+    )
+
+
+@router.post("/test/upload-csv")
+async def test_upload_csv(deployment_id: str, file: Any = None) -> dict[str, Any]:
+    """Upload a CSV and run inference row-by-row.
+
+    Size-capped via ``settings.ml_workbench_max_csv_mb``. The CSV must
+    have one feature column per model input; rows are scored
+    synchronously and the result includes per-row predictions and a
+    summary distribution.
+    """
+    from fastapi import File, UploadFile
+
+    # FastAPI doesn't auto-bind File() in unsigned annotations; re-declare.
+    if file is None or not hasattr(file, "read"):
+        raise HTTPException(400, "file is required (multipart/form-data)")
+    upload: UploadFile = file  # type: ignore[assignment]
+    max_mb = int(getattr(settings, "ml_workbench_max_csv_mb", 20))
+    payload = await upload.read()
+    if len(payload) > max_mb * 1024 * 1024:
+        raise HTTPException(413, f"CSV exceeds {max_mb} MB cap")
+
+    import io
+
+    try:
+        df = pd.read_csv(io.BytesIO(payload))
+    except Exception as exc:
+        raise HTTPException(400, f"could not parse CSV: {exc}") from exc
+
+    from aqp.tasks.ml_test_tasks import _load_alpha
+
+    alpha = _load_alpha(deployment_id)
+    if alpha._model is None:  # noqa: SLF001
+        raise HTTPException(400, "deployment did not resolve to a usable model")
+    try:
+        preds = alpha._predict(df.to_numpy(dtype=float))  # noqa: SLF001
+    except Exception:
+        preds = alpha._model.predict(df)
+    arr = np.asarray(preds, dtype=float).reshape(-1)
+    out = df.copy()
+    out["__prediction__"] = arr[: len(out)]
+    return {
+        "deployment_id": deployment_id,
+        "n_rows": int(len(df)),
+        "predictions_summary": {
+            "mean": float(arr.mean()) if arr.size else 0.0,
+            "std": float(arr.std()) if arr.size else 0.0,
+            "min": float(arr.min()) if arr.size else 0.0,
+            "max": float(arr.max()) if arr.size else 0.0,
+        },
+        "rows": out.head(500).to_dict(orient="records"),
+    }
 
 
 @router.post("/live-test/start")

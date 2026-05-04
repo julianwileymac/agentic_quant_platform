@@ -31,7 +31,13 @@ def _rsi(series: pd.Series, period: int = 14) -> pd.Series:
     return 100 - 100 / (1 + rs)
 
 
-@register("RsiPatternAlpha")
+@register(
+    "RsiPatternAlpha",
+    kind="strategy",
+    tags=STRATEGY_TAGS,
+    source="quant_trading",
+    category="pattern",
+)
 class RsiPatternAlpha(IAlphaModel):
     def __init__(
         self,

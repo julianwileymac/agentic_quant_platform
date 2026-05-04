@@ -70,7 +70,7 @@ CMD ["aqp-stream-ingest", "--venue", "all"]
 ###############################################################################
 FROM base AS api
 
-RUN pip install --upgrade pip && pip install -e ".[dev,otel,cli,iceberg]"
+RUN pip install --upgrade pip && pip install -e ".[dev,otel,cli,iceberg,visualization,entity-graph,dagster-aqp]"
 
 EXPOSE 8000 8765
 
@@ -105,7 +105,7 @@ CMD ["aqp", "serve", "mlflow", "--help"]
 ###############################################################################
 FROM base AS ml-train
 
-RUN pip install --upgrade pip && pip install -e ".[ml,ml-torch,ml-forecast,ml-anomaly,portfolio,otel,cli,iceberg]"
+RUN pip install --upgrade pip && pip install -e ".[ml,ml-torch,ml-forecast,ml-anomaly,portfolio,otel,cli,iceberg,entity-graph,dagster-aqp]"
 
 RUN useradd --system --uid 1001 aqp \
     && mkdir -p /app/data \

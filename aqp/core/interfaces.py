@@ -171,6 +171,46 @@ class IPortfolioConstructionModel(ABC):
         ...
 
 
+class IOrderModel(ABC):
+    """Order-stream contract for engines that consume direct order arrays.
+
+    Where :class:`IAlphaModel` produces sparse :class:`Signal` insights and a
+    downstream portfolio model translates them into orders, an
+    :class:`IOrderModel` produces orders directly. This is the natural fit
+    for engines that consume a wide-format order stream — most notably
+    ``vectorbtpro.Portfolio.from_orders`` — and for agent-driven strategies
+    where the agent emits not just direction but precise sizes / limit prices.
+
+    Implementations return an ``OrderArrays`` payload (or anything duck-
+    compatible with ``size``/``price``/``size_type``/``direction`` attributes)
+    representing wide-format DataFrames indexed by timestamp with vt_symbol
+    columns. A concrete dataclass lives in
+    :mod:`aqp.backtest.vbtpro.order_builder` so the core layer stays free of
+    vbt-pro-specific shapes.
+    """
+
+    @abstractmethod
+    def generate_orders(
+        self,
+        bars: pd.DataFrame,
+        universe: list[Symbol],
+        context: dict[str, Any],
+    ) -> Any:
+        """Produce wide-format order arrays for the given bars + universe.
+
+        Returns an object with at least:
+
+        - ``size`` : ``pd.DataFrame`` of signed position sizes
+          (positive=long, negative=short, NaN=no order this bar).
+        - ``price`` : optional ``pd.DataFrame`` of limit prices; when ``None``
+          engines fill at the close.
+        - ``size_type`` : ``str`` selecting vbt-pro's size semantics
+          (``"amount"``, ``"percent"``, ``"value"``, ``"targetshares"``,
+          ``"targetpercent"``, ``"targetvalue"``).
+        """
+        ...
+
+
 class IRiskManagementModel(ABC):
     """Constraint layer: intercepts and adjusts portfolio targets."""
 

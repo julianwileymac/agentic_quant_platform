@@ -21,8 +21,10 @@ def _sync_engine() -> Any:
     return create_engine(
         settings.postgres_dsn,
         pool_pre_ping=True,
-        pool_size=10,
-        max_overflow=20,
+        pool_size=max(1, int(settings.postgres_pool_size)),
+        max_overflow=max(0, int(settings.postgres_max_overflow)),
+        pool_timeout=max(1, int(settings.postgres_pool_timeout_seconds)),
+        pool_recycle=max(60, int(settings.postgres_pool_recycle_seconds)),
         future=True,
     )
 
@@ -34,8 +36,10 @@ def _async_engine() -> Any:
     return create_async_engine(
         settings.postgres_async_dsn,
         pool_pre_ping=True,
-        pool_size=10,
-        max_overflow=20,
+        pool_size=max(1, int(settings.postgres_pool_size)),
+        max_overflow=max(0, int(settings.postgres_max_overflow)),
+        pool_timeout=max(1, int(settings.postgres_pool_timeout_seconds)),
+        pool_recycle=max(60, int(settings.postgres_pool_recycle_seconds)),
         future=True,
     )
 

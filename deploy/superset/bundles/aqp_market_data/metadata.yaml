@@ -1,0 +1,7 @@
+# Placeholder metadata.yaml so the directory ships in version control.
+# Replace with the file produced by `aqp viz export --out deploy/superset/bundles/aqp_market_data`
+# after first sync. Run `superset import-dashboards` (or `aqp viz import`)
+# to push it back into Superset.
+version: "1.0.0"
+type: "Dashboard"
+timestamp: "1970-01-01T00:00:00+00:00"

@@ -3,12 +3,174 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import date, datetime
 from typing import Any
 
+from aqp.config import settings
 from aqp.tasks._progress import emit, emit_done, emit_error
 from aqp.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
+
+
+class _ActiveDailyAllBatchesFailed(RuntimeError):
+    """Raised when every batch of ``ingest_active_daily_ohlcv`` fails (after ``emit_error``)."""
+
+
+_ACTIVE_DAILY_LOCK_PREFIX = "aqp:lock:ingest_active_daily_ohlcv"
+_ACTIVE_DAILY_LOCK_TTL_SECONDS = 6 * 3600
+
+
+def _active_daily_lock_key(source: str | None) -> str:
+    label = (source or "auto").strip().lower().replace(" ", "_")[:120]
+    return f"{_ACTIVE_DAILY_LOCK_PREFIX}:{label}"
+
+
+def _try_acquire_active_daily_lock(key: str, token: str, ttl_seconds: int) -> bool:
+    try:
+        import redis
+
+        client = redis.Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=2.0,
+            socket_timeout=2.0,
+        )
+        return bool(client.set(key, token, nx=True, ex=int(ttl_seconds)))
+    except Exception as exc:
+        logger.warning(
+            "ingest_active_daily_ohlcv: Redis lock unavailable (%s); proceeding without lock",
+            exc,
+        )
+        return True
+
+
+def _release_active_daily_lock(key: str, token: str) -> None:
+    try:
+        import redis
+
+        client = redis.Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=2.0,
+            socket_timeout=2.0,
+        )
+        if client.get(key) == token:
+            client.delete(key)
+    except Exception:
+        logger.debug("ingest_active_daily_ohlcv: lock release skipped", exc_info=True)
+
+
+def _register_active_daily_catalog_summary(
+    *,
+    total_rows: int,
+    loaded_symbol_count: int,
+    provider: str,
+    start: str,
+    end: str,
+    source_label: str,
+    task_id: str,
+) -> None:
+    if total_rows <= 0:
+        return
+    try:
+        from aqp.data.catalog import register_dataset_version
+
+        bars_root = (settings.parquet_dir / "bars").resolve()
+        register_dataset_version(
+            name="bars.default",
+            provider=provider,
+            domain="market.bars",
+            df=None,
+            summary_row_count=int(total_rows),
+            summary_symbol_count=int(loaded_symbol_count),
+            frequency="1d",
+            storage_uri=str(bars_root),
+            meta={
+                "task_id": task_id,
+                "aggregated_run": True,
+                "start": start,
+                "end": end,
+                "source": source_label,
+                "physical_layout": "parquet_one_file_per_vt_symbol",
+                "bars_root": str(bars_root),
+            },
+        )
+    except Exception:
+        logger.warning("ingest_active_daily_ohlcv: catalog summary registration failed", exc_info=True)
+
+
+def _subtract_years(value: date, years: int) -> date:
+    try:
+        return value.replace(year=value.year - years)
+    except ValueError:
+        return value.replace(month=2, day=28, year=value.year - years)
+
+
+def _parse_end_date(value: str | None) -> date:
+    if not value:
+        return datetime.utcnow().date()
+    return datetime.fromisoformat(str(value)[:10]).date()
+
+
+def _chunks(items: list[str], size: int) -> list[list[str]]:
+    return [items[i : i + size] for i in range(0, len(items), size)]
+
+
+def _active_instrument_vt_symbols() -> list[str]:
+    from sqlalchemy import select
+
+    from aqp.core.types import Symbol
+    from aqp.persistence.db import get_session
+    from aqp.persistence.models import Instrument
+
+    with get_session() as session:
+        rows = session.execute(
+            select(Instrument.vt_symbol)
+            .where(Instrument.is_active.is_(True))
+            .order_by(Instrument.ticker.asc())
+        ).scalars().all()
+
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for raw in rows:
+        text = str(raw or "").strip().upper()
+        if not text:
+            continue
+        vt_symbol = Symbol.parse(text).vt_symbol
+        if vt_symbol not in seen:
+            seen.add(vt_symbol)
+            symbols.append(vt_symbol)
+    return symbols
+
+
+def _intraday_plan_summary(plan: Any) -> dict[str, Any]:
+    return {
+        "plan_id": plan.plan_id,
+        "generated_at": plan.generated_at,
+        "interval": plan.interval,
+        "lookback_months": int(plan.lookback_months),
+        "manifest_path": plan.manifest_path,
+        "component_count": len(plan.components),
+        "symbol_count": len({component.vt_symbol for component in plan.components}),
+        "months": sorted({component.month for component in plan.components}),
+        "status_counts": _component_status_counts(plan.components),
+    }
+
+
+def _component_status_counts(components: list[Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for component in components:
+        status = str(getattr(component, "status", "unknown") or "unknown")
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
+def _progress_callback(task_id: str):
+    def _progress(stage: str, message: str, extras: dict[str, Any] | None = None) -> None:
+        emit(task_id, stage, message, **(extras or {}))
+
+    return _progress
 
 
 @celery_app.task(bind=True, name="aqp.tasks.ingestion_tasks.ingest_yahoo")
@@ -39,6 +201,197 @@ def ingest_yahoo(
         logger.exception("ingest_yahoo failed")
         emit_error(task_id, str(e))
         raise
+
+
+@celery_app.task(bind=True, name="aqp.tasks.ingestion_tasks.ingest_active_daily_ohlcv")
+def ingest_active_daily_ohlcv(
+    self,
+    years: int = 5,
+    end: str | None = None,
+    source: str | None = None,
+    chunk_size: int = 100,
+) -> dict[str, Any]:
+    """Load daily OHLCV for every active instrument in the security master.
+
+    **Storage:** rows are merged into the canonical Parquet lake at
+    ``{AQP_PARQUET_DIR}/bars/<TICKER>_<EXCHANGE>.parquet`` (one file per
+    ``vt_symbol``), not a new on-disk table per run. The metadata catalog
+    records one new ``bars.default`` **version** per successful full run
+    (see :func:`_register_active_daily_catalog_summary`).
+    """
+    task_id = self.request.id or "local"
+    lock_key = _active_daily_lock_key(source)
+    lock_token = task_id
+    lock_held = False
+    end_date = _parse_end_date(end)
+    start_date = _subtract_years(end_date, int(years))
+    symbols = _active_instrument_vt_symbols()
+    source_label = str(source or "auto")
+
+    if not symbols:
+        message = "no active instruments found in the security master"
+        emit_error(task_id, message)
+        raise ValueError(message)
+
+    batches = _chunks(symbols, max(1, int(chunk_size)))
+
+    if not _try_acquire_active_daily_lock(lock_key, lock_token, _ACTIVE_DAILY_LOCK_TTL_SECONDS):
+        message = "Another active daily OHLCV ingestion is already running; skipping duplicate"
+        logger.warning("%s (task_id=%s lock_key=%s)", message, task_id, lock_key)
+        emit(task_id, "skipped", message, lock_key=lock_key, concurrent=True)
+        skipped: dict[str, Any] = {
+            "skipped": True,
+            "reason": "concurrent_run",
+            "lock_key": lock_key,
+            "requested_symbols": len(symbols),
+        }
+        emit_done(task_id, skipped)
+        return skipped
+
+    lock_held = True
+    logger.info(
+        "ingest_active_daily_ohlcv start task_id=%s symbols=%d batches=%d source=%s window=%s..%s",
+        task_id,
+        len(symbols),
+        len(batches),
+        source_label,
+        start_date.isoformat(),
+        end_date.isoformat(),
+    )
+
+    emit(
+        task_id,
+        "start",
+        f"Loading {years} years of daily OHLCV for {len(symbols)} active instruments",
+        symbols=len(symbols),
+        start=start_date.isoformat(),
+        end=end_date.isoformat(),
+        source=source_label,
+        chunk_size=chunk_size,
+    )
+
+    total_rows = 0
+    loaded_symbols: set[str] = set()
+    errors: list[dict[str, Any]] = []
+    resolved_source: Any = source
+    try:
+        from aqp.data.catalog import upsert_instruments_for_vt_symbols
+        from aqp.data.ingestion import AlphaVantageSource, ingest
+
+        if str(source or "").strip().lower() in {"alpha_vantage", "alphavantage"}:
+            resolved_source = AlphaVantageSource(close_after_fetch=False)
+
+        for index, batch in enumerate(batches, start=1):
+            emit(
+                task_id,
+                "running",
+                f"Loading batch {index}/{len(batches)} ({len(batch)} instruments)",
+                batch=index,
+                batches=len(batches),
+                symbols=len(batch),
+            )
+            try:
+                df = ingest(
+                    symbols=batch,
+                    start=start_date.isoformat(),
+                    end=end_date.isoformat(),
+                    interval="1d",
+                    source=resolved_source,
+                    register_catalog_version=False,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.exception(
+                    "active daily OHLCV batch failed (batch=%s/%s size=%s task_id=%s)",
+                    index,
+                    len(batches),
+                    len(batch),
+                    task_id,
+                )
+                errors.append({"batch": index, "symbols": batch, "error": str(exc)})
+                emit(
+                    task_id,
+                    "warning",
+                    f"Batch {index}/{len(batches)} failed: {exc}",
+                    batch=index,
+                    error=str(exc),
+                )
+                continue
+
+            total_rows += int(len(df))
+            if not df.empty and "vt_symbol" in df.columns:
+                loaded_symbols.update(str(v) for v in df["vt_symbol"].dropna().unique())
+            if str(source or "").strip().lower() in {"alpha_vantage", "alphavantage"}:
+                snapshot = getattr(getattr(resolved_source, "client", None), "rate_limiter", None)
+                if snapshot is not None:
+                    state = snapshot.snapshot()
+                    emit(
+                        task_id,
+                        "rate_limit",
+                        "Alpha Vantage rate limiter state",
+                        requests_this_minute=state.requests_this_minute,
+                        requests_today=state.requests_today,
+                        next_refill_seconds=state.next_refill_seconds,
+                    )
+
+        result = {
+            "n_rows": total_rows,
+            "n_symbols": len(loaded_symbols),
+            "requested_symbols": len(symbols),
+            "start": start_date.isoformat(),
+            "end": end_date.isoformat(),
+            "interval": "1d",
+            "source": source_label,
+            "failed_batches": len(errors),
+            "errors": errors[:10],
+        }
+        if total_rows == 0 and errors:
+            message = f"all {len(errors)} active OHLCV batch(es) failed"
+            logger.error("%s (task_id=%s)", message, task_id)
+            emit_error(task_id, message, **result)
+            raise _ActiveDailyAllBatchesFailed(message)
+
+        upsert_instruments_for_vt_symbols(loaded_symbols)
+
+        provider = getattr(resolved_source, "name", None) or source_label
+        _register_active_daily_catalog_summary(
+            total_rows=total_rows,
+            loaded_symbol_count=len(loaded_symbols),
+            provider=str(provider),
+            start=start_date.isoformat(),
+            end=end_date.isoformat(),
+            source_label=source_label,
+            task_id=task_id,
+        )
+
+        if errors:
+            logger.warning(
+                "ingest_active_daily_ohlcv completed with partial failures task_id=%s failed_batches=%s",
+                task_id,
+                len(errors),
+            )
+
+        logger.info(
+            "ingest_active_daily_ohlcv done task_id=%s rows=%s symbols=%s failed_batches=%s",
+            task_id,
+            total_rows,
+            len(loaded_symbols),
+            len(errors),
+        )
+        emit_done(task_id, result)
+        return result
+
+    except _ActiveDailyAllBatchesFailed:
+        raise
+    except Exception as exc:
+        logger.exception("ingest_active_daily_ohlcv failed (task_id=%s)", task_id)
+        emit_error(task_id, str(exc))
+        raise
+    finally:
+        close = getattr(resolved_source, "close", None)
+        if callable(close):
+            close()
+        if lock_held:
+            _release_active_daily_lock(lock_key, lock_token)
 
 
 @celery_app.task(bind=True, name="aqp.tasks.ingestion_tasks.index_chroma")
@@ -139,7 +492,9 @@ def ingest_alpha_vantage_history(
     try:
         from aqp.data.sources.alpha_vantage.history import ingest_history
 
-        result = ingest_history(**payload)
+        history_payload = dict(payload)
+        history_payload.pop("progress_cb", None)
+        result = ingest_history(**history_payload, progress_cb=_progress_callback(task_id))
         response = result.to_dict()
         emit_done(task_id, response)
         return response
@@ -211,7 +566,7 @@ def plan_alpha_vantage_intraday(
         from aqp.data.sources.alpha_vantage.intraday_plan import build_intraday_plan
 
         plan = build_intraday_plan(**payload)
-        response = plan.to_dict()
+        response = _intraday_plan_summary(plan)
         emit_done(task_id, response)
         return response
     except Exception as exc:
@@ -232,7 +587,9 @@ def load_alpha_vantage_intraday_components(
     try:
         from aqp.data.sources.alpha_vantage.intraday_backfill import run_intraday_manifest
 
-        result = run_intraday_manifest(**payload)
+        load_payload = dict(payload)
+        load_payload.pop("progress_cb", None)
+        result = run_intraday_manifest(**load_payload, progress_cb=_progress_callback(task_id))
         response = result.to_dict()
         emit_done(task_id, response)
         return response
@@ -257,6 +614,7 @@ def run_alpha_vantage_intraday_delta(
 
         plan_payload = dict(payload.get("plan") or payload)
         load_payload = dict(payload.get("load") or {})
+        load_payload.pop("progress_cb", None)
         plan = build_intraday_plan(**plan_payload)
         emit(
             task_id,
@@ -265,8 +623,12 @@ def run_alpha_vantage_intraday_delta(
             manifest_path=plan.manifest_path,
             component_count=len(plan.components),
         )
-        result = run_intraday_manifest(manifest_path=plan.manifest_path, **load_payload)
-        response = {"plan": plan.to_dict(), "load": result.to_dict()}
+        result = run_intraday_manifest(
+            manifest_path=plan.manifest_path,
+            progress_cb=_progress_callback(task_id),
+            **load_payload,
+        )
+        response = {"plan": _intraday_plan_summary(plan), "load": result.to_dict()}
         emit_done(task_id, response)
         return response
     except Exception as exc:

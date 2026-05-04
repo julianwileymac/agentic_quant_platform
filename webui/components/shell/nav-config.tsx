@@ -1,8 +1,12 @@
 import {
+  ApartmentOutlined,
   AppstoreOutlined,
+  BarChartOutlined,
   BulbOutlined,
   CloudUploadOutlined,
   CodeOutlined,
+  CompassOutlined,
+  ControlOutlined,
   DatabaseOutlined,
   DotChartOutlined,
   ExperimentOutlined,
@@ -17,24 +21,49 @@ import {
   RobotOutlined,
   SettingOutlined,
   StockOutlined,
+  TeamOutlined,
   ThunderboltOutlined,
   UnorderedListOutlined,
+  UserOutlined,
   WalletOutlined,
 } from "@ant-design/icons";
 import type { ReactNode } from "react";
+
+export type NavSubmenu = "ML" | "Data Management" | "Data Pipelines";
 
 export interface NavItem {
   key: string;
   label: string;
   href: string;
   icon: ReactNode;
-  group: "Workspace" | "Research" | "Lab" | "Execution" | "Workflows" | "Agents" | "RAG" | "System";
+  group:
+    | "Workspace"
+    | "Research"
+    | "Lab"
+    | "Execution"
+    | "Workflows"
+    | "Bots"
+    | "Agents"
+    | "RAG"
+    | "Tenancy"
+    | "Admin"
+    | "System";
+  submenu?: NavSubmenu;
   hotkey?: string;
 }
 
 export const NAV_ITEMS: NavItem[] = [
   { key: "home", label: "Dashboard", href: "/", icon: <HomeOutlined />, group: "Workspace" },
   { key: "chat", label: "Chat", href: "/chat", icon: <MessageOutlined />, group: "Workspace" },
+  // -- Bot Entity Refactor: first-class bot list + builder ---------------
+  { key: "bots", label: "Bots", href: "/bots", icon: <RobotOutlined />, group: "Bots" },
+  {
+    key: "bots-new",
+    label: "New Bot",
+    href: "/bots/new",
+    icon: <NodeIndexOutlined />,
+    group: "Bots",
+  },
   {
     key: "strategies",
     label: "Strategies",
@@ -48,6 +77,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/data/catalog",
     icon: <FolderOpenOutlined />,
     group: "Research",
+    submenu: "Data Management",
   },
   {
     key: "data-iceberg",
@@ -55,6 +85,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/data/iceberg",
     icon: <PartitionOutlined />,
     group: "Research",
+    submenu: "Data Management",
   },
   {
     key: "data-dbt",
@@ -62,6 +93,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/data/dbt",
     icon: <CodeOutlined />,
     group: "Research",
+    submenu: "Data Pipelines",
   },
   {
     key: "data-ingest",
@@ -69,6 +101,15 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/data/ingest",
     icon: <CloudUploadOutlined />,
     group: "Research",
+    submenu: "Data Pipelines",
+  },
+  {
+    key: "data-pipelines",
+    label: "Data Pipelines",
+    href: "/data/pipelines",
+    icon: <NodeIndexOutlined />,
+    group: "Research",
+    submenu: "Data Pipelines",
   },
   {
     key: "airbyte",
@@ -76,6 +117,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/airbyte",
     icon: <CloudUploadOutlined />,
     group: "Research",
+    submenu: "Data Pipelines",
   },
   {
     key: "airbyte-connectors",
@@ -83,6 +125,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/airbyte/connectors",
     icon: <DatabaseOutlined />,
     group: "Research",
+    submenu: "Data Pipelines",
   },
   {
     key: "airbyte-builder",
@@ -90,6 +133,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/airbyte/builder",
     icon: <ExperimentOutlined />,
     group: "Research",
+    submenu: "Data Pipelines",
   },
   {
     key: "airbyte-runs",
@@ -97,6 +141,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/airbyte/runs",
     icon: <MonitorOutlined />,
     group: "Research",
+    submenu: "Data Pipelines",
   },
   {
     key: "data-explorer",
@@ -104,6 +149,31 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/data/explorer",
     icon: <DatabaseOutlined />,
     group: "Research",
+    submenu: "Data Management",
+  },
+  {
+    key: "visualizations",
+    label: "Visualizations",
+    href: "/visualizations",
+    icon: <BarChartOutlined />,
+    group: "Research",
+    submenu: "Data Management",
+  },
+  {
+    key: "entity-graph",
+    label: "Entity Graph",
+    href: "/data/entity-graph",
+    icon: <NodeIndexOutlined />,
+    group: "Research",
+    submenu: "Data Management",
+  },
+  {
+    key: "service-manager",
+    label: "Service Manager",
+    href: "/data/services",
+    icon: <ControlOutlined />,
+    group: "Research",
+    submenu: "Data Pipelines",
   },
   {
     key: "data-browser",
@@ -111,6 +181,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/data/browser",
     icon: <StockOutlined />,
     group: "Research",
+    submenu: "Data Management",
   },
   {
     key: "data-sources",
@@ -118,6 +189,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/data/sources",
     icon: <PartitionOutlined />,
     group: "Research",
+    submenu: "Data Pipelines",
   },
   {
     key: "data-cfpb",
@@ -125,6 +197,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/data/cfpb",
     icon: <DatabaseOutlined />,
     group: "Research",
+    submenu: "Data Management",
   },
   {
     key: "data-fda",
@@ -132,6 +205,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/data/fda",
     icon: <DatabaseOutlined />,
     group: "Research",
+    submenu: "Data Management",
   },
   {
     key: "data-uspto",
@@ -139,6 +213,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/data/uspto",
     icon: <DatabaseOutlined />,
     group: "Research",
+    submenu: "Data Management",
   },
   {
     key: "data-indicators",
@@ -153,6 +228,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/alpha-vantage",
     icon: <LineChartOutlined />,
     group: "Research",
+    submenu: "Data Management",
   },
   {
     key: "data-live",
@@ -197,6 +273,13 @@ export const NAV_ITEMS: NavItem[] = [
     group: "Research",
   },
   {
+    key: "learn-sources",
+    label: "Source Libraries",
+    href: "/learn?tab=sources",
+    icon: <CompassOutlined />,
+    group: "Research",
+  },
+  {
     key: "backtest",
     label: "Backtests",
     href: "/backtest",
@@ -217,13 +300,29 @@ export const NAV_ITEMS: NavItem[] = [
     icon: <ExperimentOutlined />,
     group: "Lab",
   },
-  { key: "ml", label: "ML Training", href: "/ml/training", icon: <FundOutlined />, group: "Lab" },
+  {
+    key: "ml",
+    label: "ML Training",
+    href: "/ml/training",
+    icon: <FundOutlined />,
+    group: "Lab",
+    submenu: "ML",
+  },
+  {
+    key: "ml-builder",
+    label: "ML Builder",
+    href: "/ml/builder",
+    icon: <NodeIndexOutlined />,
+    group: "Lab",
+    submenu: "ML",
+  },
   {
     key: "ml-datasets",
     label: "ML Datasets",
     href: "/ml/datasets",
     icon: <DatabaseOutlined />,
     group: "Lab",
+    submenu: "ML",
   },
   {
     key: "ml-test",
@@ -231,6 +330,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/ml/test",
     icon: <ExperimentOutlined />,
     group: "Lab",
+    submenu: "ML",
   },
   {
     key: "ml-models",
@@ -238,6 +338,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/ml/models",
     icon: <UnorderedListOutlined />,
     group: "Lab",
+    submenu: "ML",
   },
   {
     key: "ml-zoo",
@@ -245,6 +346,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/ml/zoo",
     icon: <BulbOutlined />,
     group: "Lab",
+    submenu: "ML",
   },
   { key: "rl", label: "RL", href: "/rl", icon: <RobotOutlined />, group: "Lab" },
   {
@@ -267,6 +369,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/data/datasets/library",
     icon: <FolderOpenOutlined />,
     group: "Research",
+    submenu: "Data Pipelines",
   },
   {
     key: "data-microstructure",
@@ -322,7 +425,57 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Data Pipeline Editor",
     href: "/workflows/data",
     icon: <NodeIndexOutlined />,
-    group: "Workflows",
+    group: "Research",
+    submenu: "Data Pipelines",
+  },
+  // ---- Data layer expansion ---------------------------------------
+  {
+    key: "data-pipelines-hub",
+    label: "Pipelines Hub",
+    href: "/data/pipelines/hub",
+    icon: <ApartmentOutlined />,
+    group: "Research",
+    submenu: "Data Pipelines",
+  },
+  {
+    key: "data-sinks",
+    label: "Sinks",
+    href: "/data/sinks",
+    icon: <DatabaseOutlined />,
+    group: "Research",
+    submenu: "Data Pipelines",
+  },
+  {
+    key: "data-dataset-configs",
+    label: "Project Datasets",
+    href: "/data/datasets/configs",
+    icon: <FolderOpenOutlined />,
+    group: "Research",
+    submenu: "Data Pipelines",
+  },
+  {
+    key: "streaming-kafka",
+    label: "Kafka",
+    href: "/streaming/kafka",
+    icon: <PartitionOutlined />,
+    group: "Research",
+    submenu: "Data Pipelines",
+  },
+  {
+    key: "streaming-flink",
+    label: "Flink",
+    href: "/streaming/flink",
+    icon: <ThunderboltOutlined />,
+    group: "Research",
+    submenu: "Data Pipelines",
+  },
+  {
+    key: "streaming-producers",
+    label: "Producers",
+    href: "/streaming/producers",
+    icon: <CloudUploadOutlined />,
+    group: "Research",
+    submenu: "Data Pipelines",
   },
   {
     key: "wf-strategy",
@@ -416,5 +569,62 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/settings",
     icon: <SettingOutlined />,
     group: "System",
+  },
+  // -- Tenancy / multi-tenant resource ownership refactor ---
+  {
+    key: "explorer",
+    label: "Resource Explorer",
+    href: "/explorer",
+    icon: <CompassOutlined />,
+    group: "Tenancy",
+  },
+  {
+    key: "admin-orgs",
+    label: "Organizations",
+    href: "/admin/orgs",
+    icon: <ApartmentOutlined />,
+    group: "Admin",
+  },
+  {
+    key: "admin-teams",
+    label: "Teams",
+    href: "/admin/teams",
+    icon: <TeamOutlined />,
+    group: "Admin",
+  },
+  {
+    key: "admin-users",
+    label: "Users",
+    href: "/admin/users",
+    icon: <UserOutlined />,
+    group: "Admin",
+  },
+  {
+    key: "admin-workspaces",
+    label: "Workspaces",
+    href: "/admin/workspaces",
+    icon: <FolderOpenOutlined />,
+    group: "Admin",
+  },
+  {
+    key: "admin-projects",
+    label: "Projects",
+    href: "/admin/projects",
+    icon: <AppstoreOutlined />,
+    group: "Admin",
+  },
+  {
+    key: "admin-labs",
+    label: "Labs",
+    href: "/admin/labs",
+    icon: <ExperimentOutlined />,
+    group: "Admin",
+  },
+  {
+    key: "admin-configs",
+    label: "Layered Config",
+    href: "/admin/configs",
+    icon: <ControlOutlined />,
+    group: "Admin",
   },
 ];

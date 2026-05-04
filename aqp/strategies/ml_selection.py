@@ -230,6 +230,8 @@ def _allocate_weights(
     "MLStockSelectionAlpha",
     kind="strategy",
     tags=("ml", "stock_selection", "supervised"),
+    source="finrl_trading",
+    category="ml_selection",
 )
 class MLStockSelectionAlpha(IAlphaModel):
     """Pick top-quantile names by predicted return + allocate weights.
@@ -396,6 +398,8 @@ class MLStockSelectionAlpha(IAlphaModel):
     "SectorNeutralMLAlpha",
     kind="strategy",
     tags=("ml", "stock_selection", "supervised", "sector_neutral"),
+    source="finrl_trading",
+    category="ml_selection",
 )
 class SectorNeutralMLAlpha(MLStockSelectionAlpha):
     """Sector-neutral version: select per-sector quantiles.

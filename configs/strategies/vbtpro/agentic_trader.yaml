@@ -1,0 +1,58 @@
+# Vbt-pro + AgenticVbtAlpha (precompute mode).
+#
+# The Celery `run_agentic_backtest` task pre-runs the trader crew across
+# every (symbol, asof) and persists decisions in the DecisionCache. This
+# config wires AgenticVbtAlpha to read the cache and emit panel-wide
+# entries/exits arrays for vbt-pro.
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols:
+          - AAPL.NASDAQ
+          - MSFT.NASDAQ
+          - GOOGL.NASDAQ
+    alpha_model:
+      class: AgenticVbtAlpha
+      module_path: aqp.strategies.vbtpro.agentic_alpha
+      kwargs:
+        spec_name: trader.signal_emitter
+        strategy_id: vbtpro_agentic_trader
+        mode: precompute
+        min_confidence: 0.5
+        use_size_in_signals: true
+        rating_size_map:
+          strong_buy: 1.0
+          buy: 0.5
+          hold: 0.0
+          sell: 0.5
+          strong_sell: 1.0
+    portfolio_model:
+      class: EqualWeightPortfolioModel
+      module_path: aqp.strategies.portfolios
+      kwargs: {}
+    risk_model:
+      class: NullRiskModel
+      module_path: aqp.strategies.risk
+      kwargs: {}
+    execution_model:
+      class: ImmediateExecutionModel
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: vbt-pro:signals
+  kwargs:
+    initial_cash: 100000.0
+    fees: 0.001
+    slippage: 0.0005
+    allow_short: true
+    cash_sharing: true
+    group_by: true
+    direction: both
+    start: "2020-01-01"
+    end: "2024-12-31"

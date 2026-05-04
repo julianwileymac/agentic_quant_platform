@@ -69,3 +69,43 @@ The `china_a_shares_top200`, `crypto_majors_intraday`, `etf_intraday_panel`, `co
 ## Ingestion of `lob_btcusdt_sample`
 
 The hftbacktest sample feed format is `gzip` of a venue-specific schema. Our `lob_sample_loader.py` decodes Binance Futures depth events; other formats (Bybit fused, Hyperliquid, MEXC) are documented but not implemented in this pass. The sample preset registration covers the Binance one only.
+
+## Quant-Trading-master (script-first assumptions)
+
+Most files in `inspiration/quant-trading-master` are standalone notebooks/scripts with implicit globals, charting side effects, and local CSV paths. We port strategy math and data-cleaning patterns, but we do not preserve ad-hoc script UX (plot windows, inline state mutation, local path constants).
+
+**Impact:** Result curves are not expected to match script output exactly; use AQP metrics and deterministic fixtures for validation.
+
+## FinRL-Trading-master (heavy optional stack)
+
+Full upstream parity depends on optional heavy packages (`finrl`, `stable-baselines3`, `gymnasium`, and GPU-aware torch stacks) plus external data/provider credentials. AQP keeps RL/ML abstractions and sample wiring, but treats those dependencies as optional integrations rather than hard requirements.
+
+**Impact:** DRL examples are represented as framework-friendly facades and sample configs; full live/provider workflows require local environment setup and credentials.
+
+## Four-source backend hydration residuals
+
+### FinRL adaptive rotation requires sector metadata in DB
+
+`GICSBucketUniverseSelector` / `AdaptiveRotationAlpha` rely on `Instrument.sector` (or equivalent classification rows) to map symbols into GICS buckets. On a fresh dev database this metadata may be sparse, which can produce an empty bucket map and no signals.
+
+**Workaround:** load/seed instrument sector metadata before running adaptive-rotation configs, or pass `_gics_bucket_map` in context for synthetic tests.
+
+### Local-CSV sample presets intentionally require user-provided files
+
+New presets (`finrl_fundamentals_panel_sample`, `finrl_sp500_membership_pit_sample`, `quant_trading_oil_money_sample`, `quant_trading_smart_farmers_cleaned_sample`) return `missing_input` when no `csv_path` is provided.
+
+**Rationale:** avoids committing large third-party sample datasets to the repo and keeps CI hermetic.
+
+**Workaround:** provide local sample CSV paths when dispatching preset ingestion tasks.
+
+### Finviz screener parsing remains scraper-fragile
+
+`finviz_screener` depends on HTML table parsing and can break when Finviz markup changes or anti-bot throttling is triggered.
+
+**Workaround:** treat the preset as best-effort; retry with backoff and prefer cached snapshots for deterministic workflows/tests.
+
+### Full FinRL DRL parity is deferred
+
+The current pass covers curated strategy/processor/split patterns and starter configs, not full DRL training parity for every upstream notebook/workflow.
+
+**Workaround:** use AQP RL application facades (`aqp/rl/applications/*`) for local workflows and add provider/FinRL dependencies only where needed.

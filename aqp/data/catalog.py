@@ -1,26 +1,39 @@
 """Data catalog and lineage persistence helpers."""
 from __future__ import annotations
 
-import logging
 import hashlib
+import json
+import logging
 from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
 import pandas as pd
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from aqp.core.types import Symbol
+from aqp.data.entities.sync import sync_dataset_version_entities
 from aqp.persistence.db import get_session
 from aqp.persistence.models import (
     DataLink,
-    DataSource,
     DatasetCatalog,
     DatasetVersion,
+    DataSource,
     Instrument,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _advisory_xact_lock(session: Any, key: str) -> None:
+    """Serialize catalog writes for one logical dataset on PostgreSQL."""
+    try:
+        dialect = session.get_bind().dialect.name
+    except Exception:
+        return
+    if dialect != "postgresql":
+        return
+    session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": key})
 
 
 def _resolve_code_version_sha() -> str | None:
@@ -64,6 +77,8 @@ def register_dataset_version(
     llm_annotations: dict[str, Any] | None = None,
     column_docs: list[dict[str, Any]] | None = None,
     engine_meta: dict[str, Any] | None = None,
+    summary_row_count: int | None = None,
+    summary_symbol_count: int | None = None,
 ) -> dict[str, Any]:
     """Persist a dataset catalog/version row and return lineage ids.
 
@@ -82,11 +97,12 @@ def register_dataset_version(
     ``entity_extraction_status``.
     """
     engine_meta = dict(engine_meta or {})
-    if df is None or df.empty:
-        # Even with no rows we still want to surface the engine_meta on the
-        # catalog so the UI shows the engine that ran (with zero rows).
-        if not (iceberg_identifier and engine_meta):
-            return {}
+    summary_mode = summary_row_count is not None
+    has_engine_only = bool(iceberg_identifier and engine_meta)
+    # Even with no rows we still want to surface the engine_meta on the
+    # catalog so the UI shows the engine that ran (with zero rows).
+    if (df is None or df.empty) and not summary_mode and not has_engine_only:
+        return {}
 
     is_market_bars = (domain or "").startswith("market.bars")
     code_version_sha = engine_meta.pop("code_version_sha", None) or _resolve_code_version_sha()
@@ -124,8 +140,23 @@ def register_dataset_version(
             vt_symbols = []
             schema = {"columns": [], "dtypes": {}}
             digest = dataset_hash_value
+            if digest is None and summary_mode:
+                digest = hashlib.sha256(
+                    json.dumps(
+                        {
+                            "name": name,
+                            "provider": provider,
+                            "summary_row_count": summary_row_count,
+                            "summary_symbol_count": summary_symbol_count,
+                            "meta": meta or {},
+                        },
+                        sort_keys=True,
+                        default=str,
+                    ).encode()
+                ).hexdigest()
 
         with get_session() as session:
+            _advisory_xact_lock(session, f"dataset_catalog:{provider}:{name}")
             catalog = session.execute(
                 select(DatasetCatalog)
                 .where(DatasetCatalog.name == name)
@@ -200,8 +231,18 @@ def register_dataset_version(
                 ).scalar_one()
                 or 0
             )
-            row_count_val = int(rows_written_hint) if rows_written_hint else (
-                int(len(df)) if df is not None else 0
+            if summary_mode:
+                row_count_val = int(summary_row_count or 0)
+            elif rows_written_hint:
+                row_count_val = int(rows_written_hint)
+            elif df is not None:
+                row_count_val = int(len(df))
+            else:
+                row_count_val = 0
+            symbol_count_val = (
+                int(summary_symbol_count)
+                if summary_mode and summary_symbol_count is not None
+                else int(len(vt_symbols))
             )
             columns_val = list(df.columns) if df is not None and not df.empty else (
                 list((schema or {}).get("columns") or [])
@@ -214,8 +255,8 @@ def register_dataset_version(
                 start_time=start_time,
                 end_time=end_time,
                 row_count=row_count_val,
-                symbol_count=int(len(vt_symbols)),
-                file_count=int(file_count or len(vt_symbols) or 1),
+                symbol_count=symbol_count_val,
+                file_count=int(file_count or symbol_count_val or 1),
                 dataset_hash=digest,
                 materialization_uri=storage_uri,
                 columns=columns_val,
@@ -231,6 +272,19 @@ def register_dataset_version(
             if is_market_bars:
                 _upsert_instruments(session, vt_symbols)
             session.flush()
+            if is_market_bars and vt_symbols:
+                sync_result = sync_dataset_version_entities(
+                    session=session,
+                    catalog=catalog,
+                    version=row,
+                    vt_symbols=vt_symbols,
+                    coverage_start=start_time,
+                    coverage_end=end_time,
+                )
+                row.meta = {**(row.meta or {}), "entity_graph_sync": sync_result}
+                catalog.meta = {**(catalog.meta or {}), "entity_graph_sync": sync_result}
+                session.add(row)
+                session.add(catalog)
             return {
                 "dataset_catalog_id": catalog.id,
                 "dataset_version_id": row.id,
@@ -390,6 +444,23 @@ def _upsert_instruments(session, vt_symbols: list[str]) -> None:
             row.instrument_class = discriminator
         row.updated_at = datetime.utcnow()
         session.add(row)
+
+
+def upsert_instruments_for_vt_symbols(vt_symbols: Iterable[str]) -> None:
+    """Best-effort: ensure :class:`~aqp.persistence.models.Instrument` rows exist.
+
+    Used when OHLCV is written without going through :func:`register_dataset_version`
+    (for example batched ingest with ``register_catalog_version=False``) so the
+    Data Browser and ``/data/universe?source=catalog`` stay aligned with the lake.
+    """
+    vt_list = sorted({str(v).strip().upper() for v in vt_symbols if str(v).strip()})
+    if not vt_list:
+        return
+    try:
+        with get_session() as session:
+            _upsert_instruments(session, vt_list)
+    except Exception:
+        logger.warning("instrument upsert for vt_symbols failed", exc_info=True)
 
 
 def _schema_snapshot(df: pd.DataFrame) -> dict[str, Any]:

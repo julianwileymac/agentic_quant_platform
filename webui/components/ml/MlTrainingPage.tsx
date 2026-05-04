@@ -2,6 +2,7 @@
 
 import { ExportOutlined, PlayCircleOutlined } from "@ant-design/icons";
 import {
+  Alert,
   App,
   Button,
   Card,
@@ -17,6 +18,7 @@ import {
   Typography,
 } from "antd";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { PageContainer } from "@/components/shell/PageContainer";
@@ -57,6 +59,12 @@ interface PipelineRecipeSummary {
   id: string;
   name: string;
   version: number;
+}
+
+interface RegistryDetailLite {
+  alias: string;
+  module?: string | null;
+  qualname: string;
 }
 
 const DEFAULT_DATASET = JSON.stringify(
@@ -108,6 +116,9 @@ const DEFAULT_RECORDS = JSON.stringify(
 );
 
 export function MlTrainingPage() {
+  const searchParams = useSearchParams();
+  const prefillModelAlias = searchParams.get("model");
+  const prefillDatasetPreset = searchParams.get("datasetPreset");
   const { message } = App.useApp();
   const [form] = Form.useForm();
   const [datasetText, setDatasetText] = useState(DEFAULT_DATASET);
@@ -115,6 +126,7 @@ export function MlTrainingPage() {
   const [recordsText, setRecordsText] = useState(DEFAULT_RECORDS);
   const [recipeId, setRecipeId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [prefillNotice, setPrefillNotice] = useState<string | null>(null);
   const stream = useChatStream(taskId);
 
   const recipes = useApiQuery<RecipeSummary[]>({
@@ -144,6 +156,50 @@ export function MlTrainingPage() {
     setModelText(JSON.stringify(recipeBody.data.model_cfg, null, 2));
     setRecordsText(JSON.stringify(recipeBody.data.records ?? [], null, 2));
   }, [recipeBody.data]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!prefillModelAlias || recipeId) return;
+    (async () => {
+      try {
+        const detail = await apiFetch<RegistryDetailLite>(
+          `/registry/model/${encodeURIComponent(prefillModelAlias)}`,
+        );
+        if (cancelled) return;
+        const nextModel = JSON.parse(DEFAULT_MODEL) as Record<string, unknown>;
+        nextModel.class = detail.alias;
+        const inferredModule =
+          detail.module ||
+          detail.qualname.split(".").slice(0, -1).join(".");
+        if (inferredModule) nextModel.module_path = inferredModule;
+        setModelText(JSON.stringify(nextModel, null, 2));
+        if (prefillDatasetPreset) {
+          form.setFieldValue(
+            "run_name",
+            `train_${prefillModelAlias.toLowerCase()}_${prefillDatasetPreset.toLowerCase()}`,
+          );
+        }
+        setPrefillNotice(
+          `Prefilled model from zoo: ${prefillModelAlias}${
+            prefillDatasetPreset ? ` · dataset preset hint: ${prefillDatasetPreset}` : ""
+          }`,
+        );
+      } catch {
+        if (!cancelled) {
+          setPrefillNotice(`Unable to prefill model ${prefillModelAlias} from registry.`);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [prefillDatasetPreset, prefillModelAlias, recipeId, form]);
+
+  useEffect(() => {
+    if (!prefillDatasetPreset || prefillModelAlias || recipeId) return;
+    form.setFieldValue("run_name", `train_${prefillDatasetPreset.toLowerCase()}`);
+    setPrefillNotice(`Dataset preset hint from library: ${prefillDatasetPreset}`);
+  }, [prefillDatasetPreset, prefillModelAlias, recipeId, form]);
 
   async function submit() {
     const v = await form.validateFields();
@@ -237,6 +293,14 @@ export function MlTrainingPage() {
             <Tag color="blue">loaded {recipeBody.data.id}</Tag>
           ) : null}
         </Space>
+        {prefillNotice ? (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginTop: 12 }}
+            message={prefillNotice}
+          />
+        ) : null}
       </Card>
       <Row gutter={16}>
         <Col xs={24} lg={8}>

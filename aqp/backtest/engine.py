@@ -22,7 +22,9 @@ from typing import Any
 
 import pandas as pd
 
+from aqp.backtest.base import BaseBacktestEngine
 from aqp.backtest.broker_sim import SimulatedBrokerage
+from aqp.backtest.capabilities import EngineCapabilities
 from aqp.backtest.interrupts import (
     InterruptHandler,
     InterruptRequest,
@@ -80,8 +82,32 @@ class BacktestResult:
 
 
 @register("EventDrivenBacktester")
-class EventDrivenBacktester:
+class EventDrivenBacktester(BaseBacktestEngine):
     """Chronologically replays bars and executes orders at next bar's open."""
+
+    capabilities = EngineCapabilities(
+        name="event-driven",
+        description=(
+            "Lean-style chronological bar replay with simulated brokerage; "
+            "the per-bar Python path used for true async agent dispatch via "
+            "the strategy `context['agents']` dispatcher."
+        ),
+        supports_signals=True,
+        supports_orders=True,
+        supports_callbacks=True,
+        supports_multi_asset=True,
+        supports_short_selling=True,
+        supports_leverage=False,
+        supports_stops=False,
+        supports_limit_orders=True,
+        supports_event_driven=True,
+        supports_per_bar_python=True,
+        supports_interrupts=True,
+        supports_walk_forward=True,
+        supports_monte_carlo=True,
+        license="MIT",
+        notes="Default engine. Use this when you need agents/ML running per-bar in pure Python.",
+    )
 
     def __init__(
         self,
@@ -92,6 +118,7 @@ class EventDrivenBacktester:
         end: str | datetime | None = None,
         interrupt_rules: list[dict[str, Any]] | None = None,
         interrupt_handler: InterruptHandler | None = None,
+        agent_dispatcher: Any | None = None,
     ) -> None:
         self.initial_cash = float(initial_cash)
         self.commission_pct = float(commission_pct)
@@ -102,6 +129,26 @@ class EventDrivenBacktester:
         self.interrupt_handler: InterruptHandler = (
             interrupt_handler or NullInterruptHandler()
         )
+        # The dispatcher exposed via ``context['agents']`` so a strategy can
+        # consult an agent inside on_bar/on_data. Lazily initialised so the
+        # AgentRuntime import is only paid for runs that actually use it.
+        self._agent_dispatcher = agent_dispatcher
+
+    def _get_agent_dispatcher(self) -> Any:
+        """Return the agent dispatcher exposed through ``context['agents']``.
+
+        Lazily resolves the default :class:`AgentDispatcher` so backtests
+        that never use the consult primitive don't pay the import cost.
+        """
+        if self._agent_dispatcher is not None:
+            return self._agent_dispatcher
+        try:
+            from aqp.strategies.agentic.agent_dispatcher import get_default_dispatcher
+
+            self._agent_dispatcher = get_default_dispatcher()
+        except Exception:
+            self._agent_dispatcher = _NoopDispatcher()
+        return self._agent_dispatcher
 
     def _request_to_dict(self, request: OrderRequest) -> dict[str, Any]:
         return {
@@ -368,6 +415,7 @@ class EventDrivenBacktester:
                 "peak_prices": dict(peak_prices),
                 "drawdown": _current_drawdown(equity_records),
                 "current_time": ts_pydt,
+                "agents": self._get_agent_dispatcher(),
             }
 
             # The strategy is dispatched once per timestamp — the queue is
@@ -521,6 +569,20 @@ def _current_drawdown(records: list[tuple[pd.Timestamp, float]]) -> float:
     cummax = series.cummax()
     dd = (series - cummax) / cummax
     return float(dd.iloc[-1])
+
+
+class _NoopDispatcher:
+    """Fallback dispatcher when the agent runtime is unavailable.
+
+    Strategies still see a ``context['agents']`` object so they don't have
+    to branch on availability — calls just return ``None``.
+    """
+
+    def consult(self, *args: Any, **kwargs: Any) -> Any:
+        return None
+
+    async def consult_async(self, *args: Any, **kwargs: Any) -> Any:
+        return None
 
 
 def _apply_fills_to_tickets(

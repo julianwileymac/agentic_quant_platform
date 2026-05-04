@@ -492,3 +492,96 @@ Files:
 - [aqp/data/pipelines/extractors.py](../aqp/data/pipelines/extractors.py)
 
 Walkthrough lives in [docs/data-catalog.md](data-catalog.md).
+
+## 6. Bot entity (TradingBot / ResearchBot)
+
+The Bot Entity Refactor introduced a first-class deployable unit that
+aggregates universe + strategy + engine + ML + agents + RAG + metrics.
+The runtime never re-implements those primitives — it composes
+references and dispatches to the existing entry points.
+
+```mermaid
+classDiagram
+    class BotSpec {
+        <<pydantic>>
+        +str name
+        +str slug
+        +str kind
+        +UniverseRef universe
+        +DataPipelineRef data_pipeline
+        +dict strategy
+        +dict backtest
+        +list~MLDeploymentRef~ ml_models
+        +list~BotAgentRef~ agents
+        +list~RAGRef~ rag
+        +list~MetricRef~ metrics
+        +RiskSpec risk
+        +DeploymentTargetSpec deployment
+        +snapshot_hash() str
+    }
+    class BaseBot {
+        <<abstract>>
+        +BotSpec spec
+        +str bot_id
+        +str project_id
+        +backtest(run_name, **overrides) dict
+        +paper(run_name, **overrides) PaperTradingSession
+        +deploy(target, **overrides) BotDeploymentResult
+        +chat(prompt, ...) Any
+        +metrics_snapshot(run_summary) dict
+    }
+    class TradingBot {
+        +consult_agents(prompt, inputs, roles) dict
+    }
+    class ResearchBot {
+        +chat(prompt, session_id, agent_role, inputs) dict
+    }
+    class BotRuntime {
+        +BotSpec spec
+        +str run_id
+        +str task_id
+        +backtest(run_name, overrides) BotRunResult
+        +paper(run_name, overrides) BotRunResult
+        +chat(prompt, session_id, agent_role) BotRunResult
+        +deploy(target, overrides) BotRunResult
+    }
+    class DeploymentDispatcher {
+        +deploy(bot, target, overrides) BotDeploymentResult
+        +register(target) void
+    }
+    class DeploymentTarget {
+        <<abstract>>
+        +str name
+        +deploy(bot, overrides) BotDeploymentResult
+    }
+    class PaperSessionTarget
+    class BacktestOnlyTarget
+    class KubernetesTarget {
+        +Path manifest_root
+        +bool apply
+        +render_manifest(bot, overrides) str
+    }
+
+    BotSpec <.. BaseBot
+    BaseBot <|-- TradingBot
+    BaseBot <|-- ResearchBot
+    BotRuntime ..> BaseBot
+    DeploymentDispatcher --> DeploymentTarget
+    DeploymentTarget <|-- PaperSessionTarget
+    DeploymentTarget <|-- BacktestOnlyTarget
+    DeploymentTarget <|-- KubernetesTarget
+    BotRuntime ..> DeploymentDispatcher : "deploy()"
+```
+
+Files:
+
+- [aqp/bots/spec.py](../aqp/bots/spec.py)
+- [aqp/bots/base.py](../aqp/bots/base.py)
+- [aqp/bots/trading_bot.py](../aqp/bots/trading_bot.py)
+- [aqp/bots/research_bot.py](../aqp/bots/research_bot.py)
+- [aqp/bots/runtime.py](../aqp/bots/runtime.py)
+- [aqp/bots/deploy.py](../aqp/bots/deploy.py)
+- [aqp/bots/registry.py](../aqp/bots/registry.py)
+- [aqp/bots/cli.py](../aqp/bots/cli.py)
+
+Walkthrough lives in [docs/bots.md](bots.md).

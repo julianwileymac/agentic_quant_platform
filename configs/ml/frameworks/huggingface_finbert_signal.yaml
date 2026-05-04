@@ -1,0 +1,23 @@
+name: huggingface_finbert_signal
+description: Hugging Face text-sentiment signal adapter for text-bearing feature panels.
+dataset:
+  class: DatasetH
+  module_path: aqp.ml.dataset
+  kwargs:
+    handler:
+      class: DataHandlerLP
+      module_path: aqp.ml.handler
+      kwargs:
+        instruments: []
+        data_loader: null
+    segments:
+      test: ["2024-01-01", "2024-12-31"]
+model:
+  class: HuggingFaceTextSignalModel
+  module_path: aqp.ml.models.huggingface
+  kwargs:
+    model_name: ProsusAI/finbert
+    task: text-classification
+    text_column: text
+    positive_labels: [positive]
+    negative_labels: [negative]

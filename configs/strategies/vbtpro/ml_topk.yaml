@@ -1,0 +1,69 @@
+# Vbt-pro + MLVbtAlpha — top-k cross-sectional ML strategy.
+#
+# Loads a Production-tagged MLflow model and runs panel-wide predictions on
+# an indicator-zoo feature set; the top 5 / bottom 5 by score go long /
+# short at each monthly rebalance.
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols:
+          - AAPL.NASDAQ
+          - MSFT.NASDAQ
+          - GOOGL.NASDAQ
+          - NVDA.NASDAQ
+          - META.NASDAQ
+          - AMZN.NASDAQ
+          - JPM.NYSE
+          - XOM.NYSE
+          - PG.NYSE
+          - CVX.NYSE
+    alpha_model:
+      class: MLVbtAlpha
+      module_path: aqp.strategies.vbtpro.ml_alpha
+      kwargs:
+        # One of `model`, `mlflow_uri`, or `deployment_id` is required.
+        # mlflow_uri: "models:/MyAlpha/Production"
+        model:
+          class: LGBModel
+          module_path: aqp.ml.models.tree
+          kwargs: {}
+        indicators:
+          - "SMA:20"
+          - "RSI:14"
+          - "MACD"
+        policy: top_k
+        top_k: 5
+        rebalance: "M"
+        allow_short: true
+        use_size_in_signals: true
+        prediction_horizon: 21
+    portfolio_model:
+      class: EqualWeightPortfolioModel
+      module_path: aqp.strategies.portfolios
+      kwargs: {}
+    risk_model:
+      class: NullRiskModel
+      module_path: aqp.strategies.risk
+      kwargs: {}
+    execution_model:
+      class: ImmediateExecutionModel
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: vbt-pro:signals
+  kwargs:
+    initial_cash: 1000000.0
+    fees: 0.0005
+    slippage: 0.0001
+    allow_short: true
+    cash_sharing: true
+    group_by: true
+    direction: both
+    start: "2020-01-01"
+    end: "2024-12-31"

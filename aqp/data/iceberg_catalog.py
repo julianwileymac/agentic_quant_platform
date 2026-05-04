@@ -29,6 +29,7 @@ back to the legacy parquet path.
 """
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -63,11 +64,50 @@ class IcebergTableNotFoundError(IcebergUnavailableError):
 _LOCK = threading.Lock()
 
 
+def _stamp_tenancy_columns(table: pa.Table, context: Any) -> pa.Table:
+    """Inject ``_workspace_id`` and ``_project_id`` columns into ``table``.
+
+    Skips columns that already exist so callers can pre-populate them when
+    needed. Borrowed from Lean's ObjectStore key-prefix idea
+    (``Common/Interfaces/IObjectStore.cs::Initialize(userId, projectId, ...)``)
+    — except we materialise the prefix as Iceberg columns rather than
+    folder paths so analytical queries can predicate on tenancy directly.
+    """
+    try:
+        import pyarrow as pa  # noqa: F401 - only needed for the ``Table`` type
+    except ImportError:
+        return table
+    row_count = int(table.num_rows)
+    if row_count == 0:
+        return table
+    import pyarrow as pa
+
+    workspace_id = str(getattr(context, "workspace_id", "") or "")
+    project_id = str(getattr(context, "project_id", "") or "")
+    if "_workspace_id" not in table.column_names:
+        table = table.append_column(
+            "_workspace_id",
+            pa.array([workspace_id] * row_count, type=pa.string()),
+        )
+    if "_project_id" not in table.column_names:
+        table = table.append_column(
+            "_project_id",
+            pa.array([project_id] * row_count, type=pa.string()),
+        )
+    return table
+
+
 _TABLE_NOT_FOUND_MARKERS = (
     "no such table",
     "nosuchtable",
     "tablenotfound",
     "table_not_found",
+)
+
+_WAREHOUSE_NOT_FOUND_MARKERS = (
+    "unable to find warehouse",
+    "warehouse not found",
+    "nosuchwarehouse",
 )
 
 _SQLITE_LOCK_MARKERS = (
@@ -82,6 +122,16 @@ def _is_table_not_found(exc: BaseException) -> bool:
     if any(marker in msg for marker in _TABLE_NOT_FOUND_MARKERS):
         return True
     return type(exc).__name__ in {"NoSuchTableError", "TableNotFoundError"}
+
+
+def _is_warehouse_not_found(exc: BaseException) -> bool:
+    """Return true when a REST catalog exists but the configured warehouse/catalog doesn't."""
+    msg = str(exc).lower()
+    if any(marker in msg for marker in _WAREHOUSE_NOT_FOUND_MARKERS):
+        return True
+    return type(exc).__name__ in {"NoSuchWarehouseError", "WarehouseNotFoundError", "NotFoundException"} and (
+        "warehouse" in msg
+    )
 
 
 def _is_sqlite_locked(exc: BaseException) -> bool:
@@ -140,6 +190,21 @@ def _build_properties() -> dict[str, str]:
             "uri": rest_uri,
             "warehouse": warehouse,
         }
+        if settings.iceberg_rest_credential:
+            props["credential"] = settings.iceberg_rest_credential
+        if settings.iceberg_rest_token:
+            props["token"] = settings.iceberg_rest_token
+        if settings.iceberg_rest_oauth2_server_uri:
+            props["oauth2-server-uri"] = settings.iceberg_rest_oauth2_server_uri
+        if settings.iceberg_rest_scope:
+            props["scope"] = settings.iceberg_rest_scope
+        if settings.iceberg_rest_extra_properties_json:
+            try:
+                extra = json.loads(settings.iceberg_rest_extra_properties_json)
+                if isinstance(extra, dict):
+                    props.update({str(k): str(v) for k, v in extra.items() if v is not None})
+            except Exception:
+                logger.warning("Invalid AQP_ICEBERG_REST_EXTRA_PROPERTIES_JSON ignored", exc_info=True)
     else:
         sqlite_path = warehouse_path / "catalog.db"
         props = {
@@ -163,7 +228,7 @@ def _build_properties() -> dict[str, str]:
 
 
 @lru_cache(maxsize=1)
-def get_catalog() -> "Catalog":
+def get_catalog() -> Catalog:
     """Return a cached :class:`pyiceberg.catalog.Catalog` handle."""
     _require_pyiceberg()
     from pyiceberg.catalog import load_catalog
@@ -225,7 +290,14 @@ def ensure_namespace(namespace: str) -> None:
 def list_namespaces() -> list[str]:
     catalog = get_catalog()
     out: list[str] = []
-    for ns in catalog.list_namespaces():
+    try:
+        namespaces = catalog.list_namespaces()
+    except Exception as exc:  # noqa: BLE001
+        if _is_warehouse_not_found(exc):
+            logger.info("Iceberg warehouse is not bootstrapped yet: %s", exc)
+            return []
+        raise
+    for ns in namespaces:
         out.append(".".join(ns) if isinstance(ns, (tuple, list)) else str(ns))
     return sorted(out)
 
@@ -233,11 +305,13 @@ def list_namespaces() -> list[str]:
 def list_tables(namespace: str | None = None) -> list[str]:
     catalog = get_catalog()
     items: list[str] = []
-    namespaces: list[str]
-    if namespace:
-        namespaces = [namespace]
-    else:
-        namespaces = list_namespaces()
+    try:
+        namespaces = [namespace] if namespace else list_namespaces()
+    except Exception as exc:  # noqa: BLE001
+        if _is_warehouse_not_found(exc):
+            logger.info("Iceberg warehouse is not bootstrapped yet: %s", exc)
+            return []
+        raise
     for ns in namespaces:
         ns_tuple = tuple(ns.split("."))
         try:
@@ -249,11 +323,14 @@ def list_tables(namespace: str | None = None) -> list[str]:
         except Exception as exc:  # noqa: BLE001
             if _is_table_not_found(exc):
                 continue
+            if _is_warehouse_not_found(exc):
+                logger.info("Iceberg warehouse is not bootstrapped yet: %s", exc)
+                return []
             logger.warning("list_tables(%s) failed: %s", ns, exc)
     return sorted(items)
 
 
-def load_table(identifier: str | tuple[str, ...]) -> "Table | None":
+def load_table(identifier: str | tuple[str, ...]) -> Table | None:
     """Return the loaded Iceberg table or ``None`` if the table does not exist.
 
     Real catalog failures (sqlite locked, REST timeouts, missing
@@ -268,6 +345,9 @@ def load_table(identifier: str | tuple[str, ...]) -> "Table | None":
     except Exception as exc:
         if _is_table_not_found(exc):
             logger.debug("load_table(%s.%s) miss", ns, name)
+            return None
+        if _is_warehouse_not_found(exc):
+            logger.info("load_table(%s.%s) skipped; Iceberg warehouse is not bootstrapped yet", ns, name)
             return None
         raise
 
@@ -288,7 +368,7 @@ def drop_table(identifier: str | tuple[str, ...]) -> bool:
         return False
 
 
-def _iceberg_schema_from_arrow(arrow_schema: "pa.Schema") -> "Any":
+def _iceberg_schema_from_arrow(arrow_schema: pa.Schema) -> Any:
     """Convert a PyArrow schema to an Iceberg :class:`Schema` with stable field ids.
 
     PyIceberg 0.11+ rejects ``pyarrow_to_schema(..., name_mapping=None)`` for
@@ -306,11 +386,11 @@ def _iceberg_schema_from_arrow(arrow_schema: "pa.Schema") -> "Any":
 
 def create_or_replace_table(
     identifier: str | tuple[str, ...],
-    arrow_schema: "pa.Schema",
+    arrow_schema: pa.Schema,
     *,
     properties: dict[str, str] | None = None,
-    partition_spec: "Any" = None,
-) -> "Table":
+    partition_spec: Any = None,
+) -> Table:
     """Drop ``identifier`` if present, then create a fresh table from ``arrow_schema``.
 
     PyIceberg's ``Catalog.create_table`` accepts either a :class:`pyarrow.Schema`
@@ -353,7 +433,7 @@ def create_or_replace_table(
     )
 
 
-def _resolve_partition_spec(spec: "Any", arrow_schema: "pa.Schema") -> "Any":
+def _resolve_partition_spec(spec: Any, arrow_schema: pa.Schema) -> Any:
     """Coerce a list-of-dicts partition descriptor into a PyIceberg PartitionSpec.
 
     Returns ``None`` for ``spec is None`` or the unchanged spec when it
@@ -457,12 +537,14 @@ def _table_exists(identifier: str | tuple[str, ...]) -> bool:
 
 def append_arrow(
     identifier: str | tuple[str, ...],
-    table: "pa.Table",
+    table: pa.Table,
     *,
     create_if_missing: bool = True,
     properties: dict[str, str] | None = None,
-    partition_spec: "Any" = None,
-) -> "Table":
+    partition_spec: Any = None,
+    context: Any | None = None,
+    shared: bool = False,
+) -> Table:
     """Append ``table`` (pyarrow) to an Iceberg table, creating it on first call.
 
     ``partition_spec`` is forwarded to :func:`create_or_replace_table` when
@@ -471,6 +553,12 @@ def append_arrow(
 
     The whole operation is wrapped in an OpenTelemetry span so Jaeger shows
     every Iceberg write attached to the calling pipeline.
+
+    Tenancy: when ``context`` is supplied and ``shared=False``, the helper
+    injects a ``_workspace_id`` and ``_project_id`` column (or NULL when
+    the context lacks one) so downstream queries can partition by
+    workspace. Reference-data tables (instruments, regulatory corpora,
+    macro series) opt out of this by passing ``shared=True``.
     """
     table_id = identifier if isinstance(identifier, str) else ".".join(identifier)
     with _tracer.start_as_current_span("iceberg.append_arrow") as span:
@@ -478,8 +566,14 @@ def append_arrow(
             span.set_attribute("iceberg.table", table_id)
             span.set_attribute("iceberg.row_count", int(table.num_rows))
             span.set_attribute("iceberg.create_if_missing", create_if_missing)
+            if context is not None:
+                span.set_attribute("aqp.workspace_id", str(getattr(context, "workspace_id", "") or ""))
+                span.set_attribute("aqp.project_id", str(getattr(context, "project_id", "") or ""))
         except Exception:  # noqa: BLE001
             pass
+
+        if context is not None and not shared:
+            table = _stamp_tenancy_columns(table, context)
 
         _require_pyiceberg()
         if table.num_rows == 0:
@@ -522,7 +616,7 @@ def read_arrow(
     columns: Iterable[str] | None = None,
     limit: int | None = None,
     row_filter: Any = None,
-) -> "pa.Table | None":
+) -> pa.Table | None:
     """Scan an Iceberg table and return a PyArrow table.
 
     Returns ``None`` only when the table does not exist. Other failures
@@ -620,7 +714,14 @@ def health_check(*, timeout: float | None = None) -> dict[str, Any]:
             raise TimeoutError("list_namespaces exceeded health-check deadline")
         info["ok"] = True
     except Exception as exc:  # noqa: BLE001
-        info["error"] = f"{type(exc).__name__}: {exc}"
+        if _is_warehouse_not_found(exc):
+            info["ok"] = True
+            info["namespace_count"] = 0
+            info["table_count"] = 0
+            info["catalog_ready"] = False
+            info["error"] = f"{type(exc).__name__}: {exc}"
+        else:
+            info["error"] = f"{type(exc).__name__}: {exc}"
     info["elapsed_seconds"] = round(time.monotonic() - started, 4)
     return info
 
@@ -670,7 +771,6 @@ def latest_timestamps_for_symbols(
     # Arrow-native group-by + max — keeps the data in columnar Arrow
     # buffers and avoids the round-trip through Pandas. Falls back to
     # Polars only if the time column carries an unusual dtype.
-    import pyarrow.compute as pc
 
     try:
         grouped = arrow.group_by(group_col).aggregate([(time_col, "max")])
@@ -768,7 +868,7 @@ def existing_keys_for_window(
 
 
 def iceberg_to_duckdb_view(
-    conn: "duckdb.DuckDBPyConnection",
+    conn: duckdb.DuckDBPyConnection,
     identifier: str | tuple[str, ...],
     *,
     view_name: str | None = None,
@@ -807,7 +907,7 @@ def _sql_string(value: str) -> str:
     return "'" + str(value).replace("'", "''") + "'"
 
 
-def _configure_duckdb_s3(conn: "duckdb.DuckDBPyConnection") -> None:
+def _configure_duckdb_s3(conn: duckdb.DuckDBPyConnection) -> None:
     """Teach DuckDB how to read Iceberg data files from MinIO/S3."""
     if not settings.s3_endpoint_url:
         return

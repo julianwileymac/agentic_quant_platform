@@ -24,7 +24,13 @@ from aqp.core.types import Direction, Signal, Symbol
 STRATEGY_TAGS = ("statistical", "mean-reversion", "quant-trading")
 
 
-@register("OilMoneyRegressionAlpha")
+@register(
+    "OilMoneyRegressionAlpha",
+    kind="strategy",
+    tags=STRATEGY_TAGS,
+    source="quant_trading",
+    category="stat_arb",
+)
 class OilMoneyRegressionAlpha(IAlphaModel):
     def __init__(
         self,

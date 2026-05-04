@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.schemas import TaskAccepted
 from aqp.data.engine import (
     Pipeline,
     PipelineManifest,
@@ -233,6 +234,25 @@ def run_manifest(manifest_id: str, triggered_by: str | None = Query(default=None
         "status": "ok" if not result.errors else "error",
         "result": result.to_dict(),
     }
+
+
+@router.post("/manifests/{manifest_id}/run-background", response_model=TaskAccepted)
+def queue_manifest_run(
+    manifest_id: str,
+    triggered_by: str | None = Query(default=None),
+) -> TaskAccepted:
+    """Queue a saved manifest run on the ingestion worker."""
+    with get_session() as session:
+        row = session.execute(
+            select(PipelineManifestRow).where(PipelineManifestRow.id == manifest_id).limit(1)
+        ).scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="manifest not found")
+
+    from aqp.tasks.engine_tasks import run_pipeline_manifest
+
+    async_result = run_pipeline_manifest.delay(manifest_id, triggered_by=triggered_by or "api")
+    return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
 
 
 @router.post("/run-adhoc")

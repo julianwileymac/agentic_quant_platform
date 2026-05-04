@@ -18,6 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 
+from aqp.persistence._tenancy_mixins import ProjectScopedMixin, TenantOwnedMixin
 from aqp.persistence.models import Base
 
 
@@ -25,7 +26,7 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
-class DbtProjectRow(Base):
+class DbtProjectRow(Base, ProjectScopedMixin):
     """One dbt project known to AQP."""
 
     __tablename__ = "dbt_projects"
@@ -48,8 +49,13 @@ class DbtProjectRow(Base):
     )
 
 
-class DbtModelVersionRow(Base):
-    """Manifest snapshot for a dbt model/source/seed."""
+class DbtModelVersionRow(Base, TenantOwnedMixin):
+    """Manifest snapshot for a dbt model/source/seed.
+
+    Uses :class:`TenantOwnedMixin` (not :class:`ProjectScopedMixin`) to avoid
+    a column-name collision with the existing ``project_id`` FK that points
+    at :class:`DbtProjectRow`.
+    """
 
     __tablename__ = "dbt_model_versions"
     id = Column(String(36), primary_key=True, default=_uuid)
@@ -80,8 +86,13 @@ class DbtModelVersionRow(Base):
     )
 
 
-class DbtSourceMappingRow(Base):
-    """Link generated dbt sources/models back to AQP datasets or tables."""
+class DbtSourceMappingRow(Base, TenantOwnedMixin):
+    """Link generated dbt sources/models back to AQP datasets or tables.
+
+    Uses :class:`TenantOwnedMixin` (not :class:`ProjectScopedMixin`) to avoid
+    a column-name collision with the existing ``project_id`` FK that points
+    at :class:`DbtProjectRow`.
+    """
 
     __tablename__ = "dbt_source_mappings"
     id = Column(String(36), primary_key=True, default=_uuid)
@@ -116,8 +127,13 @@ class DbtSourceMappingRow(Base):
     )
 
 
-class DbtRunRow(Base):
-    """One dbt command invocation tracked by AQP."""
+class DbtRunRow(Base, TenantOwnedMixin):
+    """One dbt command invocation tracked by AQP.
+
+    Uses :class:`TenantOwnedMixin` (not :class:`ProjectScopedMixin`) to avoid
+    a column-name collision with the existing ``project_id`` FK that points
+    at :class:`DbtProjectRow`.
+    """
 
     __tablename__ = "dbt_runs"
     id = Column(String(36), primary_key=True, default=_uuid)

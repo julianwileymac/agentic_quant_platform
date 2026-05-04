@@ -1,0 +1,32 @@
+name: "Auto-ETS forecast"
+description: >
+  Automatic exponential smoothing model selection via sktime's AutoETS.
+  Robust univariate baseline for seasonal series.
+
+dataset_preset: intraday_momentum_etf
+features: ["close"]
+target:
+  class: n_step_return
+  module_path: aqp.data.labels
+  kwargs:
+    horizon: 1
+
+model:
+  class: AutoETSForecastModel
+  module_path: aqp.ml.models.forecasting
+  kwargs:
+    horizon: 20
+    information_criterion: aic
+    sp: 5
+
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 252
+      test_periods: 21
+      step_periods: 21
+
+mlflow:
+  experiment: auto-ets-forecast

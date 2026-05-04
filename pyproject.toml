@@ -36,6 +36,7 @@ dependencies = [
     "alembic>=1.13",
     # Config
     "pydantic>=2.5",
+    "email-validator",
     "pydantic-settings>=2.1",
     "python-dotenv>=1.0",
     "PyYAML>=6.0",
@@ -98,6 +99,10 @@ streaming = [
 ]
 vectorbt = ["vectorbt>=0.26", "numba>=0.58"]
 backtesting = ["backtesting>=0.3.3", "bokeh>=3.1"]
+# Permissive-licence fallback engines surfaced by `aqp.backtest`. Both
+# import lazily, so they do not affect the base install footprint.
+zvt = ["zvt>=0.10.5"]
+aat = ["aat>=0.1.13"]
 ml = [
     "xgboost>=2.0",
     "lightgbm>=4.3",
@@ -114,6 +119,17 @@ ml-forecast = [
     "pmdarima>=2.0",
 ]
 ml-anomaly = ["pyod>=1.1.3"]
+ml-keras = [
+    "keras>=3.0",
+]
+ml-tensorflow = [
+    "tensorflow>=2.16",
+    "keras>=3.0",
+]
+ml-transformers = [
+    "transformers>=4.40",
+    "accelerate>=0.30",
+]
 portfolio = ["PyPortfolioOpt>=1.5.5", "cvxpy>=1.4", "ecos>=2.0", "scs>=3.2"]
 ml-structural = ["numba>=0.58"]
 serving-ray = ["ray[serve]>=2.10", "fastapi>=0.110,<0.116"]
@@ -146,7 +162,7 @@ sec = ["edgartools>=5.0"]
 gdelt = ["aiohttp>=3.9", "aiofiles>=24.1"]
 gdelt-bq = ["google-cloud-bigquery>=3.22"]
 iceberg = [
-    "pyiceberg[s3fs,sql-sqlite]>=0.7",
+    "pyiceberg[pyiceberg-core,s3fs,sql-sqlite]>=0.7",
     "s3fs>=2024.5",
     "ijson>=3.2",
 ]
@@ -199,9 +215,14 @@ sources = [
     "azure-storage-blob>=12.19",
 ]
 
-# DataHub bidirectional emitter + GMS client.
+# DataHub bidirectional emitter + GMS client. Includes the Superset
+# connector plugin so the visualization layer's
+# ``push_superset_to_datahub_task`` can run without a separate install.
 datahub-sync = [
-    "acryl-datahub[datahub-rest]>=0.13",
+    "acryl-datahub[datahub-rest,superset]>=0.13",
+]
+entity-graph = [
+    "neo4j>=5.20",
 ]
 
 # Local dbt + DuckDB modeling runtime. Kept optional so the core API can
@@ -215,6 +236,7 @@ dbt = [
 # install: just enough to expose ``Definitions`` over gRPC.
 dagster-aqp = [
     "dagster>=1.7.0",
+    "dagster-webserver>=1.7.0",
     "dagster-graphql>=1.7.0",
     "dagster-postgres>=0.23",
     "dagster-k8s>=0.23",
@@ -224,10 +246,18 @@ data-plane = [
     "agentic-quant-platform[fred,sec,gdelt,iceberg,regulatory]",
 ]
 data-fabric = [
-    "agentic-quant-platform[data-plane,compute,sources,datahub-sync,dagster-aqp,dbt]",
+    "agentic-quant-platform[data-plane,compute,sources,datahub-sync,dagster-aqp,dbt,entity-graph]",
+]
+visualization = [
+    "bokeh>=3.1",
+    # Superset DataHub source connector. Lets
+    # ``aqp.tasks.visualization_tasks.push_superset_to_datahub_task`` build
+    # an ingestion recipe and replay it through ``Pipeline.create``.
+    # The dependency is also reachable via the ``datahub-sync`` extra.
+    "acryl-datahub[datahub-rest,superset]>=0.13",
 ]
 full = [
-    "agentic-quant-platform[alpaca,ibkr,tradier,otel,cli,paper,streaming,vectorbt,backtesting,ml,ml-torch,ml-forecast,ml-anomaly,portfolio,ml-structural,serving,llm-finance,fred,sec,gdelt,iceberg,regulatory,agents-rag,compute,sources,datahub-sync,dagster-aqp,dbt]",
+    "agentic-quant-platform[alpaca,ibkr,tradier,otel,cli,paper,streaming,vectorbt,backtesting,ml,ml-torch,ml-forecast,ml-anomaly,ml-keras,ml-tensorflow,ml-transformers,portfolio,ml-structural,serving,llm-finance,fred,sec,gdelt,iceberg,regulatory,agents-rag,compute,sources,datahub-sync,dagster-aqp,dbt,entity-graph,visualization]",
 ]
 dev = [
     "pytest>=7.4",

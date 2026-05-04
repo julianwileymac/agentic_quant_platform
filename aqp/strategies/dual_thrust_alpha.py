@@ -20,7 +20,13 @@ from aqp.core.types import Direction, Signal, Symbol
 STRATEGY_TAGS = ("intraday", "breakout", "quant-trading")
 
 
-@register("DualThrustAlpha")
+@register(
+    "DualThrustAlpha",
+    kind="strategy",
+    tags=STRATEGY_TAGS,
+    source="quant_trading",
+    category="breakout",
+)
 class DualThrustAlpha(IAlphaModel):
     def __init__(
         self,

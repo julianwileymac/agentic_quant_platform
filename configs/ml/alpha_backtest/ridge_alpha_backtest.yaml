@@ -1,0 +1,63 @@
+name: "Ridge alpha backtest"
+description: >
+  End-to-end AlphaBacktestExperiment: train a Sklearn Ridge regressor
+  on Alpha158 features, register a ModelVersion, deploy as
+  DeployedModelAlpha, and run a backtest on the same period. Combined
+  ML + trading metrics are persisted to ml_alpha_backtest_runs.
+
+run_name: ridge-alpha-backtest
+
+dataset_cfg:
+  class: DatasetH
+  module_path: aqp.ml.dataset
+  kwargs:
+    handler:
+      class: Alpha158
+      module_path: aqp.ml.features.alpha158
+      kwargs:
+        instruments: ["SPY", "AAPL", "MSFT"]
+        start_time: "2020-01-01"
+        end_time: "2024-12-31"
+    segments:
+      train: ["2020-01-01", "2023-06-30"]
+      valid: ["2023-07-01", "2023-12-31"]
+      test: ["2024-01-01", "2024-12-31"]
+
+model_cfg:
+  class: SklearnRegressorModel
+  module_path: aqp.ml.models.sklearn
+  kwargs:
+    estimator: ridge
+    estimator_kwargs:
+      alpha: 1.0
+
+strategy_cfg:
+  class: MLStockSelectionAlpha
+  module_path: aqp.strategies.ml_selection
+  kwargs:
+    universe: ["SPY", "AAPL", "MSFT"]
+    long_n: 1
+    short_n: 1
+    alpha_model:
+      class: DeployedModelAlpha
+      module_path: aqp.strategies.ml_alphas
+      kwargs:
+        long_threshold: 0.0
+        short_threshold: 0.0
+
+backtest_cfg:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    start: "2024-01-01"
+    end: "2024-12-31"
+    initial_cash: 100000.0
+
+segment: test
+train_first: true
+capture_predictions: true
+
+deployment_overrides:
+  long_threshold: 0.0005
+  short_threshold: -0.0005
+  allow_short: true

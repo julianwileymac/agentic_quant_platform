@@ -1,62 +1,84 @@
-# stock-analysis-engine — Extraction Reference
+# stock-analysis-engine - Extraction Reference
 
 **Source:** `inspiration/stock-analysis-engine-master/analysis_engine/`
-**Repo character:** Redis/S3-cached pricing pipeline + indicator-driven single-symbol backtest. Heavy on `spylunking` logging (we drop it for stdlib `logging`).
+**Repo character:** Redis/S3-backed pricing cache + indicator-centric algorithm runner + Celery work-task orchestration.
 
-## Strategies (3) — port to `aqp/strategies/sae/`
+## Strategy and model ports
 
-### StockAnalysisEngineAdapter
+### StockAnalysisEngineAdapterStrategy
 
-**Source:** `algo.py::BaseAlgo` + `handle_data` + `process`
-**Logic:** Generic per-bar callback loop — `process(dataset)` sets `should_buy`/`should_sell` from indicator readouts.
-**AQP target:** `aqp/strategies/sae/sae_adapter.py::StockAnalysisEngineAdapterStrategy`. Wraps a user-provided `process_fn` callable into an `IStrategy`.
+**Source:** `algo.py::BaseAlgo` and process callback conventions
+**Logic:** Wrap custom per-bar `process` logic in a framework strategy shell.
+**AQP target:** `aqp/strategies/sae/alphas.py::StockAnalysisEngineAdapterStrategy`
 
-### IndicatorVoteStrategy
+### IndicatorVoteAlpha
 
-**Source:** `algo.py::trade_off_indicator_buy_and_sell_signals`
-**Logic:** Count buy-signal indicators vs sell-signal indicators; trade when count exceeds `min_buy_indicators` or `min_sell_indicators`.
-**AQP target:** `aqp/strategies/sae/indicator_vote.py::IndicatorVoteAlpha`. Generic over IndicatorZoo specs.
-**Params:** `indicator_specs: list[str]`, `min_buy_count: int = 3`, `min_sell_count: int = 3`.
+**Source:** `algo.py` vote-style indicator decisions
+**Logic:** Consensus voting across indicator outputs with buy/sell thresholds.
+**AQP target:** `aqp/strategies/sae/alphas.py::IndicatorVoteAlpha`
 
 ### OptionSpreadStrategy
 
-**Source:** `build_option_spread_details.py` + `build_entry_call_spread_details.py`
-**Logic:** Vertical option spread P&L math; entry/exit leg pricing.
-**AQP target:** `aqp/strategies/sae/option_spread.py::OptionSpreadStrategy`. Uses `aqp/options/spreads.py` (Phase 1).
+**Source:** `build_option_spread_details.py`, `build_entry_call_spread_details.py`, `build_exit_call_spread_details.py`
+**Logic:** Vertical spread setup and payoff-oriented option strategy scaffolding.
+**AQP target:** `aqp/strategies/sae/alphas.py::OptionSpreadStrategy`
 
-## Notable utilities
+### KerasMLPRegressor
 
-### Vertical spread math
+**Source:** `ai/build_regression_dnn.py`
+**Logic:** Feed-forward MLP with scaler preprocessing for regression forecasts.
+**AQP target:** `aqp/ml/models/sae/keras_mlp_regressor.py::KerasMLPRegressor`
+
+## High-value utility extraction
+
+### Option spread math
 
 **Source:** `build_option_spread_details.py`
-**AQP target:** `aqp/options/spreads.py`.
+**AQP target:** `aqp/options/spreads.py`
 
 ```python
-def vertical_spread_details(
-    long_strike: float, short_strike: float,
-    long_premium: float, short_premium: float,
-    is_call: bool = True,
-):
+def vertical_spread_details(long_strike, short_strike, long_premium, short_premium):
     width = abs(long_strike - short_strike)
     net_debit = long_premium - short_premium
-    max_profit = width - net_debit if is_call else net_debit
-    max_loss = net_debit if is_call else width - net_debit
-    breakeven = (long_strike + net_debit) if is_call else (long_strike - net_debit)
-    return {
-        "width": width, "net_debit": net_debit,
-        "max_profit": max_profit, "max_loss": max_loss,
-        "breakeven": breakeven, "mid": (max_profit - max_loss) / 2,
-    }
+    max_profit = width - net_debit
+    max_loss = net_debit
+    return {"width": width, "net_debit": net_debit, "max_profit": max_profit, "max_loss": max_loss}
 ```
 
-### Options expiration calendar
+### Indicator processor bridge
 
-**Source:** `options_dates.py`
-**AQP target:** `aqp/utils/options_calendar.py` (small) or absorb into existing exchange-hours module.
-**Implements:** Monthly expiration (third Friday) calculator with US holiday handling.
+**Source:** `indicators/indicator_processor.py`, `indicators/base_indicator.py`, `indicators/*.py`
+**Logic:** Single pipeline for indicator registration, transform, and scoring.
+**AQP mapping:** `aqp/data/indicators_zoo.py` and strategy-level indicator voting.
 
-### Finviz screener (HTML scrape)
+### Options expiration helper
 
-**Source:** `finviz/fetch_api.py`
-**AQP target:** `aqp/data/pipelines/finviz_screener.py` (Phase 8 pipeline).
-**Note:** Scraper-fragile; respects ToS rate limits.
+**Source:** `options_dates.py`, `holidays.py`
+**Logic:** Expiration and calendar-aware date calculations.
+**AQP mapping:** utility-level options calendar support and options lab tooling.
+
+## Data/pipeline extraction candidates
+
+### Fetch/extract/cache pipeline
+
+**Source:** `fetch.py`, `extract.py`, `load_dataset.py`, `prepare_history_dataset.py`, `dataset_scrub_utils.py`, `compress_data.py`
+**Pattern:** Acquire, normalize, cache, and reload time-series datasets from Redis/S3.
+**AQP mapping:** dataset presets + ingestion pipelines + Iceberg writes.
+
+### Celery-style jobs
+
+**Source:** `work_tasks/task_run_algo.py`, `work_tasks/get_new_pricing_data.py`, `work_tasks/prepare_pricing_dataset.py`, `work_tasks/run_distributed_algorithm.py`
+**Pattern:** Task wrappers around fetch/run/publish loops.
+**AQP mapping:** `aqp/tasks/*` with progress bus (`emit`, `emit_done`, `emit_error`).
+
+### Scripted backtest workflows
+
+**Source:** `scripts/backtest_with_runner.py`, `scripts/run_backtest_and_plot_history.py`, `scripts/train_dnn_from_history.py`
+**Pattern:** CLI-friendly sample workflows for model training and strategy replay.
+**AQP mapping:** sample configs in `configs/` and test fixtures under `tests/`.
+
+## Caveats
+
+- Native SAE runtime assumes Redis/S3-centric storage conventions; AQP uses Iceberg and Postgres as first-class state.
+- Some sources depend on provider-specific APIs and tokens (`IEX`, `Tradier`, `Finviz`).
+- Script/module APIs are not uniformly typed and often require adaptation to AQP's `Symbol` and framework contracts.

@@ -65,6 +65,16 @@ that applies on every change.
     update them in place; re-snapshotting via
     [aqp/agents/registry.py::persist_spec](mdc:aqp/agents/registry.py)
     creates a new version row automatically.
+13. All bot lifecycle actions (backtest / paper / chat / deploy) go
+    through [aqp/bots/runtime.py::BotRuntime](mdc:aqp/bots/runtime.py).
+    `bot_versions` snapshots and `bot_deployments` rows depend on it.
+    Don't call `run_backtest_from_config` /
+    `build_session_from_config` / `AgentRuntime` directly from a bot
+    subclass — derive the cfg in `BaseBot._derive_*_cfg` and let the
+    runtime drive the call.
+14. `bot_versions` rows are immutable, hash-locked. Re-snapshotting via
+    [aqp/bots/registry.py::persist_spec](mdc:aqp/bots/registry.py)
+    creates a new version row automatically.
 
 ## Style
 
@@ -90,6 +100,11 @@ that applies on every change.
 | Spec-driven agent | [aqp/agents/spec.py](mdc:aqp/agents/spec.py) + [configs/agents/](mdc:configs/agents/) |
 | LangGraph orchestration | [aqp/agents/graph/](mdc:aqp/agents/graph/) |
 | Regulatory adapter | [aqp/data/sources/{cfpb,fda,uspto}/](mdc:aqp/data/sources/) |
+| Bot (TradingBot / ResearchBot) | [aqp/bots/](mdc:aqp/bots/) + [configs/bots/](mdc:configs/bots/) |
+| Bot ORM | [aqp/persistence/models_bots.py](mdc:aqp/persistence/models_bots.py) |
+| Bot REST | [aqp/api/routes/bots.py](mdc:aqp/api/routes/bots.py) |
+| Bot Celery tasks | [aqp/tasks/bot_tasks.py](mdc:aqp/tasks/bot_tasks.py) |
+| Bot UI builder | [webui/components/bots/](mdc:webui/components/bots/) |
 
 ## Doc references
 
@@ -101,6 +116,7 @@ that applies on every change.
 - [docs/glossary.md](mdc:docs/glossary.md) — terms
 - [docs/rag.md](mdc:docs/rag.md) — hierarchical RAG design
 - [docs/agents.md](mdc:docs/agents.md) — spec-driven agent surface
+- [docs/bots.md](mdc:docs/bots.md) — Bot entity (TradingBot / ResearchBot)
 - [docs/regulatory-data.md](mdc:docs/regulatory-data.md) — CFPB / FDA / USPTO
 
 ## Don't
@@ -125,3 +141,13 @@ that applies on every change.
 - Don't write decision/episode/reflection rows to Redis from agent
   code. Use `RedisHybridMemory` from
   [aqp/llm/memory.py](mdc:aqp/llm/memory.py).
+- Don't bypass `BotRuntime` for bot lifecycle actions. Telemetry,
+  `bot_versions` snapshots, and `bot_deployments` rows depend on it.
+- Don't mutate `bot_versions` rows. They are immutable, hash-locked
+  snapshots — re-snapshotting via
+  [aqp/bots/registry.py::persist_spec](mdc:aqp/bots/registry.py)
+  creates a new version row automatically.
+- Don't put backtest / strategy / engine / agent logic inside a Bot
+  subclass. Bots compose references and dispatch to existing primitives
+  (`run_backtest_from_config`, `build_session_from_config`,
+  `AgentRuntime`, `HierarchicalRAG`).

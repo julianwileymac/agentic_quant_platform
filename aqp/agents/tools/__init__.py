@@ -47,9 +47,23 @@ from aqp.agents.tools.analytics_tools import (
     RegimeClassifierTool,
 )
 from aqp.agents.tools.annotation_tool import AnnotationTool
-from aqp.agents.tools.backtest_tool import BacktestTool, WalkForwardTool
+from aqp.agents.tools.backtest_tool import (
+    BacktestTool,
+    EngineCompareTool,
+    VectorbtSweepTool,
+    WalkForwardTool,
+)
 from aqp.agents.tools.backtrader_tool import BacktraderTool
 from aqp.agents.tools.chroma_tool import ChromaSearchTool, MemoryRecallTool
+from aqp.agents.tools.data_tools import (
+    EnrichMetadataWithDbtTool,
+    InspectPathTool,
+    LookupDatasetPresetTool,
+    PeekUrlTool,
+    ProposePipelineManifestTool,
+    ProposeSetupWizardTool,
+    SummariseAirbyteCatalogTool,
+)
 from aqp.agents.tools.directory_tool import DirectoryReadTool
 from aqp.agents.tools.duckdb_tool import DescribeBarsTool, DuckDBQueryTool
 from aqp.agents.tools.evaluator_tool import MetricsTool, PlotlyTool
@@ -65,6 +79,15 @@ from aqp.agents.tools.risk_tool import KillSwitchTool, LedgerTool, RiskCheckTool
 from aqp.agents.tools.sentiment_tool import SentimentScoreTool
 from aqp.agents.tools.simulation_tool import InsightImpactTool
 from aqp.agents.tools.technical_tool import TechnicalTool
+from aqp.agents.tools.vbtpro_tools import (
+    AgentAwareBacktestTool,
+    EngineCapabilitiesTool,
+    VbtProOptimizerTool,
+    VbtProParamSweepTool,
+    VbtProWalkForwardTool,
+    VectorbtProBacktestTool,
+)
+from aqp.agents.tools.visualization_tools import BokehChartTool, SupersetDashboardTool
 from aqp.agents.tools.volatility_tool import HistoricalVolatilityTool
 
 
@@ -76,6 +99,8 @@ TOOL_REGISTRY: dict[str, type] = {
     "memory_recall": MemoryRecallTool,
     "directory_read": DirectoryReadTool,
     "backtest": BacktestTool,
+    "backtest_compare": EngineCompareTool,
+    "vectorbt_sweep": VectorbtSweepTool,
     "backtrader_quick": BacktraderTool,
     "walk_forward": WalkForwardTool,
     "risk_check": RiskCheckTool,
@@ -109,6 +134,24 @@ TOOL_REGISTRY: dict[str, type] = {
     "chart_pattern_tool": ChartPatternTool,
     "option_greeks_tool": OptionGreeksTool,
     "option_spread_tool": OptionSpreadTool,
+    # vbt-pro deep integration tools (Phase: vbt-pro primary engine rehaul).
+    "vectorbt_pro_backtest": VectorbtProBacktestTool,
+    "vectorbt_pro_param_sweep": VbtProParamSweepTool,
+    "vectorbt_pro_wfo": VbtProWalkForwardTool,
+    "vectorbt_pro_optimizer": VbtProOptimizerTool,
+    "engine_capabilities": EngineCapabilitiesTool,
+    "agent_aware_backtest": AgentAwareBacktestTool,
+    # Data layer expansion: dataset-loading agent tools.
+    "inspect_path": InspectPathTool,
+    "peek_url": PeekUrlTool,
+    "lookup_dataset_preset": LookupDatasetPresetTool,
+    "propose_pipeline_manifest": ProposePipelineManifestTool,
+    "propose_setup_wizard": ProposeSetupWizardTool,
+    "enrich_metadata_with_dbt_artifacts": EnrichMetadataWithDbtTool,
+    "summarise_airbyte_catalog": SummariseAirbyteCatalogTool,
+    # Visualization layer tools (Phase 3 of the visualization layer build).
+    "bokeh_chart": BokehChartTool,
+    "superset_dashboard": SupersetDashboardTool,
 }
 
 
@@ -120,15 +163,19 @@ def get_tool(name: str):
 
 
 __all__ = [
+    "AgentAwareBacktestTool",
     "AnnotationTool",
     "BacktestTool",
     "BacktraderTool",
+    "BokehChartTool",
     "ChartPatternTool",
     "ChromaSearchTool",
     "CointegrationTool",
     "DescribeBarsTool",
     "DirectoryReadTool",
     "DuckDBQueryTool",
+    "EngineCapabilitiesTool",
+    "EngineCompareTool",
     "FactorScreenTool",
     "FundamentalsTool",
     "HftMetricsTool",
@@ -154,7 +201,13 @@ __all__ = [
     "RegulatoryLookupTool",
     "RiskCheckTool",
     "SentimentScoreTool",
+    "SupersetDashboardTool",
     "TechnicalTool",
+    "VbtProOptimizerTool",
+    "VbtProParamSweepTool",
+    "VbtProWalkForwardTool",
+    "VectorbtProBacktestTool",
+    "VectorbtSweepTool",
     "WalkForwardTool",
     "get_tool",
 ]

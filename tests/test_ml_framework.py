@@ -114,3 +114,74 @@ def test_tier_b_stubs_raise_not_implemented() -> None:
     model = HISTModel()
     with pytest.raises(NotImplementedError):
         model.fit(None)
+
+
+def test_mlops_adapter_models_register_without_optional_imports() -> None:
+    from aqp.core.registry import list_registered
+    from aqp.ml.models import anomaly, forecasting, huggingface, keras, sklearn  # noqa: F401
+
+    names = set(list_registered())
+    assert "SklearnRegressorModel" in names
+    assert "SklearnClassifierModel" in names
+    assert "ProphetForecastModel" in names
+    assert "SktimeForecastModel" in names
+    assert "PyODAnomalyModel" in names
+    assert "KerasMLPModel" in names
+    assert "HuggingFaceTextSignalModel" in names
+
+
+def test_pipeline_recipe_validation_and_lag_processor(synthetic_bars) -> None:
+    from aqp.ml.pipeline_recipes import apply_processor_specs, validate_recipe
+
+    df = synthetic_bars[synthetic_bars["vt_symbol"] == "AAA.NASDAQ"].copy()
+    df["feature_close"] = df["close"].pct_change().fillna(0.0)
+    df["label_fwd"] = df["feature_close"].shift(-1).fillna(0.0)
+    df = df[["timestamp", "vt_symbol", "feature_close", "label_fwd"]].set_index(
+        ["timestamp", "vt_symbol"]
+    )
+    df.columns = pd.MultiIndex.from_tuples(
+        [("feature", "close_ret"), ("label", "LABEL0")]
+    )
+    specs = [
+        {
+            "class": "LagFeatureGenerator",
+            "module_path": "aqp.ml.processors",
+            "kwargs": {"columns": ["close_ret"], "lags": [1, 2]},
+        }
+    ]
+    validation = validate_recipe({"infer_processors": specs})
+    assert validation["valid"]
+    out = apply_processor_specs(df, specs)
+    assert ("feature", "close_ret_lag_1") in out.columns
+    assert ("feature", "close_ret_lag_2") in out.columns
+
+
+def test_experiment_runner_smoke_without_mlflow(synthetic_bars, monkeypatch) -> None:
+    from aqp.ml.experiments import Experiment
+
+    monkeypatch.setattr(
+        "aqp.mlops.mlflow_client.log_ml_experiment_run",
+        lambda **kwargs: "run-test",
+    )
+    from aqp.ml.dataset import DatasetH
+    from aqp.ml.handler import DataHandlerLP
+    from aqp.ml.loader import StaticDataLoader
+
+    df = synthetic_bars[synthetic_bars["vt_symbol"] == "AAA.NASDAQ"].copy()
+    df["feature_close"] = df["close"].pct_change()
+    df["label_fwd"] = df["feature_close"].shift(-1)
+    df = df.dropna()
+    loader = StaticDataLoader(df[["timestamp", "vt_symbol", "feature_close", "label_fwd"]])
+    dataset = DatasetH(
+        handler=DataHandlerLP(instruments=["AAA.NASDAQ"], data_loader=loader),
+        segments={"train": ["2021-01-01", "2022-12-31"], "test": ["2023-01-01", "2023-12-29"]},
+    )
+    exp = Experiment(
+        dataset_cfg={"class": "DatasetH", "module_path": "aqp.ml.dataset", "kwargs": {"handler": dataset.handler, "segments": dataset.segments}},
+        model_cfg={"class": "LinearModel", "module_path": "aqp.ml.models.linear", "kwargs": {"estimator": "ols"}},
+        persist=False,
+    )
+    result = exp.run(task_id="task-test")
+    assert result.status == "completed"
+    assert result.mlflow_run_id == "run-test"
+    assert result.metrics["n_predictions"] > 0

@@ -30,6 +30,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from aqp.backtest.base import BaseBacktestEngine
+from aqp.backtest.capabilities import EngineCapabilities
 from aqp.backtest.engine import BacktestResult
 from aqp.backtest.metrics import summarise
 from aqp.core.interfaces import IAlphaModel, IStrategy
@@ -74,8 +76,11 @@ def _resolve_alpha(strategy: IAlphaModel | IStrategy) -> IAlphaModel | None:
 
 
 @register("BacktestingPyEngine")
-class BacktestingPyEngine:
+class BacktestingPyEngine(BaseBacktestEngine):
     """Adapter around ``backtesting.Backtest`` for single-symbol strategies.
+
+    Capabilities: signals + single-asset only + grid/SAMBO optimisation via
+    :meth:`optimize`. Multi-symbol YAMLs auto-dispatch through ``MultiBacktest``.
 
     Parameters
     ----------
@@ -94,6 +99,25 @@ class BacktestingPyEngine:
     symbol:
         Optional explicit single-symbol override for multi-symbol inputs.
     """
+
+    capabilities = EngineCapabilities(
+        name="backtesting.py",
+        description=(
+            "Single-symbol bar backtester from kernc/backtesting.py with "
+            "grid + SAMBO parameter optimisation."
+        ),
+        supports_signals=True,
+        supports_single_asset_only=True,
+        supports_short_selling=True,
+        supports_leverage=True,
+        supports_stops=True,
+        supports_limit_orders=True,
+        supports_param_sweep=True,
+        supports_vectorized=True,
+        license="AGPL-3.0",
+        requires_optional_dep="backtesting",
+        notes="Use for fast single-symbol parameter sweeps. Multi-symbol cases auto-dispatch.",
+    )
 
     def __init__(
         self,

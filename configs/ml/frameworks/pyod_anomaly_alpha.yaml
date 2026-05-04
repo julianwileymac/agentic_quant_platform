@@ -1,0 +1,23 @@
+name: pyod_anomaly_alpha
+description: PyOD anomaly scores over Alpha158 features for risk-gated alpha tests.
+dataset:
+  class: DatasetH
+  module_path: aqp.ml.dataset
+  kwargs:
+    handler:
+      class: Alpha158
+      module_path: aqp.ml.features.alpha158
+      kwargs:
+        instruments: [SPY.NASDAQ, AAPL.NASDAQ, MSFT.NASDAQ]
+        start_time: "2019-01-01"
+        end_time: "2024-12-31"
+    segments:
+      train: ["2019-01-01", "2022-12-31"]
+      test: ["2023-01-01", "2024-12-31"]
+model:
+  class: PyODAnomalyModel
+  module_path: aqp.ml.models.anomaly
+  kwargs:
+    detector: iforest
+    contamination: 0.02
+    invert_score: false

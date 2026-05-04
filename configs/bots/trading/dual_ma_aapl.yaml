@@ -1,0 +1,92 @@
+name: Dual MA AAPL
+slug: dual-ma-aapl
+kind: trading
+description: >-
+  Dual moving-average crossover bot on AAPL/MSFT. Demonstrates the
+  TradingBot composition: universe -> data pipeline -> strategy -> backtest
+  engine -> ML deployment (none) -> agent supervisor -> RAG plan ->
+  metrics -> risk caps -> deployment target (paper).
+
+universe:
+  symbols:
+    - AAPL.NASDAQ
+    - MSFT.NASDAQ
+
+data_pipeline:
+  preset: ohlcv-daily
+  source: alpaca
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols:
+          - AAPL.NASDAQ
+          - MSFT.NASDAQ
+    alpha_model:
+      class: DualMACrossoverAlpha
+      module_path: aqp.strategies.dual_ma
+      kwargs:
+        fast: 10
+        slow: 50
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio_construction
+    risk_model:
+      class: NoOpRiskModel
+      module_path: aqp.strategies.risk_models
+    execution_model:
+      class: ImmediateExecutionModel
+      module_path: aqp.strategies.execution_models
+
+backtest:
+  engine: vbt-pro:signals
+  kwargs:
+    initial_cash: 100000.0
+
+ml_models: []
+
+agents:
+  - spec_name: research.quant_vbtpro
+    role: supervisor
+    inputs_template:
+      hypothesis: "Is the dual-MA crossover edge stable on this universe?"
+
+rag:
+  - levels: [l1, l2]
+    orders: [first, second]
+    corpora: [bars_daily, performance]
+    per_level_k: 4
+    final_k: 8
+
+metrics:
+  - name: sharpe
+    threshold: 1.0
+    direction: max
+  - name: max_drawdown
+    threshold: 0.25
+    direction: min
+  - name: total_return
+    direction: max
+
+risk:
+  max_position_pct: 0.25
+  max_daily_loss_pct: 0.02
+  max_drawdown_pct: 0.20
+
+deployment:
+  target: paper_session
+  brokerage: simulated
+  feed: deterministic_replay
+  initial_cash: 100000.0
+  heartbeat_seconds: 30
+  dry_run: true
+
+annotations:
+  - example
+  - dual_ma
+  - trading

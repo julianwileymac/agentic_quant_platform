@@ -1,0 +1,63 @@
+name: "LightGBM alpha backtest"
+description: >
+  AlphaBacktestExperiment with a LightGBM regressor as the alpha
+  source. Demonstrates the same pipeline as ridge_alpha_backtest but
+  with a tree model and tighter long/short thresholds.
+
+run_name: lgbm-alpha-backtest
+
+dataset_cfg:
+  class: DatasetH
+  module_path: aqp.ml.dataset
+  kwargs:
+    handler:
+      class: Alpha158
+      module_path: aqp.ml.features.alpha158
+      kwargs:
+        instruments: ["SPY", "AAPL", "MSFT", "GOOGL", "META"]
+        start_time: "2020-01-01"
+        end_time: "2024-12-31"
+    segments:
+      train: ["2020-01-01", "2023-06-30"]
+      valid: ["2023-07-01", "2023-12-31"]
+      test: ["2024-01-01", "2024-12-31"]
+
+model_cfg:
+  class: LGBModel
+  module_path: aqp.ml.models.tree
+  kwargs:
+    num_leaves: 63
+    learning_rate: 0.05
+    n_estimators: 400
+    subsample: 0.8
+    colsample_bytree: 0.8
+
+strategy_cfg:
+  class: MLStockSelectionAlpha
+  module_path: aqp.strategies.ml_selection
+  kwargs:
+    universe: ["SPY", "AAPL", "MSFT", "GOOGL", "META"]
+    long_n: 2
+    short_n: 2
+    alpha_model:
+      class: DeployedModelAlpha
+      module_path: aqp.strategies.ml_alphas
+      kwargs: {}
+
+backtest_cfg:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    start: "2024-01-01"
+    end: "2024-12-31"
+    initial_cash: 100000.0
+
+segment: test
+train_first: true
+capture_predictions: true
+
+deployment_overrides:
+  long_threshold: 0.001
+  short_threshold: -0.001
+  allow_short: true
+  top_k: 2

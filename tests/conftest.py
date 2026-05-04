@@ -87,6 +87,7 @@ def in_memory_db(monkeypatch: pytest.MonkeyPatch):
         "aqp.services.portfolio_service",
         "aqp.data.catalog",
         "aqp.data.feature_sets",
+        "aqp.services.metadata_catalog_service",
     ):
         try:
             import importlib

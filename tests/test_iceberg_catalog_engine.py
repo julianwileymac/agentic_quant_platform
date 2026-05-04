@@ -45,6 +45,33 @@ def test_health_check_reports_ok_for_fresh_catalog(fresh_catalog):
     assert status["elapsed_seconds"] >= 0.0
 
 
+def test_build_properties_includes_polaris_rest_credentials(monkeypatch):
+    from aqp.config import settings as _settings
+    from aqp.data import iceberg_catalog
+
+    monkeypatch.setattr(_settings, "iceberg_rest_uri", "http://polaris:8181/api/catalog", raising=False)
+    monkeypatch.setattr(_settings, "iceberg_s3_warehouse", "quickstart_catalog", raising=False)
+    monkeypatch.setattr(_settings, "iceberg_rest_credential", "root:s3cr3t", raising=False)
+    monkeypatch.setattr(_settings, "iceberg_rest_token", "", raising=False)
+    monkeypatch.setattr(_settings, "iceberg_rest_oauth2_server_uri", "", raising=False)
+    monkeypatch.setattr(_settings, "iceberg_rest_scope", "PRINCIPAL_ROLE:ALL", raising=False)
+    monkeypatch.setattr(
+        _settings,
+        "iceberg_rest_extra_properties_json",
+        '{"header.Polaris-Realm": "POLARIS"}',
+        raising=False,
+    )
+
+    props = iceberg_catalog._build_properties()
+
+    assert props["type"] == "rest"
+    assert props["uri"] == "http://polaris:8181/api/catalog"
+    assert props["warehouse"] == "quickstart_catalog"
+    assert props["credential"] == "root:s3cr3t"
+    assert props["scope"] == "PRINCIPAL_ROLE:ALL"
+    assert props["header.Polaris-Realm"] == "POLARIS"
+
+
 def test_health_check_returns_error_when_pyiceberg_load_fails(fresh_catalog, monkeypatch):
     def boom():
         raise RuntimeError("simulated catalog failure")
@@ -54,6 +81,22 @@ def test_health_check_returns_error_when_pyiceberg_load_fails(fresh_catalog, mon
     assert status["ok"] is False
     assert "simulated catalog failure" in status["error"]
     assert status["type"] == "sql"
+
+
+def test_missing_rest_warehouse_lists_as_empty(fresh_catalog, monkeypatch):
+    class MissingWarehouseCatalog:
+        def list_namespaces(self):
+            raise RuntimeError("NotFoundException: Unable to find warehouse quickstart_catalog")
+
+    monkeypatch.setattr(fresh_catalog, "get_catalog", lambda: MissingWarehouseCatalog())
+
+    assert fresh_catalog.list_namespaces() == []
+    assert fresh_catalog.list_tables() == []
+
+    status = fresh_catalog.health_check(timeout=1.0)
+    assert status["ok"] is True
+    assert status["catalog_ready"] is False
+    assert "quickstart_catalog" in status["error"]
 
 
 def test_load_table_returns_none_when_missing(fresh_catalog):

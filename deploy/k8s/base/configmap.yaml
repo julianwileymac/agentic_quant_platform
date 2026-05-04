@@ -36,8 +36,9 @@ data:
   AQP_STREAM_HEALTH_PORT: "9301"
   # --- Shared rpi_kubernetes metadata and lakehouse services ---
   AQP_MLFLOW_TRACKING_URI: "http://mlflow.ml-platform.svc.cluster.local:5000"
-  AQP_ICEBERG_REST_URI: "http://datahub-datahub-gms.data-services.svc.cluster.local:8080/iceberg"
-  AQP_ICEBERG_S3_WAREHOUSE: "s3://iceberg-warehouse/aqp/"
+  AQP_ICEBERG_REST_URI: "http://polaris.data-services.svc.cluster.local:8181/api/catalog"
+  AQP_ICEBERG_REST_SCOPE: "PRINCIPAL_ROLE:ALL"
+  AQP_ICEBERG_S3_WAREHOUSE: "quickstart_catalog"
   AQP_S3_ENDPOINT_URL: "http://minio.data-services.svc.cluster.local:9000"
   AQP_S3_REGION: "us-east-1"
   AQP_S3_PATH_STYLE_ACCESS: "true"
@@ -71,6 +72,7 @@ stringData:
   AQP_KAFKA_SASL_USERNAME: ""
   AQP_KAFKA_SASL_PASSWORD: ""
   AQP_DATAHUB_TOKEN: ""
+  AQP_ICEBERG_REST_CREDENTIAL: "root:s3cr3t"
   # IB Gateway (gnzsnz/ib-gateway) login. Required when running the in-cluster
   # ibgateway Deployment. Leave empty to opt out.
   TWS_USERID: ""

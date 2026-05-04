@@ -1,0 +1,43 @@
+name: "Oil-Money Regression (Quant Trading)"
+description: >
+  Grouped starter for quant_trading source. Rolling OLS of FX on crude; fade
+  large residuals when R^2 is high.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs: {symbols: [FXC, USO]}
+    alpha_model:
+      class: OilMoneyRegressionAlpha
+      module_path: aqp.strategies.oil_money_alpha
+      kwargs:
+        target_symbol: "FXC.NASDAQ"
+        regressor_symbol: "USO.NASDAQ"
+        lookback: 60
+        z_threshold: 2.0
+        min_rsquare: 0.4
+    portfolio_model:
+      class: SignalWeightedPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 1}
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: {max_position_pct: 1.0, max_drawdown_pct: 0.15}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: event
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2020-01-01"
+    end: "2024-12-31"

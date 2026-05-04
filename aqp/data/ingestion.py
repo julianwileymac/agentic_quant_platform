@@ -30,6 +30,14 @@ from aqp.config import settings
 from aqp.core.types import Exchange, Symbol
 
 logger = logging.getLogger(__name__)
+_ALPHA_VANTAGE_TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,15}$")
+
+
+def _is_alpha_vantage_requestable_ticker(ticker: str) -> bool:
+    raw = str(ticker or "").strip().upper()
+    if not raw or raw in {"N/A", "NULL", "NONE"}:
+        return False
+    return bool(_ALPHA_VANTAGE_TICKER_RE.fullmatch(raw))
 
 
 # --------------------------------------------------------------------------
@@ -76,10 +84,7 @@ def _coerce_timestamp(value: Any) -> str | None:
         if isinstance(value, (int, float)) and value != value:  # NaN
             return None
         ts = pd.Timestamp(value)
-        if ts.tz is None:
-            ts = ts.tz_localize("UTC")
-        else:
-            ts = ts.tz_convert("UTC")
+        ts = ts.tz_localize("UTC") if ts.tz is None else ts.tz_convert("UTC")
         return ts.isoformat()
     except Exception:
         try:
@@ -115,6 +120,17 @@ class YahooFinanceSource(BaseDataSource):
 
     name = "yahoo"
 
+    @staticmethod
+    def _ticker_vt_pairs(symbols: Iterable[str]) -> list[tuple[str, str]]:
+        pairs: list[tuple[str, str]] = []
+        for raw in symbols:
+            text = str(raw).strip().upper()
+            if not text:
+                continue
+            symbol = Symbol.parse(text)
+            pairs.append((symbol.ticker, symbol.vt_symbol))
+        return pairs
+
     def fetch(
         self,
         symbols: Iterable[str],
@@ -124,7 +140,9 @@ class YahooFinanceSource(BaseDataSource):
     ) -> pd.DataFrame:
         import yfinance as yf
 
-        tickers = list(symbols)
+        pairs = self._ticker_vt_pairs(symbols)
+        tickers = [ticker for ticker, _ in pairs]
+        vt_by_ticker = {ticker: vt_symbol for ticker, vt_symbol in pairs}
         logger.info("yfinance: downloading %d tickers %s..%s (%s)", len(tickers), start, end, interval)
 
         raw = yf.download(
@@ -150,13 +168,13 @@ class YahooFinanceSource(BaseDataSource):
                 sub = sub.dropna(how="all").reset_index().rename(
                     columns={"Date": "timestamp", "Datetime": "timestamp"}
                 )
-                sub["vt_symbol"] = f"{ticker}.{Exchange.NASDAQ.value}"
+                sub["vt_symbol"] = vt_by_ticker.get(ticker, Symbol.parse(ticker).vt_symbol)
                 rows.append(sub)
         else:
             sub = raw.dropna(how="all").reset_index().rename(
                 columns={"Date": "timestamp", "Datetime": "timestamp"}
             )
-            sub["vt_symbol"] = f"{tickers[0]}.{Exchange.NASDAQ.value}"
+            sub["vt_symbol"] = vt_by_ticker.get(tickers[0], Symbol.parse(tickers[0]).vt_symbol)
             rows.append(sub)
 
         if not rows:
@@ -592,8 +610,32 @@ class AlphaVantageSource(BaseDataSource):
 
     name = "alpha_vantage"
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        client: Any | None = None,
+        *,
+        close_after_fetch: bool = True,
+    ) -> None:
         self.api_key = api_key or settings.alpha_vantage_api_key
+        self.client = client
+        self._owns_client = client is None
+        self.close_after_fetch = bool(close_after_fetch)
+
+    def close(self) -> None:
+        if self._owns_client and self.client is not None:
+            self.client.close()
+
+    @staticmethod
+    def _ticker_vt_pairs(symbols: Iterable[str]) -> list[tuple[str, str]]:
+        pairs: list[tuple[str, str]] = []
+        for raw in symbols:
+            text = str(raw).strip().upper()
+            if not text:
+                continue
+            symbol = Symbol.parse(text)
+            pairs.append((symbol.ticker, symbol.vt_symbol))
+        return pairs
 
     def fetch(
         self,
@@ -603,21 +645,30 @@ class AlphaVantageSource(BaseDataSource):
         interval: str = "1d",
     ) -> pd.DataFrame:
         from aqp.data.sources.alpha_vantage import AlphaVantageClient
+        from aqp.data.sources.alpha_vantage._errors import AlphaVantagePayloadError
 
         rows: list[pd.DataFrame] = []
         start_ts = pd.Timestamp(start)
         end_ts = pd.Timestamp(end)
-        client = AlphaVantageClient(api_key=self.api_key)
+        client = self.client or AlphaVantageClient(api_key=self.api_key)
+        self.client = client
         try:
-            for ticker in symbols:
-                if str(interval).endswith("m") or str(interval).endswith("min"):
-                    payload = client.timeseries.intraday(
-                        str(ticker),
-                        interval=str(interval).replace("m", "min"),
-                        outputsize="full",
-                    )
-                else:
-                    payload = client.timeseries.daily_adjusted(str(ticker), outputsize="full")
+            for ticker, vt_symbol in self._ticker_vt_pairs(symbols):
+                if not _is_alpha_vantage_requestable_ticker(ticker):
+                    logger.info("alpha_vantage: skipping unsupported ticker %s (%s)", ticker, vt_symbol)
+                    continue
+                try:
+                    if str(interval).endswith("m") or str(interval).endswith("min"):
+                        payload = client.timeseries.intraday(
+                            ticker,
+                            interval=str(interval).replace("m", "min"),
+                            outputsize="full",
+                        )
+                    else:
+                        payload = client.timeseries.daily_adjusted(ticker, outputsize="full")
+                except AlphaVantagePayloadError as exc:
+                    logger.info("alpha_vantage: skipping %s (%s): %s", ticker, vt_symbol, exc)
+                    continue
                 if not payload.bars:
                     continue
                 df = pd.DataFrame(payload.bars)
@@ -630,10 +681,12 @@ class AlphaVantageSource(BaseDataSource):
                 for col in ("open", "high", "low", "close", "volume"):
                     df[col] = pd.to_numeric(df[col], errors="coerce")
                 df = df[(df["timestamp"] >= start_ts) & (df["timestamp"] <= end_ts)].sort_values("timestamp")
-                df["vt_symbol"] = f"{ticker}.{Exchange.NASDAQ.value}"
+                df["vt_symbol"] = vt_symbol
                 rows.append(df[["timestamp", "vt_symbol", "open", "high", "low", "close", "volume"]])
         finally:
-            client.close()
+            if self._owns_client and self.close_after_fetch:
+                client.close()
+                self.client = None
         return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
 
@@ -1129,17 +1182,18 @@ def _fetch_with_fallback(
     start: datetime | str,
     end: datetime | str,
     interval: str,
+    allow_fallback: bool = True,
 ) -> tuple[pd.DataFrame, BaseDataSource]:
     try:
         df = source.fetch(symbols, start, end, interval)
     except Exception as exc:
-        if _source_name(source) == "yahoo":
+        if _source_name(source) == "yahoo" or not allow_fallback:
             raise
         logger.warning("primary source %s failed (%s); falling back to yfinance", _source_name(source), exc)
         fallback = YahooFinanceSource()
         return fallback.fetch(symbols, start, end, interval), fallback
 
-    if not df.empty or _source_name(source) == "yahoo":
+    if not df.empty or _source_name(source) == "yahoo" or not allow_fallback:
         return df, source
 
     logger.warning("primary source %s returned no rows; falling back to yfinance", _source_name(source))
@@ -1171,6 +1225,8 @@ def ingest(
     end: datetime | str | None = None,
     interval: str = "1d",
     source: BaseDataSource | str | None = None,
+    *,
+    register_catalog_version: bool = True,
 ) -> pd.DataFrame:
     """High-level one-shot: fetch + write + return the frame."""
     symbols = _resolve_ingest_symbols(symbols)
@@ -1178,6 +1234,7 @@ def ingest(
     end = end or settings.default_end
 
     resolved_source = _resolve_market_bars_source(source)
+    allow_fallback = source is None or (isinstance(source, str) and source.strip().lower() == "auto")
     logger.info(
         "ingest provider=%s symbols=%d start=%s end=%s interval=%s",
         _source_name(resolved_source),
@@ -1193,6 +1250,7 @@ def ingest(
         start=start,
         end=end,
         interval=interval,
+        allow_fallback=allow_fallback,
     )
     if df.empty:
         logger.warning("No data fetched; aborting write.")
@@ -1200,28 +1258,29 @@ def ingest(
 
     path = write_parquet(df)
     lineage: dict[str, Any] = {}
-    try:
-        from aqp.data.catalog import register_dataset_version
+    if register_catalog_version:
+        try:
+            from aqp.data.catalog import register_dataset_version
 
-        lineage = register_dataset_version(
-            name="bars.default",
-            provider=getattr(resolved_source, "name", "unknown"),
-            domain="market.bars",
-            df=df,
-            storage_uri=str(path),
-            frequency=interval,
-            meta={
-                "symbols": symbols,
-                "start": str(start),
-                "end": str(end),
-                "interval": interval,
-            },
-            file_count=int(df["vt_symbol"].nunique()),
-        )
-        if lineage:
-            df.attrs["lineage"] = lineage
-    except Exception:
-        logger.debug("ingest lineage registration failed", exc_info=True)
+            lineage = register_dataset_version(
+                name="bars.default",
+                provider=getattr(resolved_source, "name", "unknown"),
+                domain="market.bars",
+                df=df,
+                storage_uri=str(path),
+                frequency=interval,
+                meta={
+                    "symbols": symbols,
+                    "start": str(start),
+                    "end": str(end),
+                    "interval": interval,
+                },
+                file_count=int(df["vt_symbol"].nunique()),
+            )
+            if lineage:
+                df.attrs["lineage"] = lineage
+        except Exception:
+            logger.debug("ingest lineage registration failed", exc_info=True)
     logger.info("Ingestion complete: %d rows across %d symbols → %s", len(df), df["vt_symbol"].nunique(), path)
     return df
 

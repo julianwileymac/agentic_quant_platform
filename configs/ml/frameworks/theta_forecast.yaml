@@ -1,0 +1,33 @@
+name: "Theta forecast"
+description: >
+  Theta forecaster (Assimakopoulos & Nikolopoulos, 2000) via sktime.
+  Robust univariate baseline that often beats more complex models on
+  short-horizon financial series.
+
+dataset_preset: intraday_momentum_etf
+features: ["close"]
+target:
+  class: n_step_return
+  module_path: aqp.data.labels
+  kwargs:
+    horizon: 1
+
+model:
+  class: ThetaForecastModel
+  module_path: aqp.ml.models.forecasting
+  kwargs:
+    horizon: 20
+    sp: 5
+    deseasonalize: true
+
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 252
+      test_periods: 21
+      step_periods: 21
+
+mlflow:
+  experiment: theta-forecast

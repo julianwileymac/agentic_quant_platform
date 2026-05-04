@@ -39,10 +39,11 @@ flowchart LR
 
 | Stage | Docs |
 | --- | --- |
-| **Research** | [factor-research.md](factor-research.md), [ml-framework.md](ml-framework.md), [strategy-browser.md](strategy-browser.md), [data-plane.md](data-plane.md), [data-catalog.md](data-catalog.md) |
+| **Research** | [factor-research.md](factor-research.md), [ml-framework.md](ml-framework.md), [ml-libraries.md](ml-libraries.md), [ml-alpha-backtest.md](ml-alpha-backtest.md), [ml-flows.md](ml-flows.md), [ml-preprocessing-pipeline.md](ml-preprocessing-pipeline.md), [ml-builder.md](ml-builder.md), [ml-testing.md](ml-testing.md), [strategy-browser.md](strategy-browser.md), [data-plane.md](data-plane.md), [data-catalog.md](data-catalog.md), [data-pipelines-hub.md](data-pipelines-hub.md), [visualization-layer.md](visualization-layer.md) |
 | **Backtest** | [backtest-engines.md](backtest-engines.md), [strategy-lifecycle.md](strategy-lifecycle.md) |
 | **Agentic** | [agentic-pipeline.md](agentic-pipeline.md), [providers.md](providers.md) |
-| **Paper / Live** | [paper-trading.md](paper-trading.md), [live-market.md](live-market.md), [streaming.md](streaming.md) |
+| **Bots** | [bots.md](bots.md) (smallest deployable unit; aggregates universe + strategy + engine + ML + agents + RAG + metrics) |
+| **Paper / Live** | [paper-trading.md](paper-trading.md), [live-market.md](live-market.md), [streaming.md](streaming.md), [streaming-admin.md](streaming-admin.md) |
 | **Cross-cutting** | [observability.md](observability.md), [webui.md](webui.md), [core-types.md](core-types.md), [domain-model.md](domain-model.md), [alpha-vantage.md](alpha-vantage.md) |
 
 ## By subsystem
@@ -66,6 +67,7 @@ flowchart LR
 | --- | --- |
 | [data-plane.md](data-plane.md) | Provider → cache → DuckDB view pipeline |
 | [data-catalog.md](data-catalog.md) | Iceberg catalog + ingest pipeline |
+| [visualization-layer.md](visualization-layer.md) | Trino-backed Superset and Bokeh exploration layer |
 | [alpha-vantage.md](alpha-vantage.md) | AV provider quota + cache |
 | [streaming.md](streaming.md) | Kafka topic taxonomy + ingester layout |
 | [live-market.md](live-market.md) | Live subscription + WebSocket relay |
@@ -76,7 +78,14 @@ flowchart LR
 | --- | --- |
 | [factor-research.md](factor-research.md) | Building factor / alpha strategies |
 | [ml-framework.md](ml-framework.md) | Train → register → deploy → score |
-| [backtest-engines.md](backtest-engines.md) | Engine catalogue + invariants |
+| [ml-libraries.md](ml-libraries.md) | Per-library reference (TF/Keras/Prophet/sklearn/PyOD/sktime/HF) |
+| [ml-alpha-backtest.md](ml-alpha-backtest.md) | `AlphaBacktestExperiment` orchestrator + `MLAlphaBacktestRun` schema |
+| [ml-flows.md](ml-flows.md) | Lightweight workbench flows catalog |
+| [ml-preprocessing-pipeline.md](ml-preprocessing-pipeline.md) | ML preprocessors as data-engine pipeline nodes |
+| [ml-builder.md](ml-builder.md) | Graphical experiment builder UX |
+| [ml-testing.md](ml-testing.md) | Interactive ML testing workbench |
+| [backtest-engines.md](backtest-engines.md) | Engine catalogue + invariants (vbt-pro primary, event-driven, ZVT, AAT, fallback) |
+| [vbtpro-integration.md](vbtpro-integration.md) | Deep vectorbt-pro integration: modes, hooks, agent + ML components, walk-forward |
 | [strategy-lifecycle.md](strategy-lifecycle.md) | draft → backtested → paper → live |
 | [strategy-browser.md](strategy-browser.md) | Data-browser → strategy spec UX |
 
@@ -92,6 +101,7 @@ flowchart LR
 | Doc | Purpose |
 | --- | --- |
 | [paper-trading.md](paper-trading.md) | Session loop + risk model |
+| [bots.md](bots.md) | Bot entity (TradingBot / ResearchBot), graphical builder, deployment |
 | [observability.md](observability.md) | OTEL → Jaeger + structured logs |
 | [webui.md](webui.md) | Next.js page tree |
 

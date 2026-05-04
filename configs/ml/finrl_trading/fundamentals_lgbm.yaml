@@ -1,0 +1,57 @@
+name: "FinRL Fundamentals LGBM Starter"
+description: >
+  FinRL-style fundamentals pipeline using tabular cleaning processors plus
+  walk-forward training.
+
+dataset_preset: finrl_fundamentals_panel_sample
+features: ["close", "volume", "revenue_growth", "gross_margin", "debt_to_equity"]
+target:
+  class: next_bar_binary
+  module_path: aqp.data.labels
+  kwargs:
+    threshold: 0.0
+
+model:
+  class: LGBModel
+  module_path: aqp.ml.models.tree
+  kwargs:
+    num_leaves: 63
+    learning_rate: 0.05
+    n_estimators: 400
+    subsample: 0.8
+    colsample_bytree: 0.8
+
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 504
+      test_periods: 63
+      step_periods: 63
+      anchored: false
+  preprocessing:
+    - class: CoerceNumericColumns
+      module_path: aqp.ml.processors
+      kwargs:
+        min_success_ratio: 0.75
+    - class: PanelForwardFill
+      module_path: aqp.ml.processors
+      kwargs:
+        symbol_col: vt_symbol
+        timestamp_col: timestamp
+    - class: WinsorizeByQuantile
+      module_path: aqp.ml.processors
+      kwargs:
+        lower_q: 0.01
+        upper_q: 0.99
+  split_hint:
+    module_path: aqp.ml.splits
+    function: quarterly_point_in_time_split
+    kwargs:
+      date_col: datadate
+      train_quarters: 16
+      val_quarters: 4
+
+mlflow:
+  experiment: finrl-fundamentals-lgbm

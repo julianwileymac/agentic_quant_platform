@@ -14,23 +14,30 @@ interface NamespaceList {
   namespaces?: string[];
 }
 
-interface CatalogTable {
-  iceberg_identifier: string;
-  namespace: string;
+interface CatalogCardItem {
+  id: string;
   name: string;
+  namespace?: string | null;
+  table?: string | null;
   description?: string | null;
   domain?: string | null;
-  tags?: string[];
+  tags: string[];
   load_mode: string;
-  source_uri?: string | null;
+  iceberg_identifier?: string | null;
   row_count?: number | null;
-  file_count?: number | null;
-  truncated: boolean;
-  has_annotation: boolean;
-  catalog_id?: string | null;
-  location?: string | null;
+  latest_row_count?: number | null;
   updated_at?: string | null;
+  href?: string;
+  has_annotation?: boolean;
+  truncated?: boolean;
+  entry_kind?: "dataset" | "instrument";
+  vt_symbol?: string | null;
+  ticker?: string | null;
+  exchange?: string | null;
 }
+
+const REGISTERED_NS = "__registered__";
+const UNIVERSE_NS = "__universe__";
 
 export function CatalogBrowser() {
   const [selectedNs, setSelectedNs] = useState<string | null>(null);
@@ -40,32 +47,73 @@ export function CatalogBrowser() {
     queryKey: ["datasets", "namespaces"],
     path: "/datasets/namespaces",
     staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: "always",
   });
 
-  const tables = useApiQuery<CatalogTable[]>({
-    queryKey: ["datasets", "tables", selectedNs ?? "__all__"],
-    path: "/datasets/tables",
-    query: selectedNs ? { namespace: selectedNs } : undefined,
-    select: (raw) => (Array.isArray(raw) ? (raw as CatalogTable[]) : []),
+  const datasets = useApiQuery<CatalogCardItem[]>({
+    queryKey: ["metadata", "catalog", "datasets", selectedNs ?? "__all__"],
+    path: "/metadata/catalog/datasets",
+    query: {
+      limit: 1000,
+      ...(selectedNs ? { namespace: selectedNs } : {}),
+    },
+    select: (raw) => (Array.isArray(raw) ? (raw as CatalogCardItem[]) : []),
     staleTime: 15_000,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: "always",
   });
+
+  const catalogItems = useMemo<CatalogCardItem[]>(() => {
+    return (datasets.data ?? []).map((row) => {
+      const icebergHref =
+        row.iceberg_identifier && row.namespace && row.table
+          ? `/data/catalog/${encodeURIComponent(row.namespace)}/${encodeURIComponent(row.table)}`
+          : undefined;
+      const registeredHref = row.id
+        ? `/data/catalog/dataset/${encodeURIComponent(row.id)}`
+        : undefined;
+      const instrumentHref =
+        row.entry_kind === "instrument" && row.vt_symbol
+          ? `/data/catalog/instrument?vt=${encodeURIComponent(row.vt_symbol)}`
+          : undefined;
+      return {
+        ...row,
+        namespace: row.namespace ?? "registered",
+        tags: row.tags ?? [],
+        row_count: row.latest_row_count ?? row.row_count,
+        href: instrumentHref ?? icebergHref ?? registeredHref,
+      };
+    });
+  }, [datasets.data]);
 
   const filtered = useMemo(() => {
-    const all = tables.data ?? [];
+    const all = catalogItems;
     const needle = search.trim().toLowerCase();
     if (!needle) return all;
     return all.filter((t) =>
-      [t.iceberg_identifier, t.description ?? "", t.domain ?? "", (t.tags ?? []).join(" ")]
+      [
+        t.id,
+        t.name,
+        t.namespace,
+        t.description ?? "",
+        t.domain ?? "",
+        t.vt_symbol ?? "",
+        t.ticker ?? "",
+        (t.tags ?? []).join(" "),
+      ]
         .join(" ")
         .toLowerCase()
         .includes(needle),
     );
-  }, [tables.data, search]);
+  }, [catalogItems, search]);
 
   return (
     <PageContainer
       title="Data Catalog"
-      subtitle="Iceberg tables, organized by namespace, with LLM-generated annotations and lineage."
+      subtitle="Iceberg tables, registered datasets, and stock universe (instruments) — auto-refreshes every 10s."
       extra={
         <Space>
           <Input
@@ -79,7 +127,7 @@ export function CatalogBrowser() {
           <Button
             icon={<ReloadOutlined />}
             onClick={() => {
-              tables.refetch();
+              datasets.refetch();
               namespaces.refetch();
             }}
           >
@@ -101,9 +149,21 @@ export function CatalogBrowser() {
         <Card size="small" title="Namespaces" styles={{ body: { padding: 0 } }}>
           <List
             size="small"
-            dataSource={["__all__", ...((namespaces.data?.namespaces ?? []) as string[])]}
+            dataSource={[
+              "__all__",
+              ...((namespaces.data?.namespaces ?? []) as string[]),
+              REGISTERED_NS,
+              UNIVERSE_NS,
+            ]}
             renderItem={(ns) => {
-              const label = ns === "__all__" ? "All namespaces" : ns;
+              const label =
+                ns === "__all__"
+                  ? "All namespaces"
+                  : ns === REGISTERED_NS
+                    ? "Registered datasets"
+                    : ns === UNIVERSE_NS
+                      ? "Stock universe"
+                      : ns;
               const active = selectedNs === (ns === "__all__" ? null : ns);
               return (
                 <List.Item
@@ -123,15 +183,25 @@ export function CatalogBrowser() {
 
         <Card
           size="small"
-          title={selectedNs ? `Tables · ${selectedNs}` : "All tables"}
-          loading={tables.isLoading}
+          title={
+            selectedNs === REGISTERED_NS
+              ? "Registered datasets"
+              : selectedNs === UNIVERSE_NS
+                ? "Stock universe (instruments)"
+                : selectedNs
+                  ? `Tables · ${selectedNs}`
+                  : "All datasets"
+          }
+          loading={datasets.isLoading}
         >
           {filtered.length === 0 ? (
             <Empty
               description={
-                tables.isLoading
+                datasets.isLoading
                   ? "Loading…"
-                  : "No tables yet. Use the Data Ingest wizard to materialize your first dataset."
+                  : selectedNs === UNIVERSE_NS
+                    ? "No instruments in the security master yet. Sync the Alpha Vantage universe from settings or the Alpha Vantage admin."
+                    : "No tables yet. Use the Data Ingest wizard to materialize your first dataset."
               }
             />
           ) : (
@@ -142,45 +212,57 @@ export function CatalogBrowser() {
                 gap: 12,
               }}
             >
-              {filtered.map((t) => (
-                <Link
-                  key={t.iceberg_identifier}
-                  href={`/data/catalog/${encodeURIComponent(t.namespace)}/${encodeURIComponent(t.name)}`}
-                  style={{ textDecoration: "none" }}
-                >
+              {filtered.map((t) => {
+                const card = (
                   <Card
-                    hoverable
+                    hoverable={Boolean(t.href)}
                     size="small"
                     title={
                       <Space>
                         <Text strong>{t.name}</Text>
-                        {t.has_annotation ? (
+                        {t.entry_kind === "instrument" ? (
+                          <Badge color="gold" text="instrument" />
+                        ) : t.has_annotation ? (
                           <Badge color="cyan" text="annotated" />
                         ) : (
                           <Badge color="default" text="raw" />
                         )}
                       </Space>
                     }
-                    extra={<Tag color="geekblue">{t.namespace}</Tag>}
+                    extra={
+                      <Tag color={t.entry_kind === "instrument" ? "orange" : "geekblue"}>
+                        {t.entry_kind === "instrument"
+                          ? t.exchange || t.namespace || "—"
+                          : t.namespace}
+                      </Tag>
+                    }
                   >
                     <Paragraph
                       ellipsis={{ rows: 3 }}
                       type={t.description ? undefined : "secondary"}
                       style={{ minHeight: 56, marginBottom: 8 }}
                     >
-                      {t.description ?? "No description yet — re-annotate from the detail page."}
+                      {t.description ?? "No description yet."}
                     </Paragraph>
                     <Space size={4} wrap>
                       <Tag>{t.load_mode}</Tag>
                       {t.domain ? <Tag color="purple">{t.domain}</Tag> : null}
                       {t.truncated ? <Tag color="orange">truncated</Tag> : null}
+                      {t.row_count != null ? <Tag>{t.row_count.toLocaleString()} rows</Tag> : null}
                       {(t.tags ?? []).slice(0, 4).map((tag) => (
                         <Tag key={tag}>{tag}</Tag>
                       ))}
                     </Space>
                   </Card>
-                </Link>
-              ))}
+                );
+                return t.href ? (
+                  <Link key={t.id} href={t.href} style={{ textDecoration: "none" }}>
+                    {card}
+                  </Link>
+                ) : (
+                  <div key={t.id}>{card}</div>
+                );
+              })}
             </div>
           )}
         </Card>

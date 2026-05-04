@@ -1,13 +1,12 @@
 # =============================================================================
 # AQP IBKR Streaming Ingester
 # =============================================================================
-# Long-lived aqp-stream-ingest --venue ibkr pod. Reserves a unique IBKR
-# client id (offset +200 over the brokerage) and publishes canonical Avro
-# records to the rpi_kubernetes Kafka cluster.
+# Long-lived aqp-stream-ingest --venue ibkr pod. One replica only;
+# IBKR TWS/Gateway accepts a single client per id pair.
 #
-# Only one replica allowed -- IBKR enforces client id uniqueness per
-# gateway connection. Horizontal scaling requires additional IB Gateway
-# pods + alternate client ids (future work).
+# Mirrors the Alpaca ingester manifest at ingester-alpaca.yaml. Default
+# replicas=0 so a fresh cluster does NOT try to dial IBKR until a user
+# enables it from /streaming/producers in the AQP UI.
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -17,7 +16,7 @@ metadata:
     app.kubernetes.io/name: aqp-ingester-ibkr
     app.kubernetes.io/component: streaming-ingester
 spec:
-  replicas: 1
+  replicas: 0
   strategy:
     type: Recreate
   selector:
@@ -42,6 +41,11 @@ spec:
                 name: aqp-env
             - secretRef:
                 name: aqp-broker-secrets
+          env:
+            - name: AQP_IBKR_HOST
+              value: "ibgateway.data-services.svc.cluster.local"
+            - name: AQP_IBKR_PORT
+              value: "4002"
           ports:
             - name: metrics
               containerPort: 9300
@@ -51,7 +55,7 @@ spec:
             httpGet:
               path: /healthz
               port: 9301
-            initialDelaySeconds: 10
+            initialDelaySeconds: 30
             periodSeconds: 15
           livenessProbe:
             httpGet:
@@ -62,11 +66,11 @@ spec:
             failureThreshold: 5
           resources:
             requests:
-              cpu: "200m"
-              memory: "384Mi"
+              cpu: "100m"
+              memory: "256Mi"
             limits:
-              cpu: "1000m"
-              memory: "1024Mi"
+              cpu: "500m"
+              memory: "768Mi"
 ---
 apiVersion: v1
 kind: Service

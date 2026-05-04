@@ -1,0 +1,48 @@
+name: "FinRL Sector-Neutral ML Selection"
+description: >
+  Grouped starter for finrl_trading source. Sector-neutral extension of
+  MLStockSelectionAlpha with per-sector quantile selection.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: ["AAPL.NASDAQ", "MSFT.NASDAQ", "NVDA.NASDAQ", "AMZN.NASDAQ", "META.NASDAQ", "JPM.NYSE", "XOM.NYSE", "JNJ.NYSE"]
+    alpha_model:
+      class: SectorNeutralMLAlpha
+      module_path: aqp.strategies.ml_selection
+      kwargs:
+        model_kind: random_forest
+        forward_horizon_days: 21
+        top_quantile: 0.7
+        per_sector_quantile: 0.7
+        target_sector_weights: {technology: 0.35, financials: 0.25, energy: 0.20, healthcare: 0.20}
+        weight_method: equal
+        lookback_periods: 252
+        min_pred_return: 0.0
+        retrain_each_call: false
+    portfolio_model:
+      class: SignalWeightedPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs: {max_positions: 8}
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: {max_position_pct: 0.20, max_drawdown_pct: 0.20}
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: event
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2021-01-01"
+    end: "2024-12-31"

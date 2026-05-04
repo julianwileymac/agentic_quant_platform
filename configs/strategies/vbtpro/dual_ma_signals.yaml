@@ -1,0 +1,51 @@
+# Vbt-pro signals example — classic dual moving-average crossover.
+#
+# Demonstrates the canonical signals mode: an IAlphaModel emits LONG/SHORT
+# Signal objects, the engine builds wide entries/exits arrays, and
+# Portfolio.from_signals runs the simulation. The full vbt-pro kwarg
+# surface is available via the engine's portfolio_kwargs slot.
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols:
+          - AAPL.NASDAQ
+          - MSFT.NASDAQ
+          - SPY.NYSE
+    alpha_model:
+      class: DualMACrossoverAlpha
+      module_path: aqp.strategies.dual_ma
+      kwargs:
+        fast: 10
+        slow: 50
+    portfolio_model:
+      class: EqualWeightPortfolioModel
+      module_path: aqp.strategies.portfolios
+      kwargs: {}
+    risk_model:
+      class: NullRiskModel
+      module_path: aqp.strategies.risk
+      kwargs: {}
+    execution_model:
+      class: ImmediateExecutionModel
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  engine: vbt-pro:signals
+  kwargs:
+    initial_cash: 100000.0
+    fees: 0.0005
+    slippage: 0.0002
+    freq: "1D"
+    allow_short: false
+    sl_stop: 0.05
+    tsl_stop: 0.03
+    cash_sharing: true
+    group_by: true
+    start: "2020-01-01"
+    end: "2024-12-31"

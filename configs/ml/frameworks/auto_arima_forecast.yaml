@@ -1,0 +1,36 @@
+name: "Auto-ARIMA forecast"
+description: >
+  Automatic ARIMA via sktime's AutoARIMA (with pmdarima). Stepwise
+  stationarity selection; useful as a strong univariate baseline.
+
+dataset_preset: intraday_momentum_etf
+features: ["close"]
+target:
+  class: n_step_return
+  module_path: aqp.data.labels
+  kwargs:
+    horizon: 1
+
+model:
+  class: AutoARIMAForecastModel
+  module_path: aqp.ml.models.forecasting
+  kwargs:
+    horizon: 20
+    seasonal: true
+    sp: 5
+    max_p: 5
+    max_q: 5
+    max_d: 2
+    information_criterion: aicc
+
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 504
+      test_periods: 63
+      step_periods: 63
+
+mlflow:
+  experiment: auto-arima-forecast

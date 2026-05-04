@@ -1,6 +1,7 @@
 """Route tests for managed universe endpoints."""
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
 
@@ -129,3 +130,37 @@ def test_universe_list_can_use_catalog_source(
     payload = response.json()
     assert payload["source"] == "catalog"
     assert payload["items"][0]["vt_symbol"] == "MSFT.NASDAQ"
+
+
+def test_universe_list_parquet_lake_source(
+    fastapi_test_client,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Parquet lake source lists symbols that have bar files on disk."""
+    from aqp.data import duckdb_engine as duckdb_engine_mod
+
+    bars = tmp_path / "bars"
+    bars.mkdir(parents=True)
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"]),
+            "vt_symbol": ["ZZZ.NASDAQ", "ZZZ.NASDAQ", "ZZZ.NASDAQ"],
+            "open": [10.0, 10.1, 10.2],
+            "high": [10.5, 10.6, 10.7],
+            "low": [9.8, 9.9, 10.0],
+            "close": [10.2, 10.3, 10.4],
+            "volume": [1_000_000.0, 1_100_000.0, 1_200_000.0],
+        }
+    )
+    df.to_parquet(bars / "ZZZ_NASDAQ.parquet", index=False)
+    monkeypatch.setattr(duckdb_engine_mod.settings, "parquet_dir", tmp_path, raising=False)
+
+    response = fastapi_test_client.get("/data/universe?source=lake")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["source"] == "parquet_lake"
+    assert payload["total"] == 1
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["vt_symbol"] == "ZZZ.NASDAQ"
+    assert payload["items"][0]["ticker"] == "ZZZ"

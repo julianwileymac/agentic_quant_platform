@@ -1,6 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 
-export type FlowDomain = "agent" | "data" | "strategy";
+export type FlowDomain = "agent" | "data" | "strategy" | "bot" | "ml";
 
 /**
  * Base shape for AQP flow nodes. Each node carries a `kind` discriminator

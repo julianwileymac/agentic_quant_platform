@@ -1,0 +1,43 @@
+model:
+  class: KerasMLPRegressor
+  module_path: aqp.ml.models.sae.keras_mlp_regressor
+  kwargs:
+    hidden_sizes: [16, 8]
+    dropout: 0.2
+    use_minmax: true
+    seq_len: 1
+    epochs: 60
+    batch_size: 32
+    lr: 0.001
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 504
+      test_periods: 63
+      step_periods: 63
+      anchored: false
+  preprocessing:
+    - class: CoerceNumericColumns
+      module_path: aqp.ml.processors
+      kwargs: {}
+    - class: WinsorizeByQuantile
+      module_path: aqp.ml.processors
+      kwargs:
+        lower_q: 0.02
+        upper_q: 0.98
+  split_hint:
+    module_path: aqp.ml.splits
+    function: chronological_train_val_test_split
+    kwargs:
+      train_ratio: 0.7
+      val_ratio: 0.15
+dataset_preset: equity_universe_sp500_daily
+features: ["close", "volume"]
+target:
+  class: next_bar_binary
+  module_path: aqp.data.labels
+  kwargs: {}
+mlflow:
+  experiment: sae-mlp-tvt

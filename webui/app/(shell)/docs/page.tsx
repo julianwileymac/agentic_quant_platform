@@ -12,6 +12,7 @@ const links = [
   { href: process.env.NEXT_PUBLIC_MLFLOW_URL ?? "http://localhost:5000", label: "MLflow", desc: "Experiment tracking + registry" },
   { href: process.env.NEXT_PUBLIC_JAEGER_URL ?? "http://localhost:16686", label: "Jaeger", desc: "Distributed tracing" },
   { href: process.env.NEXT_PUBLIC_DASH_URL ?? "http://localhost:8000/dash/", label: "Dash monitor", desc: "Legacy strategy monitor" },
+  { href: process.env.NEXT_PUBLIC_SUPERSET_URL ?? "http://localhost:8088", label: "Superset", desc: "Trino-backed BI exploration" },
 ];
 
 export default function DocsPage() {

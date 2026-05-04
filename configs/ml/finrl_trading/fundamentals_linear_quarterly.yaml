@@ -1,0 +1,53 @@
+name: "FinRL Fundamentals Linear Quarterly"
+description: >
+  Lightweight baseline for FinRL fundamentals datasets with quarterly
+  train/validation/test split guidance.
+
+dataset_preset: finrl_fundamentals_panel_sample
+features: ["close", "volume", "roe", "roa", "operating_margin", "book_to_market"]
+target:
+  class: next_bar_binary
+  module_path: aqp.data.labels
+  kwargs:
+    threshold: 0.0
+
+model:
+  class: LinearModel
+  module_path: aqp.ml.models.linear
+  kwargs:
+    estimator: ridge
+    alpha: 1.0
+
+training:
+  splitter:
+    class: WalkForwardSplitter
+    module_path: aqp.ml.walk_forward
+    kwargs:
+      train_periods: 756
+      test_periods: 63
+      step_periods: 63
+      anchored: true
+  preprocessing:
+    - class: CoerceNumericColumns
+      module_path: aqp.ml.processors
+      kwargs: {}
+    - class: PanelForwardFill
+      module_path: aqp.ml.processors
+      kwargs:
+        symbol_col: vt_symbol
+        timestamp_col: timestamp
+    - class: RobustScaler
+      module_path: aqp.ml.processors
+      kwargs:
+        quantile_range: [0.25, 0.75]
+  split_hint:
+    module_path: aqp.ml.splits
+    function: rolling_train_val_test_windows
+    kwargs:
+      train_periods: 756
+      val_periods: 63
+      test_periods: 63
+      step_periods: 63
+
+mlflow:
+  experiment: finrl-fundamentals-linear

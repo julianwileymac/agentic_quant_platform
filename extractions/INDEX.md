@@ -1,6 +1,6 @@
 # AQP Inspiration Extraction Index
 
-> Reference cache for the rehydration of AQP from 7 inspiration sources.
+> Reference cache for the rehydration of AQP from 9 inspiration sources.
 > **Use these markdown files instead of re-reading the raw inspiration code.**
 > Each per-source `REFERENCE.md` contains the extracted code excerpts and AQP mapping notes.
 
@@ -10,6 +10,8 @@
 |---------------|------------------------------------|---------------|-------------|
 | `stock_analysis_engine/` | `stock-analysis-engine-master/analysis_engine` | [REFERENCE.md](stock_analysis_engine/REFERENCE.md) | 13 |
 | `analyzingalpha/` | `analyzingalpha-master` | [REFERENCE.md](analyzingalpha/REFERENCE.md) | 18 |
+| `quant_trading/` | `quant-trading-master` | [REFERENCE.md](quant_trading/REFERENCE.md) | 15 |
+| `finrl_trading/` | `FinRL-Trading-master` | [REFERENCE.md](finrl_trading/REFERENCE.md) | 12 |
 | `notebooks/` | `notebooks-master` | [REFERENCE.md](notebooks/REFERENCE.md) | 17 |
 | `akquant/` | `akquant-main/examples` | [REFERENCE.md](akquant/REFERENCE.md) | 60+ |
 | `qtradex/` | `QTradeX-AI-Agents-master` | [REFERENCE.md](qtradex/REFERENCE.md) | 28 |
@@ -28,6 +30,14 @@ These three random end-to-end tests exercise the rehydrated platform across ever
 1. **Strategy backtest** — `tests/strategies/test_ma_sabres_backtest.py` (QTradeX `MASabres` via `EventDrivenBacktester`).
 2. **ML training** — `tests/ml/models/test_lstm_forecaster_train.py` (SPM `LSTMForecaster` via `TorchForecasterBase` + `WalkForwardTrainer`).
 3. **Agent run** — `tests/agents/test_regime_analyst_run.py` (new `research.regime_analyst` spec via `AgentRuntime`).
+
+## Four-source backend hydration smoke runs
+
+Deterministic random seed (`20260503`) selection across strategy/model/pipeline surfaces:
+
+1. **Strategy smoke** — `tests/strategies/test_four_source_random_strategy_smoke.py`.
+2. **Model smoke** — `tests/ml/models/test_four_source_random_model_smoke.py`.
+3. **Pipeline smoke** — `tests/data/test_four_source_random_pipeline_smoke.py`.
 
 ## How to use this cache
 

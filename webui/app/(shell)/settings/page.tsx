@@ -80,6 +80,11 @@ export default function SettingsPage() {
                   label: "MLflow",
                   children: <code>{process.env.NEXT_PUBLIC_MLFLOW_URL ?? "http://localhost:5000"}</code>,
                 },
+                {
+                  key: "superset",
+                  label: "Superset",
+                  children: <code>{process.env.NEXT_PUBLIC_SUPERSET_URL ?? "http://localhost:8088"}</code>,
+                },
               ]}
             />
             <div style={{ marginTop: 12 }}>

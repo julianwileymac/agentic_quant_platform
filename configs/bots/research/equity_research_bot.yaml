@@ -1,0 +1,45 @@
+name: Equity Research Bot
+slug: equity-research-bot
+kind: research
+description: >-
+  Research-focused bot with chat surface. Drives the spec-driven
+  research.equity AgentSpec for long-form synthesis with hierarchical
+  RAG citations. No paper trading; on-demand backtest is also
+  unavailable (no strategy block).
+
+universe:
+  symbols: []
+
+agents:
+  - spec_name: research.equity
+    role: equity_analyst
+    inputs_template:
+      style: long-form
+  - spec_name: research.quant_vbtpro
+    role: quant_analyst
+
+rag:
+  - levels: [l1, l2]
+    orders: [second]
+    corpora: [sec_filings, sec_xbrl, financial_ratios, earnings_call]
+    per_level_k: 5
+    final_k: 12
+  - levels: [l3]
+    orders: [third]
+    corpora: [cfpb_complaints, fda_recalls, uspto_patents]
+    per_level_k: 3
+    final_k: 8
+
+metrics:
+  - name: cost_usd
+    threshold: 1.5
+    direction: min
+
+deployment:
+  target: backtest_only
+  initial_cash: 0.0
+
+annotations:
+  - example
+  - research
+  - chat

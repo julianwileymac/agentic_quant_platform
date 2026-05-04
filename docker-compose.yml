@@ -36,6 +36,29 @@ services:
       timeout: 3s
       retries: 5
 
+  neo4j:
+    image: neo4j:5-community
+    container_name: aqp-neo4j
+    environment:
+      NEO4J_AUTH: "${AQP_NEO4J_USER:-neo4j}/${AQP_NEO4J_PASSWORD:-aqpneo4j}"
+      AQP_NEO4J_USER: "${AQP_NEO4J_USER:-neo4j}"
+      AQP_NEO4J_PASSWORD: "${AQP_NEO4J_PASSWORD:-aqpneo4j}"
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache_size: 512m
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u \"$${AQP_NEO4J_USER}\" -p \"$${AQP_NEO4J_PASSWORD}\" 'RETURN 1;' >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.11.1
     container_name: aqp-mlflow
@@ -158,6 +181,11 @@ services:
       AQP_REDIS_PUBSUB_URL: redis://redis:6379/1
       AQP_POSTGRES_DSN: postgresql+psycopg2://aqp:aqp@postgres:5432/aqp
       AQP_POSTGRES_ASYNC_DSN: postgresql+asyncpg://aqp:aqp@postgres:5432/aqp
+      AQP_GRAPH_STORE: "${AQP_GRAPH_STORE:-neo4j}"
+      AQP_NEO4J_URI: bolt://neo4j:7687
+      AQP_NEO4J_USER: "${AQP_NEO4J_USER:-neo4j}"
+      AQP_NEO4J_PASSWORD: "${AQP_NEO4J_PASSWORD:-aqpneo4j}"
+      AQP_NEO4J_DATABASE: "${AQP_NEO4J_DATABASE:-neo4j}"
       AQP_CHROMA_HOST: chromadb
       AQP_CHROMA_PORT: "8000"
       AQP_MLFLOW_TRACKING_URI: http://mlflow:5000
@@ -199,6 +227,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      neo4j:
+        condition: service_healthy
       chromadb:
         condition: service_started
     extra_hosts:
@@ -216,6 +246,11 @@ services:
       AQP_REDIS_PUBSUB_URL: redis://redis:6379/1
       AQP_POSTGRES_DSN: postgresql+psycopg2://aqp:aqp@postgres:5432/aqp
       AQP_POSTGRES_ASYNC_DSN: postgresql+asyncpg://aqp:aqp@postgres:5432/aqp
+      AQP_GRAPH_STORE: "${AQP_GRAPH_STORE:-neo4j}"
+      AQP_NEO4J_URI: bolt://neo4j:7687
+      AQP_NEO4J_USER: "${AQP_NEO4J_USER:-neo4j}"
+      AQP_NEO4J_PASSWORD: "${AQP_NEO4J_PASSWORD:-aqpneo4j}"
+      AQP_NEO4J_DATABASE: "${AQP_NEO4J_DATABASE:-neo4j}"
       AQP_CHROMA_HOST: chromadb
       AQP_CHROMA_PORT: "8000"
       AQP_MLFLOW_TRACKING_URI: http://mlflow:5000
@@ -243,6 +278,8 @@ services:
       redis:
         condition: service_healthy
       postgres:
+        condition: service_healthy
+      neo4j:
         condition: service_healthy
       chromadb:
         condition: service_started
@@ -337,6 +374,7 @@ services:
         NEXT_PUBLIC_DASH_URL: http://localhost:8000/dash/
         NEXT_PUBLIC_MLFLOW_URL: http://localhost:5000
         NEXT_PUBLIC_JAEGER_URL: http://localhost:16686
+        NEXT_PUBLIC_SUPERSET_URL: http://localhost:8088
     container_name: aqp-webui
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
@@ -344,6 +382,7 @@ services:
       NEXT_PUBLIC_DASH_URL: http://localhost:8000/dash/
       NEXT_PUBLIC_MLFLOW_URL: http://localhost:5000
       NEXT_PUBLIC_JAEGER_URL: http://localhost:16686
+      NEXT_PUBLIC_SUPERSET_URL: http://localhost:8088
       AQP_API_URL: http://api:8000
       AQP_WS_URL: ws://api:8000
     ports:
@@ -606,6 +645,8 @@ services:
 volumes:
   redis-data:
   postgres-data:
+  neo4j-data:
+  neo4j-logs:
   mlflow-artifacts:
   chroma-data:
   kafka-data:

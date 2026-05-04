@@ -33,6 +33,7 @@ celery_app = Celery(
         "aqp.tasks.paper_tasks",
         "aqp.tasks.factor_tasks",
         "aqp.tasks.ml_tasks",
+        "aqp.tasks.ml_test_tasks",
         "aqp.tasks.optimize_tasks",
         "aqp.tasks.feature_set_tasks",
         "aqp.tasks.equity_report_tasks",
@@ -49,10 +50,18 @@ celery_app = Celery(
         "aqp.tasks.entity_tasks",
         "aqp.tasks.datahub_tasks",
         "aqp.tasks.airbyte_tasks",
+        "aqp.tasks.engine_tasks",
+        "aqp.tasks.data_metadata_tasks",
         # Phase 5 — FinOps governance audit task.
         "aqp.tasks.finops_tasks",
         # Inspiration rehydration — dataset preset ingestion tasks.
         "aqp.tasks.dataset_preset_tasks",
+        # Bot Entity Refactor — bot lifecycle tasks (backtest / paper / chat / deploy).
+        "aqp.tasks.bot_tasks",
+        # Visualization layer — Superset/Trino provisioning.
+        "aqp.tasks.visualization_tasks",
+        # Data layer expansion: scheduling + streaming link refresh.
+        "aqp.tasks.streaming_link_tasks",
     ],
 )
 
@@ -78,6 +87,7 @@ celery_app.conf.update(
         "aqp.tasks.paper_tasks.*": {"queue": "paper"},
         "aqp.tasks.factor_tasks.*": {"queue": "factors"},
         "aqp.tasks.ml_tasks.*": {"queue": "ml"},
+        "aqp.tasks.ml_test_tasks.*": {"queue": "ml"},
         "aqp.tasks.optimize_tasks.*": {"queue": "backtest"},
         "aqp.tasks.feature_set_tasks.*": {"queue": "ml"},
         "aqp.tasks.equity_report_tasks.*": {"queue": "agents"},
@@ -85,8 +95,18 @@ celery_app.conf.update(
         "aqp.tasks.entity_tasks.*": {"queue": "agents"},
         "aqp.tasks.datahub_tasks.*": {"queue": "ingestion"},
         "aqp.tasks.airbyte_tasks.*": {"queue": "ingestion"},
+        "aqp.tasks.engine_tasks.*": {"queue": "ingestion"},
+        "aqp.tasks.data_metadata_tasks.*": {"queue": "ingestion"},
         "aqp.tasks.finops_tasks.*": {"queue": "default"},
         "aqp.tasks.dataset_preset_tasks.*": {"queue": "ingestion"},
+        # Bot lifecycle: route to the matching execution queues so backtest /
+        # paper / chat workloads inherit the existing per-queue capacity caps.
+        "aqp.tasks.bot_tasks.run_bot_backtest": {"queue": "backtest"},
+        "aqp.tasks.bot_tasks.run_bot_paper": {"queue": "paper"},
+        "aqp.tasks.bot_tasks.chat_research_bot": {"queue": "agents"},
+        "aqp.tasks.bot_tasks.deploy_bot": {"queue": "default"},
+        "aqp.tasks.visualization_tasks.*": {"queue": "ingestion"},
+        "aqp.tasks.streaming_link_tasks.*": {"queue": "ingestion"},
     },
     beat_schedule={
         "drift-check": {

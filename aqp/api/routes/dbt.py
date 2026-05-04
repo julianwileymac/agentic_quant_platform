@@ -161,6 +161,99 @@ def write_file(payload: FileWriteRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+# ---------------------------------------------------------------------------
+# Manifest extraction + agentic enrichment
+# ---------------------------------------------------------------------------
+class ManifestExtractRequest(BaseModel):
+    project_dir: str | None = None
+    manifest_url: str | None = None
+    target_table: str | None = None
+
+
+@router.post("/models/extract")
+def extract_models_from_manifest(req: ManifestExtractRequest) -> dict[str, Any]:
+    """Parse manifest.json (from disk or URL) and return models + sources without persisting."""
+    manifest_data: dict[str, Any] | None = None
+    if req.manifest_url:
+        try:
+            import httpx
+
+            with httpx.Client(timeout=15.0) as client:
+                r = client.get(req.manifest_url)
+                if r.status_code >= 400:
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"manifest fetch failed: {r.status_code} {r.text}",
+                    )
+                manifest_data = r.json()
+        except HTTPException:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    try:
+        from aqp.data.dbt.artifacts import _node_summary, load_manifest_models
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"dbt artifacts unavailable: {exc}") from exc
+    if manifest_data is not None:
+        models: list[dict[str, Any]] = []
+        for resource_type in ("nodes", "sources"):
+            entries = manifest_data.get(resource_type) or {}
+            for unique_id, payload in entries.items():
+                if resource_type == "nodes" and payload.get("resource_type") not in {
+                    "model",
+                    "seed",
+                    "snapshot",
+                    "test",
+                }:
+                    continue
+                models.append(
+                    _node_summary(
+                        unique_id,
+                        payload,
+                        resource_type=payload.get("resource_type", resource_type[:-1]),
+                    )
+                )
+    else:
+        models = load_manifest_models(project_dir=req.project_dir)
+    if req.target_table:
+        target = req.target_table.lower()
+        models = [m for m in models if target in str(m.get("name") or "").lower()]
+    return {"count": len(models), "models": models}
+
+
+class AgenticEnrichRequest(BaseModel):
+    project_dir: str | None = None
+    extra_prompt: str | None = None
+
+
+@router.post("/models/{unique_id:path}/agentic-enrich")
+def agentic_enrich_model(unique_id: str, req: AgenticEnrichRequest) -> dict[str, Any]:
+    """Ask the dataset-loading agent to propose enrichment for a dbt model."""
+    try:
+        from aqp.agents.registry import get_spec
+        from aqp.agents.runtime import AgentRuntime
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"agent runtime unavailable: {exc}") from exc
+    try:
+        spec = get_spec("dataset_loading_assistant")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=404,
+            detail=f"dataset_loading_assistant spec missing: {exc}",
+        ) from exc
+    inputs = {
+        "user_prompt": (
+            req.extra_prompt
+            or f"Enrich the dbt model {unique_id} — borrow column docs from manifest.json"
+        ),
+        "extra_context": {"dbt_unique_id": unique_id, "project_dir": req.project_dir},
+    }
+    runtime = AgentRuntime(spec=spec)
+    result = runtime.run(inputs)
+    return result.to_dict()
+
+
 def _invoke_dbt(command: str, payload: DbtCommandRequest):
     manager = DbtProjectManager.from_settings()
     runner = DbtRunnerService(manager)

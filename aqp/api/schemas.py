@@ -190,6 +190,13 @@ class IngestRequest(BaseModel):
     source: str | None = None
 
 
+class ActiveDailyOhlcvIngestRequest(BaseModel):
+    years: int = Field(default=5, ge=1, le=50)
+    end: str | None = None
+    source: str | None = None
+    chunk_size: int = Field(default=100, ge=1, le=500)
+
+
 class UniverseSyncRequest(BaseModel):
     state: str = "active"
     limit: int | None = None

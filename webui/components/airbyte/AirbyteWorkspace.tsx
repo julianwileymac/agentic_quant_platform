@@ -9,6 +9,13 @@ import { AirbyteApi, type AirbyteConnection, type AirbyteConnector, type Airbyte
 
 type View = "overview" | "connectors" | "builder" | "runs";
 
+interface AirbyteHealthPayload {
+  ok: boolean;
+  enabled?: boolean;
+  base_url?: string;
+  airbyte?: { reachable?: boolean; detail?: string; available?: boolean; error?: string };
+}
+
 interface Props {
   view: View;
 }
@@ -18,7 +25,7 @@ export function AirbyteWorkspace({ view }: Props) {
   const [selectedConnector, setSelectedConnector] = useState("alpha-vantage");
   const [configText, setConfigText] = useState("{}");
 
-  const health = useApiQuery<Record<string, unknown>>({
+  const health = useApiQuery<AirbyteHealthPayload>({
     queryKey: ["airbyte", "health"],
     path: "/airbyte/health",
     staleTime: 30_000,
@@ -90,7 +97,17 @@ export function AirbyteWorkspace({ view }: Props) {
             <Row gutter={[16, 16]}>
               <Col xs={24} md={6}>
                 <Card>
-                  <Statistic title="Airbyte health" value={String(health.data?.ok ?? "unknown")} />
+                  <Statistic title="Airbyte OK" value={String(health.data?.ok ?? "unknown")} />
+                  <Space direction="vertical" size={4} style={{ marginTop: 8 }}>
+                    <Tag color={health.data?.enabled ? "blue" : "default"}>
+                      {health.data?.enabled ? "enabled" : "disabled"}
+                    </Tag>
+                    {health.data?.airbyte?.detail ? (
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        {health.data.airbyte.detail}
+                      </Typography.Text>
+                    ) : null}
+                  </Space>
                 </Card>
               </Col>
               <Col xs={24} md={6}>

@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 
 from aqp.api.schemas import (
+    ActiveDailyOhlcvIngestRequest,
     DataSearchRequest,
     DiscoverResponse,
     IBKRHistoricalFetchRequest,
@@ -35,6 +36,7 @@ from aqp.persistence.db import get_session
 from aqp.persistence.models import DatasetCatalog, DatasetVersion, Instrument
 from aqp.tasks.ingestion_tasks import (
     index_chroma,
+    ingest_active_daily_ohlcv,
     ingest_ibkr_historical,
     ingest_yahoo,
     load_local_directory,
@@ -82,6 +84,17 @@ class DatasetVersionSummary(BaseModel):
 @router.post("/ingest", response_model=TaskAccepted)
 def ingest(req: IngestRequest) -> TaskAccepted:
     async_result = ingest_yahoo.delay(req.symbols, req.start, req.end, req.interval, req.source)
+    return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
+
+
+@router.post("/ingest/active-daily-ohlcv", response_model=TaskAccepted)
+def ingest_active_daily_ohlcv_route(req: ActiveDailyOhlcvIngestRequest) -> TaskAccepted:
+    async_result = ingest_active_daily_ohlcv.delay(
+        req.years,
+        req.end,
+        req.source,
+        req.chunk_size,
+    )
     return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
 
 
@@ -145,6 +158,9 @@ def list_universe(
             return _universe_response("alpha_vantage_live", items, total=total, offset=start, limit=cap)
         except Exception:
             items = []
+    elif policy in {"lake", "parquet", "parquet_lake", "disk", "bars_lake"}:
+        items, total = _list_parquet_lake_universe(limit=cap, offset=start, query=q or None)
+        return _universe_response("parquet_lake", items, total=total, offset=start, limit=cap)
     elif policy in {"catalog", "data_catalog", "instrument", "instruments"}:
         items, total = _list_catalog_universe(limit=cap, offset=start, query=q or None)
         return _universe_response("catalog", items, total=total, offset=start, limit=cap)
@@ -224,6 +240,54 @@ def _count_instruments(query: str | None = None) -> int:
     with get_session() as session:
         stmt = _instrument_filter(select(func.count()).select_from(Instrument), query)
         return int(session.execute(stmt).scalar_one() or 0)
+
+
+def _list_parquet_lake_universe(
+    *,
+    limit: int,
+    offset: int = 0,
+    query: str | None = None,
+) -> tuple[list[dict[str, Any]], int]:
+    """Symbols that have at least one row in the local Parquet ``bars`` lake."""
+    provider = DuckDBHistoryProvider()
+    frame = provider.describe_bars()
+    if frame is None or frame.empty or "vt_symbol" not in frame.columns:
+        return [], 0
+    df = frame.sort_values("vt_symbol").reset_index(drop=True)
+    if query:
+        q = query.strip().upper()
+        mask = df["vt_symbol"].astype(str).str.upper().str.contains(q, na=False)
+        df = df.loc[mask].reset_index(drop=True)
+    total = int(len(df))
+    start = max(0, int(offset))
+    cap = max(1, int(limit))
+    page = df.iloc[start : start + cap]
+    items: list[dict[str, Any]] = []
+    for row in page.itertuples(index=False):
+        vt = str(getattr(row, "vt_symbol", "") or "").strip().upper()
+        if not vt:
+            continue
+        try:
+            sym = Symbol.parse(vt)
+        except Exception:
+            continue
+        items.append(
+            {
+                "id": "",
+                "vt_symbol": sym.vt_symbol,
+                "ticker": sym.ticker,
+                "exchange": sym.exchange.value,
+                "asset_class": sym.asset_class.value,
+                "security_type": sym.security_type.value,
+                "sector": None,
+                "industry": None,
+                "currency": "USD",
+                "name": None,
+                "status": None,
+                "updated_at": None,
+            }
+        )
+    return items, total
 
 
 def _list_catalog_universe(

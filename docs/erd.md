@@ -271,6 +271,10 @@ erDiagram
         float max_drawdown
         string mlflow_run_id
         string dataset_hash
+        uuid model_version_id FK
+        uuid ml_experiment_run_id FK
+        uuid experiment_plan_id FK
+        uuid model_deployment_id FK
     }
     agent_runs {
         uuid id PK
@@ -752,6 +756,177 @@ erDiagram
     optimization_runs ||--o{ optimization_trials : "run_id"
     strategies ||--o{ paper_trading_runs : "strategy_id"
 ```
+
+## Bots
+
+Tables introduced by the Bot Entity Refactor (Alembic
+[`0020_bots`](../alembic/versions/0020_bots.py)).
+
+```mermaid
+erDiagram
+    PROJECTS ||--o{ BOTS : "owns"
+    BOTS ||--o{ BOT_VERSIONS : "snapshots"
+    BOTS ||--o{ BOT_DEPLOYMENTS : "runs"
+    BOT_VERSIONS ||--o{ BOT_DEPLOYMENTS : "produces"
+
+    BOTS {
+        string id PK
+        string project_id FK
+        string slug
+        string kind
+        string name
+        text description
+        int current_version
+        text spec_yaml
+        string status
+        json annotations
+    }
+    BOT_VERSIONS {
+        string id PK
+        string bot_id FK
+        int version
+        string spec_hash
+        json payload
+        text notes
+        string created_by
+    }
+    BOT_DEPLOYMENTS {
+        string id PK
+        string bot_id FK
+        string version_id FK
+        string target
+        string task_id
+        string status
+        text manifest_yaml
+        json result_summary
+        text error
+    }
+```
+
+- `(project_id, slug)` is unique on `bots`.
+- `(bot_id, spec_hash)` is unique on `bot_versions` (immutable snapshots).
+- `bot_deployments.target` is one of `paper_session` / `kubernetes` /
+  `backtest_only` / `chat` / `backtest`.
+
+## Data layer expansion (sinks, producers, streaming links)
+
+Tables introduced by the Data Pipelines Hub work (Alembic
+[`0024_data_layer_expansion`](../alembic/versions/0024_data_layer_expansion.py)).
+All four tables use `ProjectScopedMixin`.
+
+```mermaid
+erDiagram
+    PROJECTS ||--o{ SINKS : "owns"
+    SINKS ||--o{ SINK_VERSIONS : "snapshots"
+    PROJECTS ||--o{ MARKET_DATA_PRODUCERS : "owns"
+    DATASET_CATALOGS ||--o{ STREAMING_DATASET_LINKS : "linked"
+    PIPELINE_MANIFESTS ||--o{ DATASET_PIPELINE_CONFIGS : "binds"
+
+    SINKS {
+        string id PK
+        string project_id FK
+        string name
+        string kind
+        string display_name
+        json config_json
+        json tags
+        bool requires_manifest_node
+        int current_version
+        bool enabled
+    }
+    SINK_VERSIONS {
+        string id PK
+        string sink_id FK
+        int version
+        string spec_hash
+        json payload
+        text notes
+    }
+    MARKET_DATA_PRODUCERS {
+        string id PK
+        string project_id FK
+        string name
+        string kind
+        string runtime
+        string deployment_namespace
+        string deployment_name
+        json topics
+        int desired_replicas
+        int current_replicas
+        string last_status
+    }
+    STREAMING_DATASET_LINKS {
+        string id PK
+        string dataset_catalog_id FK
+        string kind
+        string target_ref
+        string cluster_ref
+        string direction
+        json metadata_json
+        bool enabled
+    }
+```
+
+Notes:
+
+- `(project_id, name)` is unique on `sinks` and `market_data_producers`.
+- `(sink_id, spec_hash)` and `(sink_id, version)` are unique on
+  `sink_versions` (mirrors the `bot_versions` pattern).
+- `(dataset_catalog_id, kind, target_ref, direction)` is unique on
+  `streaming_dataset_links` so the
+  [refresh_links](../aqp/tasks/streaming_link_tasks.py) task can be
+  re-run idempotently.
+
+## ML alpha-backtest linkage (Alembic 0025)
+
+```mermaid
+erDiagram
+    ml_experiment_runs ||--o| ml_alpha_backtest_runs : "ml_experiment_run_id"
+    backtest_runs ||--o| ml_alpha_backtest_runs : "backtest_run_id"
+    model_versions ||--o| ml_alpha_backtest_runs : "model_version_id"
+    model_deployments ||--o| ml_alpha_backtest_runs : "model_deployment_id"
+    experiment_plans ||--o| ml_alpha_backtest_runs : "experiment_plan_id"
+    ml_alpha_backtest_runs ||--o{ ml_prediction_audit : "alpha_backtest_run_id"
+
+    ml_alpha_backtest_runs {
+        uuid id PK
+        string task_id
+        string run_name
+        string status
+        uuid ml_experiment_run_id FK
+        uuid backtest_run_id FK
+        uuid model_version_id FK
+        uuid model_deployment_id FK
+        uuid experiment_plan_id FK
+        string mlflow_run_id
+        json ml_metrics
+        json trading_metrics
+        json combined_metrics
+        json attribution
+        datetime started_at
+        datetime completed_at
+    }
+    ml_prediction_audit {
+        uuid id PK
+        uuid alpha_backtest_run_id FK
+        string vt_symbol
+        datetime ts
+        float prediction
+        float label
+        float position_after
+        float pnl_after_bar
+    }
+```
+
+The four new FKs on `backtest_runs` (added by Alembic 0025) close the
+loop from a backtest result back to the trained model that produced
+its alpha:
+
+- `model_version_id` — the registered `ModelVersion` row.
+- `ml_experiment_run_id` — the `MLExperimentRun` that trained it.
+- `experiment_plan_id` — the `ExperimentPlan` lineage row.
+- `model_deployment_id` — the `ModelDeployment` used to wire the
+  model into the strategy via `DeployedModelAlpha`.
 
 ## Adding a new model
 

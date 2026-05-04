@@ -895,8 +895,8 @@ export function CatalogTableDetail({ namespace, name }: CatalogTableDetailProps)
             ),
           },
           {
-            key: "lineage",
-            label: "Lineage",
+            key: "iceberg-meta",
+            label: "Iceberg storage",
             children: (
               <Card size="small">
                 <Descriptions column={1} size="small" bordered>

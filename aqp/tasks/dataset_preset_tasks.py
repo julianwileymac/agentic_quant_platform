@@ -17,9 +17,13 @@ from aqp.data.pipelines.dataset_preset_pipelines import (
     ingest_crypto_kucoin_intraday,
     ingest_eod_options_sample,
     ingest_etf_intraday_panel,
+    ingest_finrl_fundamentals_panel_sample,
+    ingest_finrl_sp500_membership_pit_sample,
     ingest_finviz_screener,
     ingest_fred_macro_basket,
     ingest_lob_sample,
+    ingest_quant_oil_money_sample,
+    ingest_quant_smart_farmers_cleaned_sample,
     ingest_sp500_daily,
 )
 from aqp.tasks._progress import emit, emit_done, emit_error
@@ -85,6 +89,55 @@ def task_ingest_finviz_screener(self, **kwargs: Any) -> dict[str, Any]:
     return _wrap(self, "finviz_screener", ingest_finviz_screener, **kwargs)
 
 
+@shared_task(
+    bind=True,
+    name="aqp.tasks.dataset_preset_tasks.ingest_finrl_fundamentals_panel_sample",
+)
+def task_ingest_finrl_fundamentals_panel_sample(self, **kwargs: Any) -> dict[str, Any]:
+    return _wrap(
+        self,
+        "finrl_fundamentals_panel_sample",
+        ingest_finrl_fundamentals_panel_sample,
+        **kwargs,
+    )
+
+
+@shared_task(
+    bind=True,
+    name="aqp.tasks.dataset_preset_tasks.ingest_finrl_sp500_membership_pit_sample",
+)
+def task_ingest_finrl_sp500_membership_pit_sample(self, **kwargs: Any) -> dict[str, Any]:
+    return _wrap(
+        self,
+        "finrl_sp500_membership_pit_sample",
+        ingest_finrl_sp500_membership_pit_sample,
+        **kwargs,
+    )
+
+
+@shared_task(bind=True, name="aqp.tasks.dataset_preset_tasks.ingest_quant_oil_money_sample")
+def task_ingest_quant_oil_money_sample(self, **kwargs: Any) -> dict[str, Any]:
+    return _wrap(
+        self,
+        "quant_trading_oil_money_sample",
+        ingest_quant_oil_money_sample,
+        **kwargs,
+    )
+
+
+@shared_task(
+    bind=True,
+    name="aqp.tasks.dataset_preset_tasks.ingest_quant_smart_farmers_cleaned_sample",
+)
+def task_ingest_quant_smart_farmers_cleaned_sample(self, **kwargs: Any) -> dict[str, Any]:
+    return _wrap(
+        self,
+        "quant_trading_smart_farmers_cleaned_sample",
+        ingest_quant_smart_farmers_cleaned_sample,
+        **kwargs,
+    )
+
+
 _TASKS_BY_PRESET = {
     "intraday_momentum_etf": task_ingest_etf_intraday_panel,
     "commodity_futures_panel": task_ingest_commodity_futures_panel,
@@ -94,6 +147,11 @@ _TASKS_BY_PRESET = {
     "fred_macro_basket": task_ingest_fred_macro_basket,
     "eod_options_chain_sample": task_ingest_eod_options_sample,
     "lob_btcusdt_sample": task_ingest_lob_sample,
+    "finviz_screener": task_ingest_finviz_screener,
+    "finrl_fundamentals_panel_sample": task_ingest_finrl_fundamentals_panel_sample,
+    "finrl_sp500_membership_pit_sample": task_ingest_finrl_sp500_membership_pit_sample,
+    "quant_trading_oil_money_sample": task_ingest_quant_oil_money_sample,
+    "quant_trading_smart_farmers_cleaned_sample": task_ingest_quant_smart_farmers_cleaned_sample,
 }
 
 

@@ -18,6 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 
+from aqp.persistence._tenancy_mixins import ProjectScopedMixin
 from aqp.persistence.models import Base
 
 
@@ -25,7 +26,7 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
-class AirbyteConnectorRow(Base):
+class AirbyteConnectorRow(Base, ProjectScopedMixin):
     """AQP-curated or discovered Airbyte connector definition."""
 
     __tablename__ = "airbyte_connectors"
@@ -49,7 +50,7 @@ class AirbyteConnectorRow(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
-class AirbyteConnectionRow(Base):
+class AirbyteConnectionRow(Base, ProjectScopedMixin):
     """Configured source -> destination connection managed by AQP."""
 
     __tablename__ = "airbyte_connections"
@@ -81,7 +82,7 @@ class AirbyteConnectionRow(Base):
     )
 
 
-class AirbyteSyncRunRow(Base):
+class AirbyteSyncRunRow(Base, ProjectScopedMixin):
     """One Airbyte job or embedded read invocation."""
 
     __tablename__ = "airbyte_sync_runs"

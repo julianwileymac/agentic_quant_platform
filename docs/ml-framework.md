@@ -131,6 +131,24 @@ analysis, and a portfolio tearsheet in a single MLflow run.
 | Generic          | `GeneralPTNN(model_class=..., model_module=...)`                        | bring-your-own `nn.Module`              |
 | Seq2Seq          | `LSTMSeq2Seq`, `GRUSeq2Seq`, `LSTMSeq2SeqVAE`, `DilatedCNNSeq2Seq`, `TransformerForecaster` | ported from Stock-Prediction-Models |
 
+## ML-Ops framework adapters
+
+The experiment layer also exposes framework adapters that still satisfy the
+same `Model.fit(dataset)` / `Model.predict(dataset, segment)` contract:
+
+| Family | Classes | Extra |
+| --- | --- | --- |
+| scikit-learn | `SklearnRegressorModel`, `SklearnClassifierModel`, `SklearnPipelineModel` | `ml` |
+| Forecasting | `ProphetForecastModel`, `SktimeForecastModel`, `SktimeReductionForecastModel` | `ml-forecast` |
+| Anomaly detection | `PyODAnomalyModel` | `ml-anomaly` |
+| Keras / TensorFlow | `KerasMLPModel`, `KerasLSTMModel` | `ml-keras` or `ml-tensorflow` |
+| Hugging Face | `HuggingFaceTextSignalModel` | `ml-transformers` |
+
+All heavy libraries are imported lazily. The base API can list recipes and
+build configs without TensorFlow, Prophet, sktime, PyOD, or transformers
+installed; fitting one of those classes raises a targeted install message if
+the corresponding extra is missing.
+
 ## Model zoo (Tier B — scaffolded stubs)
 
 These classes register into `aqp.core.registry` so the Strategy Browser
@@ -199,6 +217,32 @@ curl -X POST http://localhost:8000/ml/train \
   }'
 ```
 
+For a richer ML-ops run that persists an `MLExperimentRun` row and logs compact
+prediction samples, use the experiment runner:
+
+```bash
+curl -X POST http://localhost:8000/ml/experiment-runs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "run_name": "ridge-alpha-smoke",
+    "experiment_type": "alpha",
+    "dataset_cfg": {"class": "DatasetH", "module_path": "aqp.ml.dataset", "kwargs": {...}},
+    "model_cfg": {"class": "SklearnRegressorModel", "module_path": "aqp.ml.models.sklearn", "kwargs": {"estimator": "ridge"}}
+  }'
+```
+
+Small interactive flows can run synchronously without Celery:
+
+```bash
+curl -X POST http://localhost:8000/ml/flows/linear/preview \
+  -H "Content-Type: application/json" \
+  -d '{"dataset_cfg": {...}, "estimator": "ridge", "alpha": 1.0}'
+```
+
+The Next.js web UI exposes the same objects in `/ml/builder`, using a graph
+that serializes `Dataset`, `Preprocessing`, `Split`, `Model`, `Records`, and
+`Experiment` nodes into the `/ml/experiment-runs` request.
+
 4. Deploy a tested `ModelVersion` as a strategy alpha profile:
 
 ```bash
@@ -237,4 +281,36 @@ flowchart LR
     Score --> Backtest[backtest replay]
     Score --> WebUI
 ```
+
+## ML engine major expansion (Alembic 0025)
+
+The ML layer has grown a number of new surfaces, all driven by the
+existing `Experiment` / `Model` / `Processor` contracts:
+
+- **`AlphaBacktestExperiment`** — combined "model used as alpha"
+  experiment that trains, registers, deploys, backtests, and rolls
+  the combined ML + trading metrics into a single MLflow parent run
+  and a `ml_alpha_backtest_runs` Postgres row. See
+  [docs/ml-alpha-backtest.md](ml-alpha-backtest.md).
+- **Library coverage** — TF-native (`TFEstimatorModel`),
+  Keras Functional / TabTransformer, HuggingFace
+  FinBERT / time-series transformer / generative,
+  AutoETS / AutoARIMA / Theta / Tbats, PyOD ECOD / SUOD / AutoEncoder,
+  Sklearn Stacking / AutoPipeline. See [docs/ml-libraries.md](ml-libraries.md).
+- **Lightweight workbench flows** — `regression_diagnostics`,
+  `unit_root`, `acf_pacf`, `granger_causality`, `cointegration`,
+  `garch`, `change_point`, `clustering`, `pca_summary`. See
+  [docs/ml-flows.md](ml-flows.md).
+- **ML preprocessors as data-pipeline nodes** —
+  `transform.ml_preprocessing` plus specialised tiles, with a new
+  `sink.ml_feature_snapshot` for deterministic feature reload. See
+  [docs/ml-preprocessing-pipeline.md](ml-preprocessing-pipeline.md).
+- **Interactive testing workbench** — `/ml/test/{single,batch,compare,scenario,upload-csv}`
+  endpoints + tabbed webui surface. See [docs/ml-testing.md](ml-testing.md).
+- **Graphical builder palette** — Source / Pipeline / Split / Model
+  (per-framework) / Records / Experiment / Test / Deploy sections plus
+  an Interactive Workbench drawer. See [docs/ml-builder.md](ml-builder.md).
+- **Adhoc helpers** — [`aqp.ml.adhoc`](../aqp/ml/adhoc/__init__.py)
+  exposes `quick_ridge`, `quick_arima`, `quick_iforest`, etc. for
+  notebook iteration.
 

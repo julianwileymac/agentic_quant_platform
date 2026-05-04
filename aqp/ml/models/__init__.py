@@ -16,6 +16,42 @@ with contextlib.suppress(Exception):
     from aqp.ml.models.ensemble import DEnsembleModel  # noqa: F401
 with contextlib.suppress(Exception):
     from aqp.ml.models.highfreq_gbdt import HighFreqGBDT  # noqa: F401
+with contextlib.suppress(Exception):
+    from aqp.ml.models.sklearn import (  # noqa: F401
+        SklearnAutoPipelineModel,
+        SklearnClassifierModel,
+        SklearnPipelineModel,
+        SklearnRegressorModel,
+        SklearnStackingModel,
+    )
+with contextlib.suppress(Exception):
+    from aqp.ml.models.forecasting import (  # noqa: F401
+        AutoARIMAForecastModel,
+        AutoETSForecastModel,
+        BatsTbatsForecastModel,
+        ProphetForecastModel,
+        SktimeForecastModel,
+        SktimeReductionForecastModel,
+        ThetaForecastModel,
+    )
+with contextlib.suppress(Exception):
+    from aqp.ml.models.anomaly import PyODAnomalyModel  # noqa: F401
+with contextlib.suppress(Exception):
+    from aqp.ml.models.keras import (  # noqa: F401
+        KerasFunctionalModel,
+        KerasLSTMModel,
+        KerasMLPModel,
+        KerasTabTransformerModel,
+    )
+with contextlib.suppress(Exception):
+    from aqp.ml.models.tensorflow import TFEstimatorModel  # noqa: F401
+with contextlib.suppress(Exception):
+    from aqp.ml.models.huggingface import (  # noqa: F401
+        HuggingFaceFinBertSentimentModel,
+        HuggingFaceGenerativeForecastModel,
+        HuggingFaceTextSignalModel,
+        HuggingFaceTimeSeriesModel,
+    )
 
 # ---------------------------------------------------------------------------
 # Tier-B PyTorch model ports — each is registered when ``torch`` is available.

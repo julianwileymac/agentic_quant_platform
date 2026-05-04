@@ -89,6 +89,9 @@ class ComponentSummary(BaseModel):
     alias: str
     qualname: str
     kind: str
+    module: str | None = None
+    source: str | None = None
+    category: str | None = None
     tags: list[str] = Field(default_factory=list)
     doc: str | None = None
     params: list[ParamSchema] = Field(default_factory=list)
@@ -96,7 +99,6 @@ class ComponentSummary(BaseModel):
 
 class ComponentDetail(ComponentSummary):
     full_doc: str | None = None
-    module: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -204,13 +206,27 @@ def _params_for(cls: type) -> list[ParamSchema]:
 
 
 def _summary_for(alias: str, cls: type, kind: str) -> ComponentSummary:
-    from aqp.core.registry import get_tags
+    from aqp.core.registry import get_metadata, get_tags
 
     raw_tags = sorted(get_tags(cls))
+    meta = get_metadata(cls)
+    source = meta.get("source")
+    category = meta.get("category")
+    if not source:
+        source_tag = next((t for t in raw_tags if t.startswith("source:")), None)
+        if source_tag:
+            source = source_tag.split(":", 1)[1]
+    if not category:
+        category_tag = next((t for t in raw_tags if t.startswith("category:")), None)
+        if category_tag:
+            category = category_tag.split(":", 1)[1]
     return ComponentSummary(
         alias=alias,
         qualname=f"{cls.__module__}.{cls.__name__}",
         kind=kind,
+        module=cls.__module__,
+        source=source,
+        category=category,
         tags=[t for t in raw_tags if not t.startswith("kind:")],
         doc=(inspect.getdoc(cls) or "").split("\n\n", 1)[0] or None,
         params=_params_for(cls),
@@ -551,13 +567,32 @@ def taxonomy_section(section: str) -> dict[str, Any]:
 
 
 @router.get("/{kind}", response_model=list[ComponentSummary])
-def list_components(kind: str) -> list[ComponentSummary]:
+def list_components(
+    kind: str,
+    source: str | None = None,
+    category: str | None = None,
+    tag: str | None = None,
+) -> list[ComponentSummary]:
     from aqp.core.registry import list_by_kind
 
     bucket = list_by_kind(kind)
     if not bucket:
         return []
-    return [_summary_for(alias, cls, kind) for alias, cls in sorted(bucket.items())]
+    source_norm = source.strip().lower() if source else None
+    category_norm = category.strip().lower() if category else None
+    tag_norm = tag.strip().lower() if tag else None
+
+    out: list[ComponentSummary] = []
+    for alias, cls in sorted(bucket.items()):
+        summary = _summary_for(alias, cls, kind)
+        if source_norm and (summary.source or "").lower() != source_norm:
+            continue
+        if category_norm and (summary.category or "").lower() != category_norm:
+            continue
+        if tag_norm and not any(t.lower() == tag_norm for t in summary.tags):
+            continue
+        out.append(summary)
+    return out
 
 
 @router.get("/{kind}/{alias}", response_model=ComponentDetail)
@@ -572,5 +607,4 @@ def get_component(kind: str, alias: str) -> ComponentDetail:
     return ComponentDetail(
         **summary,
         full_doc=inspect.getdoc(cls),
-        module=cls.__module__,
     )

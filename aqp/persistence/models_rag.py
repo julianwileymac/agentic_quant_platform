@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
 )
 
+from aqp.persistence._tenancy_mixins import LabScopedMixin
 from aqp.persistence.models import Base
 
 
@@ -25,7 +26,7 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
-class RagCorpus(Base):
+class RagCorpus(Base, LabScopedMixin):
     """One row per registered corpus (mirror of :data:`OrderCatalog`)."""
 
     __tablename__ = "rag_corpora"
@@ -42,7 +43,7 @@ class RagCorpus(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
-class RagDocument(Base):
+class RagDocument(Base, LabScopedMixin):
     """Optional source-document metadata kept in Postgres for quick joins."""
 
     __tablename__ = "rag_documents"
@@ -56,7 +57,7 @@ class RagDocument(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
-class RagChunkAudit(Base):
+class RagChunkAudit(Base, LabScopedMixin):
     """Sample chunk metadata kept for inspection (full text lives in Redis)."""
 
     __tablename__ = "rag_chunks"
@@ -71,7 +72,7 @@ class RagChunkAudit(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
-class RagSummary(Base):
+class RagSummary(Base, LabScopedMixin):
     """Raptor summary node (parent over a cluster of leaf chunks)."""
 
     __tablename__ = "rag_summaries"
@@ -86,7 +87,7 @@ class RagSummary(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
-class RagQuery(Base):
+class RagQuery(Base, LabScopedMixin):
     """Audit log of every retrieval (used by /rag/explorer)."""
 
     __tablename__ = "rag_queries"
@@ -100,7 +101,7 @@ class RagQuery(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
-class RagEvalRun(Base):
+class RagEvalRun(Base, LabScopedMixin):
     """Outcome of a RAG evaluation pass."""
 
     __tablename__ = "rag_eval_runs"

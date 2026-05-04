@@ -78,6 +78,8 @@ def _sector_to_bucket(sector: str | None) -> str | None:
     "GICSBucketUniverseSelector",
     kind="universe",
     tags=("universe", "rotation", "gics"),
+    source="finrl_trading",
+    category="universe_selection",
 )
 class GICSBucketUniverseSelector(IUniverseSelectionModel):
     """Group every base universe member into GICS buckets and emit a flat list.

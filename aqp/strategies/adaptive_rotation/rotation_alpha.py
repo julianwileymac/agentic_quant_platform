@@ -36,6 +36,8 @@ def _ts_momentum(prices: pd.Series, lookback: int) -> float:
     "AdaptiveRotationAlpha",
     kind="strategy",
     tags=("rotation", "regime", "tsmom"),
+    source="finrl_trading",
+    category="rotation",
 )
 class AdaptiveRotationAlpha(IAlphaModel):
     """Rotate capital across GICS buckets according to market regime."""

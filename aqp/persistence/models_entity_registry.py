@@ -26,6 +26,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 
+from aqp.persistence._tenancy_mixins import LabScopedMixin
 from aqp.persistence.models import Base
 
 
@@ -133,7 +134,7 @@ class EntityRelation(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
-class EntityAnnotation(Base):
+class EntityAnnotation(Base, LabScopedMixin):
     """LLM- or human-authored note attached to an entity."""
 
     __tablename__ = "entity_annotations"

@@ -2,15 +2,20 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import random
+import time
+import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from email.utils import parsedate_to_datetime
+from functools import lru_cache
 from typing import Any
 
 import httpx
 
+from aqp.config import settings
 from aqp.data.sources.alpha_vantage._cache import CacheBackend, CacheKey, NullCache, default_ttl
 from aqp.data.sources.alpha_vantage._errors import (
     AlphaVantagePayloadError,
@@ -22,6 +27,80 @@ from aqp.data.sources.alpha_vantage._errors import (
 from aqp.data.sources.alpha_vantage._rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
+
+_DISTRIBUTED_LIMIT_SCRIPT = """
+local key = KEYS[1]
+local now_ms = tonumber(ARGV[1])
+local window_ms = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local member = ARGV[4]
+redis.call('ZREMRANGEBYSCORE', key, 0, now_ms - window_ms)
+local count = redis.call('ZCARD', key)
+if count < limit then
+  redis.call('ZADD', key, now_ms, member)
+  redis.call('PEXPIRE', key, window_ms * 2)
+  return 0
+end
+local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+if oldest[2] == nil then
+  return 1000
+end
+return math.max(1, (tonumber(oldest[2]) + window_ms) - now_ms)
+"""
+
+
+@lru_cache(maxsize=4)
+def _redis_client(url: str) -> Any:
+    import redis
+
+    return redis.Redis.from_url(url)
+
+
+def _distributed_window_acquire(
+    *,
+    api_key: str,
+    suffix: str,
+    window_ms: int,
+    limit: int,
+) -> None:
+    """Best-effort Redis-backed sliding-window throttle."""
+    url = str(settings.redis_url or "").strip()
+    if not url or limit <= 0:
+        return
+    key_hash = hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
+    key = f"aqp:alpha_vantage:rate:{suffix}:{key_hash}"
+    client = _redis_client(url)
+    while True:
+        now_ms = int(time.time() * 1000)
+        wait_ms = int(
+            client.eval(
+                _DISTRIBUTED_LIMIT_SCRIPT,
+                1,
+                key,
+                now_ms,
+                int(window_ms),
+                int(limit),
+                f"{now_ms}:{uuid.uuid4().hex}",
+            )
+        )
+        if wait_ms <= 0:
+            return
+        time.sleep(max(0.01, wait_ms / 1000.0))
+
+
+def _distributed_acquire(api_key: str, rpm: int) -> None:
+    """Throttle shared Alpha Vantage API-key usage across workers/processes."""
+    _distributed_window_acquire(api_key=api_key, suffix="minute", window_ms=60_000, limit=rpm)
+    _distributed_window_acquire(
+        api_key=api_key,
+        suffix="second",
+        window_ms=1_000,
+        limit=max(1, int(settings.alpha_vantage_rps_limit)),
+    )
+
+
+async def _adistributed_acquire(api_key: str, rpm: int) -> None:
+    await asyncio.to_thread(_distributed_acquire, api_key, rpm)
 
 
 @dataclass
@@ -138,6 +217,10 @@ class Transport(_TransportMixin):
     def _retry_request(self, query: Mapping[str, Any], *, datatype: str | None) -> Any:
         last_exc: Exception | None = None
         for attempt in range(1, self.config.max_retries + 2):
+            try:
+                _distributed_acquire(self.api_key, self.rate_limiter.rpm)
+            except Exception:
+                logger.debug("distributed Alpha Vantage limiter unavailable", exc_info=True)
             self.rate_limiter.acquire()
             try:
                 response = self._client.get(self.config.base_url, params=query)
@@ -211,6 +294,10 @@ class AsyncTransport(_TransportMixin):
     async def _retry_request(self, query: Mapping[str, Any], *, datatype: str | None) -> Any:
         last_exc: Exception | None = None
         for attempt in range(1, self.config.max_retries + 2):
+            try:
+                await _adistributed_acquire(self.api_key, self.rate_limiter.rpm)
+            except Exception:
+                logger.debug("distributed Alpha Vantage limiter unavailable", exc_info=True)
             await self.rate_limiter.aacquire()
             try:
                 response = await self._client.get(self.config.base_url, params=query)

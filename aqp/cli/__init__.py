@@ -1,13 +1,10 @@
-"""Unified ``aqp`` command-line interface.
+"""``aqp`` CLI entry point.
 
-Entrypoint::
-
-    aqp --help
-
-All subcommands delegate to existing Python APIs (FastAPI/Celery/Solara/Dash)
-so the CLI itself has zero runtime obligations beyond parsing arguments.
+The Typer app is exposed at :data:`aqp.cli.main.app` (matches the
+``pyproject.toml`` ``[project.scripts]`` entry). New subcommands live as
+their own modules and are added with ``app.add_typer(...)`` from
+:mod:`aqp.cli.main`.
 """
-from __future__ import annotations
 
 from aqp.cli.main import app
 

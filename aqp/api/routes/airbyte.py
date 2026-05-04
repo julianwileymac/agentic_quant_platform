@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
 from aqp.api.schemas import TaskAccepted
+from aqp.config import settings
 from aqp.data.airbyte import (
     AirbyteConnectionSpec,
     AirbyteConnectorDefinition,
@@ -27,9 +28,19 @@ from aqp.persistence.models_airbyte import (
     AirbyteConnectionRow,
     AirbyteSyncRunRow,
 )
-from aqp.services.airbyte_client import AirbyteClient
+from aqp.services.airbyte_client import AirbyteClient, AirbyteClientError
 
 router = APIRouter(prefix="/airbyte", tags=["airbyte"])
+
+
+def _airbyte_config_snapshot() -> dict[str, Any]:
+    return {
+        "enabled": bool(settings.airbyte_enabled),
+        "base_url": settings.airbyte_base_url,
+        "api_url": settings.airbyte_api_url or settings.airbyte_base_url,
+        "workspace_id_configured": bool((settings.airbyte_workspace_id or "").strip()),
+        "auth_token_configured": bool((settings.airbyte_auth_token or "").strip()),
+    }
 
 
 class ConnectionSummary(BaseModel):
@@ -65,9 +76,34 @@ class EmbeddedCheckRequest(BaseModel):
     dry_run: bool = True
 
 
+class MetadataSyncRequest(BaseModel):
+    discover_schemas: bool = True
+    enrich_with_llm: bool = False
+
+
 @router.get("/health")
 def health() -> dict[str, Any]:
-    return AirbyteClient().health()
+    cfg = _airbyte_config_snapshot()
+    if not settings.airbyte_enabled:
+        return {
+            "ok": False,
+            "airbyte": {"reachable": False, "detail": "AQP_AIRBYTE_ENABLED is false"},
+            **cfg,
+        }
+    try:
+        remote = AirbyteClient().health()
+    except AirbyteClientError as exc:
+        return {
+            "ok": False,
+            "airbyte": {"reachable": False, "detail": str(exc)},
+            **cfg,
+        }
+    available = remote.get("available")
+    if isinstance(available, bool):
+        ok = available
+    else:
+        ok = not remote.get("error") and remote.get("ok") is not False
+    return {"ok": ok, "airbyte": remote, **cfg}
 
 
 @router.get("/connectors/summary")
@@ -118,6 +154,40 @@ def discover(req: AirbyteDiscoverRequest) -> TaskAccepted:
     payload = req.model_dump(mode="json")
     payload["dry_run"] = req.runtime != ConnectorRuntime.FULL_AIRBYTE
     async_result = discover_airbyte_source.delay(payload)
+    return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
+
+
+@router.get("/metadata/remote")
+def remote_metadata() -> dict[str, Any]:
+    """Read Airbyte control-plane metadata without starting sync jobs."""
+    if not settings.airbyte_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Airbyte is disabled (set AQP_AIRBYTE_ENABLED=true and configure URLs / workspace / token)",
+        )
+    client = AirbyteClient()
+    return {
+        "health": client.health(),
+        "workspaces": client.list_workspaces(),
+        "sources": client.list_sources(),
+        "destinations": client.list_destinations(),
+        "connections": client.list_connections(),
+        "metadata_only": True,
+    }
+
+
+@router.post("/metadata/sync", response_model=TaskAccepted)
+def sync_metadata(req: MetadataSyncRequest) -> TaskAccepted:
+    """Queue Airbyte metadata sync only; never triggers connection sync."""
+    from aqp.tasks.data_metadata_tasks import sync_data_metadata
+
+    async_result = sync_data_metadata.delay(
+        {
+            "targets": ["airbyte"],
+            "discover_airbyte_schemas": req.discover_schemas,
+            "enrich_with_llm": req.enrich_with_llm,
+        }
+    )
     return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
 
 
@@ -199,7 +269,44 @@ def list_runs(
 
 @router.get("/remote/connections")
 def remote_connections() -> dict[str, Any]:
+    if not settings.airbyte_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Airbyte is disabled (set AQP_AIRBYTE_ENABLED=true and configure URLs / workspace / token)",
+        )
     return AirbyteClient().list_connections()
+
+
+@router.post("/connectors/import")
+def import_oss_connectors(
+    url: str = "https://connectors.airbyte.com/files/registries/v0/oss_registry.json",
+    api_token: str | None = None,
+    overwrite_cache: bool = False,
+) -> dict[str, Any]:
+    """Fetch the Airbyte OSS connector registry and merge into the catalog.
+
+    Imported entries are cached for the process lifetime and merged on top
+    of the curated catalog (curated entries win on id collision).
+    """
+    try:
+        from aqp.data.airbyte.registry import (
+            load_airbyte_oss_registry,
+            merged_catalog,
+        )
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"registry unavailable: {exc}") from exc
+    try:
+        rows = load_airbyte_oss_registry(
+            url, api_token=api_token, overwrite_cache=overwrite_cache
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"oss registry fetch failed: {exc}") from exc
+    merged = merged_catalog(oss_url=url)
+    return {
+        "imported": len(rows),
+        "merged_total": len(merged),
+        "url": url,
+    }
 
 
 def _connection_summary(row: AirbyteConnectionRow) -> dict[str, Any]:
