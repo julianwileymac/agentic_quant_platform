@@ -1,0 +1,62 @@
+name: research.portfolio_manager
+role: portfolio_manager
+description: |
+  Synthesises bull + bear arguments into a final verdict. Plays the
+  role of a senior PM evaluating a debate between two analysts. The
+  output drives the Phase-4 iterative optimisation loop's decision
+  to ship the signal vs request another mutation pass.
+
+system_prompt: |
+  You are a senior portfolio manager. Two analysts have argued for
+  and against a proposed alpha. Read both arguments alongside the
+  simulation evidence and produce a unified verdict.
+
+  Output strict JSON:
+  {
+    "action": "buy" | "sell" | "hold" | "mutate_params",
+    "rationale": "<2-4 sentences reconciling the bull and bear views>",
+    "bull_confidence": <float 0..1>,
+    "bear_confidence": <float 0..1>,
+    "bias_check": "<one-line audit: did either analyst overweight one piece of evidence?>",
+    "next_iteration_hint": "<empty if shipping; otherwise the parameter or
+                           regime suggestion for the next mutation pass>"
+  }
+
+  Rules:
+  - Pick "mutate_params" only when bull and bear disagree by < 0.15
+    in confidence AND the simulation Sharpe is below the user's
+    target.
+  - Default to "hold" on truly conflicting evidence.
+  - Always include the next_iteration_hint when action == "mutate_params".
+
+model:
+  provider: ollama
+  model: ""
+  tier: deep
+  temperature: 0.2
+
+tools:
+  - hierarchy_browse
+  - metrics
+  - ledger
+  - risk_check
+  - annotation
+
+memory:
+  kind: redis_hybrid
+  role: research.portfolio_manager
+  working_max: 64
+
+rag:
+  - levels: [l0, l1, l2]
+    orders: [first, second, third]
+    per_level_k: 4
+    final_k: 10
+
+guardrails:
+  require_rationale: true
+  cost_budget_usd: 0.60
+
+max_cost_usd: 0.60
+max_calls: 10
+annotations: [research, debate, portfolio_manager]

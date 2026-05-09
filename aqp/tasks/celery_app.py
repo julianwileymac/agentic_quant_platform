@@ -56,6 +56,10 @@ celery_app = Celery(
         "aqp.tasks.finops_tasks",
         # Inspiration rehydration — dataset preset ingestion tasks.
         "aqp.tasks.dataset_preset_tasks",
+        # Phase 2 (multi-tenant) — interactive user uploads + merge.
+        "aqp.tasks.dataset_upload_tasks",
+        # Phase 4 — iterative agent-driven optimisation loop.
+        "aqp.tasks.optimization_tasks",
         # Bot Entity Refactor — bot lifecycle tasks (backtest / paper / chat / deploy).
         "aqp.tasks.bot_tasks",
         # Visualization layer — Superset/Trino provisioning.
@@ -98,6 +102,8 @@ celery_app.conf.update(
         "aqp.tasks.datahub_tasks.*": {"queue": "ingestion"},
         "aqp.tasks.airbyte_tasks.*": {"queue": "ingestion"},
         "aqp.tasks.engine_tasks.*": {"queue": "ingestion"},
+        "aqp.tasks.dataset_upload_tasks.*": {"queue": "ingestion"},
+        "aqp.tasks.optimization_tasks.*": {"queue": "backtest"},
         "aqp.tasks.data_metadata_tasks.*": {"queue": "ingestion"},
         "aqp.tasks.finops_tasks.*": {"queue": "default"},
         "aqp.tasks.dataset_preset_tasks.*": {"queue": "ingestion"},

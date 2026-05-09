@@ -127,6 +127,39 @@ class BacktestRun(Base, ProjectScopedMixin):
     )
 
 
+class BacktestRunArtifact(Base, ProjectScopedMixin):
+    """Off-row storage for large backtest outputs.
+
+    The :class:`BacktestRun` row stores summary statistics + a small
+    JSON ``metrics`` blob. Full equity curves, complete trade logs,
+    signal histories, and event-log replays are too large for the
+    relational row, so they go into object storage and the catalog
+    keeps a pointer here.
+
+    Tenancy: inherits :class:`ProjectScopedMixin`, so artifacts always
+    carry ``owner_user_id`` / ``workspace_id`` / ``project_id`` for
+    cross-tenant isolation.
+    """
+
+    __tablename__ = "backtest_run_artifacts"
+    id = Column(String(36), primary_key=True, default=_uuid)
+    backtest_run_id = Column(
+        String(36),
+        ForeignKey("backtest_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    artifact_kind = Column(
+        String(64), nullable=False, index=True,
+        # equity_curve | trade_log | signal_log | event_log | confidence_intervals
+    )
+    storage_uri = Column(String(1024), nullable=False)
+    bytes_size = Column(Integer, nullable=True)
+    content_type = Column(String(120), nullable=True)
+    summary = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class SignalEntry(Base, ProjectScopedMixin):
     __tablename__ = "signals"
     id = Column(String(36), primary_key=True, default=_uuid)

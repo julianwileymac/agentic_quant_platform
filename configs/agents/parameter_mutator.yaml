@@ -1,0 +1,63 @@
+name: parameter_mutator
+role: parameter_mutator
+description: |
+  Proposes the next parameter set for the iterative optimisation
+  loop. Reads the strategy_id, recent backtest history (last 3
+  iterations + their metrics), the active regime, and the
+  target_sharpe; emits a JSON params dict to backtest next.
+
+system_prompt: |
+  You are a quantitative researcher running a hypothesis loop. The
+  previous iterations have not met the target Sharpe ratio. Read
+  the recent history and propose the next parameter set.
+
+  Inputs:
+  - strategy_id: the strategy registry name
+  - regime: the active VIX-percentile regime (crisis | high_vol | mid_vol | low_vol | unknown)
+  - target_sharpe: the user's threshold
+  - history: list of {iteration, params, metrics, run_id, timestamp}
+
+  Output strict JSON:
+  {
+    "params": { ...next parameter set... },
+    "rationale": "<one-line reason>",
+    "expected_improvement": <float 0..1>
+  }
+
+  Rules:
+  - Don't repeat any params dict that already appears in history.
+  - Bias mutations toward params that have a known regime memory hit
+    (the runtime warm-starts from regime memory; you can recommend
+    fresh exploration when the warm-start is exhausted).
+  - Conservative perturbations (±15%) under crisis regime, more
+    aggressive (±30%) under low_vol.
+
+model:
+  provider: ollama
+  model: ""
+  tier: deep
+  temperature: 0.5
+
+tools:
+  - hierarchy_browse
+  - metrics
+  - ledger
+
+memory:
+  kind: redis_hybrid
+  role: parameter_mutator
+  working_max: 32
+
+rag:
+  - levels: [l1, l2]
+    orders: [first, second]
+    per_level_k: 3
+    final_k: 6
+
+guardrails:
+  require_rationale: true
+  cost_budget_usd: 0.30
+
+max_cost_usd: 0.30
+max_calls: 6
+annotations: [optimization, mutation]

@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
@@ -15,6 +15,7 @@ from aqp.api.schemas import (
     TaskAccepted,
     WalkForwardRequest,
 )
+from aqp.auth import RequestContext, current_context
 from aqp.backtest.metrics import plot_drawdown, plot_equity_curve
 from aqp.persistence.db import get_session
 from aqp.persistence.models import (
@@ -26,6 +27,32 @@ from aqp.persistence.models import (
 from aqp.tasks.backtest_tasks import run_backtest, run_monte_carlo, run_walk_forward
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
+
+
+class IterateRequest(BaseModel):
+    """Body for ``POST /backtest/iterate``.
+
+    Kicks off the Phase-4 closed-loop optimisation: warm-start from
+    regime memory, run a backtest, ask the parameter mutator agent to
+    propose new params, repeat until ``target_sharpe`` is met or
+    ``max_iterations`` is exhausted. The active workspace is read
+    from :func:`current_context` so memory rows are workspace-scoped.
+    """
+
+    strategy_id: str = Field(..., description="Strategy registry name (e.g. 'BBadXMacDrSi')")
+    base_config: dict[str, Any] = Field(
+        ..., description="Backtest YAML the iterations mutate the params section of"
+    )
+    target_sharpe: float = Field(..., description="Stop once Sharpe meets this threshold")
+    max_iterations: int = Field(default=8, ge=1, le=64)
+    regime: str | None = Field(
+        default=None,
+        description=(
+            "Active VIX-percentile regime label "
+            "(crisis | high_vol | mid_vol | low_vol). When omitted the "
+            "loop runs without warm-starting from regime memory."
+        ),
+    )
 
 
 class BacktestDataSource(BaseModel):
@@ -102,6 +129,32 @@ def submit_wfo(req: WalkForwardRequest) -> TaskAccepted:
 @router.post("/monte_carlo", response_model=TaskAccepted)
 def submit_mc(req: MonteCarloRequest) -> TaskAccepted:
     async_result = run_monte_carlo.delay(req.backtest_id, req.n_runs, req.method)
+    return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
+
+
+@router.post("/iterate", response_model=TaskAccepted)
+def submit_iterate(
+    req: IterateRequest,
+    ctx: RequestContext = Depends(current_context),
+) -> TaskAccepted:
+    """Kick off the agent-driven iterative optimisation loop.
+
+    Workspace-scoped: the Celery task re-binds the active context
+    inside the worker so :func:`record_observation` writes to the
+    right :class:`StrategyRegimeMemory` rows.
+    """
+    from aqp.tasks.optimization_tasks import iterate_until_target
+
+    async_result = iterate_until_target.delay(
+        strategy_id=req.strategy_id,
+        base_config=req.base_config,
+        target_sharpe=float(req.target_sharpe),
+        max_iterations=int(req.max_iterations),
+        regime=req.regime,
+        workspace_id=ctx.workspace_id,
+        project_id=ctx.project_id,
+        user_id=ctx.user_id,
+    )
     return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
 
 

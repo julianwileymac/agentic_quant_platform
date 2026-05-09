@@ -12,6 +12,7 @@ import { useTenancyStore, type ExecutionMode } from "@/store/tenancy";
 import { useUiStore } from "@/store/ui";
 
 import { findActiveNavItem } from "./nav-config";
+import { IdentityChip } from "./IdentityChip";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 const MODE_TONE: Record<ExecutionMode, "positive" | "warn"> = {
@@ -145,6 +146,7 @@ export function TopBar() {
       </TooltipProvider>
 
       <KillSwitch />
+      <IdentityChip />
     </header>
   );
 }

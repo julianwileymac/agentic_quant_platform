@@ -619,6 +619,7 @@ def append_arrow(
                     data_contract=data_contract,
                     arrow_schema=table.schema,
                     register_metadata=register_metadata,
+                    context=context,
                 )
                 _emit_iceberg_lineage(
                     transform_kind="iceberg_append",
@@ -648,6 +649,7 @@ def append_arrow(
                     data_contract=data_contract,
                     arrow_schema=table.schema,
                     register_metadata=register_metadata,
+                    context=context,
                 )
                 _emit_iceberg_lineage(
                     transform_kind="iceberg_create_or_replace",
@@ -692,6 +694,7 @@ def append_arrow(
             data_contract=data_contract,
             arrow_schema=table.schema,
             register_metadata=register_metadata,
+            context=context,
         )
         _emit_iceberg_lineage(
             transform_kind=(
@@ -723,12 +726,19 @@ def _maybe_register_metadata(
     data_contract: Any,
     arrow_schema: Any,
     register_metadata: bool | None,
+    context: Any | None = None,
 ) -> None:
     """Upsert :class:`DatasetCatalog` when the caller supplied medallion + business metadata.
 
     Failures are logged and swallowed — a busted catalog upsert must
     never block an Iceberg write. ``register_metadata=False`` short
     circuits even when the inputs are present.
+
+    ``context`` is the active :class:`RequestContext`; the catalog
+    upsert reads it (or falls back to the request-scoped contextvar)
+    to stamp ``owner_user_id`` / ``workspace_id`` / ``project_id`` on
+    the ``DatasetCatalog`` row, mirroring the row-level tenancy
+    columns injected by :func:`_stamp_tenancy_columns`.
     """
     if register_metadata is False:
         return
@@ -743,6 +753,7 @@ def _maybe_register_metadata(
             business_metadata=business_metadata,
             data_contract=data_contract,
             arrow_schema=arrow_schema,
+            context=context,
         )
     except Exception:  # noqa: BLE001
         logger.warning(

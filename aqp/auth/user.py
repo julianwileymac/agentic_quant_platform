@@ -4,13 +4,17 @@ This module is the single seam between the rest of AQP and *who* is making
 a request. Today the default ``auth_provider="local"`` returns the
 deterministic ``default-user`` row from
 :ref:`migration 0017 <alembic-0017>`. When the platform is wired to OIDC,
-swap :func:`resolve_user` to a JWT-validating implementation; everything
-else (the FastAPI deps, the chokepoints, the UI) keeps working unchanged.
+:func:`resolve_user` is called with the validated ``sub`` claim and lazy-
+provisions a new :class:`User` + default :class:`Membership` chain via
+:func:`provision_user_from_claims`; everything downstream (the FastAPI
+deps, the chokepoints, the UI) keeps working unchanged.
 """
 from __future__ import annotations
 
 import logging
+import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from aqp.config.defaults import (
@@ -22,6 +26,7 @@ from aqp.config.defaults import (
     DEFAULT_USER_EMAIL,
     DEFAULT_USER_ID,
     DEFAULT_WORKSPACE_ID,
+    ROLE_EDITOR,
     ROLE_OWNER,
     ROLE_RANK,
     SCOPE_LAB,
@@ -140,6 +145,8 @@ def resolve_user(
     email: str | None = None,
     auth_subject: str | None = None,
     fallback_to_default: bool = True,
+    claims: dict[str, Any] | None = None,
+    auto_provision: bool = True,
 ) -> CurrentUser:
     """Resolve a :class:`CurrentUser` from any of the available identifiers.
 
@@ -148,10 +155,14 @@ def resolve_user(
     1. If ``user_id`` matches a row in ``users``, return it.
     2. Else if ``auth_subject`` matches an OIDC-provisioned row, return it.
     3. Else if ``email`` matches, return it.
-    4. Else (and ``fallback_to_default``), return :func:`default_user`.
+    4. Else if ``claims`` is provided and ``auto_provision`` is True
+       (and the platform is in OIDC mode), call
+       :func:`provision_user_from_claims` to insert a new ``User`` row.
+    5. Else (and ``fallback_to_default``), return :func:`default_user`.
 
-    The OIDC adapter (when added) calls this with the validated ``sub``
-    claim; today every code path lands in step (4).
+    The OIDC adapter calls this with ``claims=<verified JWT>`` and
+    ``auto_provision=True``; the local-first path passes ``user_id``
+    only.
     """
     settings = _settings_safe()
     if user_id and user_id == DEFAULT_USER_ID:
@@ -169,6 +180,20 @@ def resolve_user(
         if user is not None:
             return user
 
+    if (
+        auto_provision
+        and claims is not None
+        and settings is not None
+        and str(settings.auth_provider).lower() != "local"
+    ):
+        try:
+            return provision_user_from_claims(claims)
+        except Exception:
+            logger.exception(
+                "Auto-provisioning failed for sub=%r; falling back",
+                (claims or {}).get("sub"),
+            )
+
     if not fallback_to_default:
         raise LookupError("Could not resolve user")
 
@@ -179,6 +204,118 @@ def resolve_user(
             settings.auth_provider,
         )
     return default_user()
+
+
+def provision_user_from_claims(claims: dict[str, Any]) -> CurrentUser:
+    """Insert a :class:`User` + default :class:`Membership` chain.
+
+    Called on the user's first OIDC login when the ``sub`` claim is not
+    yet bound to a Postgres row. The function is idempotent: a second
+    call with the same claims returns the existing row instead of
+    raising on the unique constraint.
+
+    The default Membership grants ``editor`` on the deployment's
+    ``DEFAULT_WORKSPACE_ID`` (the org's "Personal" workspace seeded by
+    migration 0017). Admins can promote / move the user via
+    ``/users/{id}/memberships`` once they're in.
+    """
+    from aqp.auth.oidc import (
+        claims_display_name,
+        claims_email,
+        claims_picture,
+        claims_provider,
+        claims_subject,
+    )
+    from aqp.persistence.db import get_session
+    from aqp.persistence.models_tenancy import Membership, User
+
+    sub = claims_subject(claims)
+    email = claims_email(claims)
+    if not email:
+        raise ValueError(f"OIDC claims for sub={sub!r} have no email; cannot provision user")
+
+    display_name = claims_display_name(claims)
+    avatar = claims_picture(claims)
+    provider = claims_provider(claims)
+
+    with get_session() as session:
+        existing = (
+            session.query(User)
+            .filter(User.auth_subject == sub)
+            .one_or_none()
+        )
+        if existing is None:
+            existing = (
+                session.query(User)
+                .filter(User.email == email.lower())
+                .one_or_none()
+            )
+            if existing is not None:
+                # Email collision — a local-default or pre-existing user
+                # is taking over via SSO. Bind the auth_subject so future
+                # logins resolve directly.
+                existing.auth_subject = sub
+                existing.auth_provider = provider
+                existing.last_login_at = datetime.utcnow()
+                if avatar and not existing.avatar_url:
+                    existing.avatar_url = avatar
+                session.flush()
+
+        if existing is None:
+            user_row = User(
+                id=str(uuid.uuid4()),
+                email=email.lower(),
+                display_name=display_name or email.split("@", 1)[0],
+                auth_subject=sub,
+                auth_provider=provider,
+                status="active",
+                avatar_url=avatar,
+                meta={"oidc_claims_first_seen": _safe_claims_subset(claims)},
+                last_login_at=datetime.utcnow(),
+            )
+            session.add(user_row)
+            session.flush()
+            # Default editor membership on the seeded workspace so the
+            # user lands somewhere on first /whoami.
+            session.add(
+                Membership(
+                    id=str(uuid.uuid4()),
+                    user_id=user_row.id,
+                    scope_kind=SCOPE_WORKSPACE,
+                    scope_id=DEFAULT_WORKSPACE_ID,
+                    role=ROLE_EDITOR,
+                    live_control=False,
+                )
+            )
+            session.flush()
+            logger.info(
+                "Provisioned new OIDC user sub=%s email=%s id=%s", sub, email, user_row.id
+            )
+        else:
+            user_row = existing
+            user_row.last_login_at = datetime.utcnow()
+            session.flush()
+
+    refreshed = _load_user(auth_subject=sub) or _load_user(email=email)
+    if refreshed is None:
+        raise RuntimeError(f"Provisioned user sub={sub!r} could not be re-loaded")
+    return refreshed
+
+
+def _safe_claims_subset(claims: dict[str, Any]) -> dict[str, Any]:
+    """Return a small, JSON-safe subset of *claims* for audit storage.
+
+    Avoids persisting OAuth access tokens or PII beyond what's already
+    in standard fields. Drops every non-JSON-primitive value.
+    """
+    keep = {"sub", "iss", "aud", "iat", "exp", "name", "nickname", "email"}
+    out: dict[str, Any] = {}
+    for key, value in claims.items():
+        if key not in keep:
+            continue
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            out[key] = value
+    return out
 
 
 def _settings_safe():
@@ -322,6 +459,7 @@ __all__ = [
     "accessible_workspaces",
     "default_user",
     "effective_role",
+    "provision_user_from_claims",
     "resolve_user",
     "user_can",
 ]

@@ -4,6 +4,12 @@ Routes:
 
 - ``GET    /datasets/namespaces`` — Iceberg namespace list.
 - ``GET    /datasets/tables`` — combined Iceberg + ``DatasetCatalog`` listing.
+- ``POST   /datasets/upload`` — multi-tenant multipart upload that lands
+  raw bytes in MinIO/S3 (or the local-fs fallback) and dispatches a
+  Celery task to materialise them into a workspace-scoped Iceberg
+  bronze table.
+- ``PATCH  /datasets/{id}/merge`` — schedule a relational join between
+  two workspace-owned bronze tables.
 - ``GET    /datasets/{namespace}/{name}`` — full table detail (schema,
   partitions, snapshots, llm annotations, column docs, sample).
 - ``POST   /datasets/{namespace}/{name}/query`` — DuckDB-driven SQL
@@ -24,12 +30,14 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from aqp.api.schemas import TaskAccepted
+from aqp.auth import RequestContext, current_context, require_authenticated
 from aqp.data import iceberg_catalog
+from aqp.data.datasets import get_dataset_manager
 from aqp.data.iceberg_catalog import IcebergUnavailableError
 from aqp.data.sources.base import IdentifierSpec
 from aqp.data.sources.resolvers.identifiers import IdentifierResolver
@@ -1085,3 +1093,165 @@ def delete_table(namespace: str, name: str) -> dict[str, Any]:
         "iceberg_dropped": bool(dropped),
         "catalog_rows_deleted": int(deleted_rows),
     }
+
+
+# ---------------------------------------------------------------------------
+# Multi-tenant upload + merge (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+class UploadResponse(BaseModel):
+    """Response shape returned to the SPA after a successful upload.
+
+    The Celery materialise task runs asynchronously; the SPA can
+    subscribe to ``task_id`` over the existing progress bus to drive
+    the upload UI's stage / message frames.
+    """
+
+    dataset_id: str
+    catalog_id: str
+    status: str
+    storage_uri: str
+    backend: str
+    filename: str
+    iceberg_identifier: str
+    namespace: str
+    table_name: str
+    task_id: str | None = None
+    bytes_written: int = 0
+    workspace_id: str | None = None
+    project_id: str | None = None
+
+
+class MergeRequest(BaseModel):
+    """Body for ``PATCH /datasets/{dataset_id}/merge``."""
+
+    right_dataset_id: str = Field(
+        ..., description="Catalog id (UUID) of the dataset to join against"
+    )
+    on: list[str] = Field(
+        ..., min_length=1,
+        description="Column(s) to join on. Both datasets must contain every column listed.",
+    )
+    how: str = Field(
+        default="inner",
+        description="Join type: inner | left | right | outer",
+        pattern="^(inner|left|right|outer|full)$",
+    )
+    target_table: str | None = Field(
+        default=None,
+        description="Optional target table name; auto-generated when omitted.",
+    )
+
+
+class MergeResponse(BaseModel):
+    task_id: str
+    target_namespace: str | None = None
+    target_table: str | None = None
+
+
+@router.post("/upload", response_model=UploadResponse)
+def upload_dataset(
+    file: UploadFile = File(..., description="Tabular file (CSV / Parquet / JSON / Excel)."),
+    dataset_name: str | None = Form(default=None),
+    description: str | None = Form(default=None),
+    ctx: RequestContext = Depends(current_context),
+    _user=Depends(require_authenticated),
+) -> UploadResponse:
+    """Upload a tabular file and trigger workspace-scoped ingestion.
+
+    The bytes are streamed into the configured object store (MinIO/S3
+    when ``AQP_MINIO_ENDPOINT_URL`` is set, the local filesystem
+    otherwise) under a path containing the active ``workspace_id``.
+    A placeholder :class:`DatasetCatalog` row is written immediately
+    with ``status="ingesting"`` so the SPA can show the dataset in the
+    workspace listing right away.
+
+    The actual Iceberg materialisation happens in the
+    ``aqp.tasks.dataset_upload_tasks.materialise_uploaded_dataset``
+    Celery task, which uses the existing :class:`IngestionPipeline`
+    + tenancy context to land bronze rows under
+    ``aqp_bronze_user_uploads_ws_<slug>.<table>``.
+    """
+    if not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="file must include a filename",
+        )
+
+    manager = get_dataset_manager()
+    try:
+        result = manager.upload_file(
+            stream=file.file,
+            filename=file.filename,
+            content_type=file.content_type,
+            context=ctx,
+            dataset_name=dataset_name,
+            description=description,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+    return UploadResponse(
+        dataset_id=result.dataset_id,
+        catalog_id=result.catalog_id,
+        status=result.status,
+        storage_uri=result.storage_uri,
+        backend=result.backend,
+        filename=result.filename,
+        iceberg_identifier=result.iceberg_identifier,
+        namespace=result.namespace,
+        table_name=result.table_name,
+        task_id=result.task_id,
+        bytes_written=result.bytes_written,
+        workspace_id=result.workspace_id,
+        project_id=result.project_id,
+    )
+
+
+@router.patch("/{dataset_id}/merge", response_model=MergeResponse)
+def merge_dataset(
+    dataset_id: str,
+    req: MergeRequest,
+    ctx: RequestContext = Depends(current_context),
+    _user=Depends(require_authenticated),
+) -> MergeResponse:
+    """Schedule a relational merge between two workspace bronze tables.
+
+    Validates that both ``dataset_id`` (the path parameter — the LEFT
+    side) and ``right_dataset_id`` (request body) belong to the active
+    workspace, derives a target silver namespace based on the workspace
+    id, and dispatches a Celery task to perform the join via DuckDB +
+    PyArrow. The result is written through ``iceberg_catalog.append_arrow``
+    with the active context, so tenancy stamping flows through.
+    """
+    manager = get_dataset_manager()
+    try:
+        task_id = manager.merge_datasets(
+            left_id=dataset_id,
+            right_id=req.right_dataset_id,
+            on=list(req.on),
+            how=str(req.how),
+            target_table=req.target_table,
+            context=ctx,
+        )
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+    return MergeResponse(task_id=task_id)

@@ -71,5 +71,11 @@ export interface PaletteDragPayload {
   defaultParams?: Record<string, unknown>;
 }
 
+export function isPaletteDragPayload(value: unknown): value is PaletteDragPayload {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as Partial<PaletteDragPayload>;
+  return typeof payload.kind === "string" && typeof payload.label === "string";
+}
+
 /** Default accent for a node whose kind is not in `accentByKind`. */
 export const DEFAULT_NODE_ACCENT = "#3b82f6";

@@ -33,6 +33,7 @@ from aqp.backtest.interrupts import (
     find_first_matching_rule,
 )
 from aqp.backtest.metrics import summarise
+from aqp.backtest.warmup import note_bar, strategy_is_warmed_up
 from aqp.core.interfaces import (
     IAlphaModel,
     IExecutionModel,
@@ -437,7 +438,15 @@ class EventDrivenBacktester(BaseBacktestEngine):
                     # has had a chance to emit its own.
                     deferred.append(event)
 
+            # Increment the warmup counter on every dispatched bar so
+            # strategies that mix in :class:`WarmupEnforcerMixin` know
+            # how many bars they have observed. The note_bar helper
+            # also handles strategies that don't use the mixin (no-op).
+            if seen_market_events:
+                note_bar(strategy)
+
             requests: list[OrderRequest] = []
+            warmed_up = strategy_is_warmed_up(strategy)
             if use_slice_api and seen_market_events:
                 slice_ = Slice(
                     timestamp=ts_pydt,
@@ -446,10 +455,17 @@ class EventDrivenBacktester(BaseBacktestEngine):
                         for ev in seen_market_events
                     },
                 )
-                requests = list(strategy.on_data(slice_, context))
+                # Always invoke ``on_data`` so the strategy can keep
+                # accumulating internal state (e.g. rolling indicators).
+                emitted = list(strategy.on_data(slice_, context))
+                if warmed_up:
+                    requests = emitted
             elif seen_market_events:
+                emitted = []
                 for ev in seen_market_events:
-                    requests.extend(strategy.on_bar(ev.data, context))
+                    emitted.extend(strategy.on_bar(ev.data, context))
+                if warmed_up:
+                    requests = emitted
 
             requests = self._maybe_interrupt(
                 requests,

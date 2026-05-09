@@ -20,9 +20,16 @@ swap-out happens in one place.
 from __future__ import annotations
 
 from aqp.auth.context import RequestContext, default_context, scope_id_for
+from aqp.auth.contextvars import (
+    bind_context,
+    current_request_context,
+    get_context_or_default,
+    use_context,
+)
 from aqp.auth.deps import (
     current_context,
     current_user,
+    require_authenticated,
     require_lab,
     require_project,
     require_role,
@@ -35,6 +42,7 @@ from aqp.auth.user import (
     accessible_workspaces,
     default_user,
     effective_role,
+    provision_user_from_claims,
     resolve_user,
     user_can,
 )
@@ -45,16 +53,22 @@ __all__ = [
     "accessible_labs",
     "accessible_projects",
     "accessible_workspaces",
+    "bind_context",
     "current_context",
+    "current_request_context",
     "current_user",
     "default_context",
     "default_user",
     "effective_role",
+    "get_context_or_default",
+    "provision_user_from_claims",
+    "require_authenticated",
     "require_lab",
     "require_project",
     "require_role",
     "require_workspace",
     "resolve_user",
     "scope_id_for",
+    "use_context",
     "user_can",
 ]

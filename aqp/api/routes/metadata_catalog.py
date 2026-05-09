@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from aqp.services.metadata_catalog_service import MetadataCatalogService
 
@@ -37,6 +38,9 @@ class MetadataDatasetResponse(BaseModel):
     data_link_count: int = 0
     streaming_link_count: int = 0
     has_annotation: bool = False
+    medallion_layer: str | None = None
+    business_metadata: dict[str, Any] = Field(default_factory=dict)
+    data_contract: dict[str, Any] = Field(default_factory=dict)
     updated_at: datetime | None = None
     created_at: datetime | None = None
     entry_kind: Literal["dataset", "instrument"] = "dataset"
@@ -59,6 +63,27 @@ class MetadataDatasetPatchRequest(BaseModel):
     description: str | None = None
     tags: list[str] | None = None
     load_mode: str | None = None
+    medallion_layer: str | None = None
+    business_metadata: dict[str, Any] | None = None
+    data_contract: dict[str, Any] | None = None
+
+
+class MetadataDatasetCreateRequest(BaseModel):
+    name: str
+    provider: str = "self_service"
+    domain: str = "user.dataset"
+    namespace: str | None = None
+    table: str | None = None
+    iceberg_identifier: str | None = None
+    storage_uri: str | None = None
+    source_uri: str | None = None
+    frequency: str | None = None
+    load_mode: str = "registered"
+    description: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    medallion_layer: str | None = None
+    business_metadata: dict[str, Any] = Field(default_factory=dict)
+    data_contract: dict[str, Any] = Field(default_factory=dict)
 
 
 _service = MetadataCatalogService()
@@ -95,6 +120,72 @@ def get_metadata_dataset(dataset_id: str) -> dict[str, Any]:
     if dataset is None:
         raise HTTPException(404, f"dataset {dataset_id!r} not found")
     return dataset
+
+
+@router.post("/datasets", response_model=MetadataDatasetResponse)
+def create_metadata_dataset(payload: MetadataDatasetCreateRequest) -> dict[str, Any]:
+    from datetime import datetime
+
+    from aqp.persistence.db import get_session
+    from aqp.persistence.models import DatasetCatalog
+
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+    iceberg_identifier = payload.iceberg_identifier
+    if not iceberg_identifier and payload.namespace and payload.table:
+        iceberg_identifier = f"{payload.namespace.strip()}.{payload.table.strip()}"
+    with get_session() as session:
+        existing = None
+        if iceberg_identifier:
+            existing = session.execute(
+                select(DatasetCatalog)
+                .where(DatasetCatalog.iceberg_identifier == iceberg_identifier)
+                .limit(1)
+            ).scalar_one_or_none()
+        if existing is None:
+            existing = session.execute(
+                select(DatasetCatalog)
+                .where(DatasetCatalog.provider == payload.provider)
+                .where(DatasetCatalog.name == name)
+                .limit(1)
+            ).scalar_one_or_none()
+        if existing is None:
+            row = DatasetCatalog(
+                name=name,
+                provider=payload.provider,
+                domain=payload.domain,
+                frequency=payload.frequency,
+                storage_uri=payload.storage_uri,
+                description=payload.description,
+                tags=list(payload.tags or []),
+                iceberg_identifier=iceberg_identifier,
+                load_mode=payload.load_mode,
+                source_uri=payload.source_uri,
+                medallion_layer=payload.medallion_layer,
+                business_metadata=dict(payload.business_metadata or {}),
+                data_contract_json=dict(payload.data_contract or {}),
+                updated_at=datetime.utcnow(),
+            )
+            session.add(row)
+            session.flush()
+        else:
+            row = existing
+            row.description = payload.description if payload.description is not None else row.description
+            row.tags = list(payload.tags or row.tags or [])
+            row.iceberg_identifier = iceberg_identifier or row.iceberg_identifier
+            row.source_uri = payload.source_uri or row.source_uri
+            row.load_mode = payload.load_mode or row.load_mode
+            row.medallion_layer = payload.medallion_layer or row.medallion_layer
+            if payload.business_metadata:
+                row.business_metadata = dict(payload.business_metadata)
+            if payload.data_contract:
+                row.data_contract_json = dict(payload.data_contract)
+            row.updated_at = datetime.utcnow()
+            session.add(row)
+        session.commit()
+        session.refresh(row)
+        return _service.get_dataset(row.id) or {}
 
 
 @router.patch("/datasets/{dataset_id}", response_model=MetadataDatasetResponse)

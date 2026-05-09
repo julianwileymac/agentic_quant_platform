@@ -72,7 +72,12 @@ CMD ["aqp-stream-ingest", "--venue", "all"]
 ###############################################################################
 FROM base AS api
 
-RUN pip install --upgrade pip && pip install -e ".[dev,otel,cli,iceberg,visualization,entity-graph,dagster-aqp,compute-dask,compute-ray]"
+# Phase 0 — adds the [auth] extra so python-jose ships in the API image
+# and OIDC validate_jwt() works when AQP_AUTH_PROVIDER=oidc. boto3
+# (for MinIO uploads) comes in transitively via [iceberg] -> s3fs ->
+# botocore; the DatasetManager has a local-fs fallback when neither
+# boto3 nor MinIO endpoints are configured.
+RUN pip install --upgrade pip && pip install -e ".[auth,dev,otel,cli,iceberg,visualization,entity-graph,dagster-aqp,compute-dask,compute-ray]"
 
 EXPOSE 8000 8765
 

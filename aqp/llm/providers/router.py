@@ -144,6 +144,7 @@ def router_complete(
     tools: list[dict[str, Any]] | None = None,
     *,
     context: Any | None = None,
+    role: str | None = None,
     **extra: Any,
 ) -> LLMResult:
     """One-shot completion through LiteLLM that also records USD cost.
@@ -154,10 +155,30 @@ def router_complete(
     ``llm`` namespace (provider / model / temperature) win over the
     explicit arguments. Useful when the caller wants to honour
     workspace-level pinning without rebuilding the call site.
+
+    Smart Scheduler: when *model* is empty and *role* is given,
+    :func:`aqp.llm.providers.scheduler.pick_tier_for_role` selects the
+    ``quick`` or ``deep`` default model from the active settings.
+    Existing callers that pass a concrete ``model`` are unaffected.
     """
     import litellm
 
     litellm.drop_params = True
+
+    # Smart Scheduler — only kicks in when caller passed a role hint
+    # AND left model empty. Existing call sites pin model explicitly
+    # so they aren't downgraded behind their back.
+    if not model and role:
+        try:
+            from aqp.llm.providers.scheduler import pick_tier_for_role
+
+            tier = pick_tier_for_role(role)
+            if tier == "quick":
+                model = settings.llm_quick_model or settings.llm_model
+            else:
+                model = settings.llm_deep_model or settings.llm_model
+        except Exception:
+            logger.debug("Smart Scheduler resolution failed; using default model", exc_info=True)
 
     if context is not None:
         try:

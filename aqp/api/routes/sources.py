@@ -89,6 +89,29 @@ class SourceImportRequest(SourceEditRequest):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class SourceDatasetCreateRequest(BaseModel):
+    name: str
+    namespace: str = "aqp"
+    table: str
+    description: str | None = None
+    domain: str = "user.dataset"
+    medallion_layer: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    source_node: str | None = None
+    source_kwargs: dict[str, Any] = Field(default_factory=dict)
+    transforms: list[dict[str, Any]] = Field(default_factory=list)
+    schedule_cron: str | None = None
+    run_now: bool = False
+
+
+class SourceDatasetCreateResponse(BaseModel):
+    dataset_id: str
+    manifest_id: str
+    iceberg_identifier: str
+    run_id: str | None = None
+    status: str = "created"
+
+
 class SourceLibraryView(BaseModel):
     id: str
     source_name: str
@@ -382,6 +405,29 @@ def _infer_default_node(uri: str | None, reference_path: str | None = None) -> s
     return "source.local_directory" if raw else "source.rest_api"
 
 
+def _default_source_node(source_name: str) -> str:
+    source = get_data_source(source_name) or {}
+    meta = source.get("meta") if isinstance(source.get("meta"), dict) else {}
+    capabilities = source.get("capabilities") if isinstance(source.get("capabilities"), dict) else {}
+    for value in (
+        meta.get("default_node"),
+        capabilities.get("default_node"),
+        source.get("default_node"),
+    ):
+        if value:
+            return str(value)
+    lowered = source_name.lower().replace("_", "-")
+    if "alpha" in lowered:
+        return "source.alpha_vantage"
+    if "fred" in lowered:
+        return "source.fred"
+    if "ibkr" in lowered:
+        return "source.ibkr_historical"
+    if "yahoo" in lowered or "yfinance" in lowered:
+        return "source.yfinance"
+    return "source.rest_api"
+
+
 def _source_library_view(row: SourceLibraryEntry) -> SourceLibraryView:
     return SourceLibraryView(
         id=row.id,
@@ -651,6 +697,138 @@ def toggle_source(name: str, req: ToggleRequest) -> DataSourceSummary:
     if row is None:
         raise HTTPException(status_code=404, detail=f"source {name!r} not found")
     return DataSourceSummary(**row)
+
+
+@router.post("/{name}/datasets", response_model=SourceDatasetCreateResponse)
+def create_dataset_from_source(name: str, payload: SourceDatasetCreateRequest) -> SourceDatasetCreateResponse:
+    """Create a source-backed dataset manifest targeting ``sink.iceberg``."""
+
+    source_name = (name or "").strip()
+    if not source_name:
+        raise HTTPException(status_code=400, detail="source name required")
+    if get_data_source(source_name) is None:
+        raise HTTPException(status_code=404, detail=f"source {source_name!r} not found")
+
+    dataset_name = payload.name.strip()
+    namespace = (payload.namespace or "aqp").strip() or "aqp"
+    table = payload.table.strip()
+    if not dataset_name or not table:
+        raise HTTPException(status_code=400, detail="dataset name and table are required")
+    iceberg_identifier = f"{namespace}.{table}"
+
+    from aqp.data.engine.manifest import PipelineManifest
+    from aqp.persistence.models import DatasetCatalog
+    from aqp.persistence.models_pipelines import PipelineManifestRow
+
+    source_node = payload.source_node or _default_source_node(source_name)
+    now = datetime.utcnow()
+    spec = PipelineManifest.model_validate(
+        {
+            "name": dataset_name,
+            "namespace": namespace,
+            "description": payload.description or f"{source_name} to {iceberg_identifier}",
+            "tags": list(dict.fromkeys([*payload.tags, "self-service", source_name])),
+            "source": {"name": source_node, "kwargs": dict(payload.source_kwargs or {})},
+            "transforms": list(payload.transforms or []),
+            "sink": {
+                "name": "sink.iceberg",
+                "kwargs": {
+                    "namespace": namespace,
+                    "table": table,
+                    "provider": source_name,
+                    "domain": payload.domain,
+                    "catalog_name": iceberg_identifier,
+                    "tags": list(payload.tags or []),
+                    "meta": {"source_name": source_name, "self_service": True},
+                },
+            },
+            "compute": {"backend": "auto"},
+            "schedule": {"cron": payload.schedule_cron, "enabled": bool(payload.schedule_cron)},
+            "enabled": True,
+        }
+    )
+    with get_session() as session:
+        dataset = session.execute(
+            select(DatasetCatalog)
+            .where(DatasetCatalog.iceberg_identifier == iceberg_identifier)
+            .limit(1)
+        ).scalar_one_or_none()
+        if dataset is None:
+            dataset = DatasetCatalog(
+                name=dataset_name,
+                provider=source_name,
+                domain=payload.domain,
+                description=payload.description,
+                tags=list(payload.tags or []),
+                iceberg_identifier=iceberg_identifier,
+                load_mode="managed",
+                source_uri=str(payload.source_kwargs.get("url") or payload.source_kwargs.get("path") or ""),
+                medallion_layer=payload.medallion_layer,
+                business_metadata={"owner": "self_service", "source": source_name},
+                data_contract_json={},
+                manifest_id=None,
+                pipeline_kind="source_to_iceberg",
+                updated_at=now,
+            )
+            session.add(dataset)
+            session.flush()
+
+        manifest = session.execute(
+            select(PipelineManifestRow)
+            .where(PipelineManifestRow.namespace == namespace)
+            .where(PipelineManifestRow.name == dataset_name)
+            .limit(1)
+        ).scalar_one_or_none()
+        spec_json = spec.model_dump(mode="json")
+        if manifest is None:
+            manifest = PipelineManifestRow(
+                name=dataset_name,
+                namespace=namespace,
+                description=spec.description,
+                owner="self_service",
+                version=1,
+                enabled=True,
+                spec_json=spec_json,
+                tags=list(spec.tags),
+                compute_backend=spec.compute.backend.value,
+                schedule_cron=spec.schedule.cron,
+            )
+            session.add(manifest)
+            session.flush()
+        else:
+            manifest.description = spec.description
+            manifest.spec_json = spec_json
+            manifest.tags = list(spec.tags)
+            manifest.compute_backend = spec.compute.backend.value
+            manifest.schedule_cron = spec.schedule.cron
+            manifest.enabled = True
+            manifest.updated_at = now
+            session.add(manifest)
+            session.flush()
+
+        dataset.manifest_id = manifest.id
+        session.add(dataset)
+        session.commit()
+        dataset_id = dataset.id
+        manifest_id = manifest.id
+
+    run_id: str | None = None
+    if payload.run_now:
+        from aqp.api.routes.engine import run_manifest
+
+        try:
+            result = run_manifest(manifest_id, triggered_by="source-self-service")
+            run_id = str(result.get("run_id") or "")
+        except Exception:
+            run_id = None
+
+    return SourceDatasetCreateResponse(
+        dataset_id=dataset_id,
+        manifest_id=manifest_id,
+        iceberg_identifier=iceberg_identifier,
+        run_id=run_id,
+        status="created",
+    )
 
 
 @router.get("/{name}/metadata-versions", response_model=list[SourceMetadataVersionView])

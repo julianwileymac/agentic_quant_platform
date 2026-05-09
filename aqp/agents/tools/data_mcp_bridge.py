@@ -5,6 +5,14 @@ Wraps each registered :class:`DataMCPTool` so it slots into
 existing OpenAI-function-calling loop then dispatches to the same
 DataMCP tools as the external MCP server, guaranteeing a single
 catalog with two transports.
+
+Tenancy: the bridge reads the active :class:`RequestContext` from
+:mod:`aqp.auth.contextvars` and forwards ``workspace_id`` /
+``project_id`` into the :class:`MCPToolContext` so the existing
+``enforce_tenancy`` policy on each tool actually has data to enforce
+on. Without this, agent-driven calls were arriving with an empty
+context and tools that required tenancy (sinks, pipeline runs, the
+portfolio entity tool) rejected every invocation.
 """
 from __future__ import annotations
 
@@ -14,6 +22,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from aqp.auth.contextvars import current_request_context
 from aqp.data.mcp import DATA_MCP_TOOLS, MCPToolContext, get_data_mcp_tool
 
 logger = logging.getLogger(__name__)
@@ -25,6 +34,29 @@ except ImportError:  # pragma: no cover - dev-only path
     # Fall back to whichever shim aqp.agents.tools.__init__ already
     # installed.
     from aqp.agents.tools import BaseTool as _CrewAIBaseTool  # type: ignore[attr-defined]
+
+
+def _resolve_mcp_context(extra_scopes: tuple[str, ...] = ()) -> MCPToolContext:
+    """Build the MCP tool context from the active :class:`RequestContext`.
+
+    Falls back to a minimal context (no workspace) when nothing is
+    bound — those calls will be rejected by tools that require
+    tenancy, which is the desired behaviour: an agent invoking a
+    write-only tool outside a request lifecycle should not silently
+    succeed.
+    """
+    ctx = current_request_context.get()
+    workspace_id = getattr(ctx, "workspace_id", None) if ctx is not None else None
+    project_id = getattr(ctx, "project_id", None) if ctx is not None else None
+    user_id = getattr(ctx, "user_id", None) if ctx is not None else None
+    granted = ("data:read",) + tuple(extra_scopes)
+    return MCPToolContext(
+        actor=user_id or "agent_runtime",
+        actor_kind="agent",
+        workspace_id=workspace_id,
+        project_id=project_id,
+        granted_scopes=granted,
+    )
 
 
 def make_bridge_tool_class(mcp_tool_name: str) -> type:
@@ -51,11 +83,7 @@ def make_bridge_tool_class(mcp_tool_name: str) -> type:
 
         def _run(self, **kwargs: Any) -> str:  # type: ignore[override]
             tool = get_data_mcp_tool(mcp_tool_name)
-            ctx = MCPToolContext(
-                actor="agent_runtime",
-                actor_kind="agent",
-                granted_scopes=("data:read",),
-            )
+            ctx = _resolve_mcp_context()
             result = tool.invoke(ctx=ctx, **kwargs)
             try:
                 return json.dumps(result.to_json(), default=str)
@@ -88,4 +116,4 @@ def install_data_mcp_tools(target_registry: dict[str, type]) -> list[str]:
     return installed
 
 
-__all__ = ["install_data_mcp_tools", "make_bridge_tool_class"]
+__all__ = ["install_data_mcp_tools", "make_bridge_tool_class", "_resolve_mcp_context"]

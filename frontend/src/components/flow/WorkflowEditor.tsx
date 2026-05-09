@@ -64,6 +64,7 @@ export function WorkflowEditor({
   const [nodes, setNodes] = useState<AqpNode[]>(initialHydrated.nodes);
   const [edges, setEdges] = useState<Edge[]>(initialHydrated.edges);
   const [drawerNode, setDrawerNode] = useState<AqpNode | null>(null);
+  const [selectedPaletteItem, setSelectedPaletteItem] = useState<PaletteDragPayload | null>(null);
   const [menu, setMenu] = useState<{
     open: boolean;
     position: { x: number; y: number } | null;
@@ -100,6 +101,14 @@ export function WorkflowEditor({
       setNodes((prev) => [...prev, newNode]);
     },
     [],
+  );
+
+  const addPaletteNode = useCallback(
+    (payload: PaletteDragPayload, position?: { x: number; y: number }) => {
+      const targetPosition = position ?? canvasRef.current?.getViewportCenter() ?? { x: 0, y: 0 };
+      handlePaletteDrop(payload, targetPosition);
+    },
+    [handlePaletteDrop],
   );
 
   const updateNode = useCallback(
@@ -244,9 +253,16 @@ export function WorkflowEditor({
       </Card>
 
       <div className="flex min-h-0 flex-1 gap-2">
-        <Palette sections={paletteSections} />
+        <Palette
+          sections={paletteSections}
+          selectedKind={selectedPaletteItem?.kind ?? null}
+          onItemClick={(item) => {
+            setSelectedPaletteItem(item);
+            addPaletteNode(item);
+          }}
+        />
         <Card className="flex min-h-0 flex-1 overflow-hidden">
-          <CardContent className="h-full p-0">
+          <CardContent className="h-full min-h-0 w-full min-w-0 flex-1 p-0">
             <FlowCanvas
               ref={canvasRef}
               nodes={nodes}
@@ -254,7 +270,10 @@ export function WorkflowEditor({
               onNodesChange={setNodes}
               onEdgesChange={setEdges}
               onPaletteDrop={handlePaletteDrop}
-              onNodeClick={(node) => setDrawerNode(node)}
+              onNodeClick={(node) => {
+                setSelectedPaletteItem(null);
+                setDrawerNode(node);
+              }}
               onNodeContextMenu={(node, pos) =>
                 setMenu({ open: true, position: { x: pos.clientX, y: pos.clientY }, nodeId: node.id })
               }

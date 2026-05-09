@@ -55,7 +55,10 @@ class Settings(BaseSettings):
     auth_provider: str = Field(default="local")  # local | oidc | jwt
     auth_oidc_issuer: str = Field(default="")
     auth_oidc_client_id: str = Field(default="")
+    auth_oidc_client_secret: str = Field(default="")
     auth_oidc_audience: str = Field(default="")
+    auth_oidc_jwks_ttl_seconds: int = Field(default=3600)
+    auth_oidc_leeway_seconds: int = Field(default=60)
     auth_session_cookie: str = Field(default="aqp_session")
     auth_workspace_header: str = Field(default="X-AQP-Workspace")
     auth_project_header: str = Field(default="X-AQP-Project")

@@ -1,0 +1,54 @@
+name: research.bull_researcher
+role: bull_researcher
+description: |
+  Argues for the proposed alpha from a bullish perspective. Reads the
+  upstream simulation verdict + proposed alpha and produces a
+  structured argument supporting the trade. The Portfolio Manager
+  agent later weighs this against the bear researcher's argument.
+
+system_prompt: |
+  You are a senior quantitative researcher who has been asked to take
+  the BULL CASE for a proposed alpha. Your job is to surface every
+  reason the trade should work — historical analogues, structural
+  tailwinds, regime fit, expected reward — using ONLY the evidence in
+  the simulation_verdict and proposed_alpha inputs. Do not fabricate
+  history or invent statistics.
+
+  Output strict JSON:
+  {
+    "rationale": "<2-4 sentence narrative for the bull case>",
+    "supporting_evidence": ["<bullet 1>", "<bullet 2>", ...],
+    "expected_reward_pct": <float 0..100>,
+    "confidence": <float 0..1, calibrated against the simulation evidence>,
+    "regime_fit_score": <float 0..1>
+  }
+
+model:
+  provider: ollama
+  model: ""
+  tier: deep
+  temperature: 0.4
+
+tools:
+  - hierarchy_browse
+  - metrics
+  - ledger
+
+memory:
+  kind: redis_hybrid
+  role: research.bull_researcher
+  working_max: 32
+
+rag:
+  - levels: [l0, l1]
+    orders: [first, second]
+    per_level_k: 3
+    final_k: 6
+
+guardrails:
+  require_rationale: true
+  cost_budget_usd: 0.40
+
+max_cost_usd: 0.40
+max_calls: 8
+annotations: [research, debate, bull]

@@ -8,6 +8,8 @@ import { PALETTE_DRAG_MIME, type PaletteDragPayload, type PaletteSection } from 
 interface PaletteProps {
   sections: PaletteSection[];
   className?: string;
+  selectedKind?: string | null;
+  onItemClick?: (item: PaletteDragPayload) => void;
 }
 
 /**
@@ -18,7 +20,7 @@ interface PaletteProps {
  * `application/aqp-flow-node`. The canvas listens for that MIME and
  * spawns a node at the drop cursor.
  */
-export function Palette({ sections, className }: PaletteProps) {
+export function Palette({ sections, className, selectedKind, onItemClick }: PaletteProps) {
   return (
     <aside
       className={cn(
@@ -47,9 +49,25 @@ export function Palette({ sections, className }: PaletteProps) {
                   type="button"
                   draggable
                   onDragStart={(e) => onDragStart(e, item)}
-                  className="flex w-full flex-col items-start gap-0.5 rounded-md border border-[var(--border-default)] bg-[var(--bg-surface)] px-2 py-1.5 text-left text-xs transition-colors hover:border-[var(--info-fg)] hover:bg-[var(--bg-elevated)]"
+                  onClick={() =>
+                    onItemClick?.({
+                      kind: item.kind,
+                      label: item.label,
+                      ...(item.accent !== undefined ? { accent: item.accent } : {}),
+                      ...(item.defaultParams !== undefined
+                        ? { defaultParams: item.defaultParams }
+                        : {}),
+                    })
+                  }
+                  className={cn(
+                    "flex w-full flex-col items-start gap-0.5 rounded-md border bg-[var(--bg-surface)] px-2 py-1.5 text-left text-xs transition-colors hover:border-[var(--info-fg)] hover:bg-[var(--bg-elevated)]",
+                    selectedKind === item.kind
+                      ? "border-[var(--info-fg)] bg-[var(--info-bg)]/20"
+                      : "border-[var(--border-default)]",
+                  )}
                   data-flow-palette-tile="true"
                   data-kind={item.kind}
+                  title="Drag onto the canvas, or click to add at the canvas center."
                 >
                   <div className="flex w-full items-center gap-2">
                     <span
@@ -82,5 +100,8 @@ function onDragStart(e: DragEvent<HTMLButtonElement>, item: PaletteSection["item
     ...(item.defaultParams !== undefined ? { defaultParams: item.defaultParams } : {}),
   };
   e.dataTransfer.setData(PALETTE_DRAG_MIME, JSON.stringify(payload));
+  // Fallback for browsers / embedded previews that ignore unknown custom
+  // MIME types during native drag-and-drop.
+  e.dataTransfer.setData("text/plain", JSON.stringify(payload));
   e.dataTransfer.effectAllowed = "move";
 }

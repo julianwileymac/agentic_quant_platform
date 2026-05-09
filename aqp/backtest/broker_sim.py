@@ -2,12 +2,19 @@
 
 Implements :class:`IBrokerage` so it plugs into the same code path as a
 future paper/live adapter (Lean pattern).
+
+Slippage / market impact is delegated to a :class:`MarketImpactModel`
+implementation in :mod:`aqp.backtest.market_impact`. The default is
+the legacy fixed-bps model (``LinearBpsImpact``), preserving backward
+compatibility; pass ``impact_model=SquareRootImpact(...)`` to opt into
+size-aware square-root impact for institutional-scale research.
 """
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
 
+from aqp.backtest.market_impact import LinearBpsImpact, MarketImpactModel
 from aqp.core.interfaces import IBrokerage
 from aqp.core.types import (
     AccountData,
@@ -22,7 +29,7 @@ from aqp.core.types import (
 
 
 class SimulatedBrokerage(IBrokerage):
-    """Fills market orders at the next bar's open with linear slippage."""
+    """Fills market orders at the next bar's open with configurable impact."""
 
     name = "sim"
 
@@ -31,10 +38,17 @@ class SimulatedBrokerage(IBrokerage):
         initial_cash: float = 100000.0,
         commission_pct: float = 0.0005,
         slippage_bps: float = 2.0,
+        impact_model: MarketImpactModel | None = None,
     ) -> None:
         self.cash = float(initial_cash)
         self.commission_pct = float(commission_pct)
+        # ``slippage_bps`` retained for backward compatibility; the
+        # default impact model honours it 1:1. Custom impact models
+        # ignore the bps knob and use their own parameters.
         self.slippage_bps = float(slippage_bps)
+        self.impact_model: MarketImpactModel = (
+            impact_model if impact_model is not None else LinearBpsImpact(bps=float(slippage_bps))
+        )
         self.equity = float(initial_cash)
         self.positions: dict[str, PositionData] = {}
         self.orders: dict[str, OrderData] = {}
@@ -73,11 +87,18 @@ class SimulatedBrokerage(IBrokerage):
         )
 
     # --- Simulator mechanics ----
-    def fill_open_orders(self, fill_price_map: dict[str, float], timestamp: datetime) -> list[TradeData]:
+    def fill_open_orders(
+        self,
+        fill_price_map: dict[str, float],
+        timestamp: datetime,
+        adv_map: dict[str, float] | None = None,
+    ) -> list[TradeData]:
         """Fill all active orders at the provided per-symbol prices.
 
-        Adds slippage in the side-direction (buys fill worse, sells fill worse).
-        Records the resulting ``TradeData`` and mutates position + cash state.
+        Slippage / market impact is delegated to ``self.impact_model``.
+        Optional ``adv_map`` lets the engine pass per-symbol average
+        daily volume so size-aware impact models (square-root)
+        compute realistic fill prices.
         """
         fills: list[TradeData] = []
         for order in list(self.orders.values()):
@@ -87,8 +108,13 @@ class SimulatedBrokerage(IBrokerage):
             if base_price is None or base_price <= 0:
                 order.status = OrderStatus.REJECTED
                 continue
-            slip = base_price * (self.slippage_bps / 10000.0)
-            fill_price = base_price + slip if order.side == OrderSide.BUY else base_price - slip
+            adv = (adv_map or {}).get(order.symbol.vt_symbol)
+            fill_price = self.impact_model.fill_price(
+                base_price=float(base_price),
+                side=order.side,
+                quantity=float(order.quantity),
+                adv=float(adv) if adv is not None else None,
+            )
             trade = self._apply_fill(order, fill_price, timestamp)
             fills.append(trade)
         return fills

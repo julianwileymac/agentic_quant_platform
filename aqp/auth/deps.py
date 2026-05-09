@@ -22,16 +22,33 @@ The deps respect three optional headers:
 - ``X-AQP-Workspace`` — pin the active workspace.
 - ``X-AQP-Project`` / ``X-AQP-Lab`` — pin the active project / lab.
 
-Without those headers the dep returns the local-first default context.
+In OIDC mode the user is resolved from the standard
+``Authorization: Bearer <jwt>`` header instead of ``X-AQP-User``. The
+JWT is verified against the issuer's JWKS (see :mod:`aqp.auth.oidc`)
+and the ``sub`` claim is mapped onto a :class:`User` row, lazily
+provisioning a new row + default :class:`Membership` on first contact.
+
+Without an Authorization header the local-first default user is used —
+this preserves the workflow for CLIs, Celery workers, and unit tests.
 """
 from __future__ import annotations
 
 import logging
 from typing import Callable
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from aqp.auth.context import RequestContext, default_context, scope_id_for
+from aqp.auth.contextvars import bind_context
+from aqp.auth.oidc import (
+    InvalidTokenError,
+    JWKSUnavailableError,
+    OIDCError,
+    claims_subject,
+    get_oidc_config,
+    validate_jwt,
+)
 from aqp.auth.user import (
     CurrentUser,
     accessible_labs,
@@ -53,32 +70,125 @@ from aqp.config.defaults import (
 logger = logging.getLogger(__name__)
 
 
+# Tokens are optional at the dep layer — local-first deployments keep
+# working without an Authorization header. Routes that strictly require
+# auth should depend on :func:`require_authenticated`.
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
 def current_user(
+    request: Request,
     x_aqp_user: str | None = Header(default=None, alias="X-AQP-User"),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ) -> CurrentUser:
     """Resolve the current user.
 
-    Today: returns the local default unless ``X-AQP-User`` is set to a
-    known user id (admin / service-to-service paths can use that header
-    when ``auth_provider == "local"``). Wire OIDC by replacing the body
-    of :func:`aqp.auth.user.resolve_user`.
+    OIDC mode (``settings.auth_provider != "local"``):
+        Validate the ``Authorization: Bearer`` JWT against the configured
+        issuer / audience. Map the verified ``sub`` claim onto a ``User``
+        row, lazily provisioning one (with a default workspace
+        ``Membership``) on first login.
+
+    Local mode:
+        Fall back to the deterministic default user, optionally honoring
+        the ``X-AQP-User`` header for service-to-service calls.
+
+    Failure modes:
+        ``HTTPException(401)`` for malformed / expired / wrong-audience
+        tokens, ``HTTPException(503)`` if the JWKS endpoint is
+        unreachable and no cached document exists, and graceful fall-
+        back to the default user when no header is supplied.
     """
     try:
         from aqp.config import settings
 
-        provider = settings.auth_provider
+        provider = str(settings.auth_provider).lower()
     except Exception:
         provider = "local"
 
     if provider != "local":
-        # OIDC / JWT path is wired here when the platform adopts SSO. For now
-        # we reject explicit X-AQP-User headers under non-local providers so
-        # impersonation isn't a privilege-escalation hole.
-        return resolve_user(fallback_to_default=True)
+        if credentials is None:
+            # No Authorization header supplied; surface the local default
+            # so unauthenticated reads (e.g. health probes) keep working.
+            # Routes that strictly require auth chain ``require_authenticated``.
+            return default_user()
+
+        oidc_config = get_oidc_config()
+        if oidc_config is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "OIDC is enabled (auth_provider=%s) but issuer/audience are "
+                    "not configured. Set AQP_AUTH_OIDC_ISSUER + "
+                    "AQP_AUTH_OIDC_AUDIENCE." % provider
+                ),
+            )
+        try:
+            claims = validate_jwt(credentials.credentials, config=oidc_config)
+        except InvalidTokenError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=str(exc),
+                headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+            ) from exc
+        except JWKSUnavailableError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(exc),
+            ) from exc
+        except OIDCError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(exc),
+            ) from exc
+
+        # Cache claims on the request so downstream deps / routes can
+        # surface profile fields without re-decoding the token.
+        request.state.oidc_claims = claims
+
+        try:
+            sub = claims_subject(claims)
+        except InvalidTokenError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=str(exc),
+            ) from exc
+        return resolve_user(
+            auth_subject=sub,
+            email=claims.get("email"),
+            claims=claims,
+            auto_provision=True,
+            fallback_to_default=False,
+        )
 
     if x_aqp_user:
         return resolve_user(user_id=x_aqp_user, fallback_to_default=True)
     return default_user()
+
+
+def require_authenticated(user: CurrentUser = Depends(current_user)) -> CurrentUser:
+    """Dep that returns the current user, refusing the local-default.
+
+    Use on routes that must NOT be reachable by unauthenticated clients
+    in OIDC deployments (e.g. the ``/datasets/upload`` multipart sink,
+    ``/auth/exchange``, anything that mutates state across tenants).
+    Local-first developer setups are unaffected because the default
+    user is allowed when ``settings.auth_provider == "local"``.
+    """
+    try:
+        from aqp.config import settings
+
+        provider = str(settings.auth_provider).lower()
+    except Exception:
+        provider = "local"
+
+    if provider != "local" and user.is_default:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
 
 
 def _first_scope_membership(user: CurrentUser, scope_kind: str) -> str | None:
@@ -177,7 +287,14 @@ def current_context(
             )
         overrides["lab_id"] = x_aqp_lab
 
-    return ctx.with_overrides(**overrides) if overrides else ctx
+    resolved = ctx.with_overrides(**overrides) if overrides else ctx
+    # Bind the active context onto the request-scoped ContextVar so deep
+    # chokepoints (Iceberg writer, MCP bridge, ledger writer, agent
+    # runtime) can re-hydrate ``RequestContext`` without threading it
+    # through every signature. Reset happens automatically when the
+    # request task ends.
+    bind_context(resolved)
+    return resolved
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +366,7 @@ def require_role(role: str, scope_kind: str) -> Callable[..., RequestContext]:
 __all__ = [
     "current_context",
     "current_user",
+    "require_authenticated",
     "require_lab",
     "require_project",
     "require_role",

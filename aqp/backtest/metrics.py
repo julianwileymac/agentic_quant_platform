@@ -194,7 +194,15 @@ def pyfolio_stats(returns: pd.Series) -> dict[str, float]:
     }
 
 
-def summarise(equity: pd.Series, trades: pd.DataFrame | None = None) -> dict[str, Any]:
+def summarise(
+    equity: pd.Series,
+    trades: pd.DataFrame | None = None,
+    *,
+    bootstrap: bool = False,
+    n_bootstrap: int = 1000,
+    bootstrap_alpha: float = 0.05,
+    rng_seed: int | None = None,
+) -> dict[str, Any]:
     returns = returns_from_equity(equity)
     summary = {
         "sharpe": sharpe_ratio(returns),
@@ -209,7 +217,86 @@ def summarise(equity: pd.Series, trades: pd.DataFrame | None = None) -> dict[str
     if trades is not None:
         summary["n_trades"] = int(len(trades))
         summary["turnover"] = turnover(trades, equity)
+
+    if bootstrap and len(returns) >= 30:
+        try:
+            cis = bootstrap_confidence_intervals(
+                returns,
+                equity=equity,
+                n_bootstrap=int(n_bootstrap),
+                alpha=float(bootstrap_alpha),
+                rng_seed=rng_seed,
+            )
+            summary["confidence_intervals"] = cis
+        except Exception:  # noqa: BLE001
+            logger.debug("bootstrap CIs failed; omitting", exc_info=True)
     return summary
+
+
+def bootstrap_confidence_intervals(
+    returns: pd.Series,
+    *,
+    equity: pd.Series | None = None,
+    n_bootstrap: int = 1000,
+    alpha: float = 0.05,
+    rng_seed: int | None = None,
+) -> dict[str, dict[str, float]]:
+    """Stationary bootstrap CIs for Sharpe / Sortino / MaxDD / Calmar.
+
+    The function block-bootstraps the daily returns (default block
+    length = sqrt(n)) to preserve auto-correlation, recomputes each
+    statistic on each resample, and returns
+    ``{statistic: {lower, upper, point}}`` at the ``[alpha/2, 1-alpha/2]``
+    quantiles. The block length defends against IID-bootstrap bias on
+    return series with serial correlation (the typical case for
+    momentum / mean-reversion strategies).
+    """
+    if returns is None or len(returns) < 30:
+        return {}
+    rng = np.random.default_rng(rng_seed)
+    arr = returns.to_numpy(dtype=float, copy=False)
+    n = len(arr)
+    block_len = max(2, int(np.sqrt(n)))
+    n_blocks = int(np.ceil(n / block_len))
+
+    sharpe_samples = np.empty(n_bootstrap, dtype=float)
+    sortino_samples = np.empty(n_bootstrap, dtype=float)
+    mdd_samples = np.empty(n_bootstrap, dtype=float)
+    calmar_samples = np.empty(n_bootstrap, dtype=float)
+
+    for i in range(n_bootstrap):
+        starts = rng.integers(0, max(1, n - block_len + 1), size=n_blocks)
+        sample = np.concatenate([arr[s : s + block_len] for s in starts])[:n]
+        sample_series = pd.Series(sample)
+        sharpe_samples[i] = sharpe_ratio(sample_series)
+        sortino_samples[i] = sortino_ratio(sample_series)
+        sample_equity = (1.0 + sample_series).cumprod()
+        if not sample_equity.empty:
+            mdd_samples[i] = max_drawdown(sample_equity)
+            calmar_samples[i] = calmar_ratio(sample_equity)
+
+    lower_q = float(alpha / 2.0)
+    upper_q = float(1.0 - alpha / 2.0)
+
+    def _ci(values: np.ndarray, point_value: float) -> dict[str, float]:
+        return {
+            "point": float(point_value),
+            "lower": float(np.nanquantile(values, lower_q)),
+            "upper": float(np.nanquantile(values, upper_q)),
+        }
+
+    point_sharpe = sharpe_ratio(returns)
+    point_sortino = sortino_ratio(returns)
+    point_mdd = max_drawdown(equity) if equity is not None else float(mdd_samples.mean())
+    point_calmar = calmar_ratio(equity) if equity is not None else float(calmar_samples.mean())
+
+    return {
+        "sharpe": _ci(sharpe_samples, point_sharpe),
+        "sortino": _ci(sortino_samples, point_sortino),
+        "max_drawdown": _ci(mdd_samples, point_mdd),
+        "calmar": _ci(calmar_samples, point_calmar),
+        "n_bootstrap": {"point": float(n_bootstrap), "lower": float(n_bootstrap), "upper": float(n_bootstrap)},
+    }
 
 
 # ---------------------------------------------------------------------------

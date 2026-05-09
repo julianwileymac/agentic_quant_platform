@@ -58,6 +58,9 @@ class MetadataDataset:
     data_link_count: int = 0
     streaming_link_count: int = 0
     has_annotation: bool = False
+    medallion_layer: str | None = None
+    business_metadata: dict[str, Any] = field(default_factory=dict)
+    data_contract: dict[str, Any] = field(default_factory=dict)
     updated_at: datetime | None = None
     created_at: datetime | None = None
     entry_kind: Literal["dataset", "instrument"] = "dataset"
@@ -95,6 +98,9 @@ class MetadataDataset:
             "data_link_count": self.data_link_count,
             "streaming_link_count": self.streaming_link_count,
             "has_annotation": self.has_annotation,
+            "medallion_layer": self.medallion_layer,
+            "business_metadata": self.business_metadata,
+            "data_contract": self.data_contract,
             "updated_at": self.updated_at,
             "created_at": self.created_at,
             "entry_kind": self.entry_kind,
@@ -242,6 +248,9 @@ class MetadataCatalogService:
         description: str | None = None,
         tags: list[str] | None = None,
         load_mode: str | None = None,
+        medallion_layer: str | None = None,
+        business_metadata: dict[str, Any] | None = None,
+        data_contract: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         with get_session() as session:
             row = session.execute(
@@ -272,6 +281,18 @@ class MetadataCatalogService:
                         f"allowed={sorted(_ALLOWED_DATASET_LOAD_MODES)}"
                     )
                 row.load_mode = mode
+                changed = True
+            if medallion_layer is not None:
+                layer = str(medallion_layer).strip().lower()
+                if layer and layer not in {"bronze", "silver", "gold"}:
+                    raise ValueError("medallion_layer must be bronze, silver, or gold")
+                row.medallion_layer = layer or None
+                changed = True
+            if business_metadata is not None:
+                row.business_metadata = dict(business_metadata)
+                changed = True
+            if data_contract is not None:
+                row.data_contract_json = dict(data_contract)
                 changed = True
 
             if changed:
@@ -450,6 +471,9 @@ class MetadataCatalogService:
             data_link_count=data_link_count,
             streaming_link_count=self._streaming_link_count(session, row.id),
             has_annotation=bool(row.llm_annotations),
+            medallion_layer=row.medallion_layer,
+            business_metadata=dict(row.business_metadata or {}),
+            data_contract=dict(row.data_contract_json or {}),
             updated_at=row.updated_at,
             created_at=row.created_at,
         )

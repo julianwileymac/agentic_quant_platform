@@ -2,8 +2,11 @@ import type { ReactElement } from "react";
 import { createBrowserRouter, type RouteObject } from "react-router-dom";
 
 import { AppShell } from "@/components/shell/AppShell";
+import { RequireAuth } from "@/lib/auth";
 
 import { ActionCenterRoute } from "@/routes/action-center/page";
+import { CallbackRoute } from "@/routes/auth/callback/page";
+import { LoginRoute } from "@/routes/auth/login/page";
 import { AirbyteRoute } from "@/routes/airbyte/page";
 import { AlphaVantageRoute } from "@/routes/alpha-vantage/page";
 import { AlphaVantageAdminRoute } from "@/routes/alpha-vantage/admin/page";
@@ -47,16 +50,19 @@ import { SelectionAgentRoute } from "@/routes/agents/selection/page";
 import { TraderAgentRoute } from "@/routes/agents/trader/page";
 import { BacktestRoute } from "@/routes/backtest/page";
 import { BacktestDetailRoute } from "@/routes/backtest/[id]/page";
+import { BacktestIterateRoute } from "@/routes/backtest/iterate/page";
 import { BacktestNewRoute } from "@/routes/backtest/new/page";
 import { BotsRoute } from "@/routes/bots/page";
 import { BotDetailRoute } from "@/routes/bots/[id]/page";
 import { BotNewRoute } from "@/routes/bots/new/page";
 import { BotBuilderRoute } from "@/routes/bots/builder/page";
+import { BotDebateRoute } from "@/routes/bots/[id]/debate/page";
 import { ChatRoute } from "@/routes/chat/page";
 import { CrewTraceRoute } from "@/routes/crew/page";
 import { DashboardRoute } from "@/routes/dashboard/page";
 import { DataCatalogRoute } from "@/routes/data/catalog/page";
 import { DataCatalogTableDetailRoute } from "@/routes/data/catalog/[namespace]/[name]/page";
+import { MetadataDatasetDetailRoute } from "@/routes/data/catalog/dataset/[dataset_id]/page";
 import { EntityGraphRoute } from "@/routes/data/entity-graph/page";
 import { IcebergEditorRoute } from "@/routes/data/iceberg/page";
 import { IndicatorCatalogRoute } from "@/routes/data/indicators/page";
@@ -74,6 +80,7 @@ import { FdaRoute } from "@/routes/data/fda/page";
 import { UsptoRoute } from "@/routes/data/uspto/page";
 import { DatasetLibraryRoute } from "@/routes/data/datasets/library/page";
 import { ProjectDatasetsRoute } from "@/routes/data/datasets/configs/page";
+import { UploadDatasetRoute } from "@/routes/data/datasets/upload/page";
 import { DataDatahubRoute } from "@/routes/data/datahub/page";
 import { MicrostructureRoute } from "@/routes/data/microstructure/page";
 import { DataEngineRoute } from "@/routes/data/engine/page";
@@ -249,12 +256,17 @@ const REAL_ROUTES: Record<string, () => ReactElement> = {
 const DYNAMIC_ROUTES: RouteObject[] = [
   { path: "bots/builder", element: <BotBuilderRoute /> },
   { path: "bots/:id", element: <BotDetailRoute /> },
+  // Phase 5 — dialectical debate viewer
+  { path: "bots/:id/debate", element: <BotDebateRoute /> },
   { path: "agents/runs/:id", element: <AgentRunDetailRoute /> },
   { path: "backtest/:id", element: <BacktestDetailRoute /> },
   { path: "backtest/new", element: <BacktestNewRoute /> },
+  // Phase 4 — agent-driven iterative optimisation surface
+  { path: "backtest/iterate", element: <BacktestIterateRoute /> },
   { path: "rl/runs/:id", element: <RlRunDetailRoute /> },
   // Phase 3 dynamic routes.
   { path: "strategies/:id", element: <StrategyDetailRoute /> },
+  { path: "data/catalog/dataset/:dataset_id", element: <MetadataDatasetDetailRoute /> },
   { path: "data/catalog/:namespace/:name", element: <DataCatalogTableDetailRoute /> },
   // B1 — agent deep links.
   { path: "agents/research/equity", element: <ResearchEquityAgentRoute /> },
@@ -282,6 +294,8 @@ const DYNAMIC_ROUTES: RouteObject[] = [
   { path: "data/engine", element: <DataEngineRoute /> },
   { path: "data/engine/:id", element: <DataEngineDetailRoute /> },
   { path: "data/iceberg/consolidate", element: <IcebergConsolidateRoute /> },
+  // Phase 2 — multi-tenant user upload.
+  { path: "data/datasets/upload", element: <UploadDatasetRoute /> },
   // B6 — research deep link.
   { path: "research/equity/:symbol", element: <ResearchEquityRoute /> },
   // B7 — streaming detail + strategies/new.
@@ -312,9 +326,18 @@ const childRoutes: RouteObject[] = NAV_ITEMS.map((item) => {
 });
 
 export const router = createBrowserRouter([
+  // Auth routes live OUTSIDE the AppShell so the IdP redirect / loading
+  // splash isn't framed by the navigation chrome (which would itself
+  // attempt to render workspace data we don't have yet).
+  { path: "/auth/login", element: <LoginRoute /> },
+  { path: "/auth/callback", element: <CallbackRoute /> },
   {
     path: "/",
-    element: <AppShell />,
+    element: (
+      <RequireAuth>
+        <AppShell />
+      </RequireAuth>
+    ),
     errorElement: <NotFoundRoute />,
     children: [
       ...childRoutes,
@@ -326,3 +349,5 @@ export const router = createBrowserRouter([
     ],
   },
 ]);
+
+

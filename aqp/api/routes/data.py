@@ -32,6 +32,7 @@ from aqp.config import settings
 from aqp.core.types import Symbol
 from aqp.data.chroma_store import ChromaStore
 from aqp.data.duckdb_engine import DuckDBHistoryProvider
+from aqp.data import iceberg_catalog
 from aqp.persistence.db import get_session
 from aqp.persistence.models import DatasetCatalog, DatasetVersion, Instrument
 from aqp.tasks.ingestion_tasks import (
@@ -44,6 +45,109 @@ from aqp.tasks.ingestion_tasks import (
 )
 
 router = APIRouter(prefix="/data", tags=["data"])
+
+
+def _medallion_layer(namespace: str | None) -> str | None:
+    ns = (namespace or "").lower()
+    if ns.startswith("aqp_bronze_"):
+        return "bronze"
+    if ns.startswith("aqp_silver_"):
+        return "silver"
+    if ns.startswith("aqp_gold_"):
+        return "gold"
+    return None
+
+
+def _split_iceberg_identifier(identifier: str) -> tuple[str, str]:
+    ns, _, table = str(identifier).rpartition(".")
+    if not ns:
+        ns = settings.iceberg_namespace_default or "aqp"
+    return ns, table or identifier
+
+
+def _iso_from_snapshot_ms(value: int | None) -> str | None:
+    if value is None:
+        return None
+    return datetime.utcfromtimestamp(int(value) / 1000).isoformat()
+
+
+def _registered_dataset_for_identifier(identifier: str) -> dict[str, Any] | None:
+    with get_session() as session:
+        row = session.execute(
+            select(DatasetCatalog)
+            .where(DatasetCatalog.iceberg_identifier == identifier)
+            .limit(1)
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        latest = session.execute(
+            select(DatasetVersion)
+            .where(DatasetVersion.catalog_id == row.id)
+            .order_by(desc(DatasetVersion.version))
+            .limit(1)
+        ).scalar_one_or_none()
+        bm: dict[str, Any] = {}
+        if isinstance(row.business_metadata, dict) and row.business_metadata:
+            bm = dict(row.business_metadata)
+        elif isinstance(row.llm_annotations, dict) and row.llm_annotations:
+            bm = dict(row.llm_annotations)
+        dc: dict[str, Any] = {}
+        if isinstance(row.data_contract_json, dict) and row.data_contract_json:
+            dc = dict(row.data_contract_json)
+        return {
+            "dataset_id": row.id,
+            "description": row.description,
+            "tags": list(row.tags or []),
+            "provider": row.provider,
+            "domain": row.domain,
+            "load_mode": row.load_mode,
+            "latest_row_count": latest.row_count if latest else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "business_metadata": bm,
+            "data_contract": dc,
+            "medallion_layer": row.medallion_layer,
+        }
+
+
+def _catalog_table_summary(identifier: str) -> dict[str, Any]:
+    ns, name = _split_iceberg_identifier(identifier)
+    metadata = iceberg_catalog.table_metadata(identifier)
+    snapshots = iceberg_catalog.snapshot_history(identifier)
+    latest = snapshots[-1] if snapshots else {}
+    registered = _registered_dataset_for_identifier(identifier) or {}
+    summary = latest.get("summary") if isinstance(latest.get("summary"), dict) else {}
+    row_count_raw = (
+        registered.get("latest_row_count")
+        or summary.get("total-records")
+        or summary.get("added-records")
+    )
+    try:
+        row_count = int(row_count_raw) if row_count_raw is not None else None
+    except (TypeError, ValueError):
+        row_count = None
+    partition_spec = [
+        str(p.get("name") or p.get("field") or p.get("transform"))
+        for p in metadata.get("partition_spec", [])
+    ]
+    layer_ns = _medallion_layer(ns)
+    layer_reg = registered.get("medallion_layer")
+    layer_out = layer_reg if isinstance(layer_reg, str) and layer_reg.strip() else layer_ns
+    return {
+        "namespace": ns,
+        "name": name,
+        "row_count": row_count,
+        "partition_spec": [p for p in partition_spec if p],
+        "last_snapshot_at": _iso_from_snapshot_ms(latest.get("timestamp_ms")),
+        "medallion_layer": layer_out,
+        "business_metadata": registered.get("business_metadata") or {},
+        "data_contract": registered.get("data_contract") or {},
+        "dataset_id": registered.get("dataset_id"),
+        "description": registered.get("description"),
+        "tags": registered.get("tags") or [],
+        "dataset_created_at": registered.get("created_at"),
+        "dataset_updated_at": registered.get("updated_at"),
+    }
 
 
 class LoadLocalRequest(BaseModel):
@@ -304,21 +408,23 @@ def _list_catalog_universe(
             .offset(max(0, int(offset)))
             .limit(max(1, int(limit)))
         ).scalars().all()
-    return [
-        {
-            "id": row.id,
-            "vt_symbol": row.vt_symbol,
-            "ticker": row.ticker,
-            "exchange": row.exchange,
-            "asset_class": row.asset_class,
-            "security_type": row.security_type,
-            "sector": row.sector,
-            "industry": row.industry,
-            "currency": row.currency,
-            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-        }
-        for row in rows
-    ], total
+        items = [
+            {
+                "id": row.id,
+                "vt_symbol": row.vt_symbol,
+                "ticker": row.ticker,
+                "exchange": row.exchange,
+                "asset_class": row.asset_class,
+                "security_type": row.security_type,
+                "sector": row.sector,
+                "industry": row.industry,
+                "currency": row.currency,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                "name": getattr(row, "name", None),
+            }
+            for row in rows
+        ]
+    return items, total
 
 
 @router.get("/fabric/overview")
@@ -505,6 +611,84 @@ def security_coverage(vt_symbol: str) -> dict[str, Any]:
         }
 
 
+@router.get("/symbols/{vt_symbol}")
+def symbol_metadata(vt_symbol: str) -> dict[str, Any]:
+    """Frontend-compatible symbol metadata endpoint."""
+
+    vt = (vt_symbol or "").strip()
+    if not vt:
+        raise HTTPException(400, "vt_symbol is required")
+    with get_session() as session:
+        row = session.execute(
+            select(Instrument).where(Instrument.vt_symbol == vt).limit(1)
+        ).scalar_one_or_none()
+        if row is not None:
+            return {
+                "id": row.id,
+                "vt_symbol": row.vt_symbol,
+                "ticker": row.ticker,
+                "exchange": row.exchange,
+                "asset_class": row.asset_class,
+                "security_type": row.security_type,
+                "sector": row.sector,
+                "industry": row.industry,
+                "currency": row.currency,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                "description": " / ".join(x for x in (row.sector, row.industry) if x) or None,
+            }
+    try:
+        sym = Symbol.parse(vt)
+        return {
+            "id": "",
+            "vt_symbol": sym.vt_symbol,
+            "ticker": sym.ticker,
+            "exchange": sym.exchange.value,
+            "asset_class": sym.asset_class.value,
+            "security_type": sym.security_type.value,
+            "sector": None,
+            "industry": None,
+            "currency": "USD",
+            "updated_at": None,
+            "description": None,
+        }
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(404, f"symbol {vt!r} not found") from exc
+
+
+@router.get("/symbols/{vt_symbol}/bars")
+def symbol_bars(vt_symbol: str, limit: int = 5000) -> dict[str, Any]:
+    payload = get_symbol_bars(vt_symbol, limit=limit)
+    return {
+        "vt_symbol": vt_symbol,
+        "count": payload.get("count", len(payload.get("bars", []))),
+        "bars": payload.get("bars", []),
+    }
+
+
+@router.get("/symbols/{vt_symbol}/stats")
+def symbol_stats(vt_symbol: str) -> dict[str, Any]:
+    return get_symbol_stats(vt_symbol)
+
+
+@router.get("/symbols/{vt_symbol}/coverage")
+def symbol_coverage(vt_symbol: str) -> dict[str, Any]:
+    return security_coverage(vt_symbol)
+
+
+@router.get("/symbols/{vt_symbol}/fundamentals")
+def symbol_fundamentals(vt_symbol: str) -> dict[str, Any]:
+    """Return a stable empty fundamentals payload when no provider data exists."""
+
+    return {"vt_symbol": vt_symbol, "items": [], "count": 0}
+
+
+@router.get("/symbols/{vt_symbol}/news")
+def symbol_news(vt_symbol: str) -> dict[str, Any]:
+    """Return a stable empty news payload when no provider data exists."""
+
+    return {"vt_symbol": vt_symbol, "items": [], "count": 0}
+
+
 @router.post("/load", response_model=TaskAccepted)
 def load_local(req: LoadLocalRequest) -> TaskAccepted:
     async_result = load_local_directory.delay(
@@ -598,6 +782,180 @@ def list_catalog_versions(catalog_id: str, limit: int = 50) -> list[DatasetVersi
             )
             for row in rows
         ]
+
+
+# ---------------------------------------------------------------------------
+# Iceberg catalog compatibility surface used by the Vite frontend
+# ---------------------------------------------------------------------------
+
+
+class CatalogQueryRequest(BaseModel):
+    sql: str
+    limit: int = Field(default=500, ge=1, le=10_000)
+
+
+@router.get("/catalog/namespaces")
+def catalog_namespaces() -> list[dict[str, Any]]:
+    """List Iceberg namespaces with table counts for the catalog sidebar."""
+
+    namespaces = iceberg_catalog.list_namespaces()
+    out: list[dict[str, Any]] = []
+    for ns in namespaces:
+        try:
+            count = len(iceberg_catalog.list_tables(ns))
+        except Exception:
+            count = 0
+        out.append(
+            {
+                "namespace": ns,
+                "table_count": count,
+                "medallion_layer": _medallion_layer(ns),
+            }
+        )
+    return out
+
+
+@router.get("/catalog/{namespace}")
+def catalog_tables(namespace: str) -> list[dict[str, Any]]:
+    """List tables within one Iceberg namespace."""
+
+    if namespace in {"dataset", "instrument"}:
+        raise HTTPException(404, "reserved catalog route")
+    identifiers = iceberg_catalog.list_tables(namespace)
+    return [_catalog_table_summary(identifier) for identifier in identifiers]
+
+
+@router.get("/catalog/{namespace}/{name}")
+def catalog_table_detail(namespace: str, name: str) -> dict[str, Any]:
+    identifier = f"{namespace}.{name}"
+    metadata = iceberg_catalog.table_metadata(identifier)
+    if not metadata:
+        raise HTTPException(404, f"table {identifier!r} not found")
+    summary = _catalog_table_summary(identifier)
+    fields = [
+        {
+            "id": field.get("id"),
+            "name": field.get("name"),
+            "type": field.get("type"),
+            "nullable": not bool(field.get("required", False)),
+            "doc": field.get("doc"),
+        }
+        for field in metadata.get("fields", [])
+    ]
+    partition_spec_full = [
+        {
+            "source_id": item.get("source_id"),
+            "transform": item.get("transform"),
+            "field": item.get("name"),
+        }
+        for item in metadata.get("partition_spec", [])
+    ]
+    props_raw = metadata.get("properties")
+    props = props_raw if isinstance(props_raw, dict) else {}
+    reg_contract = summary.get("data_contract") if isinstance(summary.get("data_contract"), dict) else {}
+    merged_contract = {**props, **reg_contract}
+
+    dataset_versions: list[dict[str, Any]] = []
+    catalog_id = summary.get("dataset_id")
+    if catalog_id:
+        with get_session() as session:
+            vers = session.execute(
+                select(DatasetVersion)
+                .where(DatasetVersion.catalog_id == catalog_id)
+                .order_by(desc(DatasetVersion.version))
+                .limit(50)
+            ).scalars().all()
+            for v in vers:
+                dataset_versions.append(
+                    {
+                        "id": v.id,
+                        "catalog_id": v.catalog_id,
+                        "version": v.version,
+                        "status": v.status,
+                        "dataset_hash": v.dataset_hash,
+                        "start_time": v.start_time.isoformat() if v.start_time else None,
+                        "end_time": v.end_time.isoformat() if v.end_time else None,
+                        "row_count": v.row_count,
+                        "symbol_count": v.symbol_count,
+                        "created_at": v.created_at.isoformat() if v.created_at else None,
+                    }
+                )
+
+    return {
+        **summary,
+        "schema": {"fields": fields},
+        "partition_spec_full": partition_spec_full,
+        "data_contract": merged_contract,
+        "location": metadata.get("location"),
+        "current_snapshot_id": metadata.get("current_snapshot_id"),
+        "dataset_versions": dataset_versions,
+    }
+
+
+@router.get("/catalog/{namespace}/{name}/snapshots")
+def catalog_table_snapshots(namespace: str, name: str) -> list[dict[str, Any]]:
+    identifier = f"{namespace}.{name}"
+    rows = iceberg_catalog.snapshot_history(identifier)
+    return [
+        {
+            "snapshot_id": str(row.get("snapshot_id")),
+            "parent_snapshot_id": (
+                str(row.get("parent_snapshot_id"))
+                if row.get("parent_snapshot_id") is not None
+                else None
+            ),
+            "sequence_number": row.get("sequence_number"),
+            "timestamp": _iso_from_snapshot_ms(row.get("timestamp_ms")),
+            "timestamp_ms": row.get("timestamp_ms"),
+            "operation": row.get("operation"),
+            "manifest_list": row.get("manifest_list"),
+            "summary": row.get("summary") or {},
+        }
+        for row in rows
+    ]
+
+
+@router.get("/catalog/{namespace}/{name}/sample")
+def catalog_table_sample(namespace: str, name: str, limit: int = 100) -> dict[str, Any]:
+    identifier = f"{namespace}.{name}"
+    table = iceberg_catalog.read_arrow(identifier, limit=max(1, min(int(limit), 1000)))
+    if table is None:
+        raise HTTPException(404, f"table {identifier!r} not found")
+    rows = table.to_pylist()
+    return {
+        "columns": list(table.column_names),
+        "rows": rows,
+        "duration_ms": 0,
+        "truncated": len(rows) >= int(limit),
+    }
+
+
+@router.post("/catalog/{namespace}/{name}/query")
+def catalog_table_query(namespace: str, name: str, payload: CatalogQueryRequest) -> dict[str, Any]:
+    """Run a table-scoped DuckDB query against the current Iceberg snapshot."""
+
+    import duckdb
+
+    identifier = f"{namespace}.{name}"
+    conn = duckdb.connect(database=":memory:")
+    try:
+        view = iceberg_catalog.iceberg_to_duckdb_view(conn, identifier, view_name="target_table")
+        if view is None:
+            raise HTTPException(404, f"table {identifier!r} not found or has no files")
+        sql = payload.sql.strip()
+        if not sql:
+            sql = f"select * from {view} limit {payload.limit}"
+        result = conn.execute(sql).fetch_df()
+        if len(result) > payload.limit:
+            result = result.head(payload.limit)
+        return {
+            "columns": list(result.columns),
+            "rows": result.to_dict(orient="records"),
+            "duration_ms": 0,
+            "truncated": len(result) >= payload.limit,
+        }
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useApiQuery } from "@/lib/api/hooks";
+import type { Workspace } from "@/lib/api/tenancy";
 import { useTenancyStore, type ExecutionMode } from "@/store/tenancy";
 
 const MODE_OPTIONS: ReadonlyArray<{ id: ExecutionMode; label: string; icon: typeof Radio }> = [
@@ -23,9 +25,23 @@ export function WorkspaceSwitcher() {
   const labId = useTenancyStore((s) => s.labId);
   const mode = useTenancyStore((s) => s.mode);
   const setMode = useTenancyStore((s) => s.setMode);
+  const setWorkspace = useTenancyStore((s) => s.setWorkspace);
 
-  const label =
-    projectId && labId
+  // Pull every workspace the active user can see — the api/auth dep
+  // already filters to the user's accessible scopes.
+  const workspacesQuery = useApiQuery<Workspace[]>({
+    queryKey: ["workspaces", "switcher"],
+    path: "/workspaces",
+    select: (raw) => (Array.isArray(raw) ? (raw as Workspace[]) : []),
+    staleTime: 60_000,
+  });
+
+  const workspaces = workspacesQuery.data ?? [];
+  const activeWorkspace = workspaces.find((w) => w.id === workspaceId);
+
+  const label = activeWorkspace
+    ? activeWorkspace.name
+    : projectId && labId
       ? `${shortId(workspaceId)} / ${shortId(projectId)} / ${shortId(labId)}`
       : projectId
         ? `${shortId(workspaceId)} / ${shortId(projectId)}`
@@ -37,11 +53,36 @@ export function WorkspaceSwitcher() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2 text-xs">
-          <span className="font-mono opacity-80">{label}</span>
+          <span className="max-w-[180px] truncate font-mono opacity-80">{label}</span>
           <ChevronDown className="h-3 w-3" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
+      <DropdownMenuContent align="start" className="w-72">
+        {workspaces.length > 0 ? (
+          <>
+            <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+            {workspaces.map((ws) => (
+              <DropdownMenuItem
+                key={ws.id}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  if (ws.id !== workspaceId) {
+                    setWorkspace(ws.id);
+                  }
+                }}
+              >
+                <span className="flex-1 truncate">{ws.name}</span>
+                <span className="ml-2 truncate font-mono text-[10px] text-[var(--text-muted)]">
+                  {shortId(ws.id)}
+                </span>
+                {ws.id === workspaceId ? (
+                  <Check className="h-3.5 w-3.5 text-[var(--info-fg)]" />
+                ) : null}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuLabel>Execution mode</DropdownMenuLabel>
         {MODE_OPTIONS.map((opt) => {
           const Icon = opt.icon;
@@ -61,7 +102,7 @@ export function WorkspaceSwitcher() {
           );
         })}
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Tenancy</DropdownMenuLabel>
+        <DropdownMenuLabel>Active scope</DropdownMenuLabel>
         <DropdownMenuItem disabled className="font-mono text-xs">
           workspace: {shortId(workspaceId)}
         </DropdownMenuItem>

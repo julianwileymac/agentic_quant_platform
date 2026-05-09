@@ -9,6 +9,13 @@ Per dataset family we:
    evolution via PyIceberg's :meth:`Table.update_schema` when possible).
 3. Append each chunk into the Iceberg table.
 4. Honor row / file caps and emit a ``truncated`` flag in the result.
+
+Tenancy: every ``append_arrow`` call passes the active
+:class:`aqp.auth.context.RequestContext` so the Iceberg writer stamps
+``_workspace_id`` / ``_project_id`` columns on the bronze rows.
+Pipelines triggered outside a request (Celery beat, CLI, test harness)
+fall back to the deterministic default context, which still yields a
+non-NULL workspace column for downstream filtering.
 """
 from __future__ import annotations
 
@@ -19,6 +26,7 @@ from typing import Any
 
 import pyarrow as pa
 
+from aqp.auth.contextvars import get_context_or_default
 from aqp.config import settings
 from aqp.data import iceberg_catalog
 from aqp.data.pipelines.discovery import DiscoveredDataset
@@ -142,6 +150,11 @@ def materialize_dataset(
     target_namespace: str | None = None,
     target_table: str | None = None,
     member_filter: set[str] | None = None,
+    context: Any | None = None,
+    shared: bool = False,
+    medallion_layer: str | None = None,
+    business_metadata: Any = None,
+    data_contract: Any = None,
 ) -> MaterializeResult:
     """Materialize one logical dataset into an Iceberg table.
 
@@ -150,6 +163,19 @@ def materialize_dataset(
     restricts ingestion to members whose ``"<host_path>!<archive_path>"``
     id (matching :func:`aqp.data.pipelines.director._member_id`) is in
     the supplied set; ``None`` keeps every member.
+
+    ``context`` is the active :class:`RequestContext`; when omitted the
+    helper falls back to the request-scoped contextvar (or the local-
+    first default if neither is set). Pass ``shared=True`` to write
+    reference data (instruments, regulatory corpora, macro series) that
+    every workspace can read without a tenancy filter — those rows
+    intentionally do **not** receive ``_workspace_id`` / ``_project_id``
+    columns.
+
+    ``medallion_layer`` (``bronze`` / ``silver`` / ``gold``) and
+    ``business_metadata`` opt the table into the active-metadata
+    catalog; the Iceberg wrapper validates the namespace prefix and
+    upserts the matching :class:`DatasetCatalog` row.
     """
     effective_namespace = (target_namespace or namespace).strip() or namespace
     if target_table:
@@ -172,6 +198,11 @@ def materialize_dataset(
     iceberg_catalog.ensure_namespace(effective_namespace)
     # Drop+recreate so a re-ingest is idempotent at the table level.
     iceberg_catalog.drop_table(identifier)
+
+    # Resolve the tenancy context once per call. Falls back to the
+    # local-first default when nothing is bound (CLIs, beat workers,
+    # tests) so the workspace column is still populated.
+    effective_context = context if context is not None else get_context_or_default()
 
     target_schema: pa.Schema | None = None
     rows_written = 0
@@ -204,7 +235,15 @@ def materialize_dataset(
                     chunk = chunk.slice(0, keep)
                     truncated = True
 
-                iceberg_catalog.append_arrow(identifier, chunk)
+                iceberg_catalog.append_arrow(
+                    identifier,
+                    chunk,
+                    context=effective_context,
+                    shared=shared,
+                    medallion_layer=medallion_layer,
+                    business_metadata=business_metadata,
+                    data_contract=data_contract,
+                )
                 rows_written += chunk.num_rows
                 consumed_any = True
 

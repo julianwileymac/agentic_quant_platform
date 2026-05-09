@@ -55,7 +55,15 @@ class PipelineManifestRow(Base, ProjectScopedMixin):
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("namespace", "name", name="uq_pipeline_manifests_ns_name"),
+        # Manifest names are unique per (workspace, namespace) pair. This
+        # lets two workspaces both ship a ``daily_ohlcv`` manifest in
+        # the same namespace without colliding on the unique index.
+        # Pre-tenancy rows have ``workspace_id IS NULL`` and the legacy
+        # constraint name is preserved on the index for backward compat.
+        UniqueConstraint(
+            "workspace_id", "namespace", "name",
+            name="uq_pipeline_manifests_ws_ns_name",
+        ),
     )
 
 

@@ -39,12 +39,14 @@ import {
   PALETTE_DRAG_MIME,
   type AqpNode,
   type FlowGraph,
+  isPaletteDragPayload,
   type PaletteDragPayload,
 } from "./types";
 
 export interface FlowCanvasHandle {
   fitView: () => void;
   focusNode: (id: string) => void;
+  getViewportCenter: () => { x: number; y: number };
   getInstance: () => ReactFlowInstance | null;
 }
 
@@ -120,6 +122,14 @@ function FlowCanvasInner({
           { duration: 250, zoom: 1 },
         );
       },
+      getViewportCenter: () => {
+        const rect = wrapperRef.current?.getBoundingClientRect();
+        if (!rect) return { x: 0, y: 0 };
+        return instance.screenToFlowPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        });
+      },
       getInstance: () => instance,
     }),
     [instance],
@@ -153,7 +163,8 @@ function FlowCanvasInner({
   );
 
   const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
-    if (Array.from(e.dataTransfer.types).includes(PALETTE_DRAG_MIME)) {
+    const types = Array.from(e.dataTransfer.types);
+    if (types.includes(PALETTE_DRAG_MIME) || types.includes("text/plain")) {
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       setDragOver(true);
@@ -163,11 +174,13 @@ function FlowCanvasInner({
   const handleDrop = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
       setDragOver(false);
-      const raw = e.dataTransfer.getData(PALETTE_DRAG_MIME);
+      const raw = e.dataTransfer.getData(PALETTE_DRAG_MIME) || e.dataTransfer.getData("text/plain");
       if (!raw) return;
       e.preventDefault();
       try {
-        const payload = JSON.parse(raw) as PaletteDragPayload;
+        const parsed = JSON.parse(raw) as unknown;
+        if (!isPaletteDragPayload(parsed)) return;
+        const payload = parsed as PaletteDragPayload;
         const position = instance.screenToFlowPosition({ x: e.clientX, y: e.clientY });
         onPaletteDrop?.(payload, position);
       } catch {
@@ -196,7 +209,7 @@ function FlowCanvasInner({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", minWidth: 0, minHeight: 0 }}
     >
       <ReactFlow
         nodes={nodes}
