@@ -3,6 +3,7 @@
 import { ReloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import {
   App,
+  Alert,
   Button,
   Card,
   Col,
@@ -17,6 +18,7 @@ import {
 import { useState } from "react";
 
 import { PageContainer } from "@/components/shell/PageContainer";
+import { apiFetch } from "@/lib/api/client";
 import {
   serviceManagerApi,
   type IcebergBootstrapReport,
@@ -37,6 +39,61 @@ const SERVICES: ServiceName[] = [
   "neo4j",
 ];
 
+interface AirbyteHealth {
+  ok: boolean;
+  enabled: boolean;
+  base_url?: string;
+  api_url?: string;
+  workspace_id_configured?: boolean;
+  auth_token_configured?: boolean;
+  airbyte?: {
+    ok?: boolean;
+    available?: boolean;
+    mode?: string;
+    timestamp?: string;
+  };
+}
+
+interface DataHubStatus {
+  configured: boolean;
+  gms_url: string;
+  env: string;
+  platform: string;
+  platform_instance: string;
+  sync_enabled: boolean;
+  sync_direction: string;
+  external_platforms: string[];
+  ping?: boolean;
+}
+
+interface ComputeStatus {
+  default_backend: string;
+  dask: { available: boolean; scheduler_address?: string | null; n_workers?: number };
+  ray: { available: boolean; address?: string | null };
+  engine: { default_chunk_rows: number; max_concurrent_pipelines: number };
+}
+
+interface DagsterStatus {
+  graphql_url: string | null;
+  code_location: string;
+  module_path: string;
+  repository_selector?: {
+    repositoryLocationName: string;
+    repositoryName: string;
+  };
+}
+
+interface ServiceLineageEvent {
+  id: string;
+  source_table_id?: string | null;
+  target_table_id?: string | null;
+  transform_kind: string;
+  service_name?: string | null;
+  actor?: string | null;
+  summary?: string | null;
+  created_at: string;
+}
+
 export function ServiceManagerPage() {
   const { message } = App.useApp();
   const [logs, setLogs] = useState<Record<string, string>>({});
@@ -44,6 +101,7 @@ export function ServiceManagerPage() {
   const [bootstrapBusy, setBootstrapBusy] = useState(false);
   const [verification, setVerification] = useState<TrinoVerification | null>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
+  const [datahubBusy, setDatahubBusy] = useState(false);
 
   const health = useApiQuery({
     queryKey: ["service-manager", "health"],
@@ -60,6 +118,33 @@ export function ServiceManagerPage() {
     path: "/service-manager/trino/queries",
     query: { limit: 25 },
     staleTime: 15_000,
+  });
+  const airbyteHealth = useApiQuery<AirbyteHealth>({
+    queryKey: ["airbyte", "health"],
+    path: "/airbyte/health",
+    staleTime: 10_000,
+  });
+  const datahubStatus = useApiQuery<DataHubStatus>({
+    queryKey: ["datahub", "status"],
+    path: "/datahub/status",
+    staleTime: 30_000,
+  });
+  const computeStatus = useApiQuery<ComputeStatus>({
+    queryKey: ["compute", "status"],
+    path: "/compute/status",
+    staleTime: 30_000,
+  });
+  const dagsterStatus = useApiQuery<DagsterStatus>({
+    queryKey: ["dagster", "status"],
+    path: "/dagster/status",
+    staleTime: 30_000,
+  });
+  const recentLineage = useApiQuery<ServiceLineageEvent[]>({
+    queryKey: ["service-manager", "lineage"],
+    path: "/data-control/lineage",
+    query: { limit: 200 },
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 
   const payload = health.data as
@@ -120,6 +205,19 @@ export function ServiceManagerPage() {
     }
   }
 
+  async function runDataHubSync(direction: "push" | "pull" | "bidirectional") {
+    setDatahubBusy(true);
+    try {
+      await apiFetch(`/datahub/sync?direction=${direction}`, { method: "POST" });
+      message.success(`DataHub ${direction} sync queued`);
+      await datahubStatus.refetch();
+    } catch (err) {
+      message.error((err as Error).message);
+    } finally {
+      setDatahubBusy(false);
+    }
+  }
+
   return (
     <PageContainer
       title="Service Manager"
@@ -150,6 +248,136 @@ export function ServiceManagerPage() {
           </Descriptions.Item>
         </Descriptions>
       </Card>
+
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col xs={24} lg={12} xl={6}>
+          <Card
+            size="small"
+            title="Airbyte"
+            extra={<Button size="small" href="/airbyte">Open</Button>}
+          >
+            <Descriptions size="small" column={1}>
+              <Descriptions.Item label="Health">
+                <Tag color={airbyteHealth.data?.ok ? "success" : "error"}>
+                  {airbyteHealth.data?.ok ? "healthy" : "attention"}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Mode">
+                <code>{airbyteHealth.data?.airbyte?.mode ?? "-"}</code>
+              </Descriptions.Item>
+              <Descriptions.Item label="Base URL">
+                <code>{airbyteHealth.data?.base_url ?? "-"}</code>
+              </Descriptions.Item>
+              <Descriptions.Item label="Workspace">
+                <Tag color={airbyteHealth.data?.workspace_id_configured ? "success" : "default"}>
+                  {airbyteHealth.data?.workspace_id_configured ? "configured" : "missing"}
+                </Tag>
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
+        </Col>
+        <Col xs={24} lg={12} xl={6}>
+          <Card
+            size="small"
+            title="Dagster"
+            extra={<Button size="small" href="/workflows/data">Assets</Button>}
+          >
+            <Descriptions size="small" column={1}>
+              <Descriptions.Item label="GraphQL">
+                <Tag color={payload?.services?.dagster?.ok ? "success" : "error"}>
+                  {payload?.services?.dagster?.ok ? "online" : "down"}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Location">
+                <code>{dagsterStatus.data?.repository_selector?.repositoryLocationName ?? "-"}</code>
+              </Descriptions.Item>
+              <Descriptions.Item label="Repository">
+                <code>{dagsterStatus.data?.repository_selector?.repositoryName ?? "-"}</code>
+              </Descriptions.Item>
+              <Descriptions.Item label="Module">
+                <code>{dagsterStatus.data?.module_path ?? "-"}</code>
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
+        </Col>
+        <Col xs={24} lg={12} xl={6}>
+          <Card
+            size="small"
+            title="DataHub"
+            extra={
+              <Space>
+                <Button size="small" loading={datahubBusy} onClick={() => runDataHubSync("push")}>
+                  Push
+                </Button>
+                <Button size="small" loading={datahubBusy} onClick={() => runDataHubSync("pull")}>
+                  Pull
+                </Button>
+              </Space>
+            }
+          >
+            <Descriptions size="small" column={1}>
+              <Descriptions.Item label="Configured">
+                <Tag color={datahubStatus.data?.configured ? "success" : "default"}>
+                  {String(datahubStatus.data?.configured ?? false)}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Ping">
+                <Tag color={datahubStatus.data?.ping ? "success" : "warning"}>
+                  {datahubStatus.data?.ping ? "ok" : "not responding"}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Instance">
+                <code>{datahubStatus.data?.platform_instance ?? "-"}</code>
+              </Descriptions.Item>
+              <Descriptions.Item label="Direction">
+                <code>{datahubStatus.data?.sync_direction ?? "-"}</code>
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
+        </Col>
+        <Col xs={24} lg={12} xl={6}>
+          <Card size="small" title="Compute">
+            <Descriptions size="small" column={1}>
+              <Descriptions.Item label="Default">
+                <Tag color="blue">{computeStatus.data?.default_backend ?? "auto"}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Dask">
+                <Tag color={computeStatus.data?.dask?.available ? "success" : "default"}>
+                  {computeStatus.data?.dask?.available ? "available" : "missing"}
+                </Tag>
+                <code style={{ marginLeft: 8 }}>
+                  {computeStatus.data?.dask?.scheduler_address ?? "local"}
+                </code>
+              </Descriptions.Item>
+              <Descriptions.Item label="Ray">
+                <Tag color={computeStatus.data?.ray?.available ? "success" : "default"}>
+                  {computeStatus.data?.ray?.available ? "available" : "missing"}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Chunk rows">
+                <code>{computeStatus.data?.engine?.default_chunk_rows ?? "-"}</code>
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
+        </Col>
+      </Row>
+
+      {airbyteHealth.error || datahubStatus.error || computeStatus.error || dagsterStatus.error ? (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="Some resource status calls failed"
+          description={[
+            airbyteHealth.error?.message,
+            datahubStatus.error?.message,
+            computeStatus.error?.message,
+            dagsterStatus.error?.message,
+          ]
+            .filter(Boolean)
+            .join(" | ")}
+        />
+      ) : null}
 
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} xl={12}>
@@ -362,6 +590,12 @@ export function ServiceManagerPage() {
       <Row gutter={[16, 16]}>
         {SERVICES.map((name) => {
           const service = payload?.services?.[name] ?? {};
+          const manageHref = MANAGE_IN_AQP_HREF[name];
+          const lineageEvents = (recentLineage.data ?? []).filter(
+            (event) =>
+              (event.service_name ?? "").toLowerCase() === name.toLowerCase() ||
+              (event.actor ?? "").toLowerCase().includes(name.toLowerCase()),
+          );
           return (
             <Col xs={24} md={12} xl={8} key={name}>
               <Card
@@ -373,7 +607,18 @@ export function ServiceManagerPage() {
                     </Tag>
                   </Space>
                 }
-                extra={<Button size="small" onClick={() => fetchLogs(name)}>Logs</Button>}
+                extra={
+                  <Space>
+                    {manageHref ? (
+                      <Button size="small" href={manageHref}>
+                        Manage in AQP
+                      </Button>
+                    ) : null}
+                    <Button size="small" onClick={() => fetchLogs(name)}>
+                      Logs
+                    </Button>
+                  </Space>
+                }
               >
                 <Space direction="vertical" style={{ width: "100%" }}>
                   {service.error ? (
@@ -406,6 +651,26 @@ export function ServiceManagerPage() {
                       </Button>
                     ))}
                   </Space>
+                  {lineageEvents.length > 0 ? (
+                    <Card
+                      size="small"
+                      type="inner"
+                      title={`Recent activity (${lineageEvents.length})`}
+                      style={{ marginTop: 4 }}
+                    >
+                      {lineageEvents.slice(0, 5).map((event) => (
+                        <div key={event.id} style={{ marginBottom: 4 }}>
+                          <Tag>{event.transform_kind}</Tag>
+                          <Typography.Text style={{ fontSize: 11 }} code>
+                            {event.target_table_id ?? event.source_table_id ?? "-"}
+                          </Typography.Text>
+                          <Typography.Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>
+                            {new Date(event.created_at).toLocaleTimeString()}
+                          </Typography.Text>
+                        </div>
+                      ))}
+                    </Card>
+                  ) : null}
                   {logs[name] ? (
                     <pre
                       style={{
@@ -430,3 +695,13 @@ export function ServiceManagerPage() {
     </PageContainer>
   );
 }
+
+const MANAGE_IN_AQP_HREF: Record<string, string> = {
+  trino: "/data/explorer",
+  polaris: "/data/iceberg",
+  iceberg: "/data/iceberg",
+  superset: "/visualizations",
+  airbyte: "/airbyte",
+  dagster: "/workflows/data",
+  neo4j: "/data/kg",
+};

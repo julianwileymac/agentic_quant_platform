@@ -1,0 +1,7 @@
+class: CompositeReward
+module_path: aqp.rl.core.reward
+kwargs:
+  terms:
+    - { class: BenchmarkOutperformanceTerm, kwargs: { weight: 1.0 } }
+    - { class: RiskParityTerm, kwargs: { weight: 0.5 } }
+    - { class: DrawdownPenaltyTerm, kwargs: { weight: 0.25 } }

@@ -1,0 +1,213 @@
+/*
+ * AQP Frontend design tokens.
+ *
+ * Exposes Tailwind-friendly CSS custom properties driven by the blueprint:
+ *   - dark-first deep-charcoal backgrounds (#0F172A / #1E293B)
+ *   - off-white primary text, cool-gray secondary
+ *   - semantic +/-/warn/info colours reserved for financial state
+ *   - tabular-num font features for numeric stability under high-frequency
+ *     price updates
+ *   - sandbox-mode amber accent applied via the `[data-mode="sandbox"]`
+ *     attribute on <html>; the SandboxBanner toggles this attribute.
+ *
+ * shadcn/ui consumes the `--background`, `--foreground`, `--primary`, ...
+ * names; the financial palette is exposed under `--pos-*` / `--neg-*` and
+ * never aliased into shadcn so brand colours can never accidentally render
+ * as profit / loss signals.
+ */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-background: var(--bg-app);
+  --color-foreground: var(--text-primary);
+
+  --color-card: var(--bg-surface);
+  --color-card-foreground: var(--text-primary);
+
+  --color-popover: var(--bg-elevated);
+  --color-popover-foreground: var(--text-primary);
+
+  --color-primary: var(--info-fg);
+  --color-primary-foreground: #FFFFFF;
+
+  --color-secondary: var(--bg-elevated);
+  --color-secondary-foreground: var(--text-primary);
+
+  --color-muted: var(--bg-surface);
+  --color-muted-foreground: var(--text-secondary);
+
+  --color-accent: var(--bg-elevated);
+  --color-accent-foreground: var(--text-primary);
+
+  --color-destructive: var(--neg-fg);
+  --color-destructive-foreground: #FFFFFF;
+
+  --color-border: var(--border-default);
+  --color-input: var(--border-default);
+  --color-ring: var(--info-fg);
+
+  --color-pos: var(--pos-fg);
+  --color-neg: var(--neg-fg);
+  --color-warn: var(--warn-fg);
+  --color-info: var(--info-fg);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  --font-sans:
+    "InterVariable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace;
+}
+
+:root,
+.dark {
+  /* Backgrounds */
+  --bg-app: #0F172A;
+  --bg-surface: #1E293B;
+  --bg-elevated: #243042;
+
+  /* Text */
+  --text-primary: #E5E7EB;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+
+  /* Borders */
+  --border-default: #1F2937;
+  --border-subtle: #1A2231;
+  --border-strong: #334155;
+
+  /* Semantic financial signals */
+  --pos-fg: #10B981;
+  --pos-bg: rgba(16, 185, 129, 0.12);
+  --neg-fg: #EF4444;
+  --neg-bg: rgba(239, 68, 68, 0.12);
+  --warn-fg: #F59E0B;
+  --warn-bg: rgba(245, 158, 11, 0.12);
+  --info-fg: #3B82F6;
+  --info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Sandbox / paper trading accent */
+  --sandbox-fg: #F59E0B;
+  --sandbox-border: #F59E0B;
+  --sandbox-bg: rgba(245, 158, 11, 0.06);
+
+  /* Sidebar / chrome */
+  --sidebar-bg: #0B1220;
+  --topbar-bg: #0B1220;
+  --topbar-border: #111827;
+}
+
+/* Light mode is secondary per blueprint; available for accessibility only. */
+:root.light {
+  --bg-app: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #64748B;
+  --border-default: #E2E8F0;
+  --border-subtle: #F1F5F9;
+  --border-strong: #CBD5E1;
+  --sidebar-bg: #FFFFFF;
+  --topbar-bg: #FFFFFF;
+  --topbar-border: #E2E8F0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-feature-settings: "ss01" 1, "cv11" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/*
+ * Tabular figures for any numeric data — applied via the `.tabular`
+ * utility and on the <Numeric/> primitive. Must be inherited so AG Grid
+ * cells, statistic widgets, OHLC scales, and order-book rows all share
+ * identical character widths under fast updates.
+ */
+.tabular,
+.tabular *,
+[data-numeric="true"] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.6);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Sandbox / paper-mode chrome.
+ * Activated by `<html data-mode="sandbox">` (see SandboxBanner). */
+:root[data-mode="sandbox"] body,
+:root[data-mode="paper"] body {
+  outline: 3px solid var(--sandbox-border);
+  outline-offset: -3px;
+}
+
+:root[data-mode="sandbox"] [data-topbar="true"],
+:root[data-mode="paper"] [data-topbar="true"] {
+  border-bottom-color: var(--sandbox-border) !important;
+}
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid var(--info-fg);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* AG Grid bridging — the wrapper class is set on the grid itself. */
+.ag-theme-aqp-dark {
+  --ag-grid-size: 6px;
+  --ag-list-item-height: 30px;
+  --ag-row-height: 36px;
+  --ag-header-height: 38px;
+  --ag-background-color: var(--bg-surface);
+  --ag-foreground-color: var(--text-primary);
+  --ag-header-background-color: var(--bg-elevated);
+  --ag-header-foreground-color: var(--text-secondary);
+  --ag-border-color: var(--border-default);
+  --ag-row-hover-color: rgba(59, 130, 246, 0.06);
+  --ag-selected-row-background-color: rgba(59, 130, 246, 0.12);
+  font-family: inherit;
+}
+
+/* React Flow background contrast */
+.react-flow__pane {
+  background: var(--bg-app);
+}

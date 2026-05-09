@@ -48,9 +48,13 @@ def in_memory_db(monkeypatch: pytest.MonkeyPatch):
             models_events,
             models_fundamentals,
             models_instruments,
+            models_lineage,
             models_macro,
             models_news,
             models_ownership,
+            models_pipelines,
+            models_regulatory,
+            models_sinks,
             models_taxonomy,
         )
     except Exception:
@@ -84,10 +88,25 @@ def in_memory_db(monkeypatch: pytest.MonkeyPatch):
     for module_name in (
         "aqp.api.routes.entities",
         "aqp.api.routes.datasets",
+        "aqp.api.routes.data_control",
+        "aqp.api.routes.data_entities",
         "aqp.services.portfolio_service",
         "aqp.data.catalog",
+        "aqp.data.catalog.active_metadata",
+        "aqp.data.catalog.lineage",
         "aqp.data.feature_sets",
         "aqp.services.metadata_catalog_service",
+        "aqp.data.products.equity",
+        "aqp.data.products.option_chain",
+        "aqp.data.products.portfolio",
+        "aqp.data.products.macro_series",
+        "aqp.data.products.regulatory",
+        "aqp.data.products.instrument_graph",
+        "aqp.data.mcp.tools.catalog",
+        "aqp.data.mcp.tools.entities",
+        "aqp.data.mcp.tools.pipelines",
+        "aqp.data.mcp.tools.streaming",
+        "aqp.data.mcp.tools.datahub",
     ):
         try:
             import importlib

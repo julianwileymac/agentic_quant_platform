@@ -1,0 +1,6 @@
+class: IcebergRLDataPipeline
+module_path: aqp.rl.data_pipelines.iceberg
+kwargs:
+  indicators: [macd, rsi_14, sma_20, sma_50, turbulence]
+  use_turbulence: true
+  use_vix: false

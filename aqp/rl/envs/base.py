@@ -1,4 +1,10 @@
-"""Shared helpers for FinRL-style gym environments."""
+"""Shared helpers for FinRL-style gym environments.
+
+Used both by the legacy envs (backwards-compat) and by the new
+:class:`aqp.rl.core.env.BaseRLEnv`-based envs (which call
+:func:`load_bars` + :func:`pivot_features` from their
+``_setup_data`` hook).
+"""
 from __future__ import annotations
 
 from datetime import datetime
@@ -54,6 +60,13 @@ def default_reward(
     drawdown_penalty: float = 0.1,
     scale: float = 1.0,
 ) -> float:
+    """Legacy single-call reward (PnL − cost − dd-penalty).
+
+    Kept as a free function for backwards compatibility with
+    pre-refactor envs and one-off scripts. New envs should compose
+    :class:`aqp.rl.core.reward.CompositeReward` from the
+    :mod:`aqp.rl.rewards` library instead.
+    """
     pnl = current_value - previous_value
     cost = turnover * cost_pct
     dd = abs(min(drawdown, 0.0)) * drawdown_penalty
@@ -64,3 +77,11 @@ def safe_array(values: Any, dtype=np.float32) -> np.ndarray:
     arr = np.asarray(values, dtype=dtype)
     arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
     return arr
+
+
+def vt_symbols_for(symbols: list[str]) -> list[str]:
+    """Normalise a mix of bare tickers and ``vt_symbol`` strings.
+
+    ``"AAPL"`` → ``"AAPL.NASDAQ"``; ``"BTC.BINANCE"`` is returned as-is.
+    """
+    return [s if "." in s else f"{s}.NASDAQ" for s in symbols]

@@ -3,14 +3,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from dagster import AssetExecutionContext, asset
+from dagster import asset
 
 
 @asset(
     description="Refresh dataset profiles for every namespace.table.",
     group_name="aqp_profiling",
 )
-def refresh_all_profiles(context: AssetExecutionContext) -> dict[str, Any]:
+def refresh_all_profiles(context) -> dict[str, Any]:
     try:
         from aqp.data.iceberg_catalog import list_namespaces, list_tables
         from aqp.data.profiling import refresh_table_profile
@@ -37,4 +37,7 @@ def refresh_all_profiles(context: AssetExecutionContext) -> dict[str, Any]:
     return {"refreshed": refreshed, "errors": errors}
 
 
-__all__ = ["refresh_all_profiles"]
+PROFILING_ASSETS = [refresh_all_profiles]
+
+
+__all__ = ["PROFILING_ASSETS", "refresh_all_profiles"]

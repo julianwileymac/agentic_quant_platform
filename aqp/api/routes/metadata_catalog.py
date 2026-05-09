@@ -55,6 +55,12 @@ class MetadataLineageResponse(BaseModel):
     edges: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class MetadataDatasetPatchRequest(BaseModel):
+    description: str | None = None
+    tags: list[str] | None = None
+    load_mode: str | None = None
+
+
 _service = MetadataCatalogService()
 
 
@@ -86,6 +92,20 @@ def list_metadata_datasets(
 @router.get("/datasets/{dataset_id}", response_model=MetadataDatasetResponse)
 def get_metadata_dataset(dataset_id: str) -> dict[str, Any]:
     dataset = _service.get_dataset(dataset_id)
+    if dataset is None:
+        raise HTTPException(404, f"dataset {dataset_id!r} not found")
+    return dataset
+
+
+@router.patch("/datasets/{dataset_id}", response_model=MetadataDatasetResponse)
+def patch_metadata_dataset(dataset_id: str, payload: MetadataDatasetPatchRequest) -> dict[str, Any]:
+    values = payload.model_dump(exclude_unset=True)
+    if not values:
+        raise HTTPException(status_code=400, detail="No metadata fields provided.")
+    try:
+        dataset = _service.patch_dataset(dataset_id, **values)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if dataset is None:
         raise HTTPException(404, f"dataset {dataset_id!r} not found")
     return dataset

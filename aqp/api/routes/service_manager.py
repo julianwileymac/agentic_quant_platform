@@ -10,7 +10,18 @@ from aqp.services import service_manager
 
 router = APIRouter(prefix="/service-manager", tags=["service-manager"])
 
-ServiceName = Literal["trino", "polaris", "iceberg", "superset", "airbyte", "dagster", "neo4j"]
+ServiceName = Literal[
+    "trino",
+    "polaris",
+    "iceberg",
+    "superset",
+    "airbyte",
+    "dagster",
+    "neo4j",
+    "dask",
+    "ray",
+    "minio",
+]
 ActionName = Literal["start", "stop", "restart"]
 
 

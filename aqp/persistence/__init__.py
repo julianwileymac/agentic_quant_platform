@@ -164,6 +164,15 @@ from aqp.persistence.models_regulatory import (
     UsptoPatent,
     UsptoTrademark,
 )
+from aqp.persistence.models_rl import (
+    RLComponentRegistration,
+    RLEquityCurveRef,
+    RLEvaluation,
+    RLExperimentSpec as RLExperimentSpecRow,
+    RLExperimentVersion,
+    RLRun,
+    RLTrajectoryRef,
+)
 from aqp.persistence.models_taxonomy import (
     EntityCrosswalk,
     EntityTag,
@@ -206,6 +215,7 @@ from aqp.persistence.models_extraction import (
 from aqp.persistence.models_sinks import SinkRow, SinkVersionRow
 from aqp.persistence.models_producers import MarketDataProducerRow
 from aqp.persistence.models_streaming_links import StreamingDatasetLink
+from aqp.persistence.models_lineage import DataLineageEvent
 
 __all__ = [
     # Original core
@@ -364,6 +374,14 @@ __all__ = [
     "UsptoAssignment",
     "UsptoPatent",
     "UsptoTrademark",
+    # RL layer (FinRL + FinRobot inspired refactor)
+    "RLComponentRegistration",
+    "RLEquityCurveRef",
+    "RLEvaluation",
+    "RLExperimentSpecRow",
+    "RLExperimentVersion",
+    "RLRun",
+    "RLTrajectoryRef",
     # Data engine pipelines (Phase 3 — data-fabric expansion)
     "DatahubSyncLog",
     "DatasetProfile",
@@ -388,6 +406,8 @@ __all__ = [
     "SinkRow",
     "SinkVersionRow",
     "StreamingDatasetLink",
+    # Data lineage (Phase 2 - data layer unification)
+    "DataLineageEvent",
     # DB utilities
     "async_engine",
     "async_session_dep",

@@ -334,6 +334,16 @@ export function RlPage() {
     <PageContainer
       title="Reinforcement Learning"
       subtitle="Train DRL agents with FinRL-style envs and SB3 wrappers, or run a one-shot application."
+      extra={
+        <Space>
+          <Button href="/rl/lab" type="primary">
+            Open RL Lab
+          </Button>
+          <Button href="/rl/library">Component library</Button>
+          <Button href="/rl/runs">Runs</Button>
+          <Button href="/rl/zoo">Agent zoo</Button>
+        </Space>
+      }
     >
       <Tabs
         items={[

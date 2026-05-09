@@ -430,6 +430,14 @@ export const NAV_ITEMS: NavItem[] = [
   },
   // ---- Data layer expansion ---------------------------------------
   {
+    key: "data-hub",
+    label: "Data Hub",
+    href: "/data/hub",
+    icon: <ApartmentOutlined />,
+    group: "Research",
+    submenu: "Data Pipelines",
+  },
+  {
     key: "data-pipelines-hub",
     label: "Pipelines Hub",
     href: "/data/pipelines/hub",

@@ -82,6 +82,36 @@ inspiration extracts:
 See [docs/agentic-pipeline.md](docs/agentic-pipeline.md) for the full
 walkthrough.
 
+## What's new in 0.8 — Vite + Tailwind + shadcn frontend rewrite
+
+A second-generation operator UI lives under [`frontend/`](frontend/) on
+port `:3001` next to the existing Next.js webui on `:3000`. The new app
+is built on **Vite 7 + React 19 + TypeScript 5.9 strict + Tailwind CSS 4
++ shadcn/ui** and prioritises the live-trading + agent-oversight surface
+per the architectural blueprint:
+
+- **Throttled WebSocket pipeline** — rAF batcher capped at 30 FPS with a
+  bounded ring buffer (recency wins over completeness).
+- **Live Trading Desk** at `/live` — WebGL OHLC via `lightweight-charts`,
+  resizable panes, virtualized order book, manual order ticket gated by
+  typed-confirmation friction.
+- **Action Center** at `/action-center` (and topbar bell modal) —
+  subscribes to `/agents/proposals/stream`, surfaces LTL guardrail
+  outcomes, cost-cap remaining, risk metrics, approves / declines via
+  `AgentRuntime`.
+- **Kill-switch** in the topbar — fans out to `/agents/halt`,
+  `/paper/stop-all`, `/bots/halt-all`, `/rl/halt-all`.
+- **Sandbox / Paper mode** global indicator — amber outline, tab-title
+  prefix, "Simulated execution" caption on tickets.
+- **CodeMirror IDE** at `/ide` — Python + JSON browser-based scratch.
+- **Semantic financial colour tokens** + tabular-figure font features
+  applied across every numeric surface.
+
+The legacy Next.js webui remains the canonical UI until parity is
+reached. See [`frontend/README.md`](frontend/README.md) for the rewrite
+status and [`frontend/CUTOVER.md`](frontend/CUTOVER.md) for the cutover
+plan.
+
 ## What's new in 0.7 — Next.js webui + visual workflow editors
 
 The frontend has been rewritten in **React 19 / Next.js 15 / TypeScript**

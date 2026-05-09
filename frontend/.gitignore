@@ -1,0 +1,22 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+*.log
+.vite
+
+# Editor / OS
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# Test artefacts
+playwright-report
+test-results
+coverage
+
+# Env
+.env
+.env.local
+.env.*.local

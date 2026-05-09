@@ -5,6 +5,7 @@ import { Button, Card, Col, Row, Space, Tag, Typography } from "antd";
 
 import { DataGrid, NumberCellFormatter, PercentCellFormatter, StatusBadgeCell } from "@/components/data-grid";
 import { Heatmap, type HeatmapCell } from "@/components/charts";
+import { OPTIMIZER_LIST_PATH, optimizerDetailPath } from "@/components/optimizer/paths";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { useApiQuery } from "@/lib/api/hooks";
 
@@ -35,6 +36,10 @@ interface OptimizationTrial {
   max_drawdown?: number | null;
 }
 
+interface OptimizationDetail extends OptimizationSummary {
+  trials: OptimizationTrial[];
+}
+
 function buildHeatmap(trials: OptimizationTrial[]): {
   rows: string[];
   cols: string[];
@@ -60,18 +65,19 @@ function buildHeatmap(trials: OptimizationTrial[]): {
 export function OptimizerPage() {
   const list = useApiQuery<OptimizationSummary[]>({
     queryKey: ["optimize", "list"],
-    path: "/backtest/optimize/runs",
+    path: OPTIMIZER_LIST_PATH,
     select: (raw) => (Array.isArray(raw) ? (raw as OptimizationSummary[]) : []),
   });
   const latest = list.data?.[0];
-  const trials = useApiQuery<OptimizationTrial[]>({
+  const detail = useApiQuery<OptimizationDetail | null>({
     queryKey: ["optimize", "trials", latest?.id ?? ""],
-    path: latest ? `/backtest/optimize/runs/${latest.id}/trials` : "/",
+    path: latest ? optimizerDetailPath(latest.id) : "/",
     enabled: Boolean(latest),
-    select: (raw) => (Array.isArray(raw) ? (raw as OptimizationTrial[]) : []),
+    select: (raw) => (raw && typeof raw === "object" ? (raw as OptimizationDetail) : null),
   });
+  const trials = detail.data?.trials ?? [];
 
-  const heatmap = trials.data ? buildHeatmap(trials.data) : { rows: [], cols: [], cells: [] };
+  const heatmap = buildHeatmap(trials);
 
   return (
     <PageContainer
@@ -127,8 +133,8 @@ export function OptimizerPage() {
       </Row>
       <Card title="Trials" size="small" style={{ marginTop: 16 }}>
         <DataGrid<OptimizationTrial>
-          rowData={trials.data ?? []}
-          loading={trials.isLoading}
+          rowData={trials}
+          loading={detail.isLoading}
           columnDefs={[
             { field: "trial_index", headerName: "#", width: 80 },
             { field: "status", headerName: "Status", cellRenderer: StatusBadgeCell, width: 110 },

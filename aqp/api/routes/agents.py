@@ -15,11 +15,12 @@ needing to scrape ``/chat/stream/{task_id}`` to know what to subscribe to.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
@@ -125,6 +126,26 @@ def list_agent_tools() -> dict[str, Any]:
             }
         )
     return {"tools": out}
+
+
+@router.websocket("/proposals/stream")
+async def proposal_stream(ws: WebSocket) -> None:
+    """Keep the global Action Center proposal subscriber connected.
+
+    The frontend mounts a single process-wide WebSocket subscriber so
+    human-approval proposals can surface as toasts from any route. Some
+    deployments do not yet emit proposal events; accepting the socket and
+    sending a low-frequency heartbeat avoids repeated 403 reconnect noise
+    while preserving the public route for future proposal broadcasts.
+    """
+
+    await ws.accept()
+    try:
+        while True:
+            await asyncio.sleep(30)
+            await ws.send_json({"stage": "heartbeat"})
+    except WebSocketDisconnect:
+        logger.debug("proposal stream disconnected")
 
 
 @router.get("/crews/{task_id}/events")

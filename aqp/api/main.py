@@ -26,6 +26,7 @@ from aqp.api.routes import (
     chat,
     data,
     data_control,
+    data_entities,
     data_pipelines,
     datalinks,
     datasets,
@@ -184,6 +185,7 @@ app.include_router(feature_sets.router)
 app.include_router(feature_catalog.router)
 app.include_router(data_pipelines.router)
 app.include_router(data_control.router)
+app.include_router(data_entities.router)
 app.include_router(datasets.router)
 app.include_router(dbt.router)
 app.include_router(entities.router)
@@ -250,6 +252,18 @@ app.include_router(producers_routes.router)
 app.include_router(cluster_mgmt_routes.router)
 app.include_router(streaming_links_routes.router)
 app.include_router(dataset_loading_agent_routes.router)
+
+
+# --- Data layer unification: external MCP server router ----------------
+# Exposes DATA_MCP_TOOLS via streamable HTTP so external clients
+# (Cursor, Claude Desktop, etc.) can call them through the same
+# tool catalog the in-process AgentRuntime uses via the bridge.
+try:
+    from aqp.data.mcp.server import build_mcp_router as _build_data_mcp_router
+
+    app.include_router(_build_data_mcp_router())
+except Exception:  # noqa: BLE001 - MCP server is optional at boot
+    logger.warning("DataMCP HTTP router not mounted", exc_info=True)
 
 
 # ---------------------------------------------------------------------------

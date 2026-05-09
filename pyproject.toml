@@ -75,7 +75,7 @@ dependencies = [
 
 [project.optional-dependencies]
 arcticdb = ["arcticdb>=4.4"]
-dagster = ["dagster>=1.7.0"]
+dagster = ["dagster==1.12.21"]
 alpaca = ["alpaca-py>=0.25"]
 ibkr = ["ib-async>=1.0"]
 tradier = []
@@ -204,7 +204,9 @@ compute-ray = [
     "ray[data]>=2.10",
 ]
 compute = [
-    "agentic-quant-platform[compute-dask,compute-ray]",
+    "dask[distributed,dataframe]>=2024.5",
+    "bokeh>=3.1",
+    "ray[data]>=2.10",
 ]
 
 # Broader source library deps (FinanceDatabase / akshare / coingecko etc).
@@ -235,11 +237,11 @@ dbt = [
 # Dagster code-location runtime for AQP. Lighter than the full Dagster
 # install: just enough to expose ``Definitions`` over gRPC.
 dagster-aqp = [
-    "dagster>=1.7.0",
-    "dagster-webserver>=1.7.0",
-    "dagster-graphql>=1.7.0",
-    "dagster-postgres>=0.23",
-    "dagster-k8s>=0.23",
+    "dagster==1.12.21",
+    "dagster-webserver==1.12.21",
+    "dagster-graphql==1.12.21",
+    "dagster-postgres==0.28.21",
+    "dagster-k8s==0.28.21",
 ]
 
 data-plane = [
@@ -278,6 +280,7 @@ aqp-index = "scripts.index_metadata:main"
 aqp-train = "scripts.train_agent:main"
 aqp-backtest = "scripts.run_backtest:main"
 aqp-stream-ingest = "aqp.streaming.cli:main"
+aqp-data-mcp = "aqp.data.mcp.server:run_stdio"
 
 [tool.setuptools.packages.find]
 include = ["aqp*"]

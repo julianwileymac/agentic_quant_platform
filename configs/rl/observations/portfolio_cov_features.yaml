@@ -1,0 +1,15 @@
+class: StackedObservationBuilder
+module_path: aqp.rl.core.observation
+kwargs:
+  builders:
+    - class: PortfolioStateBuilder
+      module_path: aqp.rl.observations.portfolio_state
+      kwargs: { n_assets: 5 }
+    - class: CovarianceBuilder
+      module_path: aqp.rl.observations.covariance
+      kwargs: { n_assets: 5, lookback: 60 }
+    - class: TechnicalIndicatorBuilder
+      module_path: aqp.rl.observations.technical
+      kwargs:
+        n_assets: 5
+        indicators: [macd, rsi_30, cci_30]

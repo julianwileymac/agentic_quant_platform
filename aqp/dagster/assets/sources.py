@@ -9,13 +9,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from dagster import AssetExecutionContext, AssetKey, asset
+from dagster import AssetKey, asset
 
 from aqp.dagster.resources import AqpEngineResource
 
 
 def _run(
-    context: AssetExecutionContext,
+    context,
     *,
     namespace: str,
     table: str,
@@ -46,15 +46,16 @@ def _run(
     }
     result = engine.run_manifest(manifest)
     context.log.info("rows_written=%d", result.get("total_rows_written") or 0)
-    context.add_output_metadata(
-        {
-            "rows_written": int(
-                sum(t.get("rows_written", 0) for t in result.get("tables", []))
-            ),
-            "tables": [t.get("iceberg_identifier") for t in result.get("tables", [])],
-            "lineage": str(result.get("lineage") or {})[:512],
-        }
-    )
+    metadata = {
+        "rows_written": int(
+            sum(t.get("rows_written", 0) for t in result.get("tables", []))
+        ),
+        "tables": [t.get("iceberg_identifier") for t in result.get("tables", [])],
+        "lineage": str(result.get("lineage") or {})[:512],
+    }
+    if getattr(context, "has_partition_key", False):
+        metadata["partition_key"] = context.partition_key
+    context.add_output_metadata(metadata)
     return result
 
 
@@ -68,7 +69,7 @@ def _run(
     group_name="aqp_sources",
     required_resource_keys={"engine"},
 )
-def cfpb_complaints(context: AssetExecutionContext) -> dict[str, Any]:
+def cfpb_complaints(context) -> dict[str, Any]:
     return _run(
         context,
         namespace="aqp_cfpb",
@@ -84,7 +85,7 @@ def cfpb_complaints(context: AssetExecutionContext) -> dict[str, Any]:
     group_name="aqp_sources",
     required_resource_keys={"engine"},
 )
-def fda_recalls(context: AssetExecutionContext) -> dict[str, Any]:
+def fda_recalls(context) -> dict[str, Any]:
     return _run(
         context,
         namespace="aqp_fda",
@@ -100,7 +101,7 @@ def fda_recalls(context: AssetExecutionContext) -> dict[str, Any]:
     group_name="aqp_sources",
     required_resource_keys={"engine"},
 )
-def uspto_patents(context: AssetExecutionContext) -> dict[str, Any]:
+def uspto_patents(context) -> dict[str, Any]:
     return _run(
         context,
         namespace="aqp_uspto",
@@ -116,7 +117,7 @@ def uspto_patents(context: AssetExecutionContext) -> dict[str, Any]:
     group_name="aqp_sources",
     required_resource_keys={"engine"},
 )
-def gdelt_events(context: AssetExecutionContext) -> dict[str, Any]:
+def gdelt_events(context) -> dict[str, Any]:
     return _run(
         context,
         namespace="aqp_gdelt",
@@ -132,7 +133,7 @@ def gdelt_events(context: AssetExecutionContext) -> dict[str, Any]:
     group_name="aqp_sources",
     required_resource_keys={"engine"},
 )
-def fred_observations(context: AssetExecutionContext) -> dict[str, Any]:
+def fred_observations(context) -> dict[str, Any]:
     return _run(
         context,
         namespace="aqp_fred",
@@ -148,7 +149,7 @@ def fred_observations(context: AssetExecutionContext) -> dict[str, Any]:
     group_name="aqp_sources",
     required_resource_keys={"engine"},
 )
-def sec_filings(context: AssetExecutionContext) -> dict[str, Any]:
+def sec_filings(context) -> dict[str, Any]:
     return _run(
         context,
         namespace="aqp_sec",
@@ -169,7 +170,7 @@ def sec_filings(context: AssetExecutionContext) -> dict[str, Any]:
     group_name="aqp_sources",
     required_resource_keys={"engine"},
 )
-def finance_database_equities(context: AssetExecutionContext) -> dict[str, Any]:
+def finance_database_equities(context) -> dict[str, Any]:
     return _run(
         context,
         namespace="aqp_finance_database",
@@ -185,7 +186,7 @@ def finance_database_equities(context: AssetExecutionContext) -> dict[str, Any]:
     group_name="aqp_sources",
     required_resource_keys={"engine"},
 )
-def finance_database_etfs(context: AssetExecutionContext) -> dict[str, Any]:
+def finance_database_etfs(context) -> dict[str, Any]:
     return _run(
         context,
         namespace="aqp_finance_database",
@@ -201,7 +202,7 @@ def finance_database_etfs(context: AssetExecutionContext) -> dict[str, Any]:
     group_name="aqp_sources",
     required_resource_keys={"engine"},
 )
-def finance_database_indices(context: AssetExecutionContext) -> dict[str, Any]:
+def finance_database_indices(context) -> dict[str, Any]:
     return _run(
         context,
         namespace="aqp_finance_database",
@@ -212,7 +213,21 @@ def finance_database_indices(context: AssetExecutionContext) -> dict[str, Any]:
     )
 
 
+SOURCE_ASSETS = [
+    cfpb_complaints,
+    fda_recalls,
+    uspto_patents,
+    gdelt_events,
+    fred_observations,
+    sec_filings,
+    finance_database_equities,
+    finance_database_etfs,
+    finance_database_indices,
+]
+
+
 __all__ = [
+    "SOURCE_ASSETS",
     "cfpb_complaints",
     "fda_recalls",
     "finance_database_equities",

@@ -4,6 +4,7 @@ import { Card, Tabs } from "antd";
 
 import { AgentBacktestWizard } from "@/components/backtest/AgentBacktestWizard";
 import { BacktestLab } from "@/components/backtest/BacktestLab";
+import { InteractiveBacktestLab } from "@/components/backtest/InteractiveBacktestLab";
 
 /**
  * Top-level "New backtest" page. Defaults to the registry-driven Agent
@@ -25,6 +26,11 @@ export function BacktestNewShell() {
             key: "raw",
             label: "Advanced (raw YAML/JSON)",
             children: <BacktestLab />,
+          },
+          {
+            key: "interactive",
+            label: "Interactive lab",
+            children: <InteractiveBacktestLab />,
           },
         ]}
       />

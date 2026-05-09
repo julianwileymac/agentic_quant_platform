@@ -173,6 +173,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: api
     container_name: aqp-api
     command: uvicorn aqp.api.main:app --host 0.0.0.0 --port 8000 --reload
     env_file: .env
@@ -205,8 +206,9 @@ services:
       AQP_S3_ACCESS_KEY: ""
       AQP_S3_SECRET_KEY: ""
       AQP_S3_REGION: "${AQP_S3_REGION:-us-east-1}"
-      # Next.js webui (:3000) calls the API from the browser; whitelist enables credentialed CORS if needed.
-      AQP_WEBUI_CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      # Browser frontends call the API directly from these dev/preview ports.
+      # :3000 = legacy Next.js webui, :3001 = Vite dev, :3002 = compose preview.
+      AQP_WEBUI_CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3002,http://127.0.0.1:3002
       # Writable HOME / data dirs — CrewAI's RAG module eagerly wants a
       # writable ``platformdirs.user_data_dir`` on first class import.
       HOME: /app
@@ -216,6 +218,7 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
       - "C:/Users/Julian Wiley/Downloads:/host-downloads:ro"
       # Persistent Iceberg warehouse + staging on the host drive. Tear
       # down the entire stack and the catalog still survives here.
@@ -238,6 +241,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: api
     container_name: aqp-worker
     command: celery -A aqp.tasks.celery_app worker --loglevel=info -Q default,backtest,agents,ingestion,paper --concurrency=4
     env_file: .env
@@ -360,9 +364,9 @@ services:
       - api
 
   # -----------------------------------------------------------------------
-  # Next.js 15 webui (Phase 0 of the Solara → React migration). Runs on
-  # :3000 alongside the legacy Solara UI on :8765 until feature parity is
-  # reached. Drop this section's dependency on `ui` to deprecate Solara.
+  # Legacy Next.js 15 webui. Stays on :3000 during the Vite + Tailwind
+  # rewrite (see service ``frontend`` below). Will be retired once the new
+  # frontend reaches parity (tracked in the rewrite plan, Phases 2-6).
   # -----------------------------------------------------------------------
   webui:
     build:
@@ -391,11 +395,37 @@ services:
       - api
 
   # -----------------------------------------------------------------------
+  # Vite 7 + Tailwind 4 + shadcn/ui frontend (rewrite target). Phases 0-6
+  # ship today (full route parity except a small long-tail). Local dev
+  # runs on :3001 (`pnpm dev`); the docker-compose-managed container is
+  # published on host :3002 to coexist with the dagster-webserver that
+  # already binds host :3001 in the visualization profile.
+  # -----------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8000
+        VITE_WS_URL: ws://localhost:8000
+        VITE_DEFAULT_MODE: live
+    container_name: aqp-frontend
+    environment:
+      VITE_API_URL: http://localhost:8000
+      VITE_WS_URL: ws://localhost:8000
+      VITE_DEFAULT_MODE: live
+    ports:
+      - "3002:3001"
+    depends_on:
+      - api
+
+  # -----------------------------------------------------------------------
   # Paper trading service. Runs the default reference config in dry-run
   # mode so the container starts even when broker credentials are absent.
   # Override ``command`` to switch to a real config.
   # -----------------------------------------------------------------------
   paper-trader:
+    profiles: ["paper"]
     build:
       context: .
       dockerfile: Dockerfile

@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { normaliseBacktestConfigShape } from "@/components/backtest/backtestLabConfig";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { apiFetch } from "@/lib/api/client";
 import { useChatStream } from "@/lib/ws";
@@ -17,19 +18,54 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react").then((m) => m.
 
 const { Text, Paragraph } = Typography;
 
-const DEFAULT_CONFIG = `# Pass either a strategy id or an inline strategy YAML/JSON
+const DEFAULT_CONFIG = `# Backend-compatible shape: strategy + backtest blocks.
 {
   "strategy": {
-    "name": "ad_hoc",
-    "asset_class": "equity",
-    "symbols": ["SPY", "AAPL"],
-    "signals": [{ "kind": "sma_cross", "fast": 10, "slow": 30 }],
-    "sizing": { "kind": "equal_weight" }
+    "class": "FrameworkAlgorithm",
+    "module_path": "aqp.strategies.framework",
+    "kwargs": {
+      "universe_model": {
+        "class": "StaticUniverse",
+        "module_path": "aqp.strategies.universes",
+        "kwargs": { "symbols": ["SPY", "AAPL", "MSFT"] }
+      },
+      "alpha_model": {
+        "class": "MomentumAlpha",
+        "module_path": "aqp.strategies.momentum",
+        "kwargs": {
+          "lookback": 90,
+          "top_quantile": 0.3,
+          "bottom_quantile": 0.3,
+          "allow_short": false
+        }
+      },
+      "portfolio_model": {
+        "class": "EqualWeightPortfolio",
+        "module_path": "aqp.strategies.portfolio",
+        "kwargs": { "max_positions": 5 }
+      },
+      "risk_model": {
+        "class": "BasicRiskModel",
+        "module_path": "aqp.strategies.risk_models",
+        "kwargs": { "max_position_pct": 0.25, "max_drawdown_pct": 0.2 }
+      },
+      "execution_model": {
+        "class": "MarketOrderExecution",
+        "module_path": "aqp.strategies.execution",
+        "kwargs": {}
+      }
+    }
   },
-  "engine": "EventDrivenBacktester",
-  "start": "2022-01-01",
-  "end": "2024-12-31",
-  "initial_cash": 100000
+  "backtest": {
+    "engine": "event",
+    "kwargs": {
+      "initial_cash": 100000,
+      "commission_pct": 0.0005,
+      "slippage_bps": 2,
+      "start": "2022-01-01",
+      "end": "2024-12-31"
+    }
+  }
 }
 `;
 
@@ -55,10 +91,15 @@ export function BacktestLab() {
       message.error(`Config is not valid JSON: ${(err as Error).message}`);
       return;
     }
+    const normalized = normaliseBacktestConfigShape(parsed, values.engine ?? "event");
+    if (!normalized) {
+      message.error("Config must include both `strategy` and `backtest` objects.");
+      return;
+    }
     try {
       const res = await apiFetch<SubmitResp>("/backtest/run", {
         method: "POST",
-        body: JSON.stringify({ config: parsed, run_name: values.run_name || "ad_hoc" }),
+        body: JSON.stringify({ config: normalized, run_name: values.run_name || "ad_hoc" }),
       });
       setTaskId(res.task_id);
       message.success(`Backtest queued: ${res.task_id}`);
@@ -85,7 +126,7 @@ export function BacktestLab() {
       <Row gutter={16}>
         <Col xs={24} lg={8}>
           <Card title="Run metadata" size="small">
-            <Form form={form} layout="vertical" initialValues={{ run_name: "ad_hoc" }}>
+            <Form form={form} layout="vertical" initialValues={{ run_name: "ad_hoc", engine: "event" }}>
               <Form.Item
                 label="Run name"
                 name="run_name"
@@ -95,11 +136,13 @@ export function BacktestLab() {
               </Form.Item>
               <Form.Item label="Engine" name="engine">
                 <Select
-                  defaultValue="EventDrivenBacktester"
+                  defaultValue="event"
                   options={[
-                    { value: "EventDrivenBacktester", label: "Event Driven" },
-                    { value: "VectorbtEngine", label: "Vectorbt" },
-                    { value: "BacktestingPyEngine", label: "backtesting.py" },
+                    { value: "event", label: "Event Driven" },
+                    { value: "vectorbt-pro", label: "Vectorbt Pro" },
+                    { value: "vectorbt", label: "Vectorbt" },
+                    { value: "backtesting", label: "backtesting.py" },
+                    { value: "fallback", label: "Fallback cascade" },
                   ]}
                 />
               </Form.Item>

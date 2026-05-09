@@ -75,6 +75,47 @@ that applies on every change.
 14. `bot_versions` rows are immutable, hash-locked. Re-snapshotting via
     [aqp/bots/registry.py::persist_spec](mdc:aqp/bots/registry.py)
     creates a new version row automatically.
+15. All RL train / evaluate / paper / replay / walk-forward goes
+    through [aqp/rl/runtime.py::RLRuntime](mdc:aqp/rl/runtime.py).
+    Celery tasks (`aqp.tasks.rl_tasks`) and API routes
+    (`aqp.api.routes.rl`) wrap it — never call `agent.train` directly.
+16. `rl_experiment_versions` rows are immutable, hash-locked.
+    Re-snapshotting via
+    [aqp/rl/registry.py::persist_spec](mdc:aqp/rl/registry.py)
+    creates a new version row automatically.
+17. All RL trajectory / equity-curve / action-log / reward-term
+    writes go through
+    [aqp/rl/trajectories/iceberg_writer.py::IcebergTrajectoryStore](mdc:aqp/rl/trajectories/iceberg_writer.py)
+    → `iceberg_catalog.append_arrow`. Don't call PyIceberg directly
+    from RL code.
+18. Concrete RL components register through the
+    [`RLComponent`](mdc:aqp/rl/core/base.py) metaclass — set
+    `rl_kind` (one of `rl_env`, `rl_reward`, `rl_observation`,
+    `rl_action`, `rl_termination`, `rl_policy`, `rl_agent`,
+    `rl_data`, `rl_ensembler`, `rl_experiment`,
+    `rl_trajectory_store`) and `rl_alias`. The metaclass calls
+    `@register` automatically.
+19. LLM calls inside `LLMHybridAgent` route through
+    [`router_complete`](mdc:aqp/llm/providers/router.py) (rule 2 still
+    applies — RL is no exception).
+20. New Iceberg tables that an agent will read MUST declare a
+    `medallion_layer` (`bronze` / `silver` / `gold`) and a
+    `BusinessMetadata` block on first write. Use
+    [`aqp.data.catalog.register_dataset`](mdc:aqp/data/catalog/active_metadata.py)
+    or the `@dataset(...)` decorator; pass `medallion_layer` /
+    `business_metadata` straight to `iceberg_catalog.append_arrow` for
+    one-shot upsert + namespace-prefix validation. Bronze namespaces
+    are `aqp_bronze_*`, Silver `aqp_silver_*`, Gold `aqp_gold_*`. Read
+    [docs/data-layer-unification.md](mdc:docs/data-layer-unification.md).
+21. Agents must NOT read Postgres / Iceberg directly. Every
+    catalog / dataset / entity / pipeline read goes through a
+    registered
+    [`DataMCPTool`](mdc:aqp/data/mcp/base.py) (in-process bridge or
+    external MCP server). Add new agent reads by adding a
+    `DataMCPTool` subclass under
+    [aqp/data/mcp/tools/](mdc:aqp/data/mcp/tools/) — never by importing
+    ORM models into agent code. Read
+    [docs/data-mcp.md](mdc:docs/data-mcp.md).
 
 ## Style
 
@@ -105,6 +146,19 @@ that applies on every change.
 | Bot REST | [aqp/api/routes/bots.py](mdc:aqp/api/routes/bots.py) |
 | Bot Celery tasks | [aqp/tasks/bot_tasks.py](mdc:aqp/tasks/bot_tasks.py) |
 | Bot UI builder | [webui/components/bots/](mdc:webui/components/bots/) |
+| RL core abstractions | [aqp/rl/core/](mdc:aqp/rl/core/) |
+| RL spec + runtime | [aqp/rl/spec.py](mdc:aqp/rl/spec.py) + [aqp/rl/runtime.py](mdc:aqp/rl/runtime.py) |
+| RL envs | [aqp/rl/envs/](mdc:aqp/rl/envs/) |
+| RL rewards / observations / actions / terminations | [aqp/rl/rewards/](mdc:aqp/rl/rewards/) + [aqp/rl/observations/](mdc:aqp/rl/observations/) + [aqp/rl/actions/](mdc:aqp/rl/actions/) + [aqp/rl/terminations/](mdc:aqp/rl/terminations/) |
+| RL data pipelines | [aqp/rl/data_pipelines/](mdc:aqp/rl/data_pipelines/) |
+| RL agents (SB3 / ElegantRL / RLlib / CleanRL / LLM-hybrid) | [aqp/rl/agents/](mdc:aqp/rl/agents/) |
+| RL ensemblers / experiments / applications | [aqp/rl/ensemblers/](mdc:aqp/rl/ensemblers/) + [aqp/rl/experiments/](mdc:aqp/rl/experiments/) + [aqp/rl/applications/](mdc:aqp/rl/applications/) |
+| RL Iceberg trajectory store | [aqp/rl/trajectories/](mdc:aqp/rl/trajectories/) |
+| RL ORM | [aqp/persistence/models_rl.py](mdc:aqp/persistence/models_rl.py) |
+| RL REST | [aqp/api/routes/rl.py](mdc:aqp/api/routes/rl.py) |
+| RL Celery tasks | [aqp/tasks/rl_tasks.py](mdc:aqp/tasks/rl_tasks.py) |
+| RL configs | [configs/rl/](mdc:configs/rl/) |
+| RL UI lab + builders | [webui/components/rl/](mdc:webui/components/rl/) |
 
 ## Doc references
 
@@ -118,6 +172,10 @@ that applies on every change.
 - [docs/agents.md](mdc:docs/agents.md) — spec-driven agent surface
 - [docs/bots.md](mdc:docs/bots.md) — Bot entity (TradingBot / ResearchBot)
 - [docs/regulatory-data.md](mdc:docs/regulatory-data.md) — CFPB / FDA / USPTO
+- [docs/rl-framework.md](mdc:docs/rl-framework.md) — RL core abstractions + spec / runtime
+- [docs/rl-lab.md](mdc:docs/rl-lab.md) — RL Lab + builders UI
+- [docs/rl-components.md](mdc:docs/rl-components.md) — registered RL components reference
+- [docs/rl-iceberg.md](mdc:docs/rl-iceberg.md) — RL Iceberg trajectory tables + DuckDB views
 
 ## Don't
 
@@ -151,3 +209,12 @@ that applies on every change.
   subclass. Bots compose references and dispatch to existing primitives
   (`run_backtest_from_config`, `build_session_from_config`,
   `AgentRuntime`, `HierarchicalRAG`).
+- Don't bypass `RLRuntime` for RL train / evaluate / paper / replay /
+  walk-forward. Iceberg trajectory persistence + `rl_runs` ledger +
+  `rl_experiment_versions` snapshots depend on it.
+- Don't mutate `rl_experiment_versions` rows. They are immutable,
+  hash-locked snapshots.
+- Don't write RL trajectories / equity / action / reward-decomp
+  directly to Iceberg. Buffer through `IcebergTrajectoryStore`.
+- Don't decorate RL components manually with `@register`. The
+  `RLComponent` metaclass does it when you set `rl_kind` / `rl_alias`.

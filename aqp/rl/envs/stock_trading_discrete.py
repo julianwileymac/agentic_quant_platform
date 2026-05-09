@@ -14,21 +14,20 @@ via the shared registry — no separate trainer needed.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-from aqp.core.registry import register
+from aqp.rl.core.base import RL_KIND_ENV, RLComponent
 from aqp.rl.envs.base import load_bars, safe_array
 
 
 _DEFAULT_INDICATORS = ("macd", "rsi_14", "sma_20", "sma_50")
 
 
-@register("StockTradingDiscreteEnv")
-class StockTradingDiscreteEnv(gym.Env):
+class StockTradingDiscreteEnv(gym.Env, RLComponent):
     """FinRL-style single-stock discrete trading env.
 
     Parameters
@@ -53,6 +52,12 @@ class StockTradingDiscreteEnv(gym.Env):
     """
 
     metadata = {"render_modes": ["human"]}
+
+    rl_kind: ClassVar[str] = RL_KIND_ENV
+    rl_alias: ClassVar[str] = "StockTradingDiscreteEnv"
+    rl_source: ClassVar[str] = "finrl"
+    rl_category: ClassVar[str] = "discrete"
+    rl_tags: ClassVar[tuple[str, ...]] = ("single-asset", "discrete", "cash-penalty")
 
     HOLD, BUY, SELL = 0, 1, 2
 
@@ -204,3 +209,19 @@ class StockTradingDiscreteEnv(gym.Env):
             f"t={self.idx} | price={self.prices[self.idx]:.2f} | "
             f"cash={self.cash:.2f} | shares={self.shares} | pv={self.portfolio_value:.2f}"
         )
+
+    def _collect_env_state(self) -> dict[str, Any]:
+        return {
+            "step_idx": self.idx,
+            "portfolio_value": self.portfolio_value,
+            "prev_value": self.prev_value,
+            "cash": self.cash,
+            "shares": self.shares,
+            "price": float(self.prices[self.idx]) if self.idx < len(self.prices) else None,
+            "initial_balance": self.initial_balance,
+        }
+
+
+from aqp.core.registry import register as _register  # noqa: E402
+
+_register("StockTradingDiscreteEnv", kind=RL_KIND_ENV)(StockTradingDiscreteEnv)

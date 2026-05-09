@@ -31,7 +31,10 @@ Use this as your first lookup when answering "where does X live?".
 | [aqp/providers/](aqp/providers/) | Data-feed adapters (yfinance, AV, IBKR, …) | [docs/data-plane.md](docs/data-plane.md) |
 | [aqp/rag/](aqp/rag/) | Hierarchical Redis RAG (Alpha-GPT levels × first/second/third-order corpora) | [docs/rag.md](docs/rag.md) |
 | [aqp/risk/](aqp/risk/) | Position-, daily-, drawdown-loss limits | [docs/paper-trading.md](docs/paper-trading.md) |
-| [aqp/rl/](aqp/rl/) | gym envs + thin SB3 adapters | [docs/ml-framework.md](docs/ml-framework.md) |
+| [aqp/rl/](aqp/rl/) | Metaclass-driven RL stack: core abstractions + envs (FinRL ports) + composable rewards / observations / actions / terminations + multi-framework agents (SB3 / ElegantRL / RLlib / CleanRL / LLM-hybrid) + data pipelines + ensemblers + experiments + Iceberg-backed trajectory store | [docs/rl-framework.md](docs/rl-framework.md), [docs/rl-lab.md](docs/rl-lab.md), [docs/rl-components.md](docs/rl-components.md), [docs/rl-iceberg.md](docs/rl-iceberg.md) |
+| [aqp/rl/core/](aqp/rl/core/) | `RLComponent` metaclass + abstract bases (env, observation, action, reward, termination, policy, agent, data, ensembler, experiment, trajectory store) + JSON schema introspection | [docs/rl-framework.md](docs/rl-framework.md) |
+| [aqp/rl/spec.py](aqp/rl/spec.py) + [aqp/rl/runtime.py](aqp/rl/runtime.py) | Hash-locked `RLExperimentSpec` + `RLRuntime` single sanctioned executor (mirrors `BotRuntime` / `AgentRuntime`) | [docs/rl-framework.md](docs/rl-framework.md) |
+| [aqp/rl/trajectories/](aqp/rl/trajectories/) | Iceberg-backed trajectory persistence (`rl.trajectories`, `rl.equity_curves`, `rl.action_logs`, `rl.reward_decomposition`) + DuckDB views | [docs/rl-iceberg.md](docs/rl-iceberg.md) |
 | [aqp/runtime/](aqp/runtime/) | Control-plane state (provider overrides, kill switches) | [docs/providers.md](docs/providers.md) |
 | [aqp/services/](aqp/services/) | Higher-level domain services (Alpha Vantage, Tradier, …) | [docs/alpha-vantage.md](docs/alpha-vantage.md) |
 | [aqp/strategies/](aqp/strategies/) | `BaseStrategy` + concrete alphas + framework | [docs/factor-research.md](docs/factor-research.md) |
@@ -50,7 +53,8 @@ External code:
 
 | Path | Purpose |
 | --- | --- |
-| [webui/](webui/) | Next.js 15 React webui (with new `/agents/*`, `/rag/*`, `/data/{cfpb,fda,uspto}` routes) |
+| [webui/](webui/) | Legacy Next.js 15 webui on `:3000`. Canonical operator UI until the [frontend/](frontend/) rewrite reaches parity. See [frontend/CUTOVER.md](frontend/CUTOVER.md). |
+| [frontend/](frontend/) | Vite 7 + React 19 + Tailwind 4 + shadcn/ui rewrite on `:3001`. Phase 0 + Phase 1 ship today (Live Trading Desk, Action Center, kill-switch, sandbox banner, throttled WS pipeline, lightweight-charts WebGL OHLC, CodeMirror IDE). Remaining ~120 routes progressively port in phases 2-6. |
 | [alembic/versions/](alembic/versions/) | DB migrations (immutable once shipped) |
 | [deploy/k8s/](deploy/k8s/) | Kubernetes manifests for the rpi_kubernetes cluster |
 | [scripts/](scripts/) | Operational scripts (`iceberg_smoke.py`, `ingest_regulatory.py`, …) |
@@ -122,8 +126,53 @@ These hold across the codebase. Any PR that violates one will be sent back.
     / `AgentRuntime` directly from a bot subclass — derive the cfg in
     `BaseBot._derive_*_cfg` and let the runtime drive the call.
 15. **`bot_versions` rows are immutable, hash-locked.** Snapshotting via
-    [aqp/bots/registry.py::persist_spec](aqp/bots/registry.py) creates a
-    new version row automatically when the spec hash changes.
+ [aqp/bots/registry.py::persist_spec](aqp/bots/registry.py) creates a
+ new version row automatically when the spec hash changes.
+16. **All RL training / evaluation / paper-trading / replay /
+ walk-forward goes through
+ [aqp/rl/runtime.py::RLRuntime](aqp/rl/runtime.py).** Celery tasks
+ (`aqp.tasks.rl_tasks`) and API routes (`aqp.api.routes.rl`) wrap it —
+ they never call `agent.train` directly.
+17. **`rl_experiment_versions` rows are immutable, hash-locked.**
+ Re-snapshotting via
+ [aqp/rl/registry.py::persist_spec](aqp/rl/registry.py) inserts a new
+ version row automatically when the spec hash changes.
+18. **All RL trajectory / equity-curve / action-log / reward-term
+ writes go through
+ [aqp/rl/trajectories/iceberg_writer.py::IcebergTrajectoryStore](aqp/rl/trajectories/iceberg_writer.py)**
+ → [`iceberg_catalog.append_arrow`](aqp/data/iceberg_catalog.py). Don't
+ call PyIceberg directly from RL code.
+19. **All concrete RL components register through the
+ [`RLComponent`](aqp/rl/core/base.py) metaclass.** Set ``rl_kind`` to
+ one of the canonical kinds (`rl_env`, `rl_reward`, `rl_observation`,
+ `rl_action`, `rl_termination`, `rl_policy`, `rl_agent`, `rl_data`,
+ `rl_ensembler`, `rl_experiment`, `rl_trajectory_store`); the
+ metaclass calls
+ [`@register`](aqp/core/registry.py) automatically.
+20. **LLM calls inside `LLMHybridAgent` route through
+ [`router_complete`](aqp/llm/providers/router.py).** No direct
+ `litellm.completion` / `OllamaClient` from RL code.
+21. **New Iceberg tables that an agent will read MUST declare a
+ medallion layer + business metadata.** Use
+ [`aqp.data.catalog.register_dataset`](aqp/data/catalog/active_metadata.py)
+ or pass `medallion_layer="bronze|silver|gold"` +
+ `business_metadata=BusinessMetadata(...)` straight to
+ [`iceberg_catalog.append_arrow`](aqp/data/iceberg_catalog.py).
+ Bronze namespaces are `aqp_bronze_*`, Silver `aqp_silver_*`, Gold
+ `aqp_gold_*`. The wrapper validates that the namespace prefix
+ matches the declared layer. Read
+ [docs/data-layer-unification.md](docs/data-layer-unification.md).
+22. **Agents MUST NOT read Postgres / Iceberg directly.** Every
+ catalog / dataset / entity / pipeline read from agent code goes
+ through a registered
+ [`DataMCPTool`](aqp/data/mcp/base.py). New agent reads = new
+ `DataMCPTool` subclass under
+ [aqp/data/mcp/tools/](aqp/data/mcp/tools/) — never an `import` of
+ ORM models inside an agent body. The bridge auto-installs every
+ `DataMCPTool` into [`TOOL_REGISTRY`](aqp/agents/tools/__init__.py)
+ and the same catalog is exposed externally via the FastAPI router
+ at `/mcp/data` and the `aqp-data-mcp` stdio binary. Read
+ [docs/data-mcp.md](docs/data-mcp.md).
 
 ## Common workflows
 
@@ -179,6 +228,12 @@ docker exec aqp-api alembic upgrade head
 | Add a backtest engine | Subclass [aqp/backtest/base.py::BaseBacktestEngine](aqp/backtest/base.py); declare an `EngineCapabilities` class attribute; decorate with `@register("Name")`; add a shortcut to [aqp/backtest/runner.py::_ENGINE_SHORTCUTS](aqp/backtest/runner.py) and document in [docs/backtest-engines.md](docs/backtest-engines.md) |
 | Add a bot | Drop a YAML under [configs/bots/trading/](configs/bots/trading/) or [configs/bots/research/](configs/bots/research/); the registry auto-loads on first lookup. Programmatic: `BotSpec(...)` + `add_spec(spec)`. CRUD via `POST /bots`; lifecycle via `/bots/{id}/{backtest|paper|chat|deploy}`. |
 | Add a bot deployment target | Subclass [aqp/bots/deploy.py::DeploymentTarget](aqp/bots/deploy.py); register on `DeploymentDispatcher.register(target)`; add the kind to the `BOT_PALETTE` Deploy section in [webui/components/bots/botPalette.ts](webui/components/bots/botPalette.ts). |
+| Add an RL component (env / reward / observation / action / termination / policy / agent / data / ensembler / experiment / trajectory_store) | Subclass the matching base in [aqp/rl/core/](aqp/rl/core/) and set `rl_kind` + `rl_alias`. The [`RLComponent`](aqp/rl/core/base.py) metaclass auto-registers via `@register`. Add a palette tile in [webui/components/rl/palette.ts](webui/components/rl/palette.ts) and a serialiser entry in [webui/components/rl/serialize.ts](webui/components/rl/serialize.ts). |
+| Add an RL reward term | Subclass [`RewardTerm`](aqp/rl/core/reward.py) in [aqp/rl/rewards/](aqp/rl/rewards/); add to [aqp/rl/rewards/__init__.py](aqp/rl/rewards/__init__.py); ship a sample composite YAML under [configs/rl/rewards/](configs/rl/rewards/) |
+| Add an RL framework adapter | Subclass [`BaseRLAgent`](aqp/rl/core/policy.py) in [aqp/rl/agents/](aqp/rl/agents/); set `rl_alias`/`rl_source`; expose via the agents `__init__.py` (suppress import errors so the dep stays optional). |
+| Add an RL data source | Subclass [`BaseDataPipeline`](aqp/rl/core/data.py) in [aqp/rl/data_pipelines/](aqp/rl/data_pipelines/); implement `download_data` / optionally override `add_risk_features` and `df_to_array`; add a YAML under [configs/rl/data_pipelines/](configs/rl/data_pipelines/). |
+| Add an RL experiment / ensemble | Subclass [`BaseExperiment`](aqp/rl/core/experiment.py) / [`BaseEnsembler`](aqp/rl/core/ensembler.py) and ship under [aqp/rl/experiments/](aqp/rl/experiments/) / [aqp/rl/ensemblers/](aqp/rl/ensemblers/). |
+| Run an RL experiment | Author / load an `RLExperimentSpec`, call `RLRuntime(spec).train(...)`. The runtime persists Iceberg trajectories + a `rl_runs` ledger row + MLflow artifacts. From the UI: [`/rl/lab`](webui/app/(shell)/rl/lab/page.tsx) → "Save & train". |
 | Add a vbt-pro mode / kwarg | Extend [aqp/backtest/vbtpro/engine.py::VectorbtProEngine](aqp/backtest/vbtpro/engine.py); update [docs/vbtpro-integration.md](docs/vbtpro-integration.md) |
 | Add an agent-aware alpha (vbt-pro) | Subclass `IAlphaModel` in [aqp/strategies/vbtpro/](aqp/strategies/vbtpro/); implement `generate_panel_signals` for the fast path; decorate with `@register("Name", kind="alpha")` |
 | Add a per-bar agent dispatcher consumer | Strategy reads `context["agents"]` (the [aqp/strategies/agentic/agent_dispatcher.py::AgentDispatcher](aqp/strategies/agentic/agent_dispatcher.py)) and calls `consult(spec_name, inputs, ttl=...)` from `on_bar` — only works on `EventDrivenBacktester` |
@@ -191,6 +246,12 @@ docker exec aqp-api alembic upgrade head
 | Find every place a task is dispatched | `rg "<task_module>\.<task_name>\.delay\(" aqp/` |
 | Find every config knob | [aqp/config.py](aqp/config.py) (single source of truth) |
 | Add an inspiration-rehydrated asset | Decorate with `@register("Name", source="<repo>", category="<bucket>")` from [aqp/core/registry.py](aqp/core/registry.py); add a per-asset note to `extractions/<source>/REFERENCE.md`; ship a YAML under `configs/<kind>/<source>/<name>.yaml` |
+| Choose a medallion layer | Use `aqp_bronze_<source>` for raw, `aqp_silver_<source>` for normalised, `aqp_gold_<entity>` for products. Validate with `medallion_layer="bronze\|silver\|gold"` on [`iceberg_catalog.append_arrow`](aqp/data/iceberg_catalog.py). Read [docs/data-layer-unification.md](docs/data-layer-unification.md) |
+| Add a normalization strategy | Subclass [`BaseNormalizationStrategy`](aqp/data/normalization/base.py) in [aqp/data/normalization/strategies.py](aqp/data/normalization/strategies.py); decorate with `@register_normalization_strategy("alias")`; reference in `Silver` transform nodes |
+| Add a DataMCP tool | Subclass [`DataMCPTool`](aqp/data/mcp/base.py) under [aqp/data/mcp/tools/](aqp/data/mcp/tools/), decorate with `@register_data_mcp_tool`. The bridge auto-installs into [`TOOL_REGISTRY`](aqp/agents/tools/__init__.py); the FastAPI router and stdio binary expose it externally. Read [docs/data-mcp.md](docs/data-mcp.md) |
+| Add an entity-centric data product | Subclass [`BaseDataProduct`](aqp/data/products/base.py) under [aqp/data/products/](aqp/data/products/); add a matching `data.entities.*` MCP tool and a `/data/entities/...` REST route. Read [docs/data-products.md](docs/data-products.md) |
+| Register active metadata | Call [`aqp.data.catalog.register_dataset`](aqp/data/catalog/active_metadata.py) with `medallion_layer`, `BusinessMetadata`, and an optional `DataContract` — or attach `@dataset(...)` to a fetcher / sink class for auto-upsert |
+| Walk lineage | UI: [/data/hub](webui/app/(shell)/data/hub/page.tsx) Overview tab. API: `GET /data-control/lineage`. Agents: `data.catalog.lineage` MCP tool. Code: [aqp/data/catalog/lineage.py](aqp/data/catalog/lineage.py) |
 | Add a microstructure feature | [aqp/data/microstructure.py](aqp/data/microstructure.py) — append a function and add to `__all__` |
 | Add an OHLC vol estimator | [aqp/data/realised_volatility.py](aqp/data/realised_volatility.py) |
 | Add a label generator | [aqp/data/labels.py](aqp/data/labels.py) |
@@ -266,6 +327,27 @@ Things that look like they should work but actively break the system.
   subclass.** Bots compose references and dispatch to existing
   primitives (`run_backtest_from_config`, `build_session_from_config`,
   `AgentRuntime`, `HierarchicalRAG`).
+- **Don't bypass [aqp/rl/runtime.py::RLRuntime](aqp/rl/runtime.py)
+  for RL train / evaluate / paper / replay / walk-forward.**
+  Telemetry, `rl_runs` ledger, Iceberg trajectories, and
+  hash-locked spec versions depend on it.
+- **Don't mutate `rl_experiment_versions` rows.** They are
+  immutable, hash-locked snapshots — re-snapshotting via
+  [aqp/rl/registry.py::persist_spec](aqp/rl/registry.py) creates a
+  new version row when the hash changes.
+- **Don't write RL trajectories / equity / action / reward-decomp
+  directly to Iceberg.** Buffer them through
+  [`IcebergTrajectoryStore`](aqp/rl/trajectories/iceberg_writer.py)
+  so `append_arrow` calls share batching, tenancy stamping, and
+  flush semantics.
+- **Don't decorate RL component subclasses manually with
+  `@register`.** The
+  [`RLComponent`](aqp/rl/core/base.py) metaclass does it for you when
+  you set `rl_kind` + `rl_alias` (and optional `rl_tags` /
+  `rl_source` / `rl_category`).
+- **Don't call `litellm.completion` / `OllamaClient` from RL code.**
+  `LLMHybridAgent` routes through
+  [`router_complete`](aqp/llm/providers/router.py).
 
 ## Quick reference
 
@@ -302,6 +384,18 @@ Things that look like they should work but actively break the system.
 | `submit_factor_job` | Render + apply a Flink session-job for an AQP factor / ML pipeline | [aqp/streaming/runtime.py](aqp/streaming/runtime.py) |
 | `ClusterMgmtClient` | Httpx wrapper around `rpi_kubernetes` `/api/{kafka,flink,alphavantage}` | [aqp/services/cluster_mgmt_client.py](aqp/services/cluster_mgmt_client.py) |
 | `dataset_loading_assistant` | Read-only data-onboarding agent (Ollama via AgentRuntime) | [configs/agents/dataset_loading_assistant.yaml](configs/agents/dataset_loading_assistant.yaml) |
+| `RLComponent` metaclass + `rl_kind` | Auto-registers concrete RL components by kind | [aqp/rl/core/base.py](aqp/rl/core/base.py) |
+| `BaseRLEnv` | Composable env (observation / action / reward / termination hooks) | [aqp/rl/core/env.py](aqp/rl/core/env.py) |
+| `CompositeReward` + `RewardTerm` | Sum of weighted reward terms with per-step decomposition | [aqp/rl/core/reward.py](aqp/rl/core/reward.py) |
+| `BaseObservationBuilder` + `StackedObservationBuilder` | Compose feature blocks (FinRL stockstats / covariance / turbulence / VIX / lookback / fundamentals / microstructure) | [aqp/rl/core/observation.py](aqp/rl/core/observation.py) |
+| `BaseActionSpace` (continuous / softmax / integer-shares / discrete / multi-discrete / target-position) | Declares gym space + transform | [aqp/rl/core/action.py](aqp/rl/core/action.py) |
+| `BaseDataPipeline` (FinRL `DataProcessor` parity) | Iceberg / Yahoo / Alpaca / streaming / replay | [aqp/rl/core/data.py](aqp/rl/core/data.py), [aqp/rl/data_pipelines/](aqp/rl/data_pipelines/) |
+| `RLExperimentSpec` + `RLRuntime` | Hash-locked spec + single sanctioned executor (mirrors `BotRuntime` / `AgentRuntime`) | [aqp/rl/spec.py](aqp/rl/spec.py), [aqp/rl/runtime.py](aqp/rl/runtime.py) |
+| `IcebergTrajectoryStore` | Buffered Arrow writer for `rl.trajectories` / `rl.equity_curves` / `rl.action_logs` / `rl.reward_decomposition` | [aqp/rl/trajectories/iceberg_writer.py](aqp/rl/trajectories/iceberg_writer.py) |
+| `WalkForwardEnsembler` | FinRL `DRLEnsembleAgent` port (rolling Sharpe-based pick) | [aqp/rl/ensemblers/walk_forward.py](aqp/rl/ensemblers/walk_forward.py) |
+| `LLMHybridAgent` | FinRobot-style LLM advisor blended with RL backbone (LLM via `router_complete`) | [aqp/rl/agents/llm_hybrid.py](aqp/rl/agents/llm_hybrid.py) |
+| `SB3Adapter` (PPO / SAC / TD3 / DDPG / DQN / sb3-contrib) | Stable-Baselines3 + sb3-contrib wrapper | [aqp/rl/agents/sb3_adapter.py](aqp/rl/agents/sb3_adapter.py) |
+| `ElegantRLAdapter` / `RayRLlibAdapter` / `CleanRLAdapter` | FinRL parity backends (optional deps) | [aqp/rl/agents/elegantrl_adapter.py](aqp/rl/agents/elegantrl_adapter.py), [aqp/rl/agents/rllib_adapter.py](aqp/rl/agents/rllib_adapter.py), [aqp/rl/agents/cleanrl_adapter.py](aqp/rl/agents/cleanrl_adapter.py) |
 
 ## When in doubt
 

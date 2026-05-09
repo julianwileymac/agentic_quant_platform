@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dagster import AssetExecutionContext, asset
+from dagster import asset
 
 from aqp.dagster.assets.sources import (
     cfpb_complaints,
@@ -39,7 +39,7 @@ def _run_extract(
     description="Extract company entities from CFPB complaints.",
     group_name="aqp_entities",
 )
-def cfpb_entities(context: AssetExecutionContext) -> dict[str, Any]:
+def cfpb_entities(context) -> dict[str, Any]:
     return _run_extract(
         flavor="regulatory",
         iceberg_identifier="aqp_cfpb.complaints",
@@ -52,7 +52,7 @@ def cfpb_entities(context: AssetExecutionContext) -> dict[str, Any]:
     description="Extract product / company entities from FDA recalls.",
     group_name="aqp_entities",
 )
-def fda_entities(context: AssetExecutionContext) -> dict[str, Any]:
+def fda_entities(context) -> dict[str, Any]:
     return _run_extract(
         flavor="regulatory",
         iceberg_identifier="aqp_fda.recalls",
@@ -65,7 +65,7 @@ def fda_entities(context: AssetExecutionContext) -> dict[str, Any]:
     description="Extract patent + assignee entities from USPTO patents.",
     group_name="aqp_entities",
 )
-def uspto_entities(context: AssetExecutionContext) -> dict[str, Any]:
+def uspto_entities(context) -> dict[str, Any]:
     return _run_extract(
         flavor="regulatory",
         iceberg_identifier="aqp_uspto.patents",
@@ -78,7 +78,7 @@ def uspto_entities(context: AssetExecutionContext) -> dict[str, Any]:
     description="Extract company entities from SEC filings index.",
     group_name="aqp_entities",
 )
-def sec_entities(context: AssetExecutionContext) -> dict[str, Any]:
+def sec_entities(context) -> dict[str, Any]:
     return _run_extract(
         flavor="filings",
         iceberg_identifier="aqp_sec.filings_index",
@@ -90,7 +90,7 @@ def sec_entities(context: AssetExecutionContext) -> dict[str, Any]:
     description="Seed the unified entity registry from FinanceDatabase equities.",
     group_name="aqp_entities",
 )
-def finance_database_entities(context: AssetExecutionContext) -> dict[str, Any]:
+def finance_database_entities(context) -> dict[str, Any]:
     return _run_extract(
         flavor="finance_database",
         iceberg_identifier="aqp_finance_database.equities",
@@ -102,7 +102,7 @@ def finance_database_entities(context: AssetExecutionContext) -> dict[str, Any]:
     description="LLM-enrich the most-recent entities with descriptions + tags.",
     group_name="aqp_entities",
 )
-def entity_llm_enrichment(context: AssetExecutionContext) -> dict[str, Any]:
+def entity_llm_enrichment(context) -> dict[str, Any]:
     from aqp.config import settings
     from aqp.data.entities.enrichers import DescriptionEnricher, TaggingEnricher
     from aqp.data.entities.registry import list_entities
@@ -119,7 +119,18 @@ def entity_llm_enrichment(context: AssetExecutionContext) -> dict[str, Any]:
     return summary
 
 
+ENTITY_ASSETS = [
+    cfpb_entities,
+    fda_entities,
+    uspto_entities,
+    sec_entities,
+    finance_database_entities,
+    entity_llm_enrichment,
+]
+
+
 __all__ = [
+    "ENTITY_ASSETS",
     "cfpb_entities",
     "entity_llm_enrichment",
     "fda_entities",

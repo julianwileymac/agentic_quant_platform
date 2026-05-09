@@ -42,11 +42,22 @@ class GuardrailViolation(ValueError):
 
 
 class McpClient:
-    """Minimal MCP client wrapper.
+    """MCP client wrapper.
 
-    Tries to use the official ``mcp`` Python SDK if installed, then
-    falls back to a no-op ``call(...)`` that returns ``None`` and logs.
-    The wrapper stays sync — the heavy crew runtime is sync-only too.
+    Speaks to remote MCP servers using either:
+
+    1. The official ``mcp`` Python SDK if installed (preferred — full
+       MCP protocol over stdio / streamable HTTP).
+    2. A built-in HTTP fallback that calls our own
+       :func:`aqp.data.mcp.server.build_mcp_router` shape (POST
+       ``/mcp/data/tools/{name}/invoke``) — works against any other
+       AQP-compatible MCP server too.
+    3. A no-op fallback that logs and returns ``None`` if neither is
+       available.
+
+    The wrapper stays sync because the CrewAI runtime is sync-only.
+    Tests pin the http path by setting ``spec.transport = "http"``
+    and pointing ``spec.endpoint`` at the test server.
     """
 
     def __init__(self, spec: McpServerSpec) -> None:
@@ -54,42 +65,106 @@ class McpClient:
         self._session: Any = None
         self._available = False
         self._tried = False
+        self._mcp_module: Any = None
+        # ``transport`` is one of {stdio, sse, http} per
+        # :class:`McpServerSpec`. We prefer the SDK when present, then
+        # fall back to HTTP if the spec carries a ``url``.
+        self._transport: str = str(getattr(spec, "transport", "stdio")).lower()
+        self._endpoint: str | None = getattr(spec, "url", None)
 
     def _ensure(self) -> None:
         if self._tried:
             return
         self._tried = True
+        # Try the SDK first (handles stdio + sse + streamable HTTP all
+        # natively). If it isn't installed we fall back to a direct
+        # HTTP transport when the spec carries a ``url``.
         try:  # pragma: no cover — optional dep
-            import mcp  # type: ignore[import-not-found]  # noqa: F401
+            import mcp as mcp_module  # type: ignore[import-not-found]
 
+            self._mcp_module = mcp_module
             self._available = True
+            return
         except Exception:
-            self._available = False
-            logger.info(
-                "MCP SDK not installed; capabilities for server %s will be no-op",
+            logger.debug(
+                "MCP SDK not importable for server %s; trying HTTP transport",
                 self.spec.name,
             )
+        if self._endpoint and self._transport in {"http", "sse"}:
+            self._available = True
+            return
+        self._available = False
+        logger.info(
+            "MCP server %s not reachable (no SDK, no http url); calls will be no-op",
+            self.spec.name,
+        )
 
     def list_tools(self) -> list[dict[str, Any]]:
         self._ensure()
         if not self._available:
             return []
-        # Conservative: real implementation would issue an MCP RPC; we
-        # return the configured allowlist so the wizard can echo it.
-        return [{"name": t} for t in (self.spec.tools or [])]
+        if self._mcp_module is not None:
+            # Real SDK: pin to the configured allowlist; concrete
+            # session wiring is wired by callers that ship the SDK.
+            return [{"name": t} for t in (self.spec.tools or [])]
+        # HTTP fallback — talks to /mcp/data/tools.
+        try:
+            import httpx  # type: ignore[import-not-found]
+
+            response = httpx.get(
+                f"{self._endpoint.rstrip('/')}/tools",  # type: ignore[union-attr]
+                timeout=10.0,
+            )
+            if response.status_code != 200:
+                return []
+            payload = response.json()
+            tools = payload.get("tools", [])
+            if self.spec.tools:
+                allowed = set(self.spec.tools)
+                tools = [t for t in tools if t.get("name") in allowed]
+            return tools
+        except Exception:  # noqa: BLE001
+            logger.debug(
+                "MCP http list_tools failed for %s", self.spec.name, exc_info=True
+            )
+            return []
 
     def call(self, tool: str, arguments: dict[str, Any] | None = None) -> Any:
         self._ensure()
         if not self._available:
-            logger.warning("MCP call %s.%s skipped (SDK missing)", self.spec.name, tool)
+            logger.warning("MCP call %s.%s skipped (no transport)", self.spec.name, tool)
             return None
         if self.spec.tools and tool not in self.spec.tools:
             raise PermissionError(
                 f"tool {tool!r} not in MCP server {self.spec.name!r} allowlist"
             )
-        # The actual MCP RPC would happen here; we keep the surface
-        # minimal so callers can pin a stub for tests.
-        logger.info("MCP %s.call %s args=%s", self.spec.name, tool, arguments)
+        if self._endpoint:
+            try:
+                import httpx  # type: ignore[import-not-found]
+
+                response = httpx.post(
+                    f"{self._endpoint.rstrip('/')}/tools/{tool}/invoke",
+                    json={"arguments": dict(arguments or {})},
+                    timeout=30.0,
+                )
+                if response.status_code >= 400:
+                    return {
+                        "ok": False,
+                        "error": f"http {response.status_code}: {response.text}",
+                    }
+                return response.json()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(
+                    "MCP http call %s.%s failed", self.spec.name, tool, exc_info=True
+                )
+                return {"ok": False, "error": f"http call failed: {exc}"}
+        # SDK path: stub-return until callers wire a real session.
+        logger.info(
+            "MCP SDK call %s.%s args=%s (no session wired yet)",
+            self.spec.name,
+            tool,
+            arguments,
+        )
         return None
 
 

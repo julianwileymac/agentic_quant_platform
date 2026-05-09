@@ -39,7 +39,7 @@ flowchart LR
 
 | Stage | Docs |
 | --- | --- |
-| **Research** | [factor-research.md](factor-research.md), [ml-framework.md](ml-framework.md), [ml-libraries.md](ml-libraries.md), [ml-alpha-backtest.md](ml-alpha-backtest.md), [ml-flows.md](ml-flows.md), [ml-preprocessing-pipeline.md](ml-preprocessing-pipeline.md), [ml-builder.md](ml-builder.md), [ml-testing.md](ml-testing.md), [strategy-browser.md](strategy-browser.md), [data-plane.md](data-plane.md), [data-catalog.md](data-catalog.md), [data-pipelines-hub.md](data-pipelines-hub.md), [visualization-layer.md](visualization-layer.md) |
+| **Research** | [factor-research.md](factor-research.md), [ml-framework.md](ml-framework.md), [ml-libraries.md](ml-libraries.md), [ml-alpha-backtest.md](ml-alpha-backtest.md), [ml-flows.md](ml-flows.md), [ml-preprocessing-pipeline.md](ml-preprocessing-pipeline.md), [ml-builder.md](ml-builder.md), [ml-testing.md](ml-testing.md), [rl-framework.md](rl-framework.md), [rl-lab.md](rl-lab.md), [rl-components.md](rl-components.md), [rl-iceberg.md](rl-iceberg.md), [strategy-browser.md](strategy-browser.md), [data-plane.md](data-plane.md), [data-catalog.md](data-catalog.md), [data-pipelines-hub.md](data-pipelines-hub.md), [visualization-layer.md](visualization-layer.md) |
 | **Backtest** | [backtest-engines.md](backtest-engines.md), [strategy-lifecycle.md](strategy-lifecycle.md) |
 | **Agentic** | [agentic-pipeline.md](agentic-pipeline.md), [providers.md](providers.md) |
 | **Bots** | [bots.md](bots.md) (smallest deployable unit; aggregates universe + strategy + engine + ML + agents + RAG + metrics) |

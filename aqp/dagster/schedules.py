@@ -1,15 +1,21 @@
 """Dagster schedules for the AQP code location."""
 from __future__ import annotations
 
-from dagster import ScheduleDefinition
+from dagster import ScheduleDefinition, build_schedule_from_partitioned_job
 
+from aqp.dagster.alphavantage_intraday import (
+    ALPHAVANTAGE_INTRADAY_SCHEDULES,
+    alphavantage_intraday_delta_schedule,
+)
 from aqp.dagster.jobs import (
+    alphavantage_intraday_partition_job,
     compaction_job,
     datahub_sync_job,
     entity_extraction_job,
     full_data_refresh_job,
     profiling_job,
     regulatory_refresh_job,
+    time_partitioned_sources_job,
 )
 
 # Daily at 02:00 UTC — full data refresh.
@@ -61,6 +67,20 @@ daily_entity_enrichment_schedule = ScheduleDefinition(
     execution_timezone="UTC",
 )
 
+daily_time_partitioned_sources_schedule = build_schedule_from_partitioned_job(
+    time_partitioned_sources_job,
+    name="daily_time_partitioned_sources",
+    minute_of_hour=10,
+    hour_of_day=3,
+)
+
+daily_alphavantage_intraday_partition_schedule = build_schedule_from_partitioned_job(
+    alphavantage_intraday_partition_job,
+    name="daily_alphavantage_intraday_partition",
+    minute_of_hour=40,
+    hour_of_day=1,
+)
+
 
 ALL_SCHEDULES = [
     daily_full_refresh_schedule,
@@ -69,24 +89,19 @@ ALL_SCHEDULES = [
     six_hourly_profiling_schedule,
     weekly_compaction_schedule,
     daily_entity_enrichment_schedule,
+    daily_time_partitioned_sources_schedule,
+    daily_alphavantage_intraday_partition_schedule,
+    *ALPHAVANTAGE_INTRADAY_SCHEDULES,
 ]
-
-
-# Re-export legacy AV intraday schedule when available.
-try:  # pragma: no cover - optional legacy path
-    from aqp.dagster.alphavantage_intraday import (
-        alphavantage_intraday_delta_schedule,
-    )
-
-    ALL_SCHEDULES.append(alphavantage_intraday_delta_schedule)
-except Exception:  # noqa: BLE001
-    pass
 
 
 __all__ = [
     "ALL_SCHEDULES",
+    "alphavantage_intraday_delta_schedule",
     "daily_entity_enrichment_schedule",
+    "daily_alphavantage_intraday_partition_schedule",
     "daily_full_refresh_schedule",
+    "daily_time_partitioned_sources_schedule",
     "hourly_datahub_sync_schedule",
     "six_hourly_profiling_schedule",
     "weekday_regulatory_schedule",

@@ -1,0 +1,7 @@
+class: CompositeReward
+module_path: aqp.rl.core.reward
+kwargs:
+  terms:
+    - { class: SharpeTerm, kwargs: { weight: 1.0, min_steps: 20 } }
+    - { class: DrawdownPenaltyTerm, kwargs: { weight: 0.5 } }
+    - { class: TurnoverPenaltyTerm, kwargs: { weight: 0.25, cost_pct: 0.001 } }

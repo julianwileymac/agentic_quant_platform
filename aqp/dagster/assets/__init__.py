@@ -1,24 +1,30 @@
 """Dagster assets exposed by the AQP code location."""
 from __future__ import annotations
 
-from aqp.dagster.assets import airbyte, catalog, compaction, entities, profiling, sources
+from aqp.dagster.alphavantage_intraday import ALPHAVANTAGE_INTRADAY_ASSETS
+from aqp.dagster.assets.airbyte import AIRBYTE_ASSETS
+from aqp.dagster.assets.catalog import CATALOG_ASSETS
+from aqp.dagster.assets.compaction import COMPACTION_ASSETS
+from aqp.dagster.assets.entities import ENTITY_ASSETS
+from aqp.dagster.assets.profiling import PROFILING_ASSETS
+from aqp.dagster.assets.sources import SOURCE_ASSETS
 
-ASSET_MODULES = (sources, entities, catalog, profiling, compaction, airbyte)
+ASSET_GROUPS = (
+    ("sources", SOURCE_ASSETS),
+    ("entities", ENTITY_ASSETS),
+    ("catalog", CATALOG_ASSETS),
+    ("profiling", PROFILING_ASSETS),
+    ("compaction", COMPACTION_ASSETS),
+    ("airbyte", AIRBYTE_ASSETS),
+    ("alpha_vantage_intraday", ALPHAVANTAGE_INTRADAY_ASSETS),
+)
+
+ALL_ASSETS = [asset for _group_name, group_assets in ASSET_GROUPS for asset in group_assets]
 
 
 def all_assets() -> list:
-    """Aggregate every asset across the modules."""
-    items: list = []
-    for module in ASSET_MODULES:
-        for attr in vars(module).values():
-            asset_def = getattr(attr, "asset_def", None) or getattr(attr, "key", None)
-            if asset_def is None and not callable(attr):
-                continue
-            # Dagster decorates with attribute ``op``; treat ``@asset``-wrapped
-            # callables as assets when they have ``op`` or ``key``.
-            if hasattr(attr, "op") and hasattr(attr, "key"):
-                items.append(attr)
-    return items
+    """Return the deterministic AQP Dagster asset list."""
+    return list(ALL_ASSETS)
 
 
-__all__ = ["ASSET_MODULES", "all_assets"]
+__all__ = ["ALL_ASSETS", "ASSET_GROUPS", "all_assets"]

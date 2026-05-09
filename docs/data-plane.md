@@ -1,6 +1,26 @@
 # Data plane expansion
 
-> Doc map: [docs/index.md](index.md) · Catalog walkthrough: [docs/data-catalog.md](data-catalog.md) · Engine: [docs/data-engine.md](data-engine.md) · Entity registry: [docs/entity-registry.md](entity-registry.md) · Entity graph + services: [docs/entity-graph-services.md](entity-graph-services.md) · DataHub sync: [docs/datahub-sync.md](datahub-sync.md) · Dagster: [docs/dagster.md](dagster.md) · **Pipelines Hub UI**: [docs/data-pipelines-hub.md](data-pipelines-hub.md) · **Streaming admin**: [docs/streaming-admin.md](streaming-admin.md).
+> Doc map: [docs/index.md](index.md) · **Unification overview**: [docs/data-layer-unification.md](data-layer-unification.md) · Catalog walkthrough: [docs/data-catalog.md](data-catalog.md) · Engine: [docs/data-engine.md](data-engine.md) · Entity registry: [docs/entity-registry.md](entity-registry.md) · Entity graph + services: [docs/entity-graph-services.md](entity-graph-services.md) · DataHub sync: [docs/datahub-sync.md](datahub-sync.md) · Dagster: [docs/dagster.md](dagster.md) · **Pipelines Hub UI**: [docs/data-pipelines-hub.md](data-pipelines-hub.md) · **Data Hub UI**: [/data/hub](../webui/app/(shell)/data/hub/page.tsx) · **Streaming admin**: [docs/streaming-admin.md](streaming-admin.md) · **Data products**: [docs/data-products.md](data-products.md) · **DataMCP**: [docs/data-mcp.md](data-mcp.md).
+
+## Pipeline patterns
+
+The data plane formalises three GoF patterns:
+
+- **Factory** —
+  [`aqp/data/fetchers/factory.py::DataExtractorFactory`](../aqp/data/fetchers/factory.py)
+  hands back fully-constructed extractor instances by registry alias,
+  eliminating brittle `if/elif` ladders.
+- **Strategy** —
+  [`aqp/data/normalization/`](../aqp/data/normalization/) ships
+  `BaseNormalizationStrategy` plus concrete `EquityNormalization`,
+  `OptionsNormalization`, `MacroNormalization`,
+  `RegulatoryNormalization`, `NewsNormalization`,
+  `MicrostructureNormalization`. Each Silver-layer transform node
+  selects the right strategy by `data_domain`.
+- **Observer** —
+  [`aqp/data/catalog/lineage.py::LineageBus`](../aqp/data/catalog/lineage.py)
+  decouples lineage / quality / audit observers from the main
+  pipeline thread so they never block a write.
 
 The data plane groups together the source registry, the identifier
 graph, and the adapters for FRED, SEC EDGAR and GDelt GKG 2.0. This

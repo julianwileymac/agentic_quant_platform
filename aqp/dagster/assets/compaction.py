@@ -3,14 +3,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from dagster import AssetExecutionContext, asset
+from dagster import asset
 
 
 @asset(
     description="Expire old Iceberg snapshots + rewrite small parquet files.",
     group_name="aqp_compaction",
 )
-def iceberg_compaction(context: AssetExecutionContext) -> dict[str, Any]:
+def iceberg_compaction(context) -> dict[str, Any]:
     """Best-effort wrapper around the existing
     :mod:`aqp.data.iceberg_consolidate` helpers.
     """
@@ -35,4 +35,7 @@ def iceberg_compaction(context: AssetExecutionContext) -> dict[str, Any]:
     return summary
 
 
-__all__ = ["iceberg_compaction"]
+COMPACTION_ASSETS = [iceberg_compaction]
+
+
+__all__ = ["COMPACTION_ASSETS", "iceberg_compaction"]

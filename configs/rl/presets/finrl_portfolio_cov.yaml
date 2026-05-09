@@ -1,0 +1,56 @@
+name: finrl-portfolio-cov
+slug: finrl-portfolio-cov
+kind: training
+description: FinRL StockPortfolioEnv (covariance + softmax) with A2C.
+
+universe:
+  symbols: [SPY.NASDAQ, AAPL.NASDAQ, MSFT.NASDAQ, GOOGL.NASDAQ, AMZN.NASDAQ]
+
+data_pipeline:
+  spec:
+    class: IcebergRLDataPipeline
+    module_path: aqp.rl.data_pipelines.iceberg
+    kwargs:
+      indicators: [macd, rsi_30, cci_30, dx_30]
+
+env:
+  class: FinRLPortfolioCovEnv
+  module_path: aqp.rl.envs.finrl_portfolio_cov_env
+  kwargs:
+    symbols: [SPY.NASDAQ, AAPL.NASDAQ, MSFT.NASDAQ, GOOGL.NASDAQ, AMZN.NASDAQ]
+    start: "2018-01-01"
+    end: "2023-06-30"
+    initial_balance: 1000000.0
+    indicators: [macd, rsi_30, cci_30, dx_30]
+    lookback: 60
+
+reward:
+  spec:
+    class: CompositeReward
+    module_path: aqp.rl.core.reward
+    kwargs:
+      terms:
+        - { class: LogReturnTerm, kwargs: { weight: 1.0 } }
+        - { class: SharpeTerm, kwargs: { weight: 0.5, min_steps: 30 } }
+        - { class: TurnoverPenaltyTerm, kwargs: { weight: 0.5, cost_pct: 0.001 } }
+
+terminations:
+  specs:
+    - { class: HorizonTermination }
+
+agent:
+  class: SB3Adapter
+  module_path: aqp.rl.agents.sb3_adapter
+  kwargs:
+    algorithm: A2C
+    policy: MlpPolicy
+
+training:
+  total_timesteps: 150000
+
+evaluation:
+  start: "2023-07-01"
+  end: "2024-01-01"
+
+mlflow:
+  experiment: aqp-rl

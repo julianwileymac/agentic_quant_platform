@@ -1,0 +1,4 @@
+class: YahooFinanceRLDataPipeline
+module_path: aqp.rl.data_pipelines.yahoo
+kwargs:
+  auto_adjust: true

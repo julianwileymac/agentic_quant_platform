@@ -1,0 +1,4 @@
+class: AlpacaRLDataPipeline
+module_path: aqp.rl.data_pipelines.alpaca
+kwargs:
+  feed: iex

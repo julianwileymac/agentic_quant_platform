@@ -225,6 +225,7 @@ def _finish_run_row(
     if not run_id:
         return
     finished_at = datetime.utcnow()
+    snapshot: dict[str, Any] = {}
     try:
         from aqp.persistence.db import get_session
         from aqp.persistence.models_airbyte import AirbyteSyncRunRow
@@ -242,8 +243,56 @@ def _finish_run_row(
             if error is not None:
                 row.error = error
             session.add(row)
+            # Snapshot the values we need for lineage *before* leaving the
+            # session — mutating ORM rows after the session closes raises
+            # DetachedInstanceError on next access.
+            snapshot = {
+                "run_id": str(row.id),
+                "connection_id": getattr(row, "connection_id", None),
+                "manifest_id": getattr(row, "manifest_id", None),
+                "dataset_id": getattr(row, "dataset_id", None),
+                "rows_synced": getattr(row, "rows_synced", None),
+                "duration_seconds": getattr(row, "duration_seconds", None),
+            }
     except Exception:
         logger.debug("Airbyte run row finish skipped", exc_info=True)
+        return
+
+    try:
+        from aqp.data.catalog.lineage import LineageEvent, get_lineage_bus
+
+        get_lineage_bus().emit(
+            LineageEvent(
+                transform_kind="airbyte",
+                target_table_id=None,
+                actor=f"airbyte.connection.{snapshot.get('connection_id')}",
+                actor_kind="service",
+                service_name="airbyte",
+                run_id=str(snapshot["run_id"]) if snapshot.get("run_id") else None,
+                manifest_id=(
+                    str(snapshot["manifest_id"])
+                    if snapshot.get("manifest_id")
+                    else None
+                ),
+                rows_written=(
+                    int(snapshot["rows_synced"])
+                    if snapshot.get("rows_synced") is not None
+                    else None
+                ),
+                summary=(
+                    f"airbyte sync run finished status={status} "
+                    f"connection={snapshot.get('connection_id')}"
+                ),
+                details={
+                    "status": status,
+                    "error": error,
+                    "duration_seconds": snapshot.get("duration_seconds"),
+                    "dataset_id": snapshot.get("dataset_id"),
+                },
+            )
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("airbyte lineage emit failed", exc_info=True)
 
 
 __all__ = [

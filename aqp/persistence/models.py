@@ -620,6 +620,12 @@ class DatasetCatalog(Base, ProjectScopedMixin):
     )
     manifest_id = Column(String(36), nullable=True)
     pipeline_kind = Column(String(64), nullable=True)
+    # Medallion + active metadata (migration 0027).
+    # medallion_layer is one of {bronze, silver, gold} when set; legacy rows
+    # left null until they're touched by a fresh append_arrow.
+    medallion_layer = Column(String(16), nullable=True, index=True)
+    business_metadata = Column(JSON, default=dict)
+    data_contract_json = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -657,6 +663,11 @@ class DatasetVersion(Base, ProjectScopedMixin):
     dagster_run_id = Column(String(120), nullable=True, index=True)
     partition_key = Column(String(240), nullable=True)
     code_version_sha = Column(String(64), nullable=True)
+    # Quality scoring (migration 0027). ``quality_score`` is a 0..1 roll-up;
+    # ``quality_breakdown`` carries dimension scores (accuracy / timeliness /
+    # completeness / consistency).
+    quality_score = Column(Float, nullable=True)
+    quality_breakdown = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     catalog = relationship("DatasetCatalog")

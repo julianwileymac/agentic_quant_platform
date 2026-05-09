@@ -544,6 +544,16 @@ def append_arrow(
     partition_spec: Any = None,
     context: Any | None = None,
     shared: bool = False,
+    medallion_layer: str | None = None,
+    business_metadata: Any = None,
+    data_contract: Any = None,
+    actor: str | None = None,
+    actor_kind: str | None = None,
+    run_id: str | None = None,
+    manifest_id: str | None = None,
+    mcp_tool_name: str | None = None,
+    service_name: str | None = None,
+    register_metadata: bool | None = None,
 ) -> Table:
     """Append ``table`` (pyarrow) to an Iceberg table, creating it on first call.
 
@@ -559,13 +569,36 @@ def append_arrow(
     the context lacks one) so downstream queries can partition by
     workspace. Reference-data tables (instruments, regulatory corpora,
     macro series) opt out of this by passing ``shared=True``.
+
+    Medallion / active-metadata: when ``medallion_layer`` is provided the
+    namespace prefix is validated against
+    :data:`aqp.data.catalog.active_metadata.LAYER_PREFIXES`. When
+    ``business_metadata`` is also provided, the
+    :class:`DatasetCatalog` row for this Iceberg identifier is upserted
+    via :func:`aqp.data.catalog.register_dataset` and a corresponding
+    ``data_lineage_events`` row is written through the
+    :class:`LineageWriter`. Set ``register_metadata=False`` to skip the
+    upsert (eg. when the catalog row is managed elsewhere).
     """
     table_id = identifier if isinstance(identifier, str) else ".".join(identifier)
+    namespace, _ = split_identifier(identifier)
+    layer_value: str | None = None
+    if medallion_layer is not None:
+        # Lazy import to avoid a circular import path on cold start.
+        from aqp.data.catalog.active_metadata import (
+            register_dataset as _register_dataset,
+            validate_layer_for_namespace as _validate_layer,
+        )
+
+        layer_value = str(medallion_layer).strip().lower()
+        _validate_layer(layer_value, namespace)
     with _tracer.start_as_current_span("iceberg.append_arrow") as span:
         try:
             span.set_attribute("iceberg.table", table_id)
             span.set_attribute("iceberg.row_count", int(table.num_rows))
             span.set_attribute("iceberg.create_if_missing", create_if_missing)
+            if layer_value is not None:
+                span.set_attribute("aqp.medallion_layer", layer_value)
             if context is not None:
                 span.set_attribute("aqp.workspace_id", str(getattr(context, "workspace_id", "") or ""))
                 span.set_attribute("aqp.project_id", str(getattr(context, "project_id", "") or ""))
@@ -579,19 +612,63 @@ def append_arrow(
         if table.num_rows == 0:
             existing = load_table(identifier)
             if existing is not None:
+                _maybe_register_metadata(
+                    table_id=table_id,
+                    layer=layer_value,
+                    business_metadata=business_metadata,
+                    data_contract=data_contract,
+                    arrow_schema=table.schema,
+                    register_metadata=register_metadata,
+                )
+                _emit_iceberg_lineage(
+                    transform_kind="iceberg_append",
+                    target=table_id,
+                    rows_written=0,
+                    layer=layer_value,
+                    actor=actor,
+                    actor_kind=actor_kind,
+                    run_id=run_id,
+                    manifest_id=manifest_id,
+                    mcp_tool_name=mcp_tool_name,
+                    service_name=service_name,
+                    summary=f"no-op append on existing table (0 rows)",
+                )
                 return existing
             if create_if_missing:
-                return create_or_replace_table(
+                created_table = create_or_replace_table(
                     identifier,
                     table.schema,
                     properties=properties,
                     partition_spec=partition_spec,
                 )
+                _maybe_register_metadata(
+                    table_id=table_id,
+                    layer=layer_value,
+                    business_metadata=business_metadata,
+                    data_contract=data_contract,
+                    arrow_schema=table.schema,
+                    register_metadata=register_metadata,
+                )
+                _emit_iceberg_lineage(
+                    transform_kind="iceberg_create_or_replace",
+                    target=table_id,
+                    rows_written=0,
+                    layer=layer_value,
+                    actor=actor,
+                    actor_kind=actor_kind,
+                    run_id=run_id,
+                    manifest_id=manifest_id,
+                    mcp_tool_name=mcp_tool_name,
+                    service_name=service_name,
+                    summary="created empty table",
+                )
+                return created_table
             raise ValueError(
                 f"refused to create empty table {identifier!r} with create_if_missing=False"
             )
 
         existing = load_table(identifier)
+        was_created = False
         if existing is None:
             if not create_if_missing:
                 raise ValueError(
@@ -603,11 +680,115 @@ def append_arrow(
                 properties=properties,
                 partition_spec=partition_spec,
             )
+            was_created = True
         _retry_on_sqlite_lock(
             lambda: existing.append(table),
             label=f"append_arrow({table_id!r})",
         )
+        _maybe_register_metadata(
+            table_id=table_id,
+            layer=layer_value,
+            business_metadata=business_metadata,
+            data_contract=data_contract,
+            arrow_schema=table.schema,
+            register_metadata=register_metadata,
+        )
+        _emit_iceberg_lineage(
+            transform_kind=(
+                "iceberg_create_or_replace" if was_created else "iceberg_append"
+            ),
+            target=table_id,
+            rows_written=int(table.num_rows),
+            layer=layer_value,
+            actor=actor,
+            actor_kind=actor_kind,
+            run_id=run_id,
+            manifest_id=manifest_id,
+            mcp_tool_name=mcp_tool_name,
+            service_name=service_name,
+            summary=(
+                f"created and wrote {int(table.num_rows)} rows"
+                if was_created
+                else f"appended {int(table.num_rows)} rows"
+            ),
+        )
         return existing
+
+
+def _maybe_register_metadata(
+    *,
+    table_id: str,
+    layer: str | None,
+    business_metadata: Any,
+    data_contract: Any,
+    arrow_schema: Any,
+    register_metadata: bool | None,
+) -> None:
+    """Upsert :class:`DatasetCatalog` when the caller supplied medallion + business metadata.
+
+    Failures are logged and swallowed — a busted catalog upsert must
+    never block an Iceberg write. ``register_metadata=False`` short
+    circuits even when the inputs are present.
+    """
+    if register_metadata is False:
+        return
+    if layer is None or business_metadata is None:
+        return
+    try:
+        from aqp.data.catalog.active_metadata import register_dataset as _register_dataset
+
+        _register_dataset(
+            table_id,
+            medallion_layer=layer,  # type: ignore[arg-type]
+            business_metadata=business_metadata,
+            data_contract=data_contract,
+            arrow_schema=arrow_schema,
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "register_dataset failed for %s; continuing append", table_id, exc_info=True
+        )
+
+
+def _emit_iceberg_lineage(
+    *,
+    transform_kind: str,
+    target: str,
+    rows_written: int,
+    layer: str | None,
+    actor: str | None,
+    actor_kind: str | None,
+    run_id: str | None,
+    manifest_id: str | None,
+    mcp_tool_name: str | None,
+    service_name: str | None,
+    summary: str | None,
+) -> None:
+    """Fire a lineage event for an Iceberg write.
+
+    Failures are swallowed because lineage is a side channel — never
+    block the data path.
+    """
+    try:
+        from aqp.data.catalog.lineage import LineageEvent, get_lineage_bus
+
+        get_lineage_bus().emit(
+            LineageEvent(
+                transform_kind=transform_kind,
+                target_table_id=target,
+                rows_written=rows_written,
+                medallion_layer=layer,
+                actor=actor or "iceberg_catalog",
+                actor_kind=actor_kind or "service",
+                run_id=run_id,
+                manifest_id=manifest_id,
+                mcp_tool_name=mcp_tool_name,
+                service_name=service_name or "iceberg",
+                summary=summary,
+            )
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("lineage emit failed for %s", target, exc_info=True)
 
 
 def read_arrow(
@@ -635,6 +816,104 @@ def read_arrow(
     if row_filter is not None:
         scan_kwargs["row_filter"] = row_filter
     scan = table.scan(**scan_kwargs)
+    return scan.to_arrow()
+
+
+def read_arrow_at(
+    identifier: str | tuple[str, ...],
+    *,
+    snapshot_id: int | None = None,
+    as_of: datetime | None = None,
+    columns: Iterable[str] | None = None,
+    limit: int | None = None,
+    row_filter: Any = None,
+) -> pa.Table | None:
+    """Time-travel read against an Iceberg table.
+
+    Picks the snapshot to read from in this priority order:
+
+    1. ``snapshot_id`` if provided
+    2. The latest snapshot whose ``timestamp_ms <= as_of`` if ``as_of``
+       is provided
+    3. The current table snapshot otherwise (equivalent to
+       :func:`read_arrow`)
+
+    Raises :class:`ValueError` if neither ``snapshot_id`` nor ``as_of``
+    matches an existing snapshot. Returns ``None`` if the table does
+    not exist.
+
+    Critical for backtests: pin every historical read to a
+    deterministic snapshot to defeat lookahead bias when source data
+    is updated retroactively.
+    """
+    table = load_table(identifier)
+    if table is None:
+        return None
+
+    target_snapshot_id: int | None = snapshot_id
+    if target_snapshot_id is None and as_of is not None:
+        if hasattr(as_of, "timestamp"):
+            cutoff_ms = int(as_of.timestamp() * 1000)
+        else:
+            raise ValueError("as_of must be a datetime instance")
+        candidate: int | None = None
+        for snap in table.snapshots():
+            ts_ms = int(snap.timestamp_ms)
+            if ts_ms <= cutoff_ms:
+                if candidate is None:
+                    candidate = int(snap.snapshot_id)
+                else:
+                    # snapshots() returns oldest-first; we want the most
+                    # recent snapshot prior to ``as_of`` so we keep
+                    # overwriting until the loop terminates.
+                    candidate = int(snap.snapshot_id)
+            else:
+                break
+        if candidate is None:
+            raise ValueError(
+                f"no snapshot of {identifier!r} at or before {as_of.isoformat()}"
+            )
+        target_snapshot_id = candidate
+
+    scan_kwargs: dict[str, Any] = {
+        "selected_fields": tuple(columns) if columns else ("*",),
+    }
+    if limit is not None:
+        scan_kwargs["limit"] = int(limit)
+    if row_filter is not None:
+        scan_kwargs["row_filter"] = row_filter
+    if target_snapshot_id is not None:
+        scan_kwargs["snapshot_id"] = int(target_snapshot_id)
+    scan = table.scan(**scan_kwargs)
+
+    table_id = identifier if isinstance(identifier, str) else ".".join(identifier)
+    try:
+        from aqp.data.catalog.lineage import LineageEvent, get_lineage_bus
+
+        get_lineage_bus().emit(
+            LineageEvent(
+                transform_kind="iceberg_time_travel_read",
+                source_table_id=table_id,
+                target_table_id=None,
+                actor="iceberg_catalog",
+                actor_kind="service",
+                service_name="iceberg",
+                summary=(
+                    f"read at snapshot_id={target_snapshot_id}"
+                    if target_snapshot_id is not None
+                    else "read at current snapshot"
+                ),
+                details={
+                    "snapshot_id": target_snapshot_id,
+                    "as_of": as_of.isoformat() if as_of else None,
+                    "columns": list(columns) if columns else None,
+                    "limit": limit,
+                },
+            )
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("lineage emit failed for time-travel read of %s", table_id, exc_info=True)
+
     return scan.to_arrow()
 
 

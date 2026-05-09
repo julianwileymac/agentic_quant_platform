@@ -210,6 +210,25 @@ class Settings(BaseSettings):
     hf_timeseries_model: str = Field(default="huggingface/time-series-transformer-tourism-monthly")
     ml_workbench_max_csv_mb: int = Field(default=20)
 
+    # --- RL layer (FinRL + FinRobot inspired refactor, Alembic 0026) ---
+    # Iceberg targets for trajectory / equity-curve / action-log / reward-decomp persistence.
+    # All four go through ``aqp.data.iceberg_catalog.append_arrow`` via
+    # :class:`aqp.rl.trajectories.iceberg_writer.IcebergTrajectoryStore`.
+    rl_trajectory_namespace: str = Field(default="rl")
+    rl_trajectory_table: str = Field(default="trajectories")
+    rl_equity_table: str = Field(default="equity_curves")
+    rl_action_log_table: str = Field(default="action_logs")
+    rl_reward_decomp_table: str = Field(default="reward_decomposition")
+    rl_persist_trajectories: bool = Field(default=True)
+    rl_trajectory_flush_rows: int = Field(default=1000)
+    # Default RL backend used by the RLRuntime when ``spec.agent`` doesn't
+    # specify a framework. One of: ``sb3``, ``elegantrl``, ``rllib``, ``cleanrl``.
+    rl_default_framework: str = Field(default="sb3")
+    # When true the runtime will refuse to run if Iceberg is unreachable
+    # (use during full data-plane testing). Default is false so local-only
+    # work falls back to the in-memory trajectory store.
+    rl_require_iceberg: bool = Field(default=False)
+
     # --- Cross-repo integration ---
     agentic_assistants_api: str = Field(default="")
     minio_endpoint_url: str = Field(default="")

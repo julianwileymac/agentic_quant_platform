@@ -3,27 +3,37 @@
 State = [cash_ratio, per-symbol weights, per-symbol technical indicators]
 Action = desired weight vector, in [-1, 1]^N
 Reward = Δportfolio_value scaled, minus turnover cost, minus drawdown penalty
+
+Concrete preset class — kept stable for backwards compatibility. The
+default reward / observation / action / termination contract maps cleanly
+onto :mod:`aqp.rl.core` and the runtime can persist trajectories
+through :class:`IcebergTrajectoryStore` regardless.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import gymnasium as gym
 import numpy as np
 import pandas as pd
 from gymnasium import spaces
 
-from aqp.core.registry import register
+from aqp.rl.core.base import RL_KIND_ENV, RLComponent
 from aqp.rl.envs.base import default_reward, load_bars, pivot_features, safe_array
 
 _DEFAULT_INDICATORS = ("macd", "rsi_14", "sma_20", "sma_50")
 
 
-@register("StockTradingEnv")
-class StockTradingEnv(gym.Env):
+class StockTradingEnv(gym.Env, RLComponent):
     """Continuous-action portfolio env over a fixed basket of symbols."""
 
     metadata = {"render_modes": ["human"]}
+
+    rl_kind: ClassVar[str] = RL_KIND_ENV
+    rl_alias: ClassVar[str] = "StockTradingEnv"
+    rl_source: ClassVar[str] = "aqp"
+    rl_category: ClassVar[str] = "continuous-portfolio"
+    rl_tags: ClassVar[tuple[str, ...]] = ("portfolio", "continuous", "turbulence-gate")
 
     def __init__(
         self,
@@ -195,3 +205,29 @@ class StockTradingEnv(gym.Env):
             f"t={self.step_idx} | pv={self.portfolio_value:.2f} | "
             f"weights={np.round(self.weights, 3).tolist()}"
         )
+
+    # ------------------------------------------------------------------
+    # New-style env-state protocol (keeps the env composable with the new
+    # :mod:`aqp.rl.core` reward / observation / termination primitives).
+    # ------------------------------------------------------------------
+    def _collect_env_state(self) -> dict[str, Any]:
+        return {
+            "step_idx": self.step_idx,
+            "portfolio_value": self.portfolio_value,
+            "prev_value": self.prev_value,
+            "peak": self.peak,
+            "cash": self.cash,
+            "weights": self.weights,
+            "price_panel": self.price_table,
+            "feature_tables": self.feature_tables,
+            "turbulence": self.turbulence,
+            "initial_balance": self.initial_balance,
+            "timestamp": str(self.timestamps[self.step_idx]) if self.step_idx < len(self.timestamps) else None,
+        }
+
+
+# Register *after* the metaclass has run so the class is also reachable
+# under its short alias via ``build_from_config({"class": "StockTradingEnv"})``.
+from aqp.core.registry import register as _register  # noqa: E402
+
+_register("StockTradingEnv", kind=RL_KIND_ENV)(StockTradingEnv)

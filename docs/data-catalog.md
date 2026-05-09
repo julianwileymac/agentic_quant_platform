@@ -1,6 +1,67 @@
 # Iceberg-first Data Catalog
 
 > Doc map: [docs/index.md](index.md) · Sequence diagram: [docs/flows.md#1-generic-file--iceberg-ingestion](flows.md#1-generic-file--iceberg-ingestion).
+>
+> See also: [docs/data-layer-unification.md](data-layer-unification.md) for the
+> medallion + active-metadata + lineage layer that wraps the catalog;
+> [docs/data-products.md](data-products.md) for entity-centric data products;
+> [docs/data-mcp.md](data-mcp.md) for the agent-facing tool surface.
+
+## Medallion architecture
+
+Three layers, each pinned to a namespace prefix that
+`iceberg_catalog.append_arrow` validates:
+
+| Layer | Namespace prefix | What lives here |
+| --- | --- | --- |
+| Bronze | `aqp_bronze_*` | Raw, append-only journal as it lands from a fetcher |
+| Silver | `aqp_silver_*` | Normalised, deduped, schema-validated rows |
+| Gold | `aqp_gold_*` | Feature sets + entity-centric data products |
+
+Pass `medallion_layer="bronze"` (or `silver` / `gold`) to
+`append_arrow` and the wrapper validates the namespace prefix matches.
+Pass `business_metadata=BusinessMetadata(...)` and the
+`DatasetCatalog` row gets upserted automatically with
+`data_owner` / `semantic_definition` / `reliability_score` / `sla_class`.
+
+## Active metadata + data contracts
+
+Migration `0027_data_layer_medallion` adds three columns to
+`DatasetCatalog`:
+
+- `medallion_layer` — `bronze` / `silver` / `gold` enum
+- `business_metadata` — JSON: `data_owner`, `semantic_definition`,
+  `reliability_score`, `sla_class`, `domain`
+- `data_contract_json` — JSON: column-level type / required / range
+  contracts validated on every append
+
+…and two columns to `DatasetVersion`:
+
+- `quality_score` — 0..1 quality roll-up
+- `quality_breakdown` — per-dimension quality dict
+  (accuracy / timeliness / completeness / consistency)
+
+See [aqp/data/catalog/active_metadata.py](../aqp/data/catalog/active_metadata.py)
+for `register_dataset(...)` + the `@dataset(...)` decorator.
+
+## Lineage events
+
+Every material data motion writes through `LineageWriter` into
+`data_lineage_events`:
+
+| Source | `transform_kind` |
+| --- | --- |
+| `iceberg_catalog.append_arrow` | `iceberg_append` / `iceberg_create_or_replace` |
+| `iceberg_catalog.read_arrow_at` | `iceberg_time_travel_read` |
+| engine `Executor.execute` | `materialize` |
+| `materialise_node_spec` | `sink` |
+| `DbtRunnerService.invoke` | `dbt` |
+| airbyte `_finish_run_row` | `airbyte` |
+| DataMCP tool invocation | `mcp_tool` |
+| Silver normalization detects new column | `schema_drift` |
+
+Browse the graph at `/data-control/lineage` (UI) or via the
+`data.catalog.lineage` MCP tool (agents).
 
 The AQP data engine leans on Apache Iceberg as the canonical home for
 non-OHLCV datasets. CSV / PSV / TSV / NDJSON / JSON-array files (in

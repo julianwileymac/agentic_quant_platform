@@ -155,6 +155,22 @@ TOOL_REGISTRY: dict[str, type] = {
 }
 
 
+# Auto-merge every DataMCP tool into TOOL_REGISTRY so AgentRuntime's
+# OpenAI function-calling loop and the external MCP server share a
+# single tool catalog (single source of truth, two transports).
+try:
+    from aqp.agents.tools.data_mcp_bridge import install_data_mcp_tools
+
+    _installed_data_mcp_tools = install_data_mcp_tools(TOOL_REGISTRY)
+except Exception:  # noqa: BLE001 - optional import path
+    import logging as _bridge_logging
+
+    _bridge_logging.getLogger(__name__).debug(
+        "DataMCP bridge unavailable; skipping auto-install", exc_info=True
+    )
+    _installed_data_mcp_tools = []
+
+
 def get_tool(name: str):
     """Look up a tool class by name (used by the crew YAML loader)."""
     if name not in TOOL_REGISTRY:

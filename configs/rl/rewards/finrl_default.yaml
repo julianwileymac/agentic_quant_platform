@@ -1,0 +1,8 @@
+# Decomposed FinRL "default_reward" (PnL − cost − dd-penalty) into composable terms.
+class: CompositeReward
+module_path: aqp.rl.core.reward
+kwargs:
+  terms:
+    - { class: PnLTerm, kwargs: { weight: 1.0, scale: 1.0e-4 } }
+    - { class: TurnoverPenaltyTerm, kwargs: { weight: 1.0, cost_pct: 0.001 } }
+    - { class: DrawdownPenaltyTerm, kwargs: { weight: 0.05 } }

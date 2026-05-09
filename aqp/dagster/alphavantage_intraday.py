@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from dagster import Definitions, ScheduleDefinition, asset, define_asset_job
+from dagster import ScheduleDefinition, asset, define_asset_job
 
 
-@asset(description="Refresh the active Alpha Vantage instrument universe.")
+@asset(
+    description="Refresh the active Alpha Vantage instrument universe.",
+    group_name="aqp_alpha_vantage",
+)
 def alphavantage_universe() -> dict:
     from aqp.data.sources.alpha_vantage.universe import AlphaVantageUniverseService
 
@@ -13,14 +16,22 @@ def alphavantage_universe() -> dict:
     return service.sync_snapshot(state="active")
 
 
-@asset(deps=[alphavantage_universe], description="Build reusable 1-minute intraday request components.")
+@asset(
+    deps=[alphavantage_universe],
+    description="Build reusable 1-minute intraday request components.",
+    group_name="aqp_alpha_vantage",
+)
 def alphavantage_intraday_request_plan() -> dict:
     from aqp.data.sources.alpha_vantage.intraday_plan import build_intraday_plan
 
     return build_intraday_plan(symbols="all_active").to_dict()
 
 
-@asset(deps=[alphavantage_intraday_request_plan], description="Load one configured batch of intraday components.")
+@asset(
+    deps=[alphavantage_intraday_request_plan],
+    description="Load one configured batch of intraday components.",
+    group_name="aqp_alpha_vantage",
+)
 def alphavantage_intraday_delta(alphavantage_intraday_request_plan: dict) -> dict:
     from aqp.data.sources.alpha_vantage.intraday_backfill import run_intraday_manifest
 
@@ -30,7 +41,11 @@ def alphavantage_intraday_delta(alphavantage_intraday_request_plan: dict) -> dic
     return result.to_dict()
 
 
-@asset(deps=[alphavantage_intraday_delta], description="Confirm DataHub metadata emission for intraday data.")
+@asset(
+    deps=[alphavantage_intraday_delta],
+    description="Confirm DataHub metadata emission for intraday data.",
+    group_name="aqp_catalog",
+)
 def alphavantage_intraday_datahub_update(alphavantage_intraday_delta: dict) -> dict:
     from aqp.data.sources.alpha_vantage.datahub import emit_dataset_properties
 
@@ -60,15 +75,27 @@ alphavantage_intraday_delta_schedule = ScheduleDefinition(
     name="alphavantage_intraday_delta_schedule",
     cron_schedule="20 * * * *",
     job=alphavantage_intraday_delta_job,
+    execution_timezone="UTC",
 )
 
-defs = Definitions(
-    assets=[
-        alphavantage_universe,
-        alphavantage_intraday_request_plan,
-        alphavantage_intraday_delta,
-        alphavantage_intraday_datahub_update,
-    ],
-    jobs=[alphavantage_intraday_delta_job],
-    schedules=[alphavantage_intraday_delta_schedule],
-)
+ALPHAVANTAGE_INTRADAY_ASSETS = [
+    alphavantage_universe,
+    alphavantage_intraday_request_plan,
+    alphavantage_intraday_delta,
+    alphavantage_intraday_datahub_update,
+]
+ALPHAVANTAGE_INTRADAY_JOBS = [alphavantage_intraday_delta_job]
+ALPHAVANTAGE_INTRADAY_SCHEDULES = [alphavantage_intraday_delta_schedule]
+
+
+__all__ = [
+    "ALPHAVANTAGE_INTRADAY_ASSETS",
+    "ALPHAVANTAGE_INTRADAY_JOBS",
+    "ALPHAVANTAGE_INTRADAY_SCHEDULES",
+    "alphavantage_intraday_datahub_update",
+    "alphavantage_intraday_delta",
+    "alphavantage_intraday_delta_job",
+    "alphavantage_intraday_delta_schedule",
+    "alphavantage_intraday_request_plan",
+    "alphavantage_universe",
+]

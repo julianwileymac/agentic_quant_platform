@@ -13,6 +13,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
+    docker.io \
+    docker-compose \
     git \
     libpq-dev \
     postgresql-client \
@@ -70,7 +72,7 @@ CMD ["aqp-stream-ingest", "--venue", "all"]
 ###############################################################################
 FROM base AS api
 
-RUN pip install --upgrade pip && pip install -e ".[dev,otel,cli,iceberg,visualization,entity-graph,dagster-aqp]"
+RUN pip install --upgrade pip && pip install -e ".[dev,otel,cli,iceberg,visualization,entity-graph,dagster-aqp,compute-dask,compute-ray]"
 
 EXPOSE 8000 8765
 

@@ -13,6 +13,17 @@ from aqp.persistence.db import get_session
 from aqp.persistence.models import DataLink, DatasetCatalog, DatasetVersion, Instrument
 
 logger = logging.getLogger(__name__)
+_ALLOWED_DATASET_LOAD_MODES = {
+    "managed",
+    "registered",
+    "discovered",
+    "manual",
+    "ad_hoc",
+    "streaming",
+    "batch",
+    "active",
+    "inactive",
+}
 
 
 def _escaped_like_prefix(column: Any, namespace: str) -> Any:
@@ -224,6 +235,52 @@ class MetadataCatalogService:
                 return None
             return self._row_to_dataset(session, row).to_dict()
 
+    def patch_dataset(
+        self,
+        dataset_id: str,
+        *,
+        description: str | None = None,
+        tags: list[str] | None = None,
+        load_mode: str | None = None,
+    ) -> dict[str, Any] | None:
+        with get_session() as session:
+            row = session.execute(
+                select(DatasetCatalog).where(DatasetCatalog.id == dataset_id).limit(1)
+            ).scalar_one_or_none()
+            if row is None:
+                row = session.execute(
+                    select(DatasetCatalog)
+                    .where(DatasetCatalog.iceberg_identifier == dataset_id)
+                    .limit(1)
+                ).scalar_one_or_none()
+            if row is None:
+                return None
+
+            changed = False
+            if description is not None:
+                text = str(description).strip()
+                row.description = text or None
+                changed = True
+            if tags is not None:
+                row.tags = self._normalise_tags(tags)
+                changed = True
+            if load_mode is not None:
+                mode = str(load_mode).strip().lower()
+                if mode not in _ALLOWED_DATASET_LOAD_MODES:
+                    raise ValueError(
+                        f"unsupported load_mode '{load_mode}'. "
+                        f"allowed={sorted(_ALLOWED_DATASET_LOAD_MODES)}"
+                    )
+                row.load_mode = mode
+                changed = True
+
+            if changed:
+                row.updated_at = datetime.utcnow()
+                session.add(row)
+                session.commit()
+                session.refresh(row)
+            return self._row_to_dataset(session, row).to_dict()
+
     def lineage(self, dataset_id: str, *, limit: int = 250) -> dict[str, Any]:
         dataset = self.get_dataset(dataset_id)
         if dataset is None:
@@ -432,6 +489,20 @@ class MetadataCatalogService:
             return None, None
         ns, _, table = identifier.rpartition(".")
         return ns or None, table or None
+
+    @staticmethod
+    def _normalise_tags(tags: list[str]) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for item in tags:
+            text = str(item or "").strip()
+            if not text:
+                continue
+            if text in seen:
+                continue
+            seen.add(text)
+            out.append(text)
+        return out
 
     @staticmethod
     def _entity_link_count(session: Any, catalog_id: str) -> int:

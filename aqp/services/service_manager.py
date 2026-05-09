@@ -20,7 +20,18 @@ from aqp.services.trino_probe import probe_trino_coordinator
 
 logger = logging.getLogger(__name__)
 
-ServiceName = Literal["trino", "polaris", "iceberg", "superset", "airbyte", "dagster", "neo4j"]
+ServiceName = Literal[
+    "trino",
+    "polaris",
+    "iceberg",
+    "superset",
+    "airbyte",
+    "dagster",
+    "neo4j",
+    "dask",
+    "ray",
+    "minio",
+]
 ActionName = Literal["start", "stop", "restart"]
 
 SERVICE_NAMES: tuple[str, ...] = (
@@ -31,6 +42,9 @@ SERVICE_NAMES: tuple[str, ...] = (
     "airbyte",
     "dagster",
     "neo4j",
+    "dask",
+    "ray",
+    "minio",
 )
 
 COMPOSE_SERVICE_MAP = {
@@ -40,6 +54,9 @@ COMPOSE_SERVICE_MAP = {
     "airbyte": "airbyte-server",
     "dagster": "dagster-webserver",
     "neo4j": "neo4j",
+    "dask": "dask-scheduler",
+    "ray": "ray-head",
+    "minio": "minio",
 }
 
 
@@ -58,6 +75,15 @@ def config_snapshot() -> dict[str, Any]:
         "airbyte_base_url": settings.airbyte_base_url,
         "dagster_graphql_url": settings.dagster_graphql_url or None,
         "dagster_webserver_url": settings.dagster_webserver_url or None,
+        "dask_scheduler_address": settings.dask_scheduler_address or None,
+        "dask_n_workers": settings.dask_n_workers,
+        "dask_threads_per_worker": settings.dask_threads_per_worker,
+        "ray_address": settings.ray_address or None,
+        "ray_init_kwargs": settings.ray_init_kwargs,
+        "s3_endpoint_url": settings.s3_endpoint_url or None,
+        "minio_endpoint_url": settings.minio_endpoint_url or None,
+        "minio_artifacts_bucket": settings.minio_artifacts_bucket,
+        "minio_datasets_bucket": settings.minio_datasets_bucket,
     }
 
 
@@ -85,6 +111,12 @@ def service_health(name: str) -> dict[str, Any]:
         return _dagster_health()
     if name == "neo4j":
         return _neo4j_health()
+    if name == "dask":
+        return _dask_health()
+    if name == "ray":
+        return _ray_health()
+    if name == "minio":
+        return _minio_health()
     return {"ok": False, "service": name, "error": "unknown service"}
 
 
@@ -101,6 +133,17 @@ def service_logs(name: str, *, lines: int | None = None) -> dict[str, Any]:
         }
     line_count = max(1, min(int(lines or settings.service_log_tail_lines or 200), 2000))
     result = _compose(["logs", "--tail", str(line_count), compose])
+    if not result.get("returncode") == 0 and _compose_unavailable(result):
+        container_names = _container_names_for_service(name)
+        payloads = [_docker_logs(container, line_count) for container in container_names]
+        ok = all(payload.get("ok") for payload in payloads)
+        return {
+            "ok": ok,
+            "service": name,
+            "containers": payloads,
+            "stdout": "\n".join(str(p.get("stdout") or "") for p in payloads),
+            "stderr": "\n".join(str(p.get("stderr") or "") for p in payloads),
+        }
     return {"ok": result["returncode"] == 0, "service": name, **result}
 
 
@@ -116,12 +159,31 @@ def service_action(name: str, action: ActionName) -> dict[str, Any]:
             "enabled": False,
             "error": "AQP_SERVICE_CONTROL_ENABLED is false",
         }
-    args = {
-        "start": ["up", "-d", compose],
-        "stop": ["stop", compose],
-        "restart": ["restart", compose],
-    }[action]
+    if name == "dask":
+        args = {
+            "start": ["up", "-d", "dask-scheduler", "dask-worker"],
+            "stop": ["stop", "dask-worker", "dask-scheduler"],
+            "restart": ["restart", "dask-scheduler", "dask-worker"],
+        }[action]
+    else:
+        args = {
+            "start": ["up", "-d", compose],
+            "stop": ["stop", compose],
+            "restart": ["restart", compose],
+        }[action]
     result = _compose(args)
+    if not result.get("returncode") == 0 and _compose_unavailable(result):
+        container_names = _container_names_for_service(name)
+        payloads = [_docker_action(container, action) for container in container_names]
+        ok = all(payload.get("ok") for payload in payloads)
+        return {
+            "ok": ok,
+            "service": name,
+            "action": action,
+            "containers": payloads,
+            "stdout": "",
+            "stderr": "\n".join(str(p.get("error") or "") for p in payloads if p.get("error")),
+        }
     return {"ok": result["returncode"] == 0, "service": name, "action": action, **result}
 
 
@@ -332,10 +394,108 @@ def _neo4j_health() -> dict[str, Any]:
     return {"service": "neo4j", **payload}
 
 
+def _dask_health() -> dict[str, Any]:
+    address = settings.dask_scheduler_address or "tcp://dask-scheduler:8786"
+    payload: dict[str, Any] = {
+        "ok": False,
+        "service": "dask",
+        "scheduler_address": address,
+        "n_workers": 0,
+        "threads_per_worker": settings.dask_threads_per_worker,
+        "dashboard_url": _dask_dashboard_url(address),
+        "error": None,
+    }
+    try:
+        from distributed import Client
+
+        client = Client(address, timeout="5s", set_as_default=False)
+        try:
+            info = client.scheduler_info()
+            workers = info.get("workers", {}) if isinstance(info, dict) else {}
+            payload.update(
+                {
+                    "ok": True,
+                    "n_workers": len(workers),
+                    "worker_addresses": list(workers.keys())[:10],
+                    "scheduler": info.get("address") if isinstance(info, dict) else None,
+                }
+            )
+        finally:
+            client.close()
+    except Exception as exc:  # noqa: BLE001
+        payload["error"] = str(exc)
+    return payload
+
+
+def _ray_health() -> dict[str, Any]:
+    address = settings.ray_address or "ray://ray-head:10001"
+    dashboard_url = _ray_dashboard_url(address)
+    payload: dict[str, Any] = {
+        "ok": False,
+        "service": "ray",
+        "address": address,
+        "dashboard_url": dashboard_url,
+        "error": None,
+    }
+    try:
+        with httpx.Client(timeout=5.0) as client:
+            response = client.get(f"{dashboard_url.rstrip('/')}/api/version")
+            response.raise_for_status()
+        payload.update({"ok": True, "version": response.json()})
+    except Exception as exc:  # noqa: BLE001
+        payload["error"] = str(exc)
+    return payload
+
+
+def _minio_health() -> dict[str, Any]:
+    endpoint = (
+        settings.s3_endpoint_url
+        or settings.minio_endpoint_url
+        or "http://minio:9000"
+    ).rstrip("/")
+    payload: dict[str, Any] = {
+        "ok": False,
+        "service": "minio",
+        "endpoint_url": endpoint,
+        "console_url": endpoint.replace(":9000", ":9090"),
+        "live": False,
+        "ready": False,
+        "artifacts_bucket": settings.minio_artifacts_bucket,
+        "datasets_bucket": settings.minio_datasets_bucket,
+        "error": None,
+    }
+    try:
+        with httpx.Client(timeout=5.0) as client:
+            live = client.get(f"{endpoint}/minio/health/live")
+            ready = client.get(f"{endpoint}/minio/health/ready")
+        payload["live"] = live.status_code < 500
+        payload["ready"] = ready.status_code < 500
+        payload["ok"] = bool(payload["live"] and payload["ready"])
+        payload["live_status_code"] = live.status_code
+        payload["ready_status_code"] = ready.status_code
+    except Exception as exc:  # noqa: BLE001
+        payload["error"] = str(exc)
+    return payload
+
+
+def _dask_dashboard_url(address: str) -> str:
+    host = "dask-scheduler"
+    if "://" in address:
+        rest = address.split("://", 1)[1]
+        host = rest.split(":", 1)[0] or host
+    return f"http://{host}:8787"
+
+
+def _ray_dashboard_url(address: str) -> str:
+    host = "ray-head"
+    if "://" in address:
+        rest = address.split("://", 1)[1]
+        host = rest.split(":", 1)[0] or host
+    return f"http://{host}:8265"
+
+
 def _compose(args: list[str]) -> dict[str, Any]:
-    command = [
-        "docker",
-        "compose",
+    compose_args = [
         "-f",
         "docker-compose.yml",
         "-f",
@@ -344,6 +504,34 @@ def _compose(args: list[str]) -> dict[str, Any]:
         "visualization",
         *args,
     ]
+    commands = [
+        ["docker", "compose", *compose_args],
+        ["docker-compose", *compose_args],
+    ]
+    last: dict[str, Any] | None = None
+    for command in commands:
+        result = _run_compose_command(command)
+        last = result
+        if result["returncode"] == 0:
+            return result
+        stderr = str(result.get("stderr") or "")
+        if "No such file or directory" in stderr or "is not a docker command" in stderr:
+            continue
+        return result
+    return last or {"returncode": 1, "stdout": "", "stderr": "compose command unavailable"}
+
+
+def _compose_unavailable(result: dict[str, Any]) -> bool:
+    stderr = str(result.get("stderr") or "")
+    return (
+        "No such file or directory" in stderr
+        or "compose command unavailable" in stderr
+        or "is not a docker command" in stderr
+        or "executable file not found" in stderr
+    )
+
+
+def _run_compose_command(command: list[str]) -> dict[str, Any]:
     try:
         result = subprocess.run(
             command,
@@ -360,6 +548,102 @@ def _compose(args: list[str]) -> dict[str, Any]:
         "stdout": result.stdout[-8000:],
         "stderr": result.stderr[-8000:],
     }
+
+
+def _container_names_for_service(name: str) -> list[str]:
+    if name == "dask":
+        return ["aqp-dask-scheduler", "aqp-dask-worker"]
+    compose = COMPOSE_SERVICE_MAP.get(name, name)
+    return [f"aqp-{compose}"]
+
+
+def _docker_client() -> httpx.Client:
+    return httpx.Client(
+        transport=httpx.HTTPTransport(uds="/var/run/docker.sock"),
+        base_url="http://docker",
+        timeout=30.0,
+    )
+
+
+def _docker_logs(container: str, tail: int) -> dict[str, Any]:
+    try:
+        with _docker_client() as client:
+            response = client.get(
+                f"/containers/{container}/logs",
+                params={
+                    "stdout": "true",
+                    "stderr": "true",
+                    "tail": str(tail),
+                    "timestamps": "false",
+                },
+            )
+        if response.status_code >= 400:
+            return {
+                "ok": False,
+                "container": container,
+                "stdout": "",
+                "stderr": response.text[-8000:],
+                "status_code": response.status_code,
+            }
+        text = _decode_docker_log_stream(response.content)
+        return {
+            "ok": True,
+            "container": container,
+            "stdout": text[-8000:],
+            "stderr": "",
+            "status_code": response.status_code,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "container": container, "stdout": "", "stderr": str(exc)}
+
+
+def _docker_action(container: str, action: ActionName) -> dict[str, Any]:
+    try:
+        with _docker_client() as client:
+            response = client.post(f"/containers/{container}/{action}")
+        ok_codes = {
+            "start": {204, 304},
+            "stop": {204, 304},
+            "restart": {204},
+        }[action]
+        return {
+            "ok": response.status_code in ok_codes,
+            "container": container,
+            "status_code": response.status_code,
+            "error": None if response.status_code in ok_codes else response.text[-8000:],
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "container": container, "error": str(exc)}
+
+
+def _decode_docker_log_stream(payload: bytes) -> str:
+    """Decode Docker Engine's multiplexed log stream.
+
+    Containers with TTY disabled return frames shaped:
+    [stream:1][000][length:4][payload:length].
+    If the payload doesn't match that framing we fall back to utf-8 text.
+    """
+
+    if not payload:
+        return ""
+    chunks: list[bytes] = []
+    i = 0
+    try:
+        while i + 8 <= len(payload):
+            stream_type = payload[i]
+            if stream_type not in (0, 1, 2):
+                raise ValueError("not a docker multiplexed log stream")
+            size = int.from_bytes(payload[i + 4 : i + 8], "big")
+            i += 8
+            if size < 0 or i + size > len(payload):
+                raise ValueError("invalid docker log frame size")
+            chunks.append(payload[i : i + size])
+            i += size
+        if i != len(payload):
+            chunks.append(payload[i:])
+        return b"".join(chunks).decode("utf-8", errors="replace")
+    except Exception:
+        return payload.decode("utf-8", errors="replace")
 
 
 __all__ = [

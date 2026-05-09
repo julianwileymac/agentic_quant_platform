@@ -62,6 +62,8 @@ celery_app = Celery(
         "aqp.tasks.visualization_tasks",
         # Data layer expansion: scheduling + streaming link refresh.
         "aqp.tasks.streaming_link_tasks",
+        # RL layer (FinRL + FinRobot inspired refactor) — runtime-driven tasks.
+        "aqp.tasks.rl_tasks",
     ],
 )
 
@@ -107,6 +109,15 @@ celery_app.conf.update(
         "aqp.tasks.bot_tasks.deploy_bot": {"queue": "default"},
         "aqp.tasks.visualization_tasks.*": {"queue": "ingestion"},
         "aqp.tasks.streaming_link_tasks.*": {"queue": "ingestion"},
+        # RL layer (FinRL + FinRobot inspired refactor): RLRuntime-driven tasks
+        # share the existing ``training`` queue with the legacy ``train_rl`` /
+        # ``evaluate_rl`` tasks; ``paper_trade_rl`` rides on the ``paper`` queue.
+        "aqp.tasks.rl_tasks.train_rl_experiment": {"queue": "training"},
+        "aqp.tasks.rl_tasks.evaluate_rl_experiment": {"queue": "training"},
+        "aqp.tasks.rl_tasks.replay_trajectories": {"queue": "training"},
+        "aqp.tasks.rl_tasks.walk_forward_ensemble": {"queue": "training"},
+        "aqp.tasks.rl_tasks.best_of_n_search": {"queue": "training"},
+        "aqp.tasks.rl_tasks.paper_trade_rl": {"queue": "paper"},
     },
     beat_schedule={
         "drift-check": {

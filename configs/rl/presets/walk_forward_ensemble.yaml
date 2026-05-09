@@ -1,0 +1,65 @@
+name: walk-forward-ensemble
+slug: walk-forward-ensemble
+kind: ensemble
+description: FinRL DRLEnsembleAgent port — train PPO/A2C/SAC, pick by Sharpe.
+
+universe:
+  symbols: [AAPL.NASDAQ, MSFT.NASDAQ, GOOGL.NASDAQ, AMZN.NASDAQ]
+
+data_pipeline:
+  spec:
+    class: IcebergRLDataPipeline
+    module_path: aqp.rl.data_pipelines.iceberg
+    kwargs:
+      indicators: [macd, rsi_30, cci_30, sma_30, sma_60, turbulence]
+
+env:
+  class: FinRLStockTradingEnv
+  module_path: aqp.rl.envs.finrl_stock_env
+  kwargs:
+    symbols: [AAPL.NASDAQ, MSFT.NASDAQ, GOOGL.NASDAQ, AMZN.NASDAQ]
+    start: "2018-01-01"
+    end: "2023-06-30"
+    initial_balance: 1000000.0
+    indicators: [macd, rsi_30, cci_30, sma_30, sma_60]
+    turbulence_threshold: 140.0
+
+reward:
+  spec:
+    class: CompositeReward
+    module_path: aqp.rl.core.reward
+    kwargs:
+      terms:
+        - { class: PnLTerm, kwargs: { weight: 1.0, scale: 1.0e-4 } }
+        - { class: TurnoverPenaltyTerm, kwargs: { weight: 1.0, cost_pct: 0.001 } }
+        - { class: DrawdownPenaltyTerm, kwargs: { weight: 0.05 } }
+
+terminations:
+  specs:
+    - { class: HorizonTermination }
+    - { class: TurbulenceTermination, kwargs: { max_turbulence: 200.0 } }
+
+agent: null  # The ensembler picks per member.
+
+ensembler:
+  spec:
+    class: WalkForwardEnsembler
+    module_path: aqp.rl.ensemblers.walk_forward
+    kwargs:
+      members:
+        - { class: SB3Adapter, kwargs: { algorithm: PPO } }
+        - { class: SB3Adapter, kwargs: { algorithm: A2C } }
+        - { class: SB3Adapter, kwargs: { algorithm: SAC } }
+      train_period: 252
+      val_period: 63
+      test_period: 63
+
+training:
+  total_timesteps: 100000
+
+evaluation:
+  start: "2023-07-01"
+  end: "2024-01-01"
+
+mlflow:
+  experiment: aqp-rl-walkforward

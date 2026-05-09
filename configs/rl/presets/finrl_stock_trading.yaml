@@ -1,0 +1,67 @@
+name: finrl-stock-trading
+slug: finrl-stock-trading
+kind: training
+description: FinRL-style share-lot stock trading with PPO + composite reward.
+
+universe:
+  symbols: [AAPL.NASDAQ, MSFT.NASDAQ, GOOGL.NASDAQ]
+
+data_pipeline:
+  spec:
+    class: IcebergRLDataPipeline
+    module_path: aqp.rl.data_pipelines.iceberg
+    kwargs:
+      indicators: [macd, rsi_30, sma_20, sma_50, turbulence]
+      use_turbulence: true
+
+env:
+  class: FinRLStockTradingEnv
+  module_path: aqp.rl.envs.finrl_stock_env
+  kwargs:
+    symbols: [AAPL.NASDAQ, MSFT.NASDAQ, GOOGL.NASDAQ]
+    start: "2018-01-01"
+    end: "2023-06-30"
+    initial_balance: 1000000.0
+    hmax: 100
+    indicators: [macd, rsi_30, sma_20, sma_50]
+    turbulence_threshold: 140.0
+
+reward:
+  spec:
+    class: CompositeReward
+    module_path: aqp.rl.core.reward
+    kwargs:
+      terms:
+        - { class: PnLTerm, kwargs: { weight: 1.0, scale: 1.0e-4 } }
+        - { class: TurnoverPenaltyTerm, kwargs: { weight: 1.0, cost_pct: 0.001 } }
+        - { class: DrawdownPenaltyTerm, kwargs: { weight: 0.05 } }
+
+terminations:
+  specs:
+    - { class: HorizonTermination }
+
+agent:
+  class: SB3Adapter
+  module_path: aqp.rl.agents.sb3_adapter
+  kwargs:
+    algorithm: PPO
+    policy: MlpPolicy
+    learning_rate: 3.0e-4
+    n_steps: 2048
+
+training:
+  total_timesteps: 200000
+  log_interval: 10
+  seed: 42
+
+evaluation:
+  start: "2023-07-01"
+  end: "2024-01-01"
+  episodes: 1
+
+trajectory_store:
+  enabled: true
+
+mlflow:
+  experiment: aqp-rl
+  register_model_as: rl-finrl-ppo-stock

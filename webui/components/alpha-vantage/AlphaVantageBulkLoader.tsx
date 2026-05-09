@@ -81,6 +81,7 @@ export function AlphaVantageBulkLoader() {
   const [universeItems, setUniverseItems] = useState<UniverseEntry[]>([]);
   const [universeQuery, setUniverseQuery] = useState("");
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
+  const [syncingDataHub, setSyncingDataHub] = useState(false);
 
   const stream = useChatStream(taskId);
 
@@ -188,6 +189,18 @@ export function AlphaVantageBulkLoader() {
       message.success(`Bulk load queued: ${res.task_id}`);
     } catch (err) {
       message.error((err as Error).message);
+    }
+  }
+
+  async function syncDataHub() {
+    try {
+      setSyncingDataHub(true);
+      await apiFetch("/datahub/sync", { method: "POST" });
+      message.success("DataHub sync complete");
+    } catch (err) {
+      message.error((err as Error).message);
+    } finally {
+      setSyncingDataHub(false);
     }
   }
 
@@ -374,7 +387,14 @@ export function AlphaVantageBulkLoader() {
                 description={
                   <Space direction="vertical">
                     <Text>Open the data catalog to inspect new tables and refresh data links:</Text>
-                    <Button type="link" href="/data/catalog">Open Data Catalog</Button>
+                    <Space>
+                      <Button type="link" href="/data/catalog">
+                        Open Data Catalog
+                      </Button>
+                      <Button type="link" loading={syncingDataHub} onClick={syncDataHub}>
+                        Sync DataHub
+                      </Button>
+                    </Space>
                   </Space>
                 }
               />

@@ -1,0 +1,91 @@
+"""Bridge from :class:`aqp.data.mcp.DataMCPTool` to ``crewai.tools.BaseTool``.
+
+Wraps each registered :class:`DataMCPTool` so it slots into
+:data:`aqp.agents.tools.TOOL_REGISTRY` unchanged. AgentRuntime's
+existing OpenAI-function-calling loop then dispatches to the same
+DataMCP tools as the external MCP server, guaranteeing a single
+catalog with two transports.
+"""
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any
+
+from pydantic import BaseModel
+
+from aqp.data.mcp import DATA_MCP_TOOLS, MCPToolContext, get_data_mcp_tool
+
+logger = logging.getLogger(__name__)
+
+
+try:  # pragma: no cover - exercised when CrewAI is installed.
+    from crewai.tools import BaseTool as _CrewAIBaseTool  # type: ignore
+except ImportError:  # pragma: no cover - dev-only path
+    # Fall back to whichever shim aqp.agents.tools.__init__ already
+    # installed.
+    from aqp.agents.tools import BaseTool as _CrewAIBaseTool  # type: ignore[attr-defined]
+
+
+def make_bridge_tool_class(mcp_tool_name: str) -> type:
+    """Produce a ``BaseTool`` subclass that delegates to a DataMCPTool.
+
+    The returned class has the same ``name``, ``description``, and
+    ``args_schema`` as the underlying :class:`DataMCPTool`. ``_run``
+    instantiates a fresh tool, calls :meth:`DataMCPTool.invoke` with
+    the validated kwargs, and returns the JSON-serialised
+    :class:`MCPToolResult`. AgentRuntime's tool dispatch loop already
+    expects a string-shaped return so this fits cleanly.
+    """
+    if mcp_tool_name not in DATA_MCP_TOOLS:
+        raise KeyError(f"unknown DataMCPTool {mcp_tool_name!r}")
+    cls = DATA_MCP_TOOLS[mcp_tool_name]
+    args_schema = cls.args_schema
+    description = (cls.description or "").strip()
+    bridge_class_name = f"DataMCP_{cls.__name__}_Bridge"
+
+    class _BridgeTool(_CrewAIBaseTool):  # type: ignore[misc, valid-type]
+        name: str = cls.name
+        description: str = description
+        args_schema: type[BaseModel] | None = args_schema
+
+        def _run(self, **kwargs: Any) -> str:  # type: ignore[override]
+            tool = get_data_mcp_tool(mcp_tool_name)
+            ctx = MCPToolContext(
+                actor="agent_runtime",
+                actor_kind="agent",
+                granted_scopes=("data:read",),
+            )
+            result = tool.invoke(ctx=ctx, **kwargs)
+            try:
+                return json.dumps(result.to_json(), default=str)
+            except Exception:  # noqa: BLE001
+                return json.dumps(
+                    {"ok": False, "error": "result serialization failed"}
+                )
+
+    _BridgeTool.__name__ = bridge_class_name
+    _BridgeTool.__qualname__ = bridge_class_name
+    return _BridgeTool
+
+
+def install_data_mcp_tools(target_registry: dict[str, type]) -> list[str]:
+    """Wrap every :class:`DataMCPTool` and merge into ``target_registry``.
+
+    Idempotent: re-registering an existing alias replaces the wrapper
+    only if the underlying class differs. Returns the list of tool
+    names installed.
+    """
+    installed: list[str] = []
+    for name in sorted(DATA_MCP_TOOLS):
+        try:
+            wrapper = make_bridge_tool_class(name)
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to bridge DataMCPTool %s", name)
+            continue
+        target_registry[name] = wrapper
+        installed.append(name)
+    return installed
+
+
+__all__ = ["install_data_mcp_tools", "make_bridge_tool_class"]

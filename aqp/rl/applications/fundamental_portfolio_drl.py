@@ -128,7 +128,7 @@ def train_fundamental_portfolio_drl(
         end=end,
         initial_balance=initial_balance,
     )
-    adapter = SB3Adapter(algo=algo, policy="MlpPolicy")
+    adapter = SB3Adapter(algorithm=algo, policy="MlpPolicy")
     adapter.build(env)
     adapter.train(total_timesteps=total_timesteps)
 
@@ -145,7 +145,7 @@ def train_fundamental_portfolio_drl(
         obs = env.reset()
         if isinstance(obs, tuple):
             obs = obs[0]
-        action, _ = adapter.policy.predict(obs, deterministic=True)  # type: ignore[union-attr]
+        action, _ = adapter.predict(obs, deterministic=True)
         # Action is softmax-shaped; align with env.symbols.
         action = np.asarray(action, dtype=float).reshape(-1)
         if action.size and action.sum() > 0:

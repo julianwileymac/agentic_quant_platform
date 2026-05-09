@@ -3,6 +3,12 @@ from __future__ import annotations
 
 from dagster import AssetSelection, define_asset_job
 
+from aqp.dagster.alphavantage_intraday import (
+    ALPHAVANTAGE_INTRADAY_JOBS,
+    alphavantage_intraday_delta_job,
+)
+from aqp.dagster.partitions import daily_partitions
+
 
 full_data_refresh_job = define_asset_job(
     name="full_data_refresh_job",
@@ -49,12 +55,29 @@ datahub_sync_job = define_asset_job(
     description="Push AQP catalog to DataHub + pull external state.",
 )
 
+time_partitioned_sources_job = define_asset_job(
+    name="time_partitioned_sources_job",
+    selection=AssetSelection.assets("fred_observations", "sec_filings", "gdelt_events"),
+    partitions_def=daily_partitions(start_date="2024-01-01"),
+    description=(
+        "Daily partitioned source refresh for time-windowed regulatory "
+        "and macro assets."
+    ),
+)
 
-# Keep the legacy AV intraday job alive so existing schedules continue working.
-try:  # pragma: no cover - optional legacy path
-    from aqp.dagster.alphavantage_intraday import alphavantage_intraday_delta_job
-except Exception:  # noqa: BLE001
-    alphavantage_intraday_delta_job = None  # type: ignore
+alphavantage_intraday_partition_job = define_asset_job(
+    name="alphavantage_intraday_partition_job",
+    selection=AssetSelection.assets(
+        "alphavantage_universe",
+        "alphavantage_intraday_request_plan",
+        "alphavantage_intraday_delta",
+        "alphavantage_intraday_datahub_update",
+    ),
+    partitions_def=daily_partitions(start_date="2024-01-01"),
+    description=(
+        "Daily partitioned intraday load track for Alpha Vantage assets."
+    ),
+)
 
 
 ALL_JOBS = [
@@ -64,18 +87,21 @@ ALL_JOBS = [
     compaction_job,
     profiling_job,
     datahub_sync_job,
+    time_partitioned_sources_job,
+    alphavantage_intraday_partition_job,
+    *ALPHAVANTAGE_INTRADAY_JOBS,
 ]
-if alphavantage_intraday_delta_job is not None:
-    ALL_JOBS.append(alphavantage_intraday_delta_job)
 
 
 __all__ = [
     "ALL_JOBS",
     "alphavantage_intraday_delta_job",
+    "alphavantage_intraday_partition_job",
     "compaction_job",
     "datahub_sync_job",
     "entity_extraction_job",
     "full_data_refresh_job",
     "profiling_job",
     "regulatory_refresh_job",
+    "time_partitioned_sources_job",
 ]

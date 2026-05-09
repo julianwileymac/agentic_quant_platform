@@ -6,17 +6,24 @@ portfolio allocation research.
 """
 from __future__ import annotations
 
+from typing import Any, ClassVar
+
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-from aqp.core.registry import register
+from aqp.rl.core.base import RL_KIND_ENV, RLComponent
 from aqp.rl.envs.base import default_reward, load_bars, pivot_features, safe_array
 
 
-@register("PortfolioAllocationEnv")
-class PortfolioAllocationEnv(gym.Env):
+class PortfolioAllocationEnv(gym.Env, RLComponent):
     metadata = {"render_modes": ["human"]}
+
+    rl_kind: ClassVar[str] = RL_KIND_ENV
+    rl_alias: ClassVar[str] = "PortfolioAllocationEnv"
+    rl_source: ClassVar[str] = "aqp"
+    rl_category: ClassVar[str] = "softmax-portfolio"
+    rl_tags: ClassVar[tuple[str, ...]] = ("portfolio", "softmax")
 
     def __init__(
         self,
@@ -118,3 +125,20 @@ class PortfolioAllocationEnv(gym.Env):
             "timestamp": str(self.timestamps[self.step_idx]),
         }
         return self._obs(), reward, bool(done), False, info
+
+    def _collect_env_state(self) -> dict[str, Any]:
+        return {
+            "step_idx": self.step_idx,
+            "portfolio_value": self.portfolio_value,
+            "prev_value": self.prev_value,
+            "weights": self.weights,
+            "price_panel": self.price_table,
+            "feature_tables": self.feature_tables,
+            "initial_balance": self.initial_balance,
+            "timestamp": str(self.timestamps[self.step_idx]) if self.step_idx < len(self.timestamps) else None,
+        }
+
+
+from aqp.core.registry import register as _register  # noqa: E402
+
+_register("PortfolioAllocationEnv", kind=RL_KIND_ENV)(PortfolioAllocationEnv)

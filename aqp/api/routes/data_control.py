@@ -358,4 +358,193 @@ def _refresh_beat_schedule_safely() -> None:
         logger.debug("beat schedule refresh skipped", exc_info=True)
 
 
+# ---------------------------------------------------------------------------
+# Lineage events (Phase 2 - data layer unification)
+# ---------------------------------------------------------------------------
+
+
+class LineageEventView(BaseModel):
+    id: str
+    source_table_id: str | None = None
+    target_table_id: str | None = None
+    transform_kind: str
+    actor: str | None = None
+    actor_kind: str | None = None
+    service_name: str | None = None
+    rows_written: str | None = None
+    medallion_layer: str | None = None
+    summary: str | None = None
+    created_at: datetime
+
+
+@router.get("/lineage", response_model=list[LineageEventView])
+def lineage(
+    *,
+    dataset: str | None = None,
+    transform_kind: str | None = None,
+    service: str | None = None,
+    actor: str | None = None,
+    since_iso: str | None = None,
+    limit: int = 50,
+) -> list[LineageEventView]:
+    """List ``data_lineage_events`` rows with optional filters.
+
+    Filters are AND-combined; ``dataset`` matches either source or target.
+    """
+    from aqp.persistence.models_lineage import DataLineageEvent
+
+    limit = max(1, min(int(limit), 500))
+    with get_session() as session:
+        query = select(DataLineageEvent)
+        if dataset:
+            query = query.where(
+                (DataLineageEvent.source_table_id == dataset)
+                | (DataLineageEvent.target_table_id == dataset)
+            )
+        if transform_kind:
+            query = query.where(DataLineageEvent.transform_kind == transform_kind)
+        if service:
+            query = query.where(DataLineageEvent.service_name == service)
+        if actor:
+            query = query.where(DataLineageEvent.actor == actor)
+        if since_iso:
+            try:
+                since_dt = datetime.fromisoformat(since_iso)
+                query = query.where(DataLineageEvent.created_at >= since_dt)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=f"invalid since_iso: {exc}")
+        rows = (
+            session.execute(query.order_by(desc(DataLineageEvent.created_at)).limit(limit))
+            .scalars()
+            .all()
+        )
+        return [
+            LineageEventView(
+                id=row.id,
+                source_table_id=row.source_table_id,
+                target_table_id=row.target_table_id,
+                transform_kind=row.transform_kind,
+                actor=row.actor,
+                actor_kind=row.actor_kind,
+                service_name=row.service_name,
+                rows_written=row.rows_written,
+                medallion_layer=row.medallion_layer,
+                summary=row.summary,
+                created_at=row.created_at,
+            )
+            for row in rows
+        ]
+
+
+# ---------------------------------------------------------------------------
+# DataMCP catalog (Phase 7 - data layer unification UI)
+# ---------------------------------------------------------------------------
+
+
+class MCPInvokeBody(BaseModel):
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    granted_scopes: list[str] = Field(default_factory=lambda: ["data:read"])
+    actor: str | None = None
+    workspace_id: str | None = None
+    project_id: str | None = None
+    session_id: str | None = None
+
+
+@router.get("/catalog/browse")
+def catalog_browse(
+    *,
+    layer: str | None = None,
+    provider: str | None = None,
+    domain: str | None = None,
+    search: str | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Server-side catalog browser used by the Data Hub UI."""
+    from sqlalchemy import or_
+
+    limit = max(1, min(int(limit), 500))
+    with get_session() as session:
+        query = select(DatasetCatalog)
+        if layer:
+            query = query.where(DatasetCatalog.medallion_layer == layer)
+        if provider:
+            query = query.where(DatasetCatalog.provider == provider)
+        if domain:
+            query = query.where(DatasetCatalog.domain == domain)
+        if search:
+            pattern = f"%{search}%"
+            query = query.where(
+                or_(
+                    DatasetCatalog.name.ilike(pattern),
+                    DatasetCatalog.description.ilike(pattern),
+                )
+            )
+        rows = (
+            session.execute(query.order_by(DatasetCatalog.name).limit(limit))
+            .scalars()
+            .all()
+        )
+        return {
+            "ok": True,
+            "rows": [
+                {
+                    "id": row.id,
+                    "name": row.name,
+                    "provider": row.provider,
+                    "domain": row.domain,
+                    "frequency": row.frequency,
+                    "iceberg_identifier": row.iceberg_identifier,
+                    "medallion_layer": row.medallion_layer,
+                    "business_metadata": dict(row.business_metadata or {}),
+                    "data_contract_json": dict(row.data_contract_json or {}),
+                    "tags": list(row.tags or []),
+                    "datahub_urn": row.datahub_urn,
+                    "description": row.description,
+                    "updated_at": (
+                        row.updated_at.isoformat() if row.updated_at else None
+                    ),
+                }
+                for row in rows
+            ],
+            "count": len(rows),
+        }
+
+
+@router.get("/mcp/tools")
+def mcp_tools_index() -> dict[str, Any]:
+    """List every DataMCP tool descriptor for the UI catalog."""
+    from aqp.data.mcp import list_data_mcp_tools
+
+    descriptors = list_data_mcp_tools()
+    return {
+        "ok": True,
+        "tools": descriptors,
+        "count": len(descriptors),
+    }
+
+
+@router.post("/mcp/tools/{name}/invoke")
+def mcp_invoke(name: str, body: MCPInvokeBody) -> dict[str, Any]:
+    """Server-side invoke endpoint backing the MCP UI playground."""
+    from aqp.data.mcp import (
+        DATA_MCP_TOOLS,
+        MCPToolContext,
+        get_data_mcp_tool,
+    )
+
+    if name not in DATA_MCP_TOOLS:
+        raise HTTPException(status_code=404, detail=f"unknown tool {name!r}")
+    ctx = MCPToolContext(
+        actor=body.actor or "ui_playground",
+        actor_kind="user",
+        workspace_id=body.workspace_id,
+        project_id=body.project_id,
+        session_id=body.session_id,
+        granted_scopes=tuple(body.granted_scopes or ()),
+    )
+    tool = get_data_mcp_tool(name)
+    result = tool.invoke(ctx=ctx, **(body.arguments or {}))
+    return {"ok": result.ok, "result": result.to_json()}
+
+
 __all__ = ["router"]

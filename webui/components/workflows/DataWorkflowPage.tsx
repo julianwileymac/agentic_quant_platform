@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   Col,
+  DatePicker,
   Form,
   Input,
   InputNumber,
@@ -43,7 +44,15 @@ const DEFAULT_TEMPLATE_ID = "alpha-vantage-intraday-2y-all-active";
 interface LoadingTemplateField {
   name: string;
   label: string;
-  kind: "string" | "number" | "boolean" | "select" | "json";
+  kind:
+    | "string"
+    | "number"
+    | "boolean"
+    | "select"
+    | "json"
+    | "date"
+    | "date_range"
+    | "multi_string";
   path: Array<string | number>;
   description?: string | null;
   default?: unknown;
@@ -234,18 +243,26 @@ export function DataWorkflowPage() {
     let queued = 0;
     const errors: string[] = [];
     for (const job of sourceJobs) {
-      const symbols = (job.params.symbols as string[]) ?? [];
+      const symbols = parseSymbols(job.params.symbols);
+      const provider = String(job.params.provider ?? job.params.source ?? "yahoo");
       try {
-        await apiFetch("/data/ingest", {
-          method: "POST",
-          body: JSON.stringify({
-            symbols,
-            start: job.params.start ?? "2022-01-01",
-            end: job.params.end ?? "2024-12-31",
-            interval: job.params.interval ?? "1d",
-            source: job.params.provider ?? "yahoo",
-          }),
-        });
+        if (isYahooProvider(provider)) {
+          await apiFetch("/data/ingest", {
+            method: "POST",
+            body: JSON.stringify({
+              symbols,
+              start: job.params.start ?? "2022-01-01",
+              end: job.params.end ?? "2024-12-31",
+              interval: job.params.interval ?? "1d",
+              source: provider,
+            }),
+          });
+        } else {
+          await apiFetch("/engine/run-adhoc", {
+            method: "POST",
+            body: JSON.stringify(buildManifestFromSource(job, graph)),
+          });
+        }
         queued += 1;
       } catch (err) {
         errors.push((err as Error).message);
@@ -349,6 +366,9 @@ export function DataWorkflowPage() {
 }
 
 function renderField(field: LoadingTemplateField) {
+  if (field.kind === "multi_string") {
+    return <Select mode="tags" style={{ minWidth: 240 }} tokenSeparators={[",", " "]} />;
+  }
   if (field.kind === "select") {
     return (
       <Select
@@ -362,6 +382,12 @@ function renderField(field: LoadingTemplateField) {
   }
   if (field.kind === "boolean") {
     return <Switch />;
+  }
+  if (field.kind === "date") {
+    return <Input type="date" style={{ width: 160 }} />;
+  }
+  if (field.kind === "date_range") {
+    return <DatePicker.RangePicker style={{ width: 260 }} />;
   }
   if (field.kind === "json") {
     return <Input.TextArea style={{ width: 260 }} autoSize={{ minRows: 1, maxRows: 4 }} />;
@@ -413,9 +439,107 @@ function overridesFromValues(template: LoadingTemplate, values: Record<string, u
     if (field.kind === "json" && typeof value === "string") {
       value = value.trim() ? JSON.parse(value) : {};
     }
+    if (field.kind === "date_range" && Array.isArray(value)) {
+      const [start, end] = value;
+      const startText = formatDateValue(start);
+      const endText = formatDateValue(end);
+      const parent = field.path.slice(0, -1);
+      const leaf = String(field.path[field.path.length - 1]);
+      if (leaf === "date_range") {
+        writePath(overrides, [...parent, "start"], startText);
+        writePath(overrides, [...parent, "end"], endText);
+        continue;
+      }
+      value = { start: startText, end: endText };
+    }
+    if (field.kind === "date") {
+      value = formatDateValue(value);
+    }
     writePath(overrides, field.path, value);
   }
   return overrides;
+}
+
+function buildManifestFromSource(
+  job: { kind: string; label?: string; params: Record<string, unknown> },
+  graph: FlowGraph,
+) {
+  const provider = String(job.params.provider ?? job.params.source ?? "generic");
+  const sinkNode = graph.nodes.find((node) => node.data.kind === "Iceberg");
+  const sinkParams = sinkNode?.data.params ?? {};
+  const table = String(sinkParams.table || sanitizeName(job.label || provider || "source_fetch"));
+  const namespace = String(sinkParams.namespace || "aqp");
+
+  return {
+    name: sanitizeName(`${provider}_${table}_${Date.now()}`),
+    namespace,
+    description: `Adhoc fetch from ${provider}`,
+    tags: ["ui", "adhoc", provider],
+    source: {
+      name: sourceNameForProvider(provider),
+      kwargs: sourceKwargs(job.params),
+    },
+    transforms: [],
+    sink: {
+      name: "sink.iceberg",
+      kwargs: {
+        namespace,
+        table,
+        provider,
+        domain: String(job.params.domain ?? "market_data"),
+      },
+    },
+    compute: { backend: "auto" },
+    partitions: partitionFromParams(job.params),
+  };
+}
+
+function sourceKwargs(params: Record<string, unknown>) {
+  const kwargs: Record<string, unknown> = isRecord(params.kwargs) ? { ...params.kwargs } : {};
+  const providerOptions = isRecord(params.provider_options) ? params.provider_options : {};
+  const symbols = parseSymbols(params.symbols);
+  if (symbols.length) kwargs.symbols = symbols;
+  for (const key of ["symbol_mode", "query", "start", "end", "interval", "timeframe", "limit", "offset", "cursor"]) {
+    if (params[key] !== undefined && params[key] !== "") kwargs[key] = params[key];
+  }
+  if (Object.keys(providerOptions).length) kwargs.provider_options = providerOptions;
+  return kwargs;
+}
+
+function partitionFromParams(params: Record<string, unknown>) {
+  const kind = String(params.partition_kind ?? "none");
+  return {
+    kind,
+    key: params.partition_key ?? null,
+    start: params.start ?? null,
+    end: params.end ?? null,
+    values: parseSymbols(params.partition_values),
+  };
+}
+
+function sourceNameForProvider(provider: string) {
+  if (provider.startsWith("source.")) return provider;
+  if (isYahooProvider(provider)) return "source.yfinance";
+  return `source.${provider}`;
+}
+
+function isYahooProvider(provider: string) {
+  return ["yahoo", "yfinance", "source.yfinance"].includes(provider.toLowerCase());
+}
+
+function parseSymbols(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(/[,\s]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function sanitizeName(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "fetch";
 }
 
 function readPath(source: Record<string, unknown>, path: Array<string | number>): unknown {
@@ -444,4 +568,13 @@ function writePath(target: Record<string, unknown>, path: Array<string | number>
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function formatDateValue(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && "format" in value && typeof value.format === "function") {
+    return value.format("YYYY-MM-DD");
+  }
+  return String(value);
 }

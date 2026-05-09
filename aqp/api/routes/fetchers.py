@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 # regardless of which route boots the API.
 import aqp.data.fetchers  # noqa: F401  (registration side effect)
 from aqp.data.engine import list_nodes, list_nodes_by_kind
+from aqp.data.engine.manifest import FetchSliceSpec
 from aqp.data.engine.nodes import NodeKind
 from aqp.data.engine.registry import build_node, get_node_class
 
@@ -30,6 +31,75 @@ class NodeSummary(BaseModel):
 class ProbeRequest(BaseModel):
     name: str
     kwargs: dict[str, Any] = Field(default_factory=dict)
+
+
+COMMON_FETCH_UI_FIELDS = [
+    {
+        "name": "symbol_mode",
+        "label": "Symbol mode",
+        "kind": "select",
+        "path": ["slice", "symbol_mode"],
+        "default": "explicit",
+        "options": ["explicit", "all_active", "query", "universe"],
+        "description": "How the source resolves the symbol universe.",
+    },
+    {
+        "name": "symbols",
+        "label": "Symbols",
+        "kind": "multi_string",
+        "path": ["slice", "symbols"],
+        "default": [],
+        "description": "Explicit tickers or vt_symbols to fetch.",
+    },
+    {
+        "name": "query",
+        "label": "Universe query",
+        "kind": "string",
+        "path": ["slice", "query"],
+        "default": "",
+        "description": "Provider/catalog query used when symbol mode is query.",
+    },
+    {
+        "name": "date_range",
+        "label": "Date range",
+        "kind": "date_range",
+        "path": ["slice", "date_range"],
+        "default": None,
+        "description": "Inclusive start/end range for historical data.",
+    },
+    {
+        "name": "interval",
+        "label": "Interval",
+        "kind": "select",
+        "path": ["slice", "interval"],
+        "default": "1d",
+        "options": ["1min", "5min", "15min", "30min", "60min", "1d", "1wk", "1mo"],
+    },
+    {
+        "name": "limit",
+        "label": "Limit",
+        "kind": "number",
+        "path": ["slice", "limit"],
+        "default": None,
+        "description": "Maximum rows/symbols/components to fetch.",
+    },
+    {
+        "name": "offset",
+        "label": "Offset",
+        "kind": "number",
+        "path": ["slice", "offset"],
+        "default": 0,
+        "description": "Zero-based offset for paged providers.",
+    },
+    {
+        "name": "provider_options",
+        "label": "Provider options",
+        "kind": "json",
+        "path": ["slice", "provider_options"],
+        "default": {},
+        "description": "Provider-specific knobs not covered by common fields.",
+    },
+]
 
 
 @router.get("", response_model=list[NodeSummary])
@@ -89,6 +159,45 @@ def get_node_schema(node_name: str) -> dict[str, Any]:
         "doc": (cls.__doc__ or "").strip(),
         "fields": fields,
     }
+
+
+@router.get("/{node_name}/ui-schema")
+def get_node_ui_schema(node_name: str) -> dict[str, Any]:
+    """Return typed UI controls for common fetch slicing plus node kwargs."""
+
+    schema = get_node_schema(node_name)
+    constructor_fields = []
+    for field in schema["fields"]:
+        constructor_fields.append(
+            {
+                "name": f"kwargs.{field['name']}",
+                "label": field["name"].replace("_", " ").title(),
+                "kind": _ui_kind_for_annotation(str(field.get("annotation") or "")),
+                "path": ["kwargs", field["name"]],
+                "required": bool(field.get("required")),
+                "default": field.get("default"),
+                "description": f"Constructor kwarg for {node_name}.",
+            }
+        )
+    return {
+        "name": node_name,
+        "class_name": schema["class_name"],
+        "module": schema["module"],
+        "doc": schema["doc"],
+        "slice_model": FetchSliceSpec.model_json_schema(),
+        "fields": [*COMMON_FETCH_UI_FIELDS, *constructor_fields],
+    }
+
+
+def _ui_kind_for_annotation(annotation: str) -> str:
+    normalized = annotation.lower()
+    if "bool" in normalized:
+        return "boolean"
+    if "int" in normalized or "float" in normalized:
+        return "number"
+    if "dict" in normalized or "list" in normalized:
+        return "json"
+    return "string"
 
 
 @router.post("/probe")

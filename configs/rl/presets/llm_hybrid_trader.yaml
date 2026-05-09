@@ -1,0 +1,55 @@
+name: llm-hybrid-trader
+slug: llm-hybrid-trader
+kind: training
+description: FinRobot-inspired LLM advisor blended with PPO RL backbone.
+
+universe:
+  symbols: [AAPL.NASDAQ, MSFT.NASDAQ, GOOGL.NASDAQ]
+
+data_pipeline:
+  spec:
+    class: IcebergRLDataPipeline
+    module_path: aqp.rl.data_pipelines.iceberg
+    kwargs:
+      indicators: [macd, rsi_30, sma_20, sma_50]
+
+env:
+  class: StockTradingEnv
+  module_path: aqp.rl.envs.stock_trading_env
+  kwargs:
+    symbols: [AAPL.NASDAQ, MSFT.NASDAQ, GOOGL.NASDAQ]
+    start: "2020-01-01"
+    end: "2023-12-31"
+    indicators: [macd, rsi_14, sma_20]
+
+reward:
+  spec:
+    class: CompositeReward
+    module_path: aqp.rl.core.reward
+    kwargs:
+      terms:
+        - { class: LogReturnTerm, kwargs: { weight: 1.0 } }
+        - { class: TurnoverPenaltyTerm, kwargs: { weight: 0.5, cost_pct: 0.001 } }
+        - { class: DrawdownPenaltyTerm, kwargs: { weight: 0.1 } }
+
+agent:
+  class: LLMHybridAgent
+  module_path: aqp.rl.agents.llm_hybrid
+  kwargs:
+    rl_agent:
+      class: SB3Adapter
+      module_path: aqp.rl.agents.sb3_adapter
+      kwargs:
+        algorithm: PPO
+        policy: MlpPolicy
+        learning_rate: 3.0e-4
+    llm_model: nemotron-3-nano:30b
+    llm_provider: ollama
+    llm_weight: 0.3
+    temperature: 0.0
+
+training:
+  total_timesteps: 100000
+
+mlflow:
+  experiment: aqp-rl-llm-hybrid
