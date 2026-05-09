@@ -11,13 +11,17 @@ interface PaletteProps {
   sections: PaletteSection[];
   /** MIME type used for HTML5 drag-and-drop. */
   dragMime?: string;
+  selectedKind?: string | null;
+  onItemClick?: (item: PaletteItem) => void;
 }
 
 export const PALETTE_DRAG_MIME = "application/aqp-palette";
 
-export function Palette({ sections, dragMime = PALETTE_DRAG_MIME }: PaletteProps) {
+export function Palette({ sections, dragMime = PALETTE_DRAG_MIME, selectedKind, onItemClick }: PaletteProps) {
   function onDragStart(event: DragEvent<HTMLDivElement>, item: PaletteItem) {
-    event.dataTransfer.setData(dragMime, JSON.stringify(item));
+    const payload = JSON.stringify(item);
+    event.dataTransfer.setData(dragMime, payload);
+    event.dataTransfer.setData("text/plain", payload);
     event.dataTransfer.effectAllowed = "move";
   }
 
@@ -48,8 +52,10 @@ export function Palette({ sections, dragMime = PALETTE_DRAG_MIME }: PaletteProps
                 hoverable
                 draggable
                 onDragStart={(e) => onDragStart(e as DragEvent<HTMLDivElement>, item)}
+                onClick={() => onItemClick?.(item)}
                 style={{
                   borderLeft: `3px solid ${item.accent ?? "#3b82f6"}`,
+                  borderColor: selectedKind === item.kind ? (item.accent ?? "#3b82f6") : undefined,
                   cursor: "grab",
                 }}
                 styles={{ body: { padding: "8px 10px" } }}

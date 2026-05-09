@@ -5,6 +5,10 @@ import { AppShell } from "@/components/shell/AppShell";
 import { RequireAuth } from "@/lib/auth";
 
 import { ActionCenterRoute } from "@/routes/action-center/page";
+import { AnalysisLabRoute } from "@/routes/analysis/lab/page";
+import { AnalysisComposerRoute } from "@/routes/analysis/lab/composer/page";
+import { AnalysisRunsRoute } from "@/routes/analysis/runs/page";
+import { AnalysisRunDetailRoute } from "@/routes/analysis/runs/[id]/page";
 import { CallbackRoute } from "@/routes/auth/callback/page";
 import { LoginRoute } from "@/routes/auth/login/page";
 import { AirbyteRoute } from "@/routes/airbyte/page";
@@ -197,6 +201,8 @@ const REAL_ROUTES: Record<string, () => ReactElement> = {
   "/learn": LearnRoute,
   "/learn/sources": LearnSourcesRoute,
   "/research": ResearchRoute,
+  // Analysis umbrella — hash-locked AnalysisSpec + flow catalog
+  "/analysis/lab": AnalysisLabRoute,
   // B5 — Lab (ML + RL)
   "/ml/zoo": MlZooRoute,
   "/ml/models": MlModelsRoute,
@@ -311,6 +317,10 @@ const DYNAMIC_ROUTES: RouteObject[] = [
   { path: "rl/builder/experiment", element: <RlExperimentBuilderRoute /> },
   { path: "rl/builder/observation", element: <RlObservationBuilderRoute /> },
   { path: "rl/builder/reward", element: <RlRewardBuilderRoute /> },
+  // Analysis umbrella — composer + runs deep links.
+  { path: "analysis/lab/composer", element: <AnalysisComposerRoute /> },
+  { path: "analysis/runs", element: <AnalysisRunsRoute /> },
+  { path: "analysis/runs/:id", element: <AnalysisRunDetailRoute /> },
 ];
 
 const childRoutes: RouteObject[] = NAV_ITEMS.map((item) => {

@@ -1,0 +1,48 @@
+# Local platform overlay: Vector tails docker container logs and ships
+# to the local Loki instance. Mirrors the rpi_kubernetes
+# kubernetes/observability/vector/ DaemonSet config but trimmed to a
+# single-node compose deployment.
+
+[api]
+enabled = true
+address = "0.0.0.0:8686"
+
+# ---------------------------------------------------------------------
+# Source: Docker container logs (read-only mount of /var/lib/docker)
+# ---------------------------------------------------------------------
+[sources.docker_logs]
+type = "docker_logs"
+exclude_containers = [
+  # Don't loop logs back into Loki.
+  "aqp-vector",
+  "aqp-loki",
+]
+
+# ---------------------------------------------------------------------
+# Transform: enrich each event with the AQP service name (the compose
+# service label) so Loki labels stay tidy.
+# ---------------------------------------------------------------------
+[transforms.enriched]
+type = "remap"
+inputs = ["docker_logs"]
+source = '''
+.aqp_service = .label."com.docker.compose.service"
+.aqp_project = .label."com.docker.compose.project"
+'''
+
+# ---------------------------------------------------------------------
+# Sink: forward to Loki via HTTP push API.
+# ---------------------------------------------------------------------
+[sinks.loki]
+type = "loki"
+inputs = ["enriched"]
+endpoint = "http://loki:3100"
+compression = "gzip"
+
+[sinks.loki.encoding]
+codec = "json"
+
+[sinks.loki.labels]
+service = "{{ aqp_service }}"
+container = "{{ container_name }}"
+host = "{{ host }}"

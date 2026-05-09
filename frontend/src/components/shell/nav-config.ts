@@ -347,6 +347,7 @@ export const NAV_ITEMS: NavItem[] = [
 
   { key: "rl", label: "RL", href: "/rl", icon: Bot, group: "Lab" },
   { key: "rl-lab", label: "RL Lab", href: "/rl/lab", icon: CircuitBoard, group: "Lab" },
+  { key: "analysis-lab", label: "Analysis Lab", href: "/analysis/lab", icon: Telescope, group: "Lab" },
   { key: "rl-zoo", label: "RL Agent Zoo", href: "/rl/zoo", icon: Bot, group: "Lab" },
   { key: "options-lab", label: "Options Lab", href: "/options/lab", icon: FlaskConical, group: "Lab" },
 

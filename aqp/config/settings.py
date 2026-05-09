@@ -52,13 +52,41 @@ class Settings(BaseSettings):
     default_workspace_id: str = Field(default=DEFAULT_WORKSPACE_ID)
     default_project_id: str = Field(default=DEFAULT_PROJECT_ID)
     default_lab_id: str = Field(default=DEFAULT_LAB_ID)
-    auth_provider: str = Field(default="local")  # local | oidc | jwt
+    auth_provider: str = Field(default="local")  # local | auth0 | oidc | mock | jwt
     auth_oidc_issuer: str = Field(default="")
     auth_oidc_client_id: str = Field(default="")
     auth_oidc_client_secret: str = Field(default="")
     auth_oidc_audience: str = Field(default="")
     auth_oidc_jwks_ttl_seconds: int = Field(default=3600)
     auth_oidc_leeway_seconds: int = Field(default=60)
+    # --- Federated identity (M3) ---
+    # ``auth_login_callback`` / ``auth_logout_callback`` are the
+    # backend-rendered redirect URIs for the SPA login flow. Empty in
+    # local-mode deployments; set when ``auth_provider`` is auth0 / oidc.
+    auth_login_callback: str = Field(default="")
+    auth_logout_callback: str = Field(default="")
+    # ``auth_session_secret`` keys the JWE-encrypted cookie store; must be
+    # at least 32 bytes in production. Generate with ``openssl rand -hex 32``.
+    auth_session_secret: str = Field(default="")
+    # ``cookie`` (default) keeps state in the encrypted cookie itself;
+    # ``redis`` keeps state in Redis with the cookie holding only the
+    # session id. Pick ``redis`` when the session payload exceeds 4KB.
+    auth_session_backend: str = Field(default="cookie")  # cookie | redis
+    # M2M token issuer toggle. When true, services like Polaris / Trino /
+    # MinIO reach for short-lived tokens minted via the active
+    # IdentityProvider's client_credentials flow instead of static
+    # bootstrap credentials.
+    auth_m2m_enabled: bool = Field(default=False)
+    auth_m2m_audience: str = Field(default="")
+    auth_m2m_scope: str = Field(default="")
+    auth_m2m_token_ttl_seconds: int = Field(default=900)
+    # --- Kubernetes adapter (M4) ---
+    # ``none`` (default) keeps AQP standalone. ``rpi_cluster`` activates
+    # automatically when ``cluster_mgmt_url`` is set. ``in_cluster`` uses
+    # the Kubernetes Python SDK with the active kubeconfig / pod SA.
+    # ``local_compose`` shells out to ``docker compose`` and powers the
+    # platform overlay.
+    kubernetes_adapter: str = Field(default="")  # none | rpi_cluster | in_cluster | local_compose
     auth_session_cookie: str = Field(default="aqp_session")
     auth_workspace_header: str = Field(default="X-AQP-Workspace")
     auth_project_header: str = Field(default="X-AQP-Project")

@@ -45,17 +45,78 @@ class PolarisClientConfig:
     extra_headers: dict[str, str] = field(default_factory=dict)
 
 
-def default_polaris_config() -> PolarisClientConfig:
-    """Return a :class:`PolarisClientConfig` derived from AQP settings."""
+def _polaris_base_and_extra_headers() -> tuple[str, str, dict[str, str]]:
+    """Return ``(base_url, realm, extra_headers)`` shared by every Polaris config."""
     base = (settings.polaris_base_url or "http://localhost:8181").rstrip("/")
     realm = settings.polaris_realm or "POLARIS"
     extra: dict[str, str] = {f"{realm}-Realm": realm} if realm else {}
     extra.setdefault("Polaris-Realm", realm)
+    return base, realm, extra
+
+
+def admin_polaris_config() -> PolarisClientConfig:
+    """Return a :class:`PolarisClientConfig` keyed on the **admin** credentials.
+
+    Always reads ``settings.polaris_client_id`` / ``settings.polaris_client_secret``
+    (the bootstrap seed: ``root`` / ``s3cr3t`` by default), bypassing the
+    :class:`aqp.credentials.CredentialResolver` chain.
+
+    Used by :mod:`aqp.services.iceberg_bootstrap` so the bootstrap loop
+    can re-mint a runtime principal even when the persisted
+    ``polaris-principal.json`` has gone stale (fresh Polaris container,
+    rotated secrets, manually-deleted principal).
+    """
+    base, realm, extra = _polaris_base_and_extra_headers()
     return PolarisClientConfig(
         base_url=base,
         realm=realm,
         client_id=settings.polaris_client_id or "root",
         client_secret=settings.polaris_client_secret or "s3cr3t",
+        extra_headers=extra,
+    )
+
+
+def default_polaris_config() -> PolarisClientConfig:
+    """Return a :class:`PolarisClientConfig` derived from AQP settings.
+
+    OAuth client credentials resolve through
+    :class:`aqp.credentials.CredentialResolver`, so a bootstrap-minted
+    runtime principal (persisted under ``settings.bootstrap_state_dir``)
+    automatically supersedes the static ``settings.polaris_client_*``
+    seed. This is the seam that closes the ``CREATE_TABLE_DIRECT_WITH_WRITE_DELEGATION``
+    403 we used to hit when bootstrap had run but the runtime kept using
+    ``root``.
+
+    Bootstrap workflows (which need to mint runtime principals) should
+    use :func:`admin_polaris_config` instead — the resolver path is for
+    *runtime* services, not for the workflow that produces the runtime
+    credentials in the first place.
+    """
+    from aqp.credentials import CredentialKey, get_resolver
+
+    base, realm, extra = _polaris_base_and_extra_headers()
+    creds = get_resolver().resolve(
+        CredentialKey("polaris", "oauth"),
+        default={
+            "client_id": settings.polaris_client_id or "root",
+            "client_secret": settings.polaris_client_secret or "s3cr3t",
+        },
+    )
+    client_id = creds.get("client_id") or settings.polaris_client_id or "root"
+    client_secret = (
+        creds.get("client_secret") or settings.polaris_client_secret or "s3cr3t"
+    )
+    if creds.source != "default":
+        logger.debug(
+            "Polaris client config resolved from %s (principal=%s)",
+            creds.source,
+            creds.get("principal", "?"),
+        )
+    return PolarisClientConfig(
+        base_url=base,
+        realm=realm,
+        client_id=client_id,
+        client_secret=client_secret,
         extra_headers=extra,
     )
 
@@ -374,5 +435,6 @@ __all__ = [
     "PolarisClient",
     "PolarisClientConfig",
     "PolarisClientError",
+    "admin_polaris_config",
     "default_polaris_config",
 ]

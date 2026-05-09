@@ -4,6 +4,25 @@
 > should start at [docs/architecture.md](docs/architecture.md). This
 > file is a terse, deterministic rule-set — read it top-to-bottom
 > before you make changes.
+>
+> **Companion docs**:
+> [WORKFLOW.md](WORKFLOW.md) — human ↔ agent collaboration cadence
+> (Plan → Act → Reflect, FAST vs SLOW modes, intervention nodes,
+> FREEMODE).
+> [.cursor/rules/](.cursor/rules) — glob-scoped Cursor rules
+> derived from this file (a slim always-on `aqp.mdc` plus seven
+> domain-scoped rules). The 25 hard rules below remain canonical.
+> [docs/agentic-development.md](docs/agentic-development.md) — how
+> AQP's spec-pattern (`AgentSpec` / `BotSpec` / `RLExperimentSpec` /
+> `AnalysisSpec`) maps to the broader agentic-coder vocabulary
+> ("skill artifacts", "Memento-skills", "MCP control plane") plus
+> the consolidated ADLC security manifesto.
+> [docs/multi-agent-patterns.md](docs/multi-agent-patterns.md) —
+> Sequential / Parallel / Debate / Coordinator / ReAct topologies
+> mapped to [aqp/agents/graph/](aqp/agents/graph/).
+> [.agents/state-template.md](.agents/state-template.md) —
+> cross-session state schema (use only when work spans multiple
+> sessions; prefer Cursor's plan mode + chat todos otherwise).
 
 ## Project map
 
@@ -13,6 +32,7 @@ Use this as your first lookup when answering "where does X live?".
 | Path | What lives here | Canonical doc |
 | --- | --- | --- |
 | [aqp/agents/](aqp/agents/) | CrewAI crews + spec-driven runtime + Research/Selection/Trader/Analysis teams | [docs/agents.md](docs/agents.md), [docs/agentic-pipeline.md](docs/agentic-pipeline.md) |
+| [aqp/analysis/](aqp/analysis/) | Hash-locked `AnalysisSpec` + `AnalysisRuntime` + 55-flow catalog (distribution / outlier / imputation / regression / time_series / derivatives / portfolio / factors / microstructure / profiling) | [docs/analysis-framework.md](docs/analysis-framework.md), [docs/analysis-lab.md](docs/analysis-lab.md), [docs/analysis-flows.md](docs/analysis-flows.md) |
 | [aqp/agents/graph/](aqp/agents/graph/) | LangGraph orchestration (state, builder, conditions, Redis checkpointer, decision log) | [docs/agents.md](docs/agents.md) |
 | [aqp/api/](aqp/api/) | FastAPI app + 30+ route modules under `routes/` | [docs/architecture.md](docs/architecture.md) |
 | [aqp/backtest/](aqp/backtest/) | Backtest engines (vbt-pro primary, event-driven, OSS vectorbt, backtesting.py, ZVT, AAT, fallback cascade); shared `BaseBacktestEngine` ABC + `EngineCapabilities` | [docs/backtest-engines.md](docs/backtest-engines.md) |
@@ -173,6 +193,52 @@ These hold across the codebase. Any PR that violates one will be sent back.
  and the same catalog is exposed externally via the FastAPI router
  at `/mcp/data` and the `aqp-data-mcp` stdio binary. Read
  [docs/data-mcp.md](docs/data-mcp.md).
+23. **All analysis-spec lifecycle actions go through
+ [aqp/analysis/runtime.py::AnalysisRuntime](aqp/analysis/runtime.py).**
+ Telemetry, `analysis_runs` ledger rows, `analysis_step_results`
+ rows, and gold-tier Iceberg writes (`aqp_gold_analysis_<namespace>`)
+ depend on it. Celery tasks in
+ [aqp/tasks/analysis_flow_tasks.py](aqp/tasks/analysis_flow_tasks.py)
+ and the REST router in
+ [aqp/api/routes/analysis.py](aqp/api/routes/analysis.py) wrap it —
+ they never call a flow runner directly.
+24. **`analysis_spec_versions` rows are immutable, hash-locked.**
+ Re-snapshotting via
+ [aqp/analysis/registry.py::persist_spec](aqp/analysis/registry.py)
+ inserts a new version row automatically when the SHA-256 hash
+ changes.
+25. **Concrete analysis flows register through
+ [`@register_analysis_flow`](aqp/analysis/registry.py).** Subclass
+ [`FlowParams`](aqp/analysis/base.py) for the per-flow params model;
+ the descriptor + JSON-schema-driven form generation are wired
+ automatically. Flows MUST not call `litellm.completion` /
+ `OllamaClient` / vendor SDKs directly — interpretation lives in
+ the analysis-AGENTS stack ([docs/analysis-agents.md](docs/analysis-agents.md)).
+26. **All cross-service credentials resolve through
+ [`aqp.credentials.CredentialResolver`](aqp/credentials/resolver.py).**
+ Concrete stores (env / file / m2m) self-register through the
+ [`SecretStoreMeta`](aqp/credentials/protocol.py) metaclass. Don't
+ read `settings.<service>_client_*` / `_credential` / `_token`
+ directly inside service code — the resolver chain is what closes
+ the bootstrap-not-applied class of bug. See
+ [docs/credentials.md](docs/credentials.md).
+27. **All identity / token operations go through
+ [`aqp.auth.providers.IdentityProvider`](aqp/auth/providers/protocol.py).**
+ Concrete providers (Auth0 / generic OIDC / mock) self-register via
+ [`IdentityProviderMeta`](aqp/auth/providers/protocol.py). M2M tokens
+ mint through [`M2MTokenIssuer`](aqp/auth/m2m.py); JWT validation
+ reads JWKS through the active provider. Don't call vendor SDKs or
+ hit `*.well-known/openid-configuration` directly from service code.
+ See [docs/identity.md](docs/identity.md).
+28. **All cluster-side ops go through
+ [`aqp.kubernetes.KubernetesAdapter`](aqp/kubernetes/protocol.py).**
+ Concrete adapters (none / rpi_cluster / in_cluster / local_compose)
+ self-register through
+ [`KubernetesAdapterMeta`](aqp/kubernetes/protocol.py). Don't import
+ [`ClusterMgmtClient`](aqp/services/cluster_mgmt_client.py) outside
+ [`aqp/kubernetes/adapters/rpi_cluster.py`](aqp/kubernetes/adapters/rpi_cluster.py).
+ The rpi attach is optional; `NoneAdapter` keeps AQP standalone. See
+ [docs/kubernetes-adapter.md](docs/kubernetes-adapter.md).
 
 ## Common workflows
 
@@ -253,6 +319,9 @@ docker exec aqp-api alembic upgrade head
 | Register active metadata | Call [`aqp.data.catalog.register_dataset`](aqp/data/catalog/active_metadata.py) with `medallion_layer`, `BusinessMetadata`, and an optional `DataContract` — or attach `@dataset(...)` to a fetcher / sink class for auto-upsert |
 | Walk lineage | UI: [/data/hub](webui/app/(shell)/data/hub/page.tsx) Overview tab. API: `GET /data-control/lineage`. Agents: `data.catalog.lineage` MCP tool. Code: [aqp/data/catalog/lineage.py](aqp/data/catalog/lineage.py) |
 | Add a microstructure feature | [aqp/data/microstructure.py](aqp/data/microstructure.py) — append a function and add to `__all__` |
+| Add an analysis flow | Subclass [`FlowParams`](aqp/analysis/base.py); decorate a `(df, params, ctx) -> FlowResult` function with [`@register_analysis_flow`](aqp/analysis/registry.py); add a smoke test under `tests/analysis/`; document in [docs/analysis-flows.md](docs/analysis-flows.md) |
+| Run an analysis spec end-to-end | Author / load an `AnalysisSpec`; call `AnalysisRuntime(spec).run()`. The runtime persists `analysis_runs` + `analysis_step_results` ledger rows and gold-tier Iceberg outputs. From the UI: `/analysis/lab` → "Save & run". |
+| Preview a flow without persistence | `POST /analysis/flows/{flow}/preview` (sync) or `/preview-task` (async). Both wrap `AnalysisRuntime.preview`. |
 | Add an OHLC vol estimator | [aqp/data/realised_volatility.py](aqp/data/realised_volatility.py) |
 | Add a label generator | [aqp/data/labels.py](aqp/data/labels.py) |
 | Add a portfolio construction model | [aqp/strategies/portfolio_construction.py](aqp/strategies/portfolio_construction.py); decorate with `@register("Name", kind="portfolio")` |
@@ -346,10 +415,65 @@ Things that look like they should work but actively break the system.
   you set `rl_kind` + `rl_alias` (and optional `rl_tags` /
   `rl_source` / `rl_category`).
 - **Don't call `litellm.completion` / `OllamaClient` from RL code.**
-  `LLMHybridAgent` routes through
-  [`router_complete`](aqp/llm/providers/router.py).
+ `LLMHybridAgent` routes through
+ [`router_complete`](aqp/llm/providers/router.py).
+- **Don't bypass [aqp/analysis/runtime.py::AnalysisRuntime](aqp/analysis/runtime.py)
+ for analysis-spec execution.** Telemetry, `analysis_runs` ledger,
+ `analysis_step_results` rows, and gold-tier Iceberg writes depend
+ on it.
+- **Don't mutate `analysis_spec_versions` rows.** They are
+ immutable, hash-locked snapshots — re-snapshotting via
+ [aqp/analysis/registry.py::persist_spec](aqp/analysis/registry.py)
+ creates a new version row when the hash changes.
+- **Don't write to a non-`aqp_gold_analysis_*` namespace from an
+ analysis flow.** The default is
+ `aqp_gold_analysis_<flow.namespace>`; override via
+ `output_namespace` on `register_analysis_flow` if you need a
+ different tail.
+- **Don't put LLM-driven interpretation in an analysis flow.**
+ v1 ships zero LLM-routed flows by design — interpretation lives
+ in the analysis-AGENTS stack
+ ([docs/analysis-agents.md](docs/analysis-agents.md)).
+- **Don't read `settings.<service>_client_*` / `_credential` /
+ `_token` directly from service code.** Resolve credentials through
+ [`aqp.credentials.CredentialResolver`](aqp/credentials/resolver.py)
+ — the resolver chain (m2m → file → env) is what closes the
+ bootstrap-not-applied class of bug. See
+ [docs/credentials.md](docs/credentials.md).
+- **Don't call vendor SDKs or hit `*.well-known/openid-configuration`
+ directly from service code.** All OIDC / JWKS / token-exchange / M2M
+ operations go through
+ [`aqp.auth.providers.IdentityProvider`](aqp/auth/providers/protocol.py).
+ Don't reach for `httpx` against the IdP's token endpoint; use
+ [`OidcHttpClient`](aqp/auth/oidc_client.py) (composed by every
+ provider) so discovery / JWKS caches stay shared. See
+ [docs/identity.md](docs/identity.md).
+- **Don't import
+ [`ClusterMgmtClient`](aqp/services/cluster_mgmt_client.py) outside
+ [`aqp/kubernetes/adapters/rpi_cluster.py`](aqp/kubernetes/adapters/rpi_cluster.py).**
+ Cluster-side operations resolve through
+ [`aqp.kubernetes.KubernetesAdapter`](aqp/kubernetes/protocol.py); the
+ rpi management API is one of four registered adapters. Don't call
+ `kubernetes.client.*Api()` directly outside
+ [`aqp/kubernetes/adapters/in_cluster.py`](aqp/kubernetes/adapters/in_cluster.py)
+ (the existing `aqp/tasks/finops_tasks.py` direct path is grandfathered
+ until the adapter exposes list APIs). See
+ [docs/kubernetes-adapter.md](docs/kubernetes-adapter.md).
 
 ## Quick reference
+
+> **Note on the spec-pattern.** AQP's four hash-locked spec
+> runtimes — `AgentSpec` + `AgentRuntime`, `BotSpec` + `BotRuntime`,
+> `RLExperimentSpec` + `RLRuntime`, `AnalysisSpec` +
+> `AnalysisRuntime` — are AQP's equivalent of the agentic-coder
+> literature's "skill artifacts" / "skill graph". Each spec is
+> hash-locked, snapshotted into an immutable `*_spec_versions` row,
+> and ledger-tracked through the matching `*_runs` table. AQP
+> deliberately rejects the "rewrite skill on failure" pattern —
+> behaviour changes always produce a **new** version row, never an
+> in-place mutation. See
+> [docs/agentic-development.md](docs/agentic-development.md) for
+> the full mapping.
 
 | Concept | One-liner | File |
 | --- | --- | --- |

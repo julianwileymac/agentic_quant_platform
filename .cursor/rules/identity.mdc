@@ -1,0 +1,92 @@
+# Identity providers + sessions + M2M
+
+This rule scopes AGENTS.md hard rule **27** (added in M2/M3): every
+identity / token operation in AQP — user login, JWT validation, SPA
+session, machine-to-machine — flows through the
+[`IdentityProvider`](mdc:aqp/auth/providers/protocol.py) abstraction.
+
+The narrative walk-through lives in
+[docs/identity.md](mdc:docs/identity.md).
+
+## Hard rules
+
+1. **One provider surface.** Every login flow / JWKS lookup / token
+   exchange / M2M mint goes through
+   [`get_active_provider()`](mdc:aqp/auth/providers/protocol.py). Don't
+   call `httpx` against `*.well-known/openid-configuration` or the
+   token endpoint directly from route / service code. The OIDC HTTP
+   plumbing lives behind
+   [`OidcHttpClient`](mdc:aqp/auth/oidc_client.py) and the providers
+   compose it.
+2. **Providers register themselves.** Concrete
+   [`IdentityProvider`](mdc:aqp/auth/providers/protocol.py) subclasses
+   set `provider_kind` (`auth0` / `oidc` / `mock`) and the
+   :class:`IdentityProviderMeta` metaclass auto-registers via
+   `aqp.core.registry.register(kind="identity_provider")`. Don't
+   decorate manually.
+3. **JWT validation delegates to the provider.**
+   [`aqp.auth.oidc.validate_jwt`](mdc:aqp/auth/oidc.py) reads JWKS via
+   `provider.jwks()` first and falls back to direct fetch only when the
+   provider layer is unconfigured (legacy tests). New OIDC features
+   (e.g. `id_token` decoding) extend `IdentityProvider` rather than
+   forking the validator.
+4. **PKCE / JWE crypto live in `aqp/auth`.** PKCE helpers in
+   [`aqp/auth/pkce.py`](mdc:aqp/auth/pkce.py); cookie crypto in
+   [`aqp/auth/session/crypto.py`](mdc:aqp/auth/session/crypto.py)
+   (HKDF-SHA256 + JWE A256CBC-HS512). Both are ports of the
+   inspiration auth0 reference, kept generic — never reach for vendor
+   SDKs that hardcode an issuer.
+5. **Sessions go through `StateStore`.** Long-lived login state lands
+   in
+   [`EncryptedCookieStateStore`](mdc:aqp/auth/session/stores.py) (M3)
+   or [`RedisStateStore`](mdc:aqp/auth/session/stores.py); transaction
+   state during login lands in
+   [`EncryptedCookieTransactionStore`](mdc:aqp/auth/session/stores.py).
+   Don't write user tokens into the global Redis under arbitrary keys.
+6. **M2M flows through the issuer.** Service-to-service tokens for
+   Polaris / Trino / MinIO are minted by
+   [`M2MTokenIssuer`](mdc:aqp/auth/m2m.py) via the active provider's
+   `client_credentials` grant. The issuer plugs into the credential
+   resolver as :class:`M2MStore` (priority 10) when
+   `AQP_AUTH_M2M_ENABLED=true`. Adding a new M2M consumer = a new
+   `(service, purpose)` entry in `_DEFAULT_M2M_MAP`. Don't bypass the
+   issuer to call `provider.m2m_token` directly from service code.
+7. **Auth0 specifics live in
+   [`aqp/auth/providers/auth0.py`](mdc:aqp/auth/providers/auth0.py).**
+   Generic OIDC quirks (RP-initiated logout) live in
+   [`generic_oidc.py`](mdc:aqp/auth/providers/generic_oidc.py); the
+   mock provider in
+   [`mock.py`](mdc:aqp/auth/providers/mock.py) is the safe default for
+   tests + offline dev.
+
+## Where things live
+
+| Need | Path |
+| --- | --- |
+| Backend OIDC validation | [aqp/auth/oidc.py](mdc:aqp/auth/oidc.py) |
+| Pluggable provider abstraction | [aqp/auth/providers/](mdc:aqp/auth/providers) |
+| OIDC HTTP plumbing | [aqp/auth/oidc_client.py](mdc:aqp/auth/oidc_client.py) |
+| PKCE helpers | [aqp/auth/pkce.py](mdc:aqp/auth/pkce.py) |
+| Session crypto + stores | [aqp/auth/session/](mdc:aqp/auth/session) |
+| M2M issuer + resolver bridge | [aqp/auth/m2m.py](mdc:aqp/auth/m2m.py) |
+| Login / callback / logout routes | [aqp/api/routes/auth.py](mdc:aqp/api/routes/auth.py) |
+| Frontend SPA bootstrap | `/auth/config` payload (see `AuthConfigResponse`) |
+
+## Don't
+
+- Don't add a new provider outside
+  [`aqp/auth/providers/`](mdc:aqp/auth/providers) — the registry won't
+  see it.
+- Don't write JWE cookies with a different HKDF info constant than
+  `b"AQP Identity Encryption"` — that's the cross-version bridge.
+- Don't accept tokens from query strings (PKCE flow excepted). Use
+  `Authorization: Bearer` or the encrypted cookie.
+- Don't call `oauth_token` on the
+  [`PolarisClient`](mdc:aqp/services/polaris_client.py) with an opaque
+  static secret — the resolver picks the right credential automatically.
+- Don't store raw refresh tokens in Postgres. The session store
+  (cookie or Redis) is the canonical home.
+- Don't bypass the M2M issuer to mint cluster-side tokens by hand —
+  rotation, caching, and provider rules belong in the issuer.
+
+Consider these rules if they affect your changes.

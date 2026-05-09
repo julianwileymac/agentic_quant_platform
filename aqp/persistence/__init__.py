@@ -173,6 +173,12 @@ from aqp.persistence.models_rl import (
     RLRun,
     RLTrajectoryRef,
 )
+from aqp.persistence.models_analysis import (
+    AnalysisRun,
+    AnalysisSpec as AnalysisSpecRow,
+    AnalysisSpecVersion,
+    AnalysisStepResult,
+)
 from aqp.persistence.models_taxonomy import (
     EntityCrosswalk,
     EntityTag,
@@ -382,6 +388,11 @@ __all__ = [
     "RLExperimentVersion",
     "RLRun",
     "RLTrajectoryRef",
+    # Analysis layer (research / diagnostic / production analyses)
+    "AnalysisRun",
+    "AnalysisSpecRow",
+    "AnalysisSpecVersion",
+    "AnalysisStepResult",
     # Data engine pipelines (Phase 3 — data-fabric expansion)
     "DatahubSyncLog",
     "DatasetProfile",

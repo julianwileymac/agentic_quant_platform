@@ -1,220 +1,97 @@
 ---
-description: Project-wide conventions and hard rules for the Agentic Quant Platform
+description: Always-on cardinal rules for the Agentic Quant Platform. Subsystem rules live in scoped sibling .mdc files.
 globs:
-  - aqp/**/*.py
-  - tests/**/*.py
-  - alembic/versions/*.py
-  - configs/**/*.yaml
+  - "**/*"
 alwaysApply: true
 ---
 
-# AQP Rules
+# AQP — Cardinal rules (always on)
 
-This is the Agentic Quant Platform (AQP) — a local-first, agentic
-quantitative research and trading platform. Read [AGENTS.md](mdc:AGENTS.md)
-for the full agent rule-set; this file is the Cursor-specific subset
-that applies on every change.
+This file is the **always-applied** rule for every file in the
+repository. It is intentionally short. The full rule-set is in
+[AGENTS.md](mdc:AGENTS.md) (the AI-agent contract) and is split across
+glob-scoped sibling rules under [.cursor/rules/](mdc:.cursor/rules):
 
-## Hard rules
+| Scope (glob) | Rule file | What it covers |
+| --- | --- | --- |
+| `aqp/{agents,bots,rl,analysis}/**/*.py` + matching configs/tests | [runtimes.mdc](mdc:.cursor/rules/runtimes.mdc) | `AgentRuntime` / `BotRuntime` / `RLRuntime` / `AnalysisRuntime` lifecycle, hash-locked spec versions, `RLComponent` metaclass, agent-body bans |
+| `aqp/data/**/*.py`, `tests/data/**/*.py`, `scripts/iceberg_*.py`, `scripts/ingest_*.py` | [iceberg.mdc](mdc:.cursor/rules/iceberg.mdc) | `iceberg_catalog.append_arrow`, medallion layers, `BusinessMetadata`, namespace-prefix validation |
+| `aqp/data/pipelines/**/*.py` + ingestion scripts | [data-pipelines.mdc](mdc:.cursor/rules/data-pipelines.mdc) | Discover → Director → Materialise → Verify → Annotate (existing) |
+| `alembic/versions/**/*.py`, `aqp/persistence/**/*.py` | [migrations-persistence.mdc](mdc:.cursor/rules/migrations-persistence.mdc) | Immutable migrations, `LedgerWriter`, ORM patterns |
+| `aqp/{tasks,api,ws}/**/*.py` | [tasks-api.mdc](mdc:.cursor/rules/tasks-api.mdc) | Celery progress frame shape, idempotency, route↔task layering |
+| `aqp/agents/**/*.py`, `aqp/agents/tools/**/*.py` | [data-mcp.mdc](mdc:.cursor/rules/data-mcp.mdc) | DataMCPTool boundary, no direct Postgres / Iceberg from agent code |
+| `frontend/**/*.{ts,tsx}`, `webui/**/*.{ts,tsx}` | [frontend.mdc](mdc:.cursor/rules/frontend.mdc) | Vite vs Next.js boundary, throttled WS, kill-switch, sandbox indicator |
 
-1. All symbols are `Symbol` instances. All symbol IDs are `vt_symbol`
-   strings shaped `{TICKER}.{EXCHANGE}`. Never split a `vt_symbol` on
-   `.`. Use `Symbol.parse(vt_symbol)` from
-   [aqp/core/types.py](mdc:aqp/core/types.py).
-2. All LLM calls go through `router_complete` in
+Workflow + collaboration cadence: [WORKFLOW.md](mdc:WORKFLOW.md).
+Cross-session state template: [.agents/state-template.md](mdc:.agents/state-template.md).
+
+## Cardinal rules (apply everywhere)
+
+These are the rules that apply regardless of which file you are
+touching. The numbering matches the canonical hard-rule list in
+[AGENTS.md](mdc:AGENTS.md) — see that file for full rationale and
+file references.
+
+1. **Symbols.** `Symbol.parse(vt_symbol)` from
+   [aqp/core/types.py](mdc:aqp/core/types.py). Never split a
+   `vt_symbol` on `.`. (AGENTS rule 1.)
+2. **LLM calls.** `router_complete` from
    [aqp/llm/providers/router.py](mdc:aqp/llm/providers/router.py).
-   Never call `litellm.completion`, `OllamaClient`, or vendor SDKs
-   directly.
-3. All Iceberg writes go through `iceberg_catalog.append_arrow` /
-   `create_or_replace_table` in
+   Never `litellm.completion`, `OllamaClient`, or vendor SDKs
+   directly. (AGENTS rule 2.)
+3. **Iceberg writes.** `iceberg_catalog.append_arrow` /
+   `create_or_replace_table` from
    [aqp/data/iceberg_catalog.py](mdc:aqp/data/iceberg_catalog.py).
-   Never call PyIceberg's `Catalog.create_table` /
-   `Table.append` directly.
-4. All Celery progress emits go through
-   [aqp/tasks/_progress.py](mdc:aqp/tasks/_progress.py):
-   `emit(task_id, stage, message, **extras)`,
-   `emit_done(task_id, result)`, `emit_error(task_id, error)`.
-5. All ledger writes go through `LedgerWriter` in
-   [aqp/persistence/ledger.py](mdc:aqp/persistence/ledger.py).
-6. Migrations are immutable once committed in
-   [alembic/versions/](mdc:alembic/versions/). Add a new migration —
-   never edit a shipped one.
-7. Configuration is read once via `from aqp.config import settings`
-   from [aqp/config.py](mdc:aqp/config.py). Don't construct
-   `Settings()` directly. New env vars must be `AQP_*` prefixed and
-   added to both `Settings` and [.env.example](mdc:.env.example).
-8. New strategies / models / engines use the `class` / `module_path`
-   / `kwargs` factory pattern. Decorate with
-   `@register("Name")` from
-   [aqp/core/registry.py](mdc:aqp/core/registry.py).
-9. Tests live under [tests/](mdc:tests/) mirroring the source path
-   and must run hermetically (no network, no host filesystem).
-10. All RAG retrievals + writes go through
-    [aqp/rag/HierarchicalRAG](mdc:aqp/rag/hierarchy.py). Don't query
-    Redis vector indexes directly. Don't write embeddings outside
-    [aqp/rag/indexers/](mdc:aqp/rag/indexers/). Adding a new corpus =
-    new indexer + new entry in
-    [aqp/rag/orders.py](mdc:aqp/rag/orders.py)'s `OrderCatalog`.
-11. All spec-driven agent runs go through
-    [aqp/agents/runtime.py::AgentRuntime](mdc:aqp/agents/runtime.py).
-    Telemetry, guardrails, cost caps, and `agent_runs_v2` rely on it.
-    Don't call `router_complete` directly inside an agent module —
-    declare the model in `AgentSpec.model` and let the runtime drive
-    the call.
-12. `agent_spec_versions` rows are immutable, hash-locked. Never
-    update them in place; re-snapshotting via
-    [aqp/agents/registry.py::persist_spec](mdc:aqp/agents/registry.py)
-    creates a new version row automatically.
-13. All bot lifecycle actions (backtest / paper / chat / deploy) go
-    through [aqp/bots/runtime.py::BotRuntime](mdc:aqp/bots/runtime.py).
-    `bot_versions` snapshots and `bot_deployments` rows depend on it.
-    Don't call `run_backtest_from_config` /
-    `build_session_from_config` / `AgentRuntime` directly from a bot
-    subclass — derive the cfg in `BaseBot._derive_*_cfg` and let the
-    runtime drive the call.
-14. `bot_versions` rows are immutable, hash-locked. Re-snapshotting via
-    [aqp/bots/registry.py::persist_spec](mdc:aqp/bots/registry.py)
-    creates a new version row automatically.
-15. All RL train / evaluate / paper / replay / walk-forward goes
-    through [aqp/rl/runtime.py::RLRuntime](mdc:aqp/rl/runtime.py).
-    Celery tasks (`aqp.tasks.rl_tasks`) and API routes
-    (`aqp.api.routes.rl`) wrap it — never call `agent.train` directly.
-16. `rl_experiment_versions` rows are immutable, hash-locked.
-    Re-snapshotting via
-    [aqp/rl/registry.py::persist_spec](mdc:aqp/rl/registry.py)
-    creates a new version row automatically.
-17. All RL trajectory / equity-curve / action-log / reward-term
-    writes go through
-    [aqp/rl/trajectories/iceberg_writer.py::IcebergTrajectoryStore](mdc:aqp/rl/trajectories/iceberg_writer.py)
-    → `iceberg_catalog.append_arrow`. Don't call PyIceberg directly
-    from RL code.
-18. Concrete RL components register through the
-    [`RLComponent`](mdc:aqp/rl/core/base.py) metaclass — set
-    `rl_kind` (one of `rl_env`, `rl_reward`, `rl_observation`,
-    `rl_action`, `rl_termination`, `rl_policy`, `rl_agent`,
-    `rl_data`, `rl_ensembler`, `rl_experiment`,
-    `rl_trajectory_store`) and `rl_alias`. The metaclass calls
-    `@register` automatically.
-19. LLM calls inside `LLMHybridAgent` route through
-    [`router_complete`](mdc:aqp/llm/providers/router.py) (rule 2 still
-    applies — RL is no exception).
-20. New Iceberg tables that an agent will read MUST declare a
-    `medallion_layer` (`bronze` / `silver` / `gold`) and a
-    `BusinessMetadata` block on first write. Use
-    [`aqp.data.catalog.register_dataset`](mdc:aqp/data/catalog/active_metadata.py)
-    or the `@dataset(...)` decorator; pass `medallion_layer` /
-    `business_metadata` straight to `iceberg_catalog.append_arrow` for
-    one-shot upsert + namespace-prefix validation. Bronze namespaces
-    are `aqp_bronze_*`, Silver `aqp_silver_*`, Gold `aqp_gold_*`. Read
-    [docs/data-layer-unification.md](mdc:docs/data-layer-unification.md).
-21. Agents must NOT read Postgres / Iceberg directly. Every
-    catalog / dataset / entity / pipeline read goes through a
-    registered
-    [`DataMCPTool`](mdc:aqp/data/mcp/base.py) (in-process bridge or
-    external MCP server). Add new agent reads by adding a
-    `DataMCPTool` subclass under
-    [aqp/data/mcp/tools/](mdc:aqp/data/mcp/tools/) — never by importing
-    ORM models into agent code. Read
-    [docs/data-mcp.md](mdc:docs/data-mcp.md).
+   Never raw PyIceberg. (AGENTS rule 3 — see also
+   [iceberg.mdc](mdc:.cursor/rules/iceberg.mdc).)
+4. **Celery progress.** `emit / emit_done / emit_error` from
+   [aqp/tasks/_progress.py](mdc:aqp/tasks/_progress.py). Never
+   publish to Redis from task code. Frame shape
+   `{task_id, stage, message, timestamp, **extras}` is contract.
+   (AGENTS rule 4 — see also
+   [tasks-api.mdc](mdc:.cursor/rules/tasks-api.mdc).)
+5. **Configuration.** `from aqp.config import settings` (public
+   surface in [aqp/config/__init__.py](mdc:aqp/config/__init__.py)).
+   Never construct a fresh `Settings()` — the
+   `lru_cache(maxsize=1)`-backed singleton is what every reader
+   gets. New env vars are `AQP_*`-prefixed fields on the `Settings`
+   class in [aqp/config/settings.py](mdc:aqp/config/settings.py) and
+   added to [.env.example](mdc:.env.example). Never read
+   `os.environ` directly. (AGENTS rule 7.)
+6. **Registry.** New strategies / models / engines /
+   alphas / portfolio constructors / sinks decorate with
+   `@register("Name", kind=...)` from
+   [aqp/core/registry.py](mdc:aqp/core/registry.py) and use the
+   `class` / `module_path` / `kwargs` factory pattern. (AGENTS rule
+   8.)
+7. **Logging.** `logger = logging.getLogger(__name__)` at module
+   top. No `print` outside [scripts/](mdc:scripts). (AGENTS rule 9.)
+8. **Tests.** Live next to similar tests under
+   [tests/](mdc:tests) and run hermetically — no host filesystem
+   outside the test, no network unless monkey-patched. (AGENTS rule
+   10.)
+9. **Migrations.** Immutable once committed. Add a new
+   `00NN_<short_slug>.py` under
+   [alembic/versions/](mdc:alembic/versions). (AGENTS rule 6 — see
+   also
+   [migrations-persistence.mdc](mdc:.cursor/rules/migrations-persistence.mdc).)
+10. **Cross-task state.** Postgres only. Don't pickle ORM objects
+    across tasks; pass IDs and re-fetch in the worker. (AGENTS rule
+    5.)
 
-## Style
+## Style (every Python file)
 
-- `from __future__ import annotations` at the top of every Python file.
-- `logger = logging.getLogger(__name__)` at module top.
+- `from __future__ import annotations` at the top.
 - Type hints required on public function signatures.
 - No emojis in code or commit messages.
 - Ruff for lint + format (`pyproject.toml`).
+- Mermaid for diagrams. No PNG / SVG / Sphinx / MkDocs.
 
-## Where things live
+## When in doubt
 
-| Need | Path |
-| --- | --- |
-| API route | [aqp/api/routes/](mdc:aqp/api/routes/) |
-| Celery task | [aqp/tasks/](mdc:aqp/tasks/) |
-| LLM provider | [aqp/llm/providers/catalog.py](mdc:aqp/llm/providers/catalog.py) |
-| ML model | [aqp/ml/models/](mdc:aqp/ml/models/) |
-| Strategy | [aqp/strategies/](mdc:aqp/strategies/) |
-| Backtest engine | [aqp/backtest/](mdc:aqp/backtest/) |
-| ORM model | [aqp/persistence/models*.py](mdc:aqp/persistence/) |
-| Ingestion | [aqp/data/pipelines/](mdc:aqp/data/pipelines/) |
-| Hierarchical RAG | [aqp/rag/](mdc:aqp/rag/) |
-| Spec-driven agent | [aqp/agents/spec.py](mdc:aqp/agents/spec.py) + [configs/agents/](mdc:configs/agents/) |
-| LangGraph orchestration | [aqp/agents/graph/](mdc:aqp/agents/graph/) |
-| Regulatory adapter | [aqp/data/sources/{cfpb,fda,uspto}/](mdc:aqp/data/sources/) |
-| Bot (TradingBot / ResearchBot) | [aqp/bots/](mdc:aqp/bots/) + [configs/bots/](mdc:configs/bots/) |
-| Bot ORM | [aqp/persistence/models_bots.py](mdc:aqp/persistence/models_bots.py) |
-| Bot REST | [aqp/api/routes/bots.py](mdc:aqp/api/routes/bots.py) |
-| Bot Celery tasks | [aqp/tasks/bot_tasks.py](mdc:aqp/tasks/bot_tasks.py) |
-| Bot UI builder | [webui/components/bots/](mdc:webui/components/bots/) |
-| RL core abstractions | [aqp/rl/core/](mdc:aqp/rl/core/) |
-| RL spec + runtime | [aqp/rl/spec.py](mdc:aqp/rl/spec.py) + [aqp/rl/runtime.py](mdc:aqp/rl/runtime.py) |
-| RL envs | [aqp/rl/envs/](mdc:aqp/rl/envs/) |
-| RL rewards / observations / actions / terminations | [aqp/rl/rewards/](mdc:aqp/rl/rewards/) + [aqp/rl/observations/](mdc:aqp/rl/observations/) + [aqp/rl/actions/](mdc:aqp/rl/actions/) + [aqp/rl/terminations/](mdc:aqp/rl/terminations/) |
-| RL data pipelines | [aqp/rl/data_pipelines/](mdc:aqp/rl/data_pipelines/) |
-| RL agents (SB3 / ElegantRL / RLlib / CleanRL / LLM-hybrid) | [aqp/rl/agents/](mdc:aqp/rl/agents/) |
-| RL ensemblers / experiments / applications | [aqp/rl/ensemblers/](mdc:aqp/rl/ensemblers/) + [aqp/rl/experiments/](mdc:aqp/rl/experiments/) + [aqp/rl/applications/](mdc:aqp/rl/applications/) |
-| RL Iceberg trajectory store | [aqp/rl/trajectories/](mdc:aqp/rl/trajectories/) |
-| RL ORM | [aqp/persistence/models_rl.py](mdc:aqp/persistence/models_rl.py) |
-| RL REST | [aqp/api/routes/rl.py](mdc:aqp/api/routes/rl.py) |
-| RL Celery tasks | [aqp/tasks/rl_tasks.py](mdc:aqp/tasks/rl_tasks.py) |
-| RL configs | [configs/rl/](mdc:configs/rl/) |
-| RL UI lab + builders | [webui/components/rl/](mdc:webui/components/rl/) |
-
-## Doc references
-
-- [docs/architecture.md](mdc:docs/architecture.md) — system overview
-- [docs/erd.md](mdc:docs/erd.md) — schema diagrams
-- [docs/class-diagram.md](mdc:docs/class-diagram.md) — class hierarchies
-- [docs/data-dictionary.md](mdc:docs/data-dictionary.md) — column reference
-- [docs/flows.md](mdc:docs/flows.md) — sequence diagrams
-- [docs/glossary.md](mdc:docs/glossary.md) — terms
-- [docs/rag.md](mdc:docs/rag.md) — hierarchical RAG design
-- [docs/agents.md](mdc:docs/agents.md) — spec-driven agent surface
-- [docs/bots.md](mdc:docs/bots.md) — Bot entity (TradingBot / ResearchBot)
-- [docs/regulatory-data.md](mdc:docs/regulatory-data.md) — CFPB / FDA / USPTO
-- [docs/rl-framework.md](mdc:docs/rl-framework.md) — RL core abstractions + spec / runtime
-- [docs/rl-lab.md](mdc:docs/rl-lab.md) — RL Lab + builders UI
-- [docs/rl-components.md](mdc:docs/rl-components.md) — registered RL components reference
-- [docs/rl-iceberg.md](mdc:docs/rl-iceberg.md) — RL Iceberg trajectory tables + DuckDB views
-
-## Don't
-
-- Don't edit shipped Alembic migrations.
-- Don't construct new `Settings()` instances.
-- Don't call `litellm.completion` / `OllamaClient` directly.
-- Don't write to Iceberg via raw PyIceberg.
-- Don't pickle ORM objects across tasks (pass IDs, re-fetch).
-- Don't put strategy logic in API routes.
-- Don't break the progress-bus payload shape
-  (`{task_id, stage, message, timestamp, **extras}`).
-- Don't add new diagram formats. Mermaid only.
-- Don't query Redis vector indexes directly. Use `HierarchicalRAG`.
-- Don't write embeddings outside `aqp.rag.indexers.*`.
-- Don't replace [aqp/data/chroma_store.py](mdc:aqp/data/chroma_store.py).
-  Chroma stays for dataset/code metadata; Redis is the agent RAG.
-- Don't mutate `agent_spec_versions` rows. They are immutable.
-- Don't bypass `AgentRuntime.run` for spec-driven agents.
-- Don't call `router_complete` from inside an agent body — declare the
-  model in `AgentSpec.model`.
-- Don't write decision/episode/reflection rows to Redis from agent
-  code. Use `RedisHybridMemory` from
-  [aqp/llm/memory.py](mdc:aqp/llm/memory.py).
-- Don't bypass `BotRuntime` for bot lifecycle actions. Telemetry,
-  `bot_versions` snapshots, and `bot_deployments` rows depend on it.
-- Don't mutate `bot_versions` rows. They are immutable, hash-locked
-  snapshots — re-snapshotting via
-  [aqp/bots/registry.py::persist_spec](mdc:aqp/bots/registry.py)
-  creates a new version row automatically.
-- Don't put backtest / strategy / engine / agent logic inside a Bot
-  subclass. Bots compose references and dispatch to existing primitives
-  (`run_backtest_from_config`, `build_session_from_config`,
-  `AgentRuntime`, `HierarchicalRAG`).
-- Don't bypass `RLRuntime` for RL train / evaluate / paper / replay /
-  walk-forward. Iceberg trajectory persistence + `rl_runs` ledger +
-  `rl_experiment_versions` snapshots depend on it.
-- Don't mutate `rl_experiment_versions` rows. They are immutable,
-  hash-locked snapshots.
-- Don't write RL trajectories / equity / action / reward-decomp
-  directly to Iceberg. Buffer through `IcebergTrajectoryStore`.
-- Don't decorate RL components manually with `@register`. The
-  `RLComponent` metaclass does it when you set `rl_kind` / `rl_alias`.
+1. Read the relevant **scoped** rule above.
+2. Read [AGENTS.md](mdc:AGENTS.md) for the full hard-rule list (25
+   rules + Don'ts).
+3. Read the canonical doc from [docs/index.md](mdc:docs/index.md).
+4. Search the code: `rg "<symbol>" aqp/`.
+5. Still stuck → ask. Don't guess and ship.

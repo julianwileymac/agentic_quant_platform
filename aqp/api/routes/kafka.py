@@ -96,7 +96,14 @@ class RegisterSchemaRequest(BaseModel):
 
 
 def _native_or_proxy_kafka(operation: str):
-    """Try native admin first; fall back to cluster-mgmt proxy."""
+    """Try native admin first; fall back to the configured KubernetesAdapter.
+
+    Adapters share the method names of the legacy ``ClusterMgmtClient``
+    (``kafka_topics``, ``kafka_create_topic``, …) so the proxy path is
+    a drop-in replacement. Routes still treat the second tuple element
+    as a duck-typed object — the change is purely in *which* adapter
+    answers the call.
+    """
     try:
         return ("native", get_kafka_admin())
     except KafkaAdminUnavailableError as exc:
@@ -104,13 +111,24 @@ def _native_or_proxy_kafka(operation: str):
     except KafkaAdminError as exc:
         logger.debug("kafka native error for %s: %s", operation, exc)
     try:
-        from aqp.services.cluster_mgmt_client import get_cluster_mgmt_client
+        from aqp.kubernetes import get_kubernetes_adapter
 
-        return ("proxy", get_cluster_mgmt_client())
+        adapter = get_kubernetes_adapter()
+        if not adapter.is_available():
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "kafka admin unavailable (native admin failed and no "
+                    f"KubernetesAdapter is configured for {operation})"
+                ),
+            )
+        return ("proxy", adapter)
+    except HTTPException:
+        raise
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=503,
-            detail=f"kafka admin unavailable (native+proxy failed): {exc}",
+            detail=f"kafka admin unavailable (native+adapter failed): {exc}",
         ) from exc
 
 
@@ -187,16 +205,27 @@ async def sample_topic_messages(name: str, limit: int = 100, timeout_s: float = 
 
 @router.post("/topics/{name}/produce")
 async def produce_topic_message(name: str, req: ProduceRequest) -> dict[str, Any]:
-    """Produce a JSON test message to a topic via the cluster bridge or native producer."""
-    try:
-        from aqp.services.cluster_mgmt_client import get_cluster_mgmt_client
+    """Produce a JSON test message to a topic via the configured adapter."""
+    from aqp.kubernetes import (
+        KubernetesAdapterError,
+        KubernetesAdapterUnavailable,
+        get_kubernetes_adapter,
+    )
 
-        client = get_cluster_mgmt_client()
-        return client.kafka_produce(
+    adapter = get_kubernetes_adapter()
+    if not adapter.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="kafka produce unavailable: no KubernetesAdapter configured",
+        )
+    try:
+        return adapter.kafka_produce(
             topic=name,
             records=[{"key": req.key, "value": req.value}],
         )
-    except Exception as exc:  # noqa: BLE001
+    except KubernetesAdapterUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except KubernetesAdapterError as exc:
         raise HTTPException(status_code=502, detail=f"produce failed: {exc}") from exc
 
 

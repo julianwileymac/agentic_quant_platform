@@ -35,7 +35,15 @@ import {
 import { useUiStore } from "@/lib/store/ui";
 
 import { PALETTE_DRAG_MIME } from "./Palette";
-import type { AqpEdge, AqpNode, AqpNodeData, FlowDomain, FlowGraph, PaletteItem } from "./types";
+import {
+  isPaletteItem,
+  type AqpEdge,
+  type AqpNode,
+  type AqpNodeData,
+  type FlowDomain,
+  type FlowGraph,
+  type PaletteItem,
+} from "./types";
 
 interface FlowCanvasProps {
   domain: FlowDomain;
@@ -57,6 +65,7 @@ interface FlowCanvasProps {
 
 export interface FlowCanvasHandle {
   addPaletteNodeAtPoint: (item: PaletteItem, screenX: number, screenY: number) => void;
+  addPaletteNodeAtCenter: (item: PaletteItem) => void;
   duplicateNode: (nodeId: string) => void;
   removeNode: (nodeId: string) => void;
   disconnectNode: (nodeId: string) => void;
@@ -131,18 +140,23 @@ const FlowCanvasInner = forwardRef<FlowCanvasHandle, FlowCanvasProps>(function F
   );
 
   const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
+    const types = Array.from(event.dataTransfer.types);
+    if (types.includes(PALETTE_DRAG_MIME) || types.includes("text/plain")) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+    }
   }, []);
 
   const onDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
       event.preventDefault();
-      const raw = event.dataTransfer.getData(PALETTE_DRAG_MIME);
+      const raw = event.dataTransfer.getData(PALETTE_DRAG_MIME) || event.dataTransfer.getData("text/plain");
       if (!raw) return;
       let item: PaletteItem;
       try {
-        item = JSON.parse(raw) as PaletteItem;
+        const parsed = JSON.parse(raw) as unknown;
+        if (!isPaletteItem(parsed)) return;
+        item = parsed;
       } catch {
         return;
       }
@@ -151,6 +165,7 @@ const FlowCanvasInner = forwardRef<FlowCanvasHandle, FlowCanvasProps>(function F
         kind: item.kind,
         label: item.label,
         params: { ...(item.defaultParams ?? {}) },
+        ...(item.accent ? { accent: item.accent } : {}),
       };
       const newNode: AqpNode = {
         id: uniqueId(item.kind.toLowerCase()),
@@ -172,6 +187,27 @@ const FlowCanvasInner = forwardRef<FlowCanvasHandle, FlowCanvasProps>(function F
           kind: item.kind,
           label: item.label,
           params: { ...(item.defaultParams ?? {}) },
+          ...(item.accent ? { accent: item.accent } : {}),
+        };
+        const newNode: AqpNode = {
+          id: uniqueId(item.kind.toLowerCase()),
+          type: "aqp",
+          position,
+          data,
+        };
+        setNodes((nds) => nds.concat(newNode));
+      },
+      addPaletteNodeAtCenter: (item) => {
+        const rect = wrapperRef.current?.getBoundingClientRect();
+        const position = screenToFlowPosition({
+          x: (rect?.left ?? 0) + (rect?.width ?? 0) / 2,
+          y: (rect?.top ?? 0) + (rect?.height ?? 0) / 2,
+        });
+        const data: AqpNodeData = {
+          kind: item.kind,
+          label: item.label,
+          params: { ...(item.defaultParams ?? {}) },
+          ...(item.accent ? { accent: item.accent } : {}),
         };
         const newNode: AqpNode = {
           id: uniqueId(item.kind.toLowerCase()),
@@ -261,7 +297,10 @@ const FlowCanvasInner = forwardRef<FlowCanvasHandle, FlowCanvasProps>(function F
   }, [graph, onGraphChange]);
 
   return (
-    <div ref={wrapperRef} style={{ width: "100%", height: "100%", position: "relative" }}>
+    <div
+      ref={wrapperRef}
+      style={{ width: "100%", height: "100%", minWidth: 0, minHeight: 0, position: "relative" }}
+    >
       {toolbar ? (
         <div
           style={{

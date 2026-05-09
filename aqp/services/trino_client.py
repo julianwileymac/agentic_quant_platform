@@ -80,6 +80,27 @@ def _statement_hash(statement: str) -> str:
     return hashlib.sha1(statement.strip().encode("utf-8")).hexdigest()[:12]
 
 
+def _trino_bearer_token() -> str | None:
+    """Return a M2M-minted bearer for Trino if the resolver has one.
+
+    Looked up via :class:`aqp.credentials.CredentialResolver`. Returns
+    ``None`` when M2M is disabled, the resolver has no Trino entry, or
+    the field is empty — Trino still accepts ``X-Trino-User`` alone in
+    that case.
+    """
+    try:
+        from aqp.credentials import CredentialKey, get_resolver
+
+        cred = get_resolver().resolve(CredentialKey("trino", "basic"))
+        for field_name in ("token", "access_token"):
+            value = cred.get(field_name)
+            if value:
+                return value
+    except Exception:  # noqa: BLE001 - never block Trino calls on resolver hiccup
+        return None
+    return None
+
+
 def _coordinator_host_port(base_url: str) -> tuple[str, int]:
     parsed = urlparse(base_url)
     host = parsed.hostname or "localhost"
@@ -152,6 +173,9 @@ class TrinoClient:
             "Accept": "application/json",
             "Content-Type": "text/plain",
         }
+        bearer = _trino_bearer_token()
+        if bearer:
+            headers["Authorization"] = f"Bearer {bearer}"
         if catalog:
             headers["X-Trino-Catalog"] = catalog
         if schema:
@@ -295,10 +319,17 @@ class TrinoClient:
 
     def query_history(self, *, limit: int = 50) -> list[TrinoQuerySummary]:
         url = f"{self.base_url}/v1/query"
+        history_headers: dict[str, str] = {
+            "Accept": "application/json",
+            "X-Trino-User": self.user,
+        }
+        bearer = _trino_bearer_token()
+        if bearer:
+            history_headers["Authorization"] = f"Bearer {bearer}"
         try:
             response = self._client.get(
                 url,
-                headers={"Accept": "application/json", "X-Trino-User": self.user},
+                headers=history_headers,
             )
         except httpx.HTTPError as exc:
             logger.warning("trino query history failed: %s", exc)

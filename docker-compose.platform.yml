@@ -1,0 +1,227 @@
+# Local platform overlay (M5).
+#
+# Brings the rpi_kubernetes data + observability services into AQP's
+# compose stack so a developer can run a fully-local platform without
+# attaching to the homelab cluster. The rpi `kubernetes/` tree is left
+# untouched — these services are *copies*, not relocations.
+#
+# Usage:
+#
+#   docker compose \
+#       -f docker-compose.yml \
+#       -f docker-compose.viz.yml \
+#       -f docker-compose.platform.yml \
+#       --profile platform \
+#       up -d
+#
+# Sub-profiles (off by default; opt in explicitly):
+#
+# - platform-rag:  ragflow stack (heavy; pulls Milvus too)
+# - platform-jh:   jupyterhub spawner
+#
+# All services share the default compose network, so the AQP api /
+# worker / dagster pick them up via their hostnames (apicurio, datahub-gms,
+# loki, victoriametrics, vector).
+
+services:
+  # ----------------------------------------------------------------
+  # Apicurio Schema Registry — the canonical schema store AQP's
+  # ``aqp/streaming/admin/schema_registry.py`` already speaks to.
+  # The ``AQP_SCHEMA_REGISTRY_URL`` env var (existing) just needs to
+  # point here.
+  # ----------------------------------------------------------------
+  apicurio:
+    image: apicurio/apicurio-registry-mem:2.5.10.Final
+    container_name: aqp-apicurio
+    profiles: ["platform"]
+    restart: unless-stopped
+    environment:
+      QUARKUS_PROFILE: prod
+      REGISTRY_AUTH_ENABLED: "false"
+    ports:
+      - "${AQP_APICURIO_HOST_PORT:-8090}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/apis"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------
+  # Real Airbyte — replaces the dev-stub `airbyte-server` from the
+  # `viz` profile when the `platform` profile is active. Bring up in
+  # order: db -> server -> webapp.
+  # ----------------------------------------------------------------
+  airbyte-db:
+    image: postgres:16-alpine
+    container_name: aqp-airbyte-db
+    profiles: ["platform"]
+    environment:
+      POSTGRES_USER: airbyte
+      POSTGRES_PASSWORD: airbyte
+      POSTGRES_DB: airbyte
+    volumes:
+      - airbyte-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airbyte"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  airbyte-server-real:
+    image: airbyte/server:0.63.0
+    container_name: aqp-airbyte-server-real
+    profiles: ["platform"]
+    depends_on:
+      airbyte-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://airbyte-db:5432/airbyte
+      DATABASE_USER: airbyte
+      DATABASE_PASSWORD: airbyte
+      DATABASE_HOST: airbyte-db
+      DATABASE_PORT: "5432"
+      DATABASE_DB: airbyte
+      AIRBYTE_VERSION: 0.63.0
+      AIRBYTE_ROLE: dev
+      WORKSPACE_ROOT: /workspace
+      WORKSPACE_DOCKER_MOUNT: aqp_airbyte-workspace
+      LOCAL_ROOT: /tmp/airbyte_local
+      WEBAPP_URL: http://localhost:${AQP_AIRBYTE_WEBAPP_HOST_PORT:-8001}
+      API_URL: /api/v1/
+      INTERNAL_API_HOST: airbyte-server-real:8001
+      TEMPORAL_HOST: airbyte-temporal:7233
+      TRACKING_STRATEGY: logging
+    ports:
+      - "${AQP_AIRBYTE_REAL_HOST_PORT:-8005}:8001"
+    volumes:
+      - airbyte-workspace:/workspace
+      - airbyte-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+
+  airbyte-webapp:
+    image: airbyte/webapp:0.63.0
+    container_name: aqp-airbyte-webapp
+    profiles: ["platform"]
+    depends_on:
+      - airbyte-server-real
+    environment:
+      INTERNAL_API_HOST: airbyte-server-real:8001
+    ports:
+      - "${AQP_AIRBYTE_WEBAPP_HOST_PORT:-8001}:80"
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------
+  # DataHub — official OSS images + AQP's existing Postgres / Neo4j /
+  # Kafka. Two services: GMS (backend) + frontend. Schema is
+  # bootstrapped by the `datahub-gms` image on first run.
+  # ----------------------------------------------------------------
+  datahub-gms:
+    image: linkedin/datahub-gms:v0.13.3
+    container_name: aqp-datahub-gms
+    profiles: ["platform"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    environment:
+      DATAHUB_GMS_HOST: 0.0.0.0
+      DATAHUB_GMS_PORT: "8080"
+      DATAHUB_BACKEND: ebean
+      EBEAN_DATASOURCE_HOST: postgres
+      EBEAN_DATASOURCE_PORT: "5432"
+      EBEAN_DATASOURCE_DB: aqp
+      EBEAN_DATASOURCE_USERNAME: aqp
+      EBEAN_DATASOURCE_PASSWORD: aqp
+      EBEAN_DATASOURCE_DRIVER: org.postgresql.Driver
+      EBEAN_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aqp
+      KAFKA_BOOTSTRAP_SERVER: ${AQP_KAFKA_BOOTSTRAP:-aqp-kafka:9092}
+      SCHEMA_REGISTRY_URL: http://apicurio:8080/apis/ccompat/v6
+      GRAPH_SERVICE_IMPL: neo4j
+      NEO4J_HOST: bolt://neo4j:7687
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USERNAME: ${AQP_NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${AQP_NEO4J_PASSWORD:-aqpneo4j}
+      ELASTICSEARCH_HOST: ""
+    ports:
+      - "${AQP_DATAHUB_GMS_HOST_PORT:-8081}:8080"
+    restart: unless-stopped
+
+  datahub-frontend:
+    image: linkedin/datahub-frontend-react:v0.13.3
+    container_name: aqp-datahub-frontend
+    profiles: ["platform"]
+    depends_on:
+      - datahub-gms
+    environment:
+      DATAHUB_GMS_HOST: datahub-gms
+      DATAHUB_GMS_PORT: "8080"
+    ports:
+      - "${AQP_DATAHUB_HOST_PORT:-9002}:9002"
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------
+  # Loki + Vector — log aggregation parity. Vector tails container
+  # logs from `/var/lib/docker/containers` and ships to Loki.
+  # ----------------------------------------------------------------
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: aqp-loki
+    profiles: ["platform"]
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    ports:
+      - "${AQP_LOKI_HOST_PORT:-3100}:3100"
+    volumes:
+      - loki-data:/loki
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3100/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  vector:
+    image: timberio/vector:0.43.0-alpine
+    container_name: aqp-vector
+    profiles: ["platform"]
+    depends_on:
+      - loki
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./deploy/vector/vector.toml:/etc/vector/vector.toml:ro
+    restart: unless-stopped
+    command: ["--config", "/etc/vector/vector.toml"]
+
+  # ----------------------------------------------------------------
+  # VictoriaMetrics — single-node, scrapes the OTel collector.
+  # Pre-empts the kube-prometheus stack on rpi for local dev.
+  # ----------------------------------------------------------------
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.108.0
+    container_name: aqp-victoriametrics
+    profiles: ["platform"]
+    command:
+      - "--storageDataPath=/storage"
+      - "--retentionPeriod=14d"
+      - "--httpListenAddr=:8428"
+      - "--promscrape.config=/etc/vmagent/scrape.yml"
+    ports:
+      - "${AQP_VM_HOST_PORT:-8428}:8428"
+    volumes:
+      - vm-data:/storage
+      - ./deploy/victoriametrics/scrape.yml:/etc/vmagent/scrape.yml:ro
+    restart: unless-stopped
+
+volumes:
+  airbyte-db-data:
+  airbyte-workspace:
+  airbyte-data:
+  loki-data:
+  vm-data:

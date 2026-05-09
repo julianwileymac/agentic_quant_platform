@@ -1,0 +1,88 @@
+---
+description: Alembic migration immutability, ORM model conventions, and LedgerWriter as the single ledger entry-point.
+globs:
+  - alembic/versions/**/*.py
+  - alembic/env.py
+  - aqp/persistence/**/*.py
+  - tests/persistence/**/*.py
+alwaysApply: false
+---
+
+# Migrations + persistence
+
+This rule scopes AGENTS.md hard rules **5, 6** and the Don'ts about
+migration-editing and ORM-pickling.
+
+## Hard rules
+
+1. **Migrations are immutable once committed.** Never edit a shipped
+   file under [alembic/versions/](mdc:alembic/versions). Add a new
+   one. Treat each shipped migration as a permanent historical
+   record — even if it has bugs, ship a follow-up that compensates.
+2. **Naming convention.** `00NN_<short_slug>.py` — increment `NN` to
+   the next free number, slug is lowercase / hyphens optional /
+   under ~25 chars (e.g.
+   `0028_analysis_layer.py`).
+3. **Autogenerate is a starting point, not a finish line.** After
+   `alembic revision --autogenerate -m "msg"`:
+   - Inspect indexes (autogenerate often misses them).
+   - Inspect check constraints.
+   - Inspect server defaults — they trip up SQLite test runs.
+   - Confirm down-revision points at the previous head.
+4. **Update docs alongside the migration.** Adding a table or column
+   means a one-line addition to
+   [docs/data-dictionary.md](mdc:docs/data-dictionary.md) and an
+   ERD entry in [docs/erd.md](mdc:docs/erd.md) in the same PR.
+5. **All ledger writes go through
+   [`LedgerWriter`](mdc:aqp/persistence/ledger.py).** Never insert
+   directly into ledger tables from a route, task, or subsystem
+   helper. The writer enforces tenancy stamping, audit fields, and
+   FK invariants.
+6. **Don't pickle ORM objects across tasks.** Pass IDs; re-fetch in
+   the worker. Celery serialises the message; detached ORM
+   instances pickled this way break in subtle, lazy-loading-related
+   ways under load.
+7. **ORM model files are split by domain.** Add new classes to the
+   right `aqp/persistence/models_*.py` (`models_bots.py`,
+   `models_rl.py`, `models_analysis.py`, `models_sinks.py`,
+   `models_streaming_links.py`, `models_producers.py`, …).
+   `aqp/persistence/models.py` is for cross-domain primitives only.
+
+## Adding an ORM model — the checklist
+
+1. Class lives in the appropriate `aqp/persistence/models_*.py`.
+2. Generate a migration:
+   ```
+   docker exec aqp-api alembic revision --autogenerate -m "add foo"
+   ```
+3. Inspect + fix indexes / constraints / defaults in the generated
+   file.
+4. Apply: `docker exec aqp-api alembic upgrade head`.
+5. Update [docs/data-dictionary.md](mdc:docs/data-dictionary.md).
+6. Update the per-domain ERD in [docs/erd.md](mdc:docs/erd.md).
+7. If an agent will read it, add a `DataMCPTool` — see
+   [data-mcp.mdc](mdc:.cursor/rules/data-mcp.mdc).
+
+## Recovering from a busted migration
+
+```
+docker exec aqp-api alembic downgrade -1
+# fix the migration file
+docker exec aqp-api alembic upgrade head
+```
+
+This is the **only** time you edit a migration after writing it —
+when it has not yet been committed and is still on your branch. Once
+merged, fix forward.
+
+## Don't
+
+- Don't edit a shipped migration. Ever. Add a new one.
+- Don't run `alembic stamp` to "skip" a migration in production
+  databases without a runbook.
+- Don't introduce `JSONB` columns where a typed column would do —
+  agents will see them and try to query the wrong shape.
+- Don't bypass `LedgerWriter` to "save a roundtrip". Telemetry +
+  audit FKs depend on it.
+- Don't query Postgres from agent code — go through DataMCPTool. See
+  [data-mcp.mdc](mdc:.cursor/rules/data-mcp.mdc).

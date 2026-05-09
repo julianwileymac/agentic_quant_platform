@@ -15,6 +15,7 @@ import type {
   AqpNodeData,
   FlowDomain,
   FlowGraph,
+  PaletteItem,
   PaletteSection,
 } from "./types";
 
@@ -60,6 +61,7 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
     initialGraph ?? { domain, version: 1, nodes: [], edges: [] },
   );
   const [drawerNode, setDrawerNode] = useState<AqpNode | null>(null);
+  const [selectedPaletteItem, setSelectedPaletteItem] = useState<PaletteItem | null>(null);
   const [menu, setMenu] = useState<ContextMenuState>({
     open: false,
     position: null,
@@ -128,15 +130,25 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
 
   return (
     <div style={{ display: "flex", height, overflow: "hidden", borderRadius: 8 }}>
-      <Palette sections={paletteSections} />
-      <div style={{ flex: 1, position: "relative" }}>
+      <Palette
+        sections={paletteSections}
+        selectedKind={selectedPaletteItem?.kind ?? null}
+        onItemClick={(item) => {
+          setSelectedPaletteItem(item);
+          canvasRef.current?.addPaletteNodeAtCenter(item);
+        }}
+      />
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, position: "relative" }}>
         <FlowCanvas
           ref={canvasRef}
           domain={domain}
           initialGraph={graph}
           nodeTypes={nodeTypes}
           onGraphChange={onGraphChange}
-          onNodeClick={(node) => setDrawerNode(node)}
+          onNodeClick={(node) => {
+            setSelectedPaletteItem(null);
+            setDrawerNode(node);
+          }}
           onNodeContextMenu={(node, position) =>
             setMenu({ open: true, position, nodeId: node.id })
           }

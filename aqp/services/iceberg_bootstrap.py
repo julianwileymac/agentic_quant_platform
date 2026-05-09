@@ -22,7 +22,7 @@ from aqp.services.polaris_client import (
     PolarisClient,
     PolarisClientConfig,
     PolarisClientError,
-    default_polaris_config,
+    admin_polaris_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,12 +85,26 @@ def load_persisted_credentials() -> dict[str, Any] | None:
 
 
 def persist_principal_credentials(payload: dict[str, Any]) -> Path:
-    """Persist Polaris principal credentials to disk with restrictive perms."""
+    """Persist Polaris principal credentials to disk with restrictive perms.
+
+    Also invalidates the cached PyIceberg catalog handle so the next
+    catalog load picks up the freshly-minted credentials via
+    :class:`aqp.credentials.CredentialResolver` (the ``FileSecretStore``
+    re-reads this file). Without the invalidation the API container
+    keeps using its boot-time ``root:s3cr3t`` credential and Polaris
+    returns ``CREATE_TABLE_DIRECT_WITH_WRITE_DELEGATION`` 403s.
+    """
     path = credentials_file()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     with contextlib.suppress(Exception):  # pragma: no cover - chmod unsupported on Windows
         os.chmod(path, 0o600)
+
+    with contextlib.suppress(Exception):
+        from aqp.data.iceberg_catalog import reset_catalog_cache
+
+        reset_catalog_cache()
+
     return path
 
 
@@ -140,7 +154,14 @@ class IcebergBootstrapManager:
     ) -> None:
         self._client = client
         self._owns_client = client is None
-        self._config = config or default_polaris_config()
+        # Bootstrap MUST authenticate as the admin (env-driven seed
+        # ``polaris_client_id`` / ``polaris_client_secret``) regardless
+        # of what the credential resolver currently has on file —
+        # otherwise a stale ``polaris-principal.json`` (e.g. from a
+        # previous Polaris container that has since been rebuilt)
+        # locks the bootstrap loop out with ``unauthorized_client`` and
+        # we can never re-mint the runtime principal.
+        self._config = config or admin_polaris_config()
         self.catalog_name = catalog_name or settings.iceberg_catalog_warehouse_name
         self.principal_name = principal_name or settings.iceberg_principal_name
         self.principal_role = principal_role or settings.iceberg_principal_role
@@ -155,6 +176,44 @@ class IcebergBootstrapManager:
         if self._client is None:
             self._client = PolarisClient(self._config)
         return self._client
+
+    def _heal_stale_credentials(self) -> bool:
+        """Drop a stale ``polaris-principal.json`` and rebuild the client.
+
+        Called from :meth:`bootstrap` when Polaris responds with
+        ``unauthorized_client``. Returns ``True`` if a healing action
+        was taken (file existed + was removed + caches cleared).
+        """
+        path = credentials_file()
+        existed = path.exists()
+        if existed:
+            with contextlib.suppress(Exception):
+                path.unlink()
+                logger.warning(
+                    "iceberg-bootstrap: removed stale %s after Polaris OAuth 401",
+                    path,
+                )
+        # Drop the resolver + iceberg catalog caches so runtime
+        # services pick up the about-to-be-minted credentials on next
+        # call.
+        with contextlib.suppress(Exception):
+            from aqp.credentials import reset_resolver
+
+            reset_resolver()
+        with contextlib.suppress(Exception):
+            from aqp.data.iceberg_catalog import reset_catalog_cache
+
+            reset_catalog_cache()
+        # Force-rebuild the PolarisClient so it re-reads the admin
+        # config we just unblocked.
+        if self._owns_client and self._client is not None:
+            with contextlib.suppress(Exception):
+                self._client.close()
+        self._client = None
+        # Make sure ``self._config`` points at the admin seed even when
+        # the operator passed an explicit non-admin config in.
+        self._config = admin_polaris_config()
+        return existed
 
     def close(self) -> None:
         if self._client is not None and self._owns_client:
@@ -235,21 +294,70 @@ class IcebergBootstrapManager:
                 client.oauth_token(force=True)
                 steps.append(BootstrapStep(name="oauth", status="ok", detail="token acquired"))
             except PolarisClientError as exc:
-                steps.append(BootstrapStep(name="oauth", status="error", detail=str(exc)))
-                return BootstrapReport(
-                    catalog=self.catalog_name,
-                    principal=self.principal_name,
-                    principal_role=self.principal_role,
-                    catalog_role=self.catalog_role,
-                    privilege=self.privilege,
-                    started_at=started,
-                    finished_at=time.monotonic(),
-                    duration_seconds=round(time.monotonic() - started, 4),
-                    success=False,
-                    bootstrap_required=True,
-                    steps=steps,
-                    last_error=str(exc),
-                )
+                # Self-heal: if Polaris rejected the credentials we
+                # were handed (typically a stale ``polaris-principal.json``
+                # left over from a previous container), wipe the file
+                # and retry exactly once with the admin config from
+                # settings. This breaks the resolver-loop deadlock
+                # without operator intervention.
+                if (
+                    "unauthorized_client" in str(exc).lower()
+                    or "401" in str(exc)
+                ):
+                    healed = self._heal_stale_credentials()
+                    if healed:
+                        client = self._client_handle()
+                        try:
+                            client.oauth_token(force=True)
+                            steps.append(
+                                BootstrapStep(
+                                    name="oauth",
+                                    status="ok",
+                                    detail="token acquired (after healing stale principal file)",
+                                )
+                            )
+                        except PolarisClientError as exc2:
+                            steps.append(
+                                BootstrapStep(
+                                    name="oauth",
+                                    status="error",
+                                    detail=str(exc2),
+                                )
+                            )
+                            exc = exc2
+                            healed = False
+                    if not healed:
+                        steps.append(BootstrapStep(name="oauth", status="error", detail=str(exc)))
+                        return BootstrapReport(
+                            catalog=self.catalog_name,
+                            principal=self.principal_name,
+                            principal_role=self.principal_role,
+                            catalog_role=self.catalog_role,
+                            privilege=self.privilege,
+                            started_at=started,
+                            finished_at=time.monotonic(),
+                            duration_seconds=round(time.monotonic() - started, 4),
+                            success=False,
+                            bootstrap_required=True,
+                            steps=steps,
+                            last_error=str(exc),
+                        )
+                else:
+                    steps.append(BootstrapStep(name="oauth", status="error", detail=str(exc)))
+                    return BootstrapReport(
+                        catalog=self.catalog_name,
+                        principal=self.principal_name,
+                        principal_role=self.principal_role,
+                        catalog_role=self.catalog_role,
+                        privilege=self.privilege,
+                        started_at=started,
+                        finished_at=time.monotonic(),
+                        duration_seconds=round(time.monotonic() - started, 4),
+                        success=False,
+                        bootstrap_required=True,
+                        steps=steps,
+                        last_error=str(exc),
+                    )
 
             steps.append(self._ensure_catalog(client))
             principal_step, principal_payload = self._ensure_principal(client)

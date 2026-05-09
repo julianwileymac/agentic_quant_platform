@@ -1,0 +1,117 @@
+---
+description: Celery task progress contract, FastAPI route layering, and Redis pub/sub frame shape.
+globs:
+  - aqp/tasks/**/*.py
+  - aqp/api/**/*.py
+  - aqp/ws/**/*.py
+  - tests/api/**/*.py
+  - tests/test_*tasks*.py
+  - tests/test_*ws*.py
+  - tests/test_live_market_ws.py
+alwaysApply: false
+---
+
+# Tasks, API routes, and the progress bus
+
+This rule scopes the Celery + FastAPI + WebSocket layering — AGENTS.md
+hard rules **4** (progress emits) and **5** (cross-task state through
+Postgres + idempotency), plus the AGENTS.md "Don't" bullets that ban
+strategy logic in routes, top-level Celery imports inside route
+modules, and breaking the SSE / WebSocket frame shape.
+
+## Hard rules
+
+1. **Progress emits go through
+   [aqp/tasks/_progress.py](mdc:aqp/tasks/_progress.py).** Every
+   Celery task that streams progress uses
+   `emit(task_id, stage, message, **extras)`,
+   `emit_done(task_id, result)`, and `emit_error(task_id, error)`.
+   Never publish to Redis directly from task code.
+2. **Frame shape is contract.** Every progress frame is shaped
+   `{task_id, stage, message, timestamp, **extras}`. Adding new
+   fields to `extras` is fine. Renaming `task_id` / `stage` /
+   `message` / `timestamp` is **not** — UI code in
+   [frontend/](mdc:frontend) and [webui/](mdc:webui) depends on the
+   shape, and so do
+   [`subscribe`](mdc:aqp/ws/broker.py) consumers.
+3. **Tasks are idempotent.** Re-runnable on transient failure. Pass
+   IDs (not pickled ORM objects) and re-fetch from Postgres inside
+   the task. Use the `bind=True` form so you can read
+   `self.request.id` for the task_id.
+4. **Routes thin-wrap tasks; tasks thin-wrap subsystem functions.**
+   - API route → enqueue Celery task → return `TaskAccepted`
+     (defined in [aqp/api/schemas.py](mdc:aqp/api/schemas.py))
+   - Celery task → call a function in `aqp/<pkg>/`, emit progress,
+     return result
+   - Subsystem function in `aqp/<pkg>/` → does the actual work, no
+     Celery / FastAPI imports
+5. **No Celery imports at FastAPI route module top level.** Celery
+   pulls in the broker config at import time, and the API process
+   may not have those env vars during boot. Inline the
+   `from aqp.tasks.<module> import <task>` inside the route
+   function body.
+6. **Reference example.** Copy
+   [aqp/api/routes/data_pipelines.py](mdc:aqp/api/routes/data_pipelines.py)
+   when scaffolding a new long-running route.
+
+## New Celery task — the template
+
+```
+from aqp.tasks._progress import emit, emit_done, emit_error
+from aqp.tasks.celery_app import celery_app
+
+
+@celery_app.task(bind=True, name="aqp.tasks.my_module.my_task")
+def my_task(self, *args, **kwargs):
+    task_id = self.request.id or "local"
+    emit(task_id, "start", "doing thing")
+    try:
+        result = ...
+        emit_done(task_id, result)
+        return result
+    except Exception as exc:
+        emit_error(task_id, str(exc))
+        raise
+```
+
+Then:
+
+1. If the file is new, add it to the `include` list in
+   [aqp/tasks/celery_app.py](mdc:aqp/tasks/celery_app.py) and add a
+   `task_routes` entry to send it to the right queue.
+2. Restart workers — they don't auto-pick-up new task modules.
+3. Wire the route: `from aqp.tasks.my_module import my_task` inside
+   the route function (not at module top).
+
+## Spec-runtime tasks
+
+For the four spec runtimes, the task file already exists — append to
+it instead of creating a new one:
+
+| Runtime | Task module |
+| --- | --- |
+| `AgentRuntime` | `aqp/tasks/agent_tasks.py` (and friends) |
+| `BotRuntime` | [aqp/tasks/bot_tasks.py](mdc:aqp/tasks/bot_tasks.py) |
+| `RLRuntime` | [aqp/tasks/rl_tasks.py](mdc:aqp/tasks/rl_tasks.py) |
+| `AnalysisRuntime` | [aqp/tasks/analysis_flow_tasks.py](mdc:aqp/tasks/analysis_flow_tasks.py) |
+
+These wrappers are thin — they instantiate the runtime, call the
+right method, and emit progress. Don't open-code lifecycle logic in
+the task body. See
+[runtimes.mdc](mdc:.cursor/rules/runtimes.mdc).
+
+## Don't
+
+- Don't break the progress frame shape. Renaming top-level keys
+  silently breaks every WebSocket consumer.
+- Don't put strategy / bot / agent / RL / analysis logic in API
+  routes. Routes thin-wrap tasks.
+- Don't put Celery imports at FastAPI route module top level —
+  circular import risk.
+- Don't pickle ORM objects through Celery — pass IDs.
+- Don't write to Redis from task code outside `_progress.py`. Use
+  [`RedisHybridMemory`](mdc:aqp/llm/memory.py) for agent memory.
+- Don't add a per-source Celery task for ingestion — use
+  `ingest_local_paths_with_director` or spawn a `_run_one_source.py`
+  subprocess (see
+  [data-pipelines.mdc](mdc:.cursor/rules/data-pipelines.mdc)).

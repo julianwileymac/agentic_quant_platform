@@ -1,0 +1,107 @@
+---
+description: Iceberg writes, medallion layers, BusinessMetadata, and namespace-prefix validation.
+globs:
+  - aqp/data/**/*.py
+  - aqp/data/sinks/**/*.py
+  - aqp/data/fetchers/**/*.py
+  - aqp/data/products/**/*.py
+  - aqp/data/normalization/**/*.py
+  - aqp/data/catalog/**/*.py
+  - aqp/dagster/**/*.py
+  - aqp/services/metadata_catalog_service.py
+  - tests/data/**/*.py
+  - scripts/iceberg_*.py
+  - scripts/ingest_*.py
+alwaysApply: false
+---
+
+# Iceberg, medallion layers, active metadata
+
+This rule scopes the Iceberg-write contract that AGENTS.md hard rules
+**3, 18, 21, 23** describe. The narrative walkthroughs are
+[docs/data-catalog.md](mdc:docs/data-catalog.md) and
+[docs/data-layer-unification.md](mdc:docs/data-layer-unification.md).
+
+## Hard rules
+
+1. **One write entry-point.** Every Iceberg write goes through
+   [`iceberg_catalog.append_arrow`](mdc:aqp/data/iceberg_catalog.py)
+   or `create_or_replace_table`. Never call PyIceberg's
+   `Catalog.create_table` / `Table.append` directly. Do not bypass
+   the wrapper from sinks, fetchers, scripts, Dagster assets,
+   notebooks, or tests.
+2. **Medallion layer + business metadata are mandatory on first
+   write.** Pass `medallion_layer="bronze|silver|gold"` and a
+   `BusinessMetadata(...)` block to `append_arrow` or call
+   [`aqp.data.catalog.register_dataset`](mdc:aqp/data/catalog/active_metadata.py)
+   first. The wrapper validates that the namespace prefix matches
+   the declared layer:
+   - Bronze → `aqp_bronze_<source>`
+   - Silver → `aqp_silver_<source>`
+   - Gold → `aqp_gold_<entity>`
+3. **Existing reserved namespaces.** Don't reuse them for unrelated
+   data:
+   - `aqp_cfpb`, `aqp_uspto`, `aqp_fda`, `aqp_sec` — regulatory
+   - `aqp` — pre-medallion fallback (frozen)
+   - `aqp_smoke` — reserved for
+     [scripts/iceberg_smoke.py](mdc:scripts/iceberg_smoke.py)
+   - `aqp_gold_analysis_<flow.namespace>` — owned by
+     [`AnalysisRuntime`](mdc:aqp/analysis/runtime.py)
+   - RL trajectory tables — owned by
+     [`IcebergTrajectoryStore`](mdc:aqp/rl/trajectories/iceberg_writer.py)
+4. **Never write trajectory / RL / analysis output through
+   `append_arrow` directly from those subsystems.** Use the
+   subsystem-specific buffer:
+   - RL → `IcebergTrajectoryStore` (handles batching, tenancy
+     stamping, flush semantics)
+   - Analysis → `AnalysisRuntime.run(...)` (gold-tier writes happen
+     inside the runtime so the `analysis_runs` ledger and
+     `analysis_step_results` rows stay consistent)
+5. **Active metadata stays current.** When you add a fetcher /
+   transform / sink, attach `@dataset(...)` to the class for
+   auto-upsert, or call `register_dataset(...)` explicitly with
+   `BusinessMetadata` and (optionally) a `DataContract`. If the
+   schema changes, bump the contract — the catalog is what agents
+   see via [`data.catalog.lineage`](mdc:aqp/data/catalog/lineage.py).
+6. **Normalisation lives in `aqp/data/normalization/`.** Subclass
+   [`BaseNormalizationStrategy`](mdc:aqp/data/normalization/base.py),
+   decorate with `@register_normalization_strategy("alias")`, and
+   reference from Silver transform nodes. Don't open-code Silver
+   logic per-source.
+
+## Choosing a layer
+
+| Use | Layer | Example namespace |
+| --- | --- | --- |
+| Raw vendor download, no transformation beyond schema coercion | bronze | `aqp_bronze_alpha_vantage` |
+| Normalised, deduped, joined-to-canonical-IDs, ready for analytics | silver | `aqp_silver_equities_bars` |
+| Entity-centric product (instrument, factor, regulator filing summary, ML feature snapshot, analysis output) | gold | `aqp_gold_instruments` / `aqp_gold_features` / `aqp_gold_analysis_<ns>` |
+
+When in doubt, start at bronze and promote. Lineage walks via
+[`data.catalog.lineage`](mdc:aqp/data/catalog/lineage.py) connect them.
+
+## Sinks
+
+- New sink kind: one
+  [`SinkKindDescriptor`](mdc:aqp/data/fetchers/sinks/__init__.py)
+  entry + one `SinkNode` subclass under
+  [aqp/data/fetchers/sinks/](mdc:aqp/data/fetchers/sinks) decorated
+  with `@register_node("sink.<kind>")`.
+- Project-scoped sink registry rows are
+  [`SinkRow`](mdc:aqp/persistence/models_sinks.py) instances
+  resolved into manifest `NodeSpec` via
+  [`materialise_node_spec`](mdc:aqp/data/sinks/service.py). Don't
+  hand-build `NodeSpec` dicts from scratch.
+
+## Don't
+
+- Don't write embeddings here. Embeddings go through
+  [aqp/rag/indexers/](mdc:aqp/rag/indexers).
+- Don't replace [aqp/data/chroma_store.py](mdc:aqp/data/chroma_store.py)
+  — it stays for the dataset/code metadata index. Redis is the
+  hierarchical agent RAG.
+- Don't ingest USPTO-style XML archives as tabular Iceberg data —
+  they go to the synthetic `__assets__` family per
+  [data-pipelines.mdc](mdc:.cursor/rules/data-pipelines.mdc).
+- Don't bypass [`IngestionPipeline.run_path`](mdc:aqp/data/pipelines/runner.py)
+  by calling `materialize_dataset` directly from a route or task.

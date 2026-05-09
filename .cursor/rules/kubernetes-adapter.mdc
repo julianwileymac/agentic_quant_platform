@@ -1,0 +1,101 @@
+# Kubernetes adapter (cluster decouple)
+
+This rule scopes AGENTS.md hard rule **28** (added in M4): every
+cluster-side operation in AQP — Kafka admin, Flink session jobs,
+deployment scaling, pod logs, manifest apply — flows through the
+[`KubernetesAdapter`](mdc:aqp/kubernetes/protocol.py) abstraction.
+
+The abstraction lets AQP run fully standalone (no cluster), attach to
+the rpi_kubernetes management API, run inside a cluster with the
+official Kubernetes Python SDK, or treat the local Docker Compose
+stack as the cluster surface. The narrative walk-through lives in
+[docs/kubernetes-adapter.md](mdc:docs/kubernetes-adapter.md).
+
+## Hard rules
+
+1. **One adapter surface.** Every cluster-side operation in AQP goes
+   through
+   [`get_kubernetes_adapter()`](mdc:aqp/kubernetes/protocol.py). Don't
+   import
+   [`ClusterMgmtClient`](mdc:aqp/services/cluster_mgmt_client.py)
+   directly outside
+   [`aqp/kubernetes/adapters/rpi_cluster.py`](mdc:aqp/kubernetes/adapters/rpi_cluster.py).
+   That adapter is the only allowed wrapper.
+2. **Adapters register themselves.** Concrete
+   [`KubernetesAdapter`](mdc:aqp/kubernetes/protocol.py) subclasses set
+   `adapter_kind` (`none` / `rpi_cluster` / `in_cluster` /
+   `local_compose`) and the :class:`KubernetesAdapterMeta` metaclass
+   auto-registers via
+   `aqp.core.registry.register(kind="k8s_adapter")`. Don't decorate
+   manually.
+3. **`is_available()` is the gate.** Routes call `is_available()`
+   first and translate `False` to `HTTP 503`. Failures during a
+   live call surface as `KubernetesAdapterError` and translate to
+   `HTTP 502`. Never let a raw cluster-mgmt HTTPError leak to the
+   route layer.
+4. **Auto-promote rpi when configured.** If
+   `settings.kubernetes_adapter` is empty and
+   `settings.cluster_mgmt_url` is set, the
+   [`RpiClusterAdapter`](mdc:aqp/kubernetes/adapters/rpi_cluster.py)
+   activates. This preserves the existing behaviour of "set the URL
+   and the proxy works".
+5. **Adapter calls re-read settings.** The
+   [`RpiClusterAdapter`](mdc:aqp/kubernetes/adapters/rpi_cluster.py)
+   builds a fresh underlying client per call so dynamic config /
+   test isolation works without explicit cache invalidation. Don't
+   cache an adapter's underlying transport across settings changes.
+6. **Unsupported ops raise
+   :class:`KubernetesAdapterUnavailable`.** When an adapter cannot
+   service a method (e.g. local-compose has no Strimzi to talk to),
+   raise the unavailable subclass — routes catch it and return 503.
+   Don't return empty stubs; failure should be loud and
+   gracefully-degraded.
+7. **The native Kafka / Flink admin still wins.** The fallback
+   pattern is `native -> adapter`. Native admin lives in
+   [`aqp/streaming/admin/`](mdc:aqp/streaming/admin); the adapter
+   is the cluster proxy when native isn't reachable. Don't swap that
+   order.
+
+## Adapter capabilities matrix
+
+| Capability | None | RpiCluster | InCluster | LocalCompose |
+| --- | --- | --- | --- | --- |
+| `is_available()` | False | URL set | kubeconfig loaded | docker on PATH |
+| `kafka_*` | 503 | yes (HTTP) | 503 | 503 |
+| `flink_*` | 503 | yes (HTTP) | 503 | 503 |
+| `alphavantage_*` | 503 | yes (HTTP) | 503 | 503 |
+| `scale_deployment` | 503 | yes | yes (AppsV1) | yes (compose up --scale) |
+| `pod_logs` | 503 | (via supervisor) | yes | yes (compose logs) |
+| `apply_manifest` | 503 | (out of scope) | yes | (out of scope) |
+
+Filling in more "503" cells is fine — open a PR adding the method to
+the relevant adapter and to the ABC.
+
+## Where things live
+
+| Need | Path |
+| --- | --- |
+| Adapter ABC + metaclass | [aqp/kubernetes/protocol.py](mdc:aqp/kubernetes/protocol.py) |
+| None / Rpi / InCluster / LocalCompose | [aqp/kubernetes/adapters/](mdc:aqp/kubernetes/adapters) |
+| `/cluster/*` REST surface | [aqp/api/routes/cluster_mgmt.py](mdc:aqp/api/routes/cluster_mgmt.py) |
+| Native Kafka / Flink fallback | [aqp/api/routes/kafka.py](mdc:aqp/api/routes/kafka.py), [aqp/api/routes/flink.py](mdc:aqp/api/routes/flink.py) |
+| Producer supervisor (kubernetes runtime) | [aqp/streaming/producers/supervisor.py](mdc:aqp/streaming/producers/supervisor.py) |
+| FinOps audit (in-cluster path) | [aqp/tasks/finops_tasks.py](mdc:aqp/tasks/finops_tasks.py) — currently uses the kubernetes SDK directly because it needs list APIs not on the adapter; expanding the adapter is the migration target |
+
+## Don't
+
+- Don't import
+  [`ClusterMgmtClient`](mdc:aqp/services/cluster_mgmt_client.py)
+  outside the rpi adapter. Audit hook:
+  `rg "from aqp.services.cluster_mgmt_client" --type py`.
+- Don't call `kubernetes.client.*Api()` directly outside
+  [`aqp/kubernetes/adapters/in_cluster.py`](mdc:aqp/kubernetes/adapters/in_cluster.py)
+  (the existing call site in
+  [`aqp/tasks/finops_tasks.py`](mdc:aqp/tasks/finops_tasks.py) is
+  grandfathered until the adapter exposes list APIs).
+- Don't reach for `subprocess.run("docker compose ...")` outside the
+  local-compose adapter.
+- Don't cache an adapter on a service object — always go through
+  `get_kubernetes_adapter()` so settings changes propagate.
+
+Consider these rules if they affect your changes.

@@ -78,8 +78,13 @@ dependencies = [
 # ``cryptography`` extra ships RS256 support without compile-time deps.
 # Required when AQP_AUTH_PROVIDER != "local" (Auth0, Google, Keycloak,
 # Authentik, etc.). Local-first deployments don't need this.
+#
+# ``jwcrypto`` powers the encrypted-cookie session store
+# (:mod:`aqp.auth.session.crypto`) — JWE compact serialisation with
+# A256CBC-HS512 + HKDF-SHA256, matching the ported auth0 reference.
 auth = [
     "python-jose[cryptography]>=3.3",
+    "jwcrypto>=1.5.7",
 ]
 arcticdb = ["arcticdb>=4.4"]
 dagster = ["dagster==1.12.21"]

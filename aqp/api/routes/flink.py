@@ -68,7 +68,12 @@ class FlinkFactorExportRequest(BaseModel):
 
 
 def _native_or_proxy_flink(operation: str):
-    """Try the native session-job client first, fall back to cluster-mgmt."""
+    """Try the native session-job client first, fall back to the adapter.
+
+    The :class:`aqp.kubernetes.KubernetesAdapter` exposes the same
+    ``flink_*`` method names as the legacy ``ClusterMgmtClient``, so
+    routes on the proxy branch are unchanged.
+    """
     try:
         return ("native", get_flink_session_jobs())
     except FlinkAdminUnavailableError as exc:
@@ -76,13 +81,24 @@ def _native_or_proxy_flink(operation: str):
     except FlinkAdminError as exc:
         logger.debug("flink native error for %s: %s", operation, exc)
     try:
-        from aqp.services.cluster_mgmt_client import get_cluster_mgmt_client
+        from aqp.kubernetes import get_kubernetes_adapter
 
-        return ("proxy", get_cluster_mgmt_client())
+        adapter = get_kubernetes_adapter()
+        if not adapter.is_available():
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "flink admin unavailable (native admin failed and no "
+                    f"KubernetesAdapter is configured for {operation})"
+                ),
+            )
+        return ("proxy", adapter)
+    except HTTPException:
+        raise
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=503,
-            detail=f"flink admin unavailable (native+proxy): {exc}",
+            detail=f"flink admin unavailable (native+adapter): {exc}",
         ) from exc
 
 

@@ -222,6 +222,50 @@ for a reference implementation.
 - **Logging**: `logger = logging.getLogger(__name__)` at module top;
   no `print` outside scripts/.
 
+## Working with the Cursor agent
+
+If you're using Cursor (or another LLM-driven IDE) to develop on
+AQP, read these in order before you start:
+
+1. [AGENTS.md](AGENTS.md) — the 25 hard rules. The agent is
+   contracted to follow them; you should know what it's contracted
+   to.
+2. [WORKFLOW.md](WORKFLOW.md) — the **Plan → Act → Reflect**
+   cadence, FAST vs SLOW velocity calibration, the intervention
+   nodes that require explicit human authorization (kill-switch
+   flips, broker credentials, migrations, immutable spec
+   re-snapshots), and the FREEMODE convention for unstructured
+   brainstorming.
+3. [docs/agentic-development.md](docs/agentic-development.md) —
+   how AQP's spec-pattern relates to the broader "skill artifact"
+   vocabulary, plus the consolidated ADLC security manifesto.
+4. [.cursor/rules/](.cursor/rules) — glob-scoped rules. The slim
+   `aqp.mdc` always applies; the rest only fire when the agent
+   touches files matching their globs (e.g. `iceberg.mdc` only
+   activates when working in `aqp/data/`).
+5. [docs/multi-agent-patterns.md](docs/multi-agent-patterns.md) —
+   when adding a new agent crew, pick the right topology
+   (Sequential / Parallel / Debate / Coordinator / ReAct).
+
+Practical tips:
+
+- For non-trivial changes, start in **plan mode**. The agent
+  produces a markdown plan you review before any code lands.
+  Mixing planning with code generation in one prompt is a known
+  source of drift.
+- Anything in [aqp/risk/](aqp/risk/), [aqp/persistence/ledger.py](aqp/persistence/ledger.py),
+  [aqp/trading/](aqp/trading/), `*_runtime.py`, or
+  [alembic/versions/](alembic/versions/) is **SLOW mode** — the
+  agent must follow a TDD loop with explicit human approval
+  before commit.
+- Long-running operations (Docker stack rebuild, full test
+  suite, training runs) belong in **background mode** so your
+  primary chat stays responsive.
+- The agent must **never** flip the kill-switch, change broker
+  credentials, edit a shipped migration, or push to live trading
+  without explicit human acknowledgement. Those are
+  intervention nodes — see [WORKFLOW.md](WORKFLOW.md).
+
 ## Tests
 
 ```bash

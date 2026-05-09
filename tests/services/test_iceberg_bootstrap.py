@@ -149,3 +149,42 @@ def test_status_reports_components(manager_factory):
     assert status["catalog_present"] is True
     assert status["principal_present"] is False
     assert status["polaris_reachable"] is True
+
+
+def test_persist_principal_credentials_invalidates_catalog_cache(monkeypatch, tmp_path):
+    """The bootstrap-persist hook MUST drop the cached PyIceberg handle.
+
+    Without this invalidation the API container keeps using the
+    boot-time ``root:s3cr3t`` credentials, even after a fresh
+    ``polaris-principal.json`` is written, and Polaris returns 403 on
+    ``CREATE_TABLE_DIRECT_WITH_WRITE_DELEGATION``. This is the live bug
+    the credentials resolver is built to close.
+    """
+    from aqp.config import settings as _settings
+    from aqp.credentials import CredentialKey, get_resolver, reset_resolver
+    from aqp.data import iceberg_catalog
+    from aqp.services import iceberg_bootstrap
+
+    monkeypatch.setattr(_settings, "bootstrap_state_dir", tmp_path, raising=False)
+    reset_resolver()
+
+    calls = {"reset": 0}
+
+    def _fake_reset() -> None:
+        calls["reset"] += 1
+
+    monkeypatch.setattr(iceberg_catalog, "reset_catalog_cache", _fake_reset, raising=True)
+
+    iceberg_bootstrap.persist_principal_credentials(
+        {
+            "client_id": "minted-id",
+            "client_secret": "minted-secret",
+            "principal": "aqp_runtime",
+        }
+    )
+    assert calls["reset"] == 1
+
+    cred = get_resolver().resolve(CredentialKey("polaris", "oauth"))
+    assert cred.source == "file"
+    assert cred.get("client_id") == "minted-id"
+    assert cred.get("client_secret") == "minted-secret"

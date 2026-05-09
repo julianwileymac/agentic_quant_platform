@@ -1,0 +1,111 @@
+---
+description: DataMCPTool boundary - the only path agents read Postgres / Iceberg / catalog / lineage / entity data through.
+globs:
+  - aqp/agents/**/*.py
+  - aqp/agents/tools/**/*.py
+  - aqp/data/mcp/**/*.py
+  - configs/agents/**/*.yaml
+  - tests/agents/**/*.py
+alwaysApply: false
+---
+
+# DataMCP — the agent-read boundary
+
+This rule scopes AGENTS.md hard rule **22**. The narrative is
+[docs/data-mcp.md](mdc:docs/data-mcp.md).
+
+## Why this is a boundary
+
+Pre-DataMCP, agents could `import` ORM models, call
+`aqp.data.iceberg_catalog` directly, or query Redis vector indexes
+free-form. That was an OWASP MCP-Top-10 anti-pattern (context
+injection / over-sharing) and a maintenance burden — every new
+dataset needed bespoke tool glue.
+
+DataMCP collapses both problems into one catalog with two transports:
+
+- **In-process bridge** —
+  [aqp/agents/tools/data_mcp_bridge.py](mdc:aqp/agents/tools/data_mcp_bridge.py)
+  auto-installs every registered `DataMCPTool` into
+  [`TOOL_REGISTRY`](mdc:aqp/agents/tools/__init__.py).
+  `AgentRuntime` sees them through this bridge.
+- **External transports** — the same catalog is exposed via the
+  FastAPI router at `/mcp/data` and the `aqp-data-mcp` stdio
+  binary. Cursor / Claude Desktop / custom scripts use these.
+
+## Hard rules
+
+1. **Agents MUST NOT read Postgres / Iceberg / Redis directly.**
+   Inside any module under [aqp/agents/](mdc:aqp/agents) (and any
+   `AgentSpec`-driven body), never:
+   - `from aqp.persistence.models...`
+   - `from aqp.data.iceberg_catalog...`
+   - `from aqp.data.duckdb_provider...`
+   - `aqp.rag.HierarchicalRAG` direct (that has its own surface;
+     agent-side go through the relevant DataMCPTool / RAG-bridged
+     tool)
+   The rule applies to anything the runtime invokes — agent tool
+   bodies, prompt builders, output parsers, custom callbacks.
+2. **New agent reads = new `DataMCPTool` subclass.** Subclass
+   [`DataMCPTool`](mdc:aqp/data/mcp/base.py) under
+   [aqp/data/mcp/tools/](mdc:aqp/data/mcp/tools), decorate with
+   `@register_data_mcp_tool`, and let the bridge auto-install. Don't
+   carve a one-off path through `aqp/agents/tools/` for "this
+   single agent".
+3. **Tools must declare a strict args schema, semantic
+   description, and policy check.** The schema enables
+   JSON-schema-driven prompt formatting; the description shapes
+   model selection of the right tool; the policy check sandboxes
+   reads (no free-form `SELECT *`).
+4. **Refresh metadata via MCP before assuming a schema.** When the
+   agent needs to construct an entity-specific read (e.g. "list
+   columns for `aqp_silver_equities_bars`"), it should first call
+   the catalog MCP tools (e.g. `data.catalog.lineage`,
+   `data.catalog.describe_dataset`) rather than relying on cached /
+   static knowledge. The static surface in
+   [docs/data-dictionary.md](mdc:docs/data-dictionary.md) bit-rots
+   between releases — MCP is the live source.
+5. **Entity-centric data products go through DataMCP too.**
+   Subclass [`BaseDataProduct`](mdc:aqp/data/products/base.py) under
+   [aqp/data/products/](mdc:aqp/data/products), then add a matching
+   `data.entities.*` MCP tool and a `/data/entities/...` REST route.
+   See [docs/data-products.md](mdc:docs/data-products.md).
+6. **The same catalog backs the FastAPI router and the stdio
+   binary.** Do not author tool variants per transport — register
+   once, both transports pick it up.
+
+## Adding a DataMCP tool — the checklist
+
+1. Subclass `DataMCPTool` (args schema, description, policy check).
+2. Implement the read (this is the only place a `from
+   aqp.persistence.models...` import is allowed — inside a
+   registered MCP tool, not inside an agent body).
+3. Decorate with `@register_data_mcp_tool`.
+4. The bridge auto-installs into `TOOL_REGISTRY` on next process
+   boot. The FastAPI router and stdio binary pick it up via the
+   same registry.
+5. Add a smoke test under [tests/data/mcp/](mdc:tests/data/mcp).
+6. (Optional) Reference the tool from any `AgentSpec.tools` list
+   that needs it.
+
+## What the boundary lets you do
+
+- Cursor / Claude Desktop / external scripts can connect to
+  `/mcp/data` and use the same tool catalog.
+- Tenancy / policy enforcement happens in one place.
+- Agents can be replayed deterministically because every read
+  flowed through the policy-checked tool catalog.
+
+## Don't
+
+- Don't `import aqp.persistence.models_*` from any module under
+  [aqp/agents/](mdc:aqp/agents).
+- Don't attach a new file directly to `aqp/agents/tools/`
+  bypassing `DataMCPTool` for "speed". The bridge is the
+  speed-of-light path; new tools just need to register.
+- Don't query Redis vector indexes directly. Use
+  [`HierarchicalRAG`](mdc:aqp/rag/hierarchy.py) (or its
+  bridged DataMCP tool).
+- Don't add a free-form SQL tool. The policy check exists for a
+  reason — agents should consume read views / curated catalog
+  reads, not run untrusted SQL.

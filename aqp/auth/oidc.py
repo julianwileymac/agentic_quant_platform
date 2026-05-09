@@ -142,11 +142,37 @@ def reset_jwks_cache() -> None:
 
 
 def _fetch_jwks(config: OIDCConfig) -> dict[str, Any]:
-    """Return the JWKS document, populating + honoring the TTL cache."""
+    """Return the JWKS document, populating + honoring the TTL cache.
+
+    When an :class:`aqp.auth.providers.IdentityProvider` is registered
+    we delegate the actual fetch to its :meth:`jwks` method so per-
+    provider caching, issuer rules, and telemetry stay uniform. The
+    ``OIDCConfig.jwks_uri`` cache below is kept as a thin fallback for
+    callers that construct an :class:`OIDCConfig` directly without
+    going through the provider layer (e.g. legacy tests).
+    """
     now = time.time()
     cached = _JWKS_CACHE.get(config.jwks_uri)
     if cached is not None and now < cached[0]:
         return cached[1]
+
+    try:
+        from aqp.auth.providers import get_active_provider
+
+        provider = get_active_provider()
+        provider_jwks = provider.jwks()
+        if isinstance(provider_jwks, dict) and "keys" in provider_jwks:
+            with _JWKS_LOCK:
+                _JWKS_CACHE[config.jwks_uri] = (
+                    now + max(60, int(config.jwks_ttl_seconds)),
+                    provider_jwks,
+                )
+            return provider_jwks
+    except Exception as exc:  # noqa: BLE001
+        # The provider layer is best-effort — if it is misconfigured we
+        # fall through to the direct fetch below so this layer keeps
+        # working in isolation.
+        logger.debug("Provider JWKS delegation failed (%s); falling back to direct fetch", exc)
 
     try:
         with httpx.Client(timeout=10.0) as client:
@@ -154,7 +180,6 @@ def _fetch_jwks(config: OIDCConfig) -> dict[str, Any]:
             response.raise_for_status()
             payload = response.json()
     except httpx.HTTPError as exc:
-        # Serve stale on transient failure rather than 503ing every request.
         if cached is not None:
             logger.warning(
                 "JWKS fetch failed (%s); serving cached document past TTL", exc

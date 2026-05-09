@@ -68,6 +68,8 @@ celery_app = Celery(
         "aqp.tasks.streaming_link_tasks",
         # RL layer (FinRL + FinRobot inspired refactor) — runtime-driven tasks.
         "aqp.tasks.rl_tasks",
+        # Analysis umbrella (hash-locked AnalysisSpec + flow catalog).
+        "aqp.tasks.analysis_flow_tasks",
     ],
 )
 
@@ -124,6 +126,9 @@ celery_app.conf.update(
         "aqp.tasks.rl_tasks.walk_forward_ensemble": {"queue": "training"},
         "aqp.tasks.rl_tasks.best_of_n_search": {"queue": "training"},
         "aqp.tasks.rl_tasks.paper_trade_rl": {"queue": "paper"},
+        # Analysis flows: light compute fan-out via the existing agents queue
+        # (matches aqp.tasks.analysis_tasks routing for symmetry).
+        "aqp.tasks.analysis_flow_tasks.*": {"queue": "agents"},
     },
     beat_schedule={
         "drift-check": {

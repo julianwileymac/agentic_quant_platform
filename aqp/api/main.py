@@ -16,6 +16,7 @@ from aqp.api.routes import (
     agentic,
     agents,
     alpha_vantage,
+    analysis as analysis_routes,
     analysis_agents,
     airbyte,
     auth,
@@ -132,10 +133,29 @@ def _maybe_run_iceberg_bootstrap() -> None:
         logger.exception("Iceberg auto-bootstrap failed; manual /service-manager/iceberg/bootstrap available")
 
 
+def _maybe_install_m2m_store() -> None:
+    """Plug the :class:`M2MStore` into the credential resolver when enabled.
+
+    Activates when ``AQP_AUTH_M2M_ENABLED=true`` and the configured
+    :class:`IdentityProvider` supports ``client_credentials``. Failure
+    is logged but never blocks startup; with M2M off the resolver still
+    reads bootstrap-minted file payloads + env defaults.
+    """
+    if not getattr(settings, "auth_m2m_enabled", False):
+        return
+    try:
+        from aqp.auth.m2m import install_m2m_store
+
+        install_m2m_store()
+    except Exception:  # noqa: BLE001
+        logger.exception("M2M store install failed; resolver will fall back to file/env stores")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("AQP API starting | env=%s", settings.env)
     _maybe_run_iceberg_bootstrap()
+    _maybe_install_m2m_store()
     try:
         yield
     finally:
@@ -219,6 +239,9 @@ app.include_router(analysis_agents.router)
 app.include_router(rag.router)
 app.include_router(memory.router)
 
+# --- Analysis umbrella (hash-locked AnalysisSpec + flow catalog) -------
+app.include_router(analysis_routes.router)
+
 # --- Data fabric expansion (Phase 5/6/7 of data-fabric expansion) -------
 app.include_router(engine_routes.router)
 app.include_router(fetcher_routes.router)
@@ -250,6 +273,7 @@ app.include_router(kafka_routes.router)
 app.include_router(flink_routes.router)
 app.include_router(producers_routes.router)
 app.include_router(cluster_mgmt_routes.router)
+app.include_router(cluster_mgmt_routes.legacy_router)
 app.include_router(streaming_links_routes.router)
 app.include_router(dataset_loading_agent_routes.router)
 

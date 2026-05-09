@@ -22,10 +22,16 @@ Triple-axis table of contents for the AQP docs.
 ### I'm an AI agent
 
 1. [../AGENTS.md](../AGENTS.md) — terse rule-set + project map.
-2. [glossary.md](glossary.md) — definitions.
-3. [erd.md](erd.md) + [class-diagram.md](class-diagram.md) — structural maps.
-4. [flows.md](flows.md) — end-to-end sequences.
-5. The relevant subsystem doc (table below).
+2. [../WORKFLOW.md](../WORKFLOW.md) — Plan / Act / Reflect cadence,
+   FAST vs SLOW modes, intervention nodes.
+3. [agentic-development.md](agentic-development.md) — spec-pattern
+   as the AQP skill-artifact + ADLC security manifesto.
+4. [../.cursor/rules/](../.cursor/rules) — glob-scoped rule files.
+5. [glossary.md](glossary.md) — definitions.
+6. [erd.md](erd.md) + [class-diagram.md](class-diagram.md) — structural maps.
+7. [flows.md](flows.md) — end-to-end sequences.
+8. The relevant subsystem doc (table below).
+9. (Cross-session work) [../.agents/state-template.md](../.agents/state-template.md).
 
 ## By lifecycle stage
 
@@ -39,12 +45,12 @@ flowchart LR
 
 | Stage | Docs |
 | --- | --- |
-| **Research** | [factor-research.md](factor-research.md), [ml-framework.md](ml-framework.md), [ml-libraries.md](ml-libraries.md), [ml-alpha-backtest.md](ml-alpha-backtest.md), [ml-flows.md](ml-flows.md), [ml-preprocessing-pipeline.md](ml-preprocessing-pipeline.md), [ml-builder.md](ml-builder.md), [ml-testing.md](ml-testing.md), [rl-framework.md](rl-framework.md), [rl-lab.md](rl-lab.md), [rl-components.md](rl-components.md), [rl-iceberg.md](rl-iceberg.md), [strategy-browser.md](strategy-browser.md), [data-plane.md](data-plane.md), [data-catalog.md](data-catalog.md), [data-pipelines-hub.md](data-pipelines-hub.md), [visualization-layer.md](visualization-layer.md) |
+| **Research** | [analysis-framework.md](analysis-framework.md), [analysis-lab.md](analysis-lab.md), [analysis-flows.md](analysis-flows.md), [factor-research.md](factor-research.md), [ml-framework.md](ml-framework.md), [ml-libraries.md](ml-libraries.md), [ml-alpha-backtest.md](ml-alpha-backtest.md), [ml-flows.md](ml-flows.md), [ml-preprocessing-pipeline.md](ml-preprocessing-pipeline.md), [ml-builder.md](ml-builder.md), [ml-testing.md](ml-testing.md), [rl-framework.md](rl-framework.md), [rl-lab.md](rl-lab.md), [rl-components.md](rl-components.md), [rl-iceberg.md](rl-iceberg.md), [strategy-browser.md](strategy-browser.md), [data-plane.md](data-plane.md), [data-catalog.md](data-catalog.md), [data-pipelines-hub.md](data-pipelines-hub.md), [visualization-layer.md](visualization-layer.md) |
 | **Backtest** | [backtest-engines.md](backtest-engines.md), [strategy-lifecycle.md](strategy-lifecycle.md) |
 | **Agentic** | [agentic-pipeline.md](agentic-pipeline.md), [providers.md](providers.md) |
 | **Bots** | [bots.md](bots.md) (smallest deployable unit; aggregates universe + strategy + engine + ML + agents + RAG + metrics) |
 | **Paper / Live** | [paper-trading.md](paper-trading.md), [live-market.md](live-market.md), [streaming.md](streaming.md), [streaming-admin.md](streaming-admin.md) |
-| **Cross-cutting** | [observability.md](observability.md), [webui.md](webui.md), [core-types.md](core-types.md), [domain-model.md](domain-model.md), [alpha-vantage.md](alpha-vantage.md) |
+| **Cross-cutting** | [observability.md](observability.md), [webui.md](webui.md), [core-types.md](core-types.md), [domain-model.md](domain-model.md), [alpha-vantage.md](alpha-vantage.md), [credentials.md](credentials.md), [identity.md](identity.md), [kubernetes-adapter.md](kubernetes-adapter.md), [local-platform.md](local-platform.md) |
 
 ## By subsystem
 
@@ -76,6 +82,9 @@ flowchart LR
 
 | Doc | Purpose |
 | --- | --- |
+| [analysis-framework.md](analysis-framework.md) | Hash-locked AnalysisSpec + AnalysisRuntime umbrella |
+| [analysis-lab.md](analysis-lab.md) | Hybrid `/analysis/lab` UI (dataset-tabs + XYFlow Composer) |
+| [analysis-flows.md](analysis-flows.md) | Per-flow reference for the analysis catalog |
 | [factor-research.md](factor-research.md) | Building factor / alpha strategies |
 | [ml-framework.md](ml-framework.md) | Train → register → deploy → score |
 | [ml-libraries.md](ml-libraries.md) | Per-library reference (TF/Keras/Prophet/sklearn/PyOD/sktime/HF) |
@@ -93,6 +102,8 @@ flowchart LR
 
 | Doc | Purpose |
 | --- | --- |
+| [agentic-development.md](agentic-development.md) | AQP's spec-pattern as the agentic-coder skill-artifact equivalent + consolidated ADLC security manifesto |
+| [multi-agent-patterns.md](multi-agent-patterns.md) | Sequential / Parallel / Debate / Coordinator / ReAct topologies mapped to [aqp/agents/graph/](../aqp/agents/graph/) |
 | [agentic-pipeline.md](agentic-pipeline.md) | Crew control plane |
 | [providers.md](providers.md) | LLM provider registry + tier routing |
 

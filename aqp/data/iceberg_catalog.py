@@ -178,7 +178,16 @@ def _require_pyiceberg() -> None:
 
 
 def _build_properties() -> dict[str, str]:
-    """Translate AQP settings into a PyIceberg ``Catalog`` properties dict."""
+    """Translate AQP settings into a PyIceberg ``Catalog`` properties dict.
+
+    The REST ``credential`` (and OAuth fields) resolve through
+    :class:`aqp.credentials.CredentialResolver`, so bootstrap-minted
+    runtime credentials supersede the static
+    ``settings.iceberg_rest_credential`` seed. SQL-mode (laptop dev)
+    bypasses the resolver entirely — there is no remote auth to make.
+    """
+    from aqp.credentials import CredentialKey, get_resolver
+
     rest_uri = (settings.iceberg_rest_uri or "").strip()
     warehouse_path = Path(settings.iceberg_warehouse).expanduser().resolve()
     warehouse_path.mkdir(parents=True, exist_ok=True)
@@ -190,14 +199,30 @@ def _build_properties() -> dict[str, str]:
             "uri": rest_uri,
             "warehouse": warehouse,
         }
-        if settings.iceberg_rest_credential:
-            props["credential"] = settings.iceberg_rest_credential
-        if settings.iceberg_rest_token:
-            props["token"] = settings.iceberg_rest_token
-        if settings.iceberg_rest_oauth2_server_uri:
-            props["oauth2-server-uri"] = settings.iceberg_rest_oauth2_server_uri
-        if settings.iceberg_rest_scope:
-            props["scope"] = settings.iceberg_rest_scope
+        rest_creds = get_resolver().resolve(
+            CredentialKey("iceberg", "rest"),
+            default={
+                "credential": settings.iceberg_rest_credential or "",
+                "token": settings.iceberg_rest_token or "",
+                "oauth2_server_uri": settings.iceberg_rest_oauth2_server_uri or "",
+                "scope": settings.iceberg_rest_scope or "",
+            },
+        )
+        # The Polaris bootstrap file lives under the ``polaris`` service
+        # key; consult it as the authoritative override when iceberg
+        # itself has no entry but Polaris does.
+        if not rest_creds.get("credential"):
+            polaris_rest = get_resolver().resolve(CredentialKey("polaris", "rest"))
+            if polaris_rest.get("credential"):
+                rest_creds = polaris_rest
+        if rest_creds.get("credential"):
+            props["credential"] = rest_creds.require("credential")
+        if rest_creds.get("token"):
+            props["token"] = rest_creds.require("token")
+        if rest_creds.get("oauth2_server_uri"):
+            props["oauth2-server-uri"] = rest_creds.require("oauth2_server_uri")
+        if rest_creds.get("scope"):
+            props["scope"] = rest_creds.require("scope")
         if settings.iceberg_rest_extra_properties_json:
             try:
                 extra = json.loads(settings.iceberg_rest_extra_properties_json)
@@ -205,6 +230,11 @@ def _build_properties() -> dict[str, str]:
                     props.update({str(k): str(v) for k, v in extra.items() if v is not None})
             except Exception:
                 logger.warning("Invalid AQP_ICEBERG_REST_EXTRA_PROPERTIES_JSON ignored", exc_info=True)
+        if rest_creds.source != "default":
+            logger.debug(
+                "Iceberg REST credential resolved from %s",
+                rest_creds.source,
+            )
     else:
         sqlite_path = warehouse_path / "catalog.db"
         props = {

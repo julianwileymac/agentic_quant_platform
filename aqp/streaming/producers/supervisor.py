@@ -17,11 +17,12 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from aqp.persistence import MarketDataProducerRow
-from aqp.services.cluster_mgmt_client import (
-    ClusterMgmtError,
-    get_cluster_mgmt_client,
+from aqp.kubernetes import (
+    KubernetesAdapterError,
+    KubernetesAdapterUnavailable,
+    get_kubernetes_adapter,
 )
+from aqp.persistence import MarketDataProducerRow
 from aqp.streaming.producers.catalog import (
     PRODUCER_CATALOG,
     list_producer_specs,
@@ -246,14 +247,16 @@ class ProducerSupervisor:
         details: dict[str, Any] = {}
         if self._is_kubernetes(row):
             try:
-                client = get_cluster_mgmt_client()
-                if row.kind == "alphavantage":
-                    snap = client.alphavantage_health()
+                adapter = get_kubernetes_adapter()
+                if not adapter.is_available():
+                    details = {"error": "no KubernetesAdapter configured"}
+                elif row.kind == "alphavantage":
+                    snap = adapter.alphavantage_health()
                     details = snap or {}
                 else:
                     details = {
                         "deployment": f"{row.deployment_namespace}/{row.deployment_name}",
-                        "managed_via": "k8s_scale_deployment",
+                        "managed_via": "scale_deployment",
                     }
             except Exception as exc:  # noqa: BLE001
                 details = {"error": str(exc)}
@@ -279,21 +282,24 @@ class ProducerSupervisor:
         row = self.get(session, name)
         if self._is_kubernetes(row):
             try:
-                client = get_cluster_mgmt_client()
-                # Best-effort: the management API exposes /api/deployments/{ns}/{name}/logs in newer revisions.
-                response = client._request(  # type: ignore[attr-defined]
-                    "GET",
-                    f"/deployments/{row.deployment_namespace}/{row.deployment_name}/logs",
-                    params={"tail": tail},
+                adapter = get_kubernetes_adapter()
+                if not adapter.is_available():
+                    return {
+                        "name": name,
+                        "pod": None,
+                        "lines": ["<no KubernetesAdapter configured>"],
+                    }
+                raw = adapter.pod_logs(
+                    namespace=str(row.deployment_namespace or ""),
+                    name=str(row.deployment_name or ""),
+                    tail_lines=int(tail),
                 )
-                lines: list[str]
-                if isinstance(response, dict) and isinstance(response.get("lines"), list):
-                    lines = [str(x) for x in response["lines"]][-tail:]
-                elif isinstance(response, str):
-                    lines = response.splitlines()[-tail:]
-                else:
-                    lines = []
+                lines = (raw or "").splitlines()[-tail:]
                 return {"name": name, "pod": None, "lines": lines}
+            except KubernetesAdapterUnavailable as exc:
+                return {"name": name, "pod": None, "lines": [f"<unavailable: {exc}>"]}
+            except KubernetesAdapterError as exc:
+                return {"name": name, "pod": None, "lines": [f"<adapter error: {exc}>"]}
             except Exception as exc:  # noqa: BLE001
                 return {"name": name, "pod": None, "lines": [f"<unavailable: {exc}>"]}
         # Local: stream tail from subprocess (best-effort)
@@ -307,12 +313,25 @@ class ProducerSupervisor:
     def _scale_kubernetes(
         self, session: Session, row: MarketDataProducerRow, replicas: int
     ) -> dict[str, Any]:
-        client = get_cluster_mgmt_client()
+        adapter = get_kubernetes_adapter()
+        if not adapter.is_available():
+            self._stamp_status(
+                session,
+                row,
+                status="error",
+                error="no KubernetesAdapter configured",
+            )
+            raise ProducerError(
+                "kubernetes producer scale requires a configured KubernetesAdapter"
+            )
         try:
             if row.kind == "alphavantage":
-                snap = client.alphavantage_stream(enable=replicas > 0, replicas=max(1, replicas) if replicas > 0 else 0)
+                snap = adapter.alphavantage_stream(
+                    enable=replicas > 0,
+                    replicas=max(1, replicas) if replicas > 0 else 0,
+                )
             elif row.deployment_namespace and row.deployment_name:
-                snap = client.k8s_scale_deployment(
+                snap = adapter.scale_deployment(
                     namespace=row.deployment_namespace,
                     name=row.deployment_name,
                     replicas=replicas,
@@ -321,10 +340,15 @@ class ProducerSupervisor:
                 raise ProducerError(
                     "kubernetes producer missing deployment_namespace/name"
                 )
-            current = int(snap.get("desired_replicas", replicas))
-            self._stamp_status(session, row, status="running" if replicas > 0 else "stopped", replicas=current)
+            current = int(snap.get("desired_replicas", replicas) if isinstance(snap, dict) else replicas)
+            self._stamp_status(
+                session,
+                row,
+                status="running" if replicas > 0 else "stopped",
+                replicas=current,
+            )
             return {**self._sanitised_status(row), "details": snap}
-        except ClusterMgmtError as exc:
+        except KubernetesAdapterError as exc:
             self._stamp_status(session, row, status="error", error=str(exc))
             raise ProducerError(f"scale failed: {exc}") from exc
 

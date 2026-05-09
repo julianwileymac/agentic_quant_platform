@@ -24,9 +24,24 @@ services:
       AWS_REGION: "${AQP_S3_REGION:-us-east-1}"
       AWS_ACCESS_KEY_ID: "${AQP_S3_ACCESS_KEY:-aqpminio}"
       AWS_SECRET_ACCESS_KEY: "${AQP_S3_SECRET_KEY:-aqpminiosecret}"
+      # The catalog's ``storageConfigInfo.endpoint`` +
+      # ``pathStyleAccess: true`` (set by AQP's iceberg_bootstrap when
+      # the catalog is first created) is what Polaris's server-side
+      # ``S3FileIO`` reads. We deliberately do NOT set
+      # ``AWS_ENDPOINT_URL_S3`` globally here — that env var redirects
+      # the SDK but does not toggle path-style addressing, which makes
+      # the SDK fall into virtual-host mode (``aqp-iceberg.minio``)
+      # that fails to resolve.
       POLARIS_BOOTSTRAP_CREDENTIALS: "POLARIS,${POLARIS_CLIENT_ID:-root},${POLARIS_CLIENT_SECRET:-s3cr3t}"
       polaris.realm-context.realms: "POLARIS"
-      polaris.features."SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION": "true"
+      # ``SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION=false`` (default) makes
+      # Polaris vend creds back to the client (PyIceberg / Trino) which
+      # then writes to MinIO using its own AWS SDK. PyIceberg reads
+      # ``s3.endpoint`` + ``s3.path-style-access`` from the catalog
+      # properties correctly, so this avoids the Polaris-side
+      # ``UnknownHostException`` we hit when its server-side ``S3FileIO``
+      # ignores ``pathStyleAccess``.
+      polaris.features."SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION": "false"
       polaris.features."ALLOW_SETTING_S3_ENDPOINTS": "true"
       quarkus.otel.sdk.disabled: "true"
     # Host 8183 avoids clashing with ``iceberg-rest`` (8181) when both profiles run.

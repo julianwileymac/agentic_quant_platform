@@ -1,4 +1,4 @@
-"""``/cluster-mgmt`` REST surface — proxy to the rpi_kubernetes management API.
+"""``/cluster`` REST surface — pluggable :class:`KubernetesAdapter`.
 
 These endpoints re-expose cluster-level operations under AQP's auth /
 tenancy layer so users do not have to talk to two backends. Native
@@ -6,6 +6,15 @@ Kafka and Flink admin lives at ``/streaming/{kafka,flink}/*`` — this
 proxy is the source of truth for cluster-only resources (Strimzi
 users, Kafka Connect connectors, generic Deployment scaling, Alpha
 Vantage producer toggle).
+
+The legacy mount path ``/cluster-mgmt/*`` continues to work via the
+:data:`legacy_router` alias so existing clients are unaffected.
+
+The behaviour is identical regardless of which
+:class:`aqp.kubernetes.KubernetesAdapter` is active — :class:`NoneAdapter`
+returns 503, :class:`RpiClusterAdapter` forwards to the rpi management
+HTTP API, :class:`InClusterAdapter` calls the K8s SDK directly, and
+:class:`LocalComposeAdapter` wraps ``docker compose``.
 """
 from __future__ import annotations
 
@@ -15,42 +24,66 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
-from aqp.services.cluster_mgmt_client import (
-    ClusterMgmtClient,
-    ClusterMgmtError,
-    get_cluster_mgmt_client,
+from aqp.kubernetes import (
+    KubernetesAdapter,
+    KubernetesAdapterError,
+    KubernetesAdapterUnavailable,
+    get_kubernetes_adapter,
 )
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/cluster-mgmt", tags=["streaming", "cluster"])
+
+_routes = APIRouter(tags=["streaming", "cluster"])
+router = APIRouter(prefix="/cluster", tags=["streaming", "cluster"])
+legacy_router = APIRouter(prefix="/cluster-mgmt", tags=["streaming", "cluster"])
 
 
-def _client() -> ClusterMgmtClient:
-    client = get_cluster_mgmt_client()
-    if not client.configured:
-        raise HTTPException(
-            status_code=503,
-            detail="cluster_mgmt_url not configured (set AQP_CLUSTER_MGMT_URL)",
-        )
-    return client
+def _adapter() -> KubernetesAdapter:
+    return get_kubernetes_adapter()
 
 
-# --- kafka ----------------------------------------------------------------
-@router.get("/kafka/topics")
+def _wrap_unavailable(exc: KubernetesAdapterUnavailable) -> HTTPException:
+    return HTTPException(status_code=503, detail=str(exc))
+
+
+def _wrap_error(exc: KubernetesAdapterError) -> HTTPException:
+    return HTTPException(status_code=502, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Status / introspection
+# ---------------------------------------------------------------------------
+
+
+@_routes.get("/status")
+def status() -> dict[str, Any]:
+    return _adapter().describe()
+
+
+# ---------------------------------------------------------------------------
+# Kafka
+# ---------------------------------------------------------------------------
+
+
+@_routes.get("/kafka/topics")
 def kafka_topics() -> list[dict[str, Any]]:
     try:
-        return _client().kafka_topics()
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _adapter().kafka_topics()
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
 
 
-@router.get("/kafka/users")
+@_routes.get("/kafka/users")
 def kafka_users() -> list[dict[str, Any]]:
     try:
-        return _client().kafka_users()
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _adapter().kafka_users()
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
 
 
 class KafkaUserCreate(BaseModel):
@@ -59,116 +92,158 @@ class KafkaUserCreate(BaseModel):
     authorization: dict[str, Any] | None = None
 
 
-@router.post("/kafka/users")
+@_routes.post("/kafka/users")
 def create_kafka_user(body: KafkaUserCreate) -> dict[str, Any]:
     try:
-        return _client().kafka_create_user(body.model_dump(mode="json"))
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _adapter().kafka_create_user(body.model_dump(mode="json"))
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
 
 
-@router.delete("/kafka/users/{name}", status_code=204, response_class=Response)
+@_routes.delete("/kafka/users/{name}", status_code=204, response_class=Response)
 def delete_kafka_user(name: str) -> Response:
     try:
-        _client().kafka_delete_user(name)
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        _adapter().kafka_delete_user(name)
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
     return Response(status_code=204)
 
 
-@router.get("/kafka/users/{name}/secret")
+@_routes.get("/kafka/users/{name}/secret")
 def kafka_user_secret(name: str) -> dict[str, Any]:
     try:
-        return _client().kafka_user_secret(name)
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _adapter().kafka_user_secret(name)
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
 
 
-@router.get("/kafka/connectors")
+@_routes.get("/kafka/connectors")
 def kafka_connectors() -> list[dict[str, Any]]:
     try:
-        return _client().kafka_connectors()
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _adapter().kafka_connectors()
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
 
 
-@router.patch("/kafka/connectors/{name}/state")
+@_routes.patch("/kafka/connectors/{name}/state")
 def kafka_patch_connector(name: str, state: str) -> dict[str, Any]:
     try:
-        return _client().kafka_patch_connector(name, state)
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _adapter().kafka_patch_connector(name, state)
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
 
 
-@router.get("/kafka/consumer-groups")
+@_routes.get("/kafka/consumer-groups")
 def kafka_consumer_groups() -> list[dict[str, Any]]:
     try:
-        return _client().kafka_consumer_groups()
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _adapter().kafka_consumer_groups()
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
 
 
-@router.get("/kafka/schema-registry/subjects")
+@_routes.get("/kafka/schema-registry/subjects")
 def kafka_schema_subjects() -> list[dict[str, Any]]:
     try:
-        return _client().kafka_schema_subjects()
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _adapter().kafka_schema_subjects()
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
 
 
-# --- flink ----------------------------------------------------------------
-@router.get("/flink/deployments")
+# ---------------------------------------------------------------------------
+# Flink
+# ---------------------------------------------------------------------------
+
+
+@_routes.get("/flink/deployments")
 def flink_deployments() -> list[dict[str, Any]]:
     try:
-        return _client().flink_deployments()
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _adapter().flink_deployments()
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
 
 
-@router.get("/flink/sessionjobs")
+@_routes.get("/flink/sessionjobs")
 def flink_session_jobs(namespace: str | None = None) -> list[dict[str, Any]]:
     try:
-        return _client().flink_session_jobs(namespace=namespace)
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _adapter().flink_session_jobs(namespace=namespace)
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
 
 
-@router.get("/flink/jobs")
+@_routes.get("/flink/jobs")
 def flink_jobs() -> list[dict[str, Any]]:
     try:
-        return _client().flink_jobs()
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _adapter().flink_jobs()
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
 
 
-@router.get("/flink/jobs/{job_id}")
+@_routes.get("/flink/jobs/{job_id}")
 def flink_job(job_id: str) -> dict[str, Any]:
     try:
-        return _client().flink_job(job_id)
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _adapter().flink_job(job_id)
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
 
 
-# --- alpha vantage producer toggle ---------------------------------------
+# ---------------------------------------------------------------------------
+# Alpha Vantage
+# ---------------------------------------------------------------------------
+
+
 class AlphaVantageStreamRequest(BaseModel):
     enable: bool
     replicas: int = 1
 
 
-@router.post("/alphavantage/stream")
+@_routes.post("/alphavantage/stream")
 def alphavantage_stream(req: AlphaVantageStreamRequest) -> dict[str, Any]:
     try:
-        return _client().alphavantage_stream(enable=req.enable, replicas=req.replicas)
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _adapter().alphavantage_stream(enable=req.enable, replicas=req.replicas)
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
 
 
-@router.get("/alphavantage/health")
+@_routes.get("/alphavantage/health")
 def alphavantage_health() -> dict[str, Any]:
     try:
-        return _client().alphavantage_health()
-    except ClusterMgmtError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return _adapter().alphavantage_health()
+    except KubernetesAdapterUnavailable as exc:
+        raise _wrap_unavailable(exc) from exc
+    except KubernetesAdapterError as exc:
+        raise _wrap_error(exc) from exc
 
 
-__all__ = ["router"]
+# ---------------------------------------------------------------------------
+# Mount the shared route table on both prefixes (forwards-compatible).
+# ---------------------------------------------------------------------------
+
+router.include_router(_routes)
+legacy_router.include_router(_routes)
+
+
+__all__ = ["router", "legacy_router"]

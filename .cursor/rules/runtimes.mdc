@@ -1,0 +1,122 @@
+---
+description: Hash-locked spec runtimes (AgentRuntime / BotRuntime / RLRuntime / AnalysisRuntime) and the immutable spec_versions contract.
+globs:
+  - aqp/agents/**/*.py
+  - aqp/bots/**/*.py
+  - aqp/rl/**/*.py
+  - aqp/analysis/**/*.py
+  - configs/agents/**/*.yaml
+  - configs/bots/**/*.yaml
+  - configs/rl/**/*.yaml
+  - tests/agents/**/*.py
+  - tests/bots/**/*.py
+  - tests/rl/**/*.py
+  - tests/analysis/**/*.py
+alwaysApply: false
+---
+
+# Spec runtimes
+
+AQP has four hash-locked, ledger-backed spec runtimes. They are AQP's
+**skill-artifact** equivalent — see
+[docs/agentic-development.md](mdc:docs/agentic-development.md) for the
+full mapping. This rule consolidates AGENTS.md hard rules **12–20** and
+**22–25** so you don't have to re-read the whole file when working in
+these directories.
+
+## The four runtimes
+
+| Spec | Runtime | Versions table | Canonical doc |
+| --- | --- | --- | --- |
+| [`AgentSpec`](mdc:aqp/agents/spec.py) | [`AgentRuntime`](mdc:aqp/agents/runtime.py) | `agent_spec_versions` | [docs/agents.md](mdc:docs/agents.md) |
+| [`BotSpec`](mdc:aqp/bots/spec.py) | [`BotRuntime`](mdc:aqp/bots/runtime.py) | `bot_versions` | [docs/bots.md](mdc:docs/bots.md) |
+| [`RLExperimentSpec`](mdc:aqp/rl/spec.py) | [`RLRuntime`](mdc:aqp/rl/runtime.py) | `rl_experiment_versions` | [docs/rl-framework.md](mdc:docs/rl-framework.md) |
+| [`AnalysisSpec`](mdc:aqp/analysis/spec.py) | [`AnalysisRuntime`](mdc:aqp/analysis/runtime.py) | `analysis_spec_versions` | [docs/analysis-framework.md](mdc:docs/analysis-framework.md) |
+
+## Hard rules
+
+1. **All lifecycle actions go through the runtime.** Telemetry,
+   guardrails, cost caps, ledger rows, and immutable version
+   snapshots depend on it.
+   - Agents: `AgentRuntime.run(...)` — never call `router_complete`
+     directly inside an agent module. Declare the model in
+     `AgentSpec.model` and let the runtime drive it.
+   - Bots: `BotRuntime.{backtest,paper,chat,deploy}(...)` — never call
+     `run_backtest_from_config` / `build_session_from_config` /
+     `AgentRuntime` directly from a bot subclass. Derive the cfg in
+     `BaseBot._derive_*_cfg`.
+   - RL: `RLRuntime.{train,evaluate,paper,replay,walk_forward}(...)` —
+     Celery tasks (`aqp.tasks.rl_tasks`) and API routes
+     (`aqp.api.routes.rl`) wrap it. Never call `agent.train` directly.
+   - Analysis: `AnalysisRuntime.{run,preview}(...)` — Celery tasks
+     ([aqp/tasks/analysis_flow_tasks.py](mdc:aqp/tasks/analysis_flow_tasks.py))
+     and the REST router
+     ([aqp/api/routes/analysis.py](mdc:aqp/api/routes/analysis.py)) wrap
+     it. Never call a flow runner directly.
+2. **`*_spec_versions` rows are immutable, hash-locked snapshots.**
+   Never update them in place. Re-snapshotting via
+   `persist_spec(...)` (in each subsystem's `registry.py`) creates a
+   **new** version row when the SHA-256 hash changes — old versions
+   stay for replay / audit.
+3. **No "rewrite-skill-on-failure".** When an agent / bot / RL
+   experiment / analysis flow fails, the next iteration produces a
+   **new** spec version. Never mutate a deployed spec to patch a bug —
+   author a new spec, snapshot it, switch traffic.
+4. **LLM calls in agent / RL bodies still route through
+   `router_complete`.** `LLMHybridAgent`
+   ([aqp/rl/agents/llm_hybrid.py](mdc:aqp/rl/agents/llm_hybrid.py))
+   and `AgentRuntime` both go through
+   [aqp/llm/providers/router.py](mdc:aqp/llm/providers/router.py). No
+   direct `litellm.completion` / `OllamaClient`.
+5. **Agents MUST NOT read Postgres / Iceberg directly.** Every
+   catalog / dataset / entity / pipeline read goes through a
+   registered `DataMCPTool`. See
+   [data-mcp.mdc](mdc:.cursor/rules/data-mcp.mdc) for the boundary
+   contract and adoption checklist.
+6. **RL components register via the [`RLComponent`](mdc:aqp/rl/core/base.py)
+   metaclass.** Set `rl_kind` (one of `rl_env` / `rl_reward` /
+   `rl_observation` / `rl_action` / `rl_termination` / `rl_policy` /
+   `rl_agent` / `rl_data` / `rl_ensembler` / `rl_experiment` /
+   `rl_trajectory_store`) and `rl_alias` — the metaclass calls
+   `@register` automatically. Don't decorate manually.
+7. **Analysis flows register via `@register_analysis_flow`.**
+   Subclass [`FlowParams`](mdc:aqp/analysis/base.py) for params; the
+   descriptor + JSON-schema-driven form generation are wired
+   automatically. Flows must NOT call LLM SDKs directly —
+   interpretation lives in the analysis-AGENTS stack
+   ([docs/analysis-agents.md](mdc:docs/analysis-agents.md)).
+
+## Adding a new spec — the checklist
+
+1. Author the YAML under `configs/<kind>/...` or instantiate the
+   `*Spec` programmatically and call `add_spec(spec)`.
+2. Run the runtime once — first run snapshots a new
+   `*_spec_versions` row automatically.
+3. The run row records `spec_version_id` so it can be deterministically
+   replayed.
+4. To change behaviour: edit the spec → re-run → a **new** version row
+   is inserted (old version stays for replay).
+
+## Don't
+
+- Don't bypass the runtime for "convenience" inside a subclass.
+  Telemetry / cost caps / immutable snapshots all break.
+- Don't mutate `*_spec_versions` rows. They are append-only audit
+  records.
+- Don't rewrite a "broken" spec on failure — author a new spec.
+- Don't put backtest / strategy / engine / agent logic inside a Bot
+  subclass. Bots compose references and dispatch to existing
+  primitives via `BotRuntime`.
+- Don't call `router_complete` inside an agent body. Declare the
+  model in `AgentSpec.model`.
+- Don't write decision / episode / reflection rows to Redis from
+  agent code — use
+  [`RedisHybridMemory`](mdc:aqp/llm/memory.py).
+- Don't write RL trajectories / equity / actions / reward-decomp
+  directly to Iceberg — buffer through
+  [`IcebergTrajectoryStore`](mdc:aqp/rl/trajectories/iceberg_writer.py).
+- Don't write analysis output to a non-`aqp_gold_analysis_*`
+  namespace. The default tail is
+  `aqp_gold_analysis_<flow.namespace>`; override via
+  `output_namespace` on `register_analysis_flow` if you need a
+  different tail.

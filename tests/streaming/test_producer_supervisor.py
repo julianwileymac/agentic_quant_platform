@@ -33,19 +33,31 @@ def test_seed_catalog_idempotent(in_memory_db, monkeypatch) -> None:
 
 
 def test_scale_alphavantage_via_proxy(in_memory_db, monkeypatch) -> None:
+    """Supervisor scales kubernetes producers via the active KubernetesAdapter.
+
+    Previously the supervisor reached for ``get_cluster_mgmt_client``
+    directly; M4 routes the call through
+    :class:`aqp.kubernetes.KubernetesAdapter`. The test still covers
+    the same behaviour via a stub adapter.
+    """
     _ensure_models()
     from aqp.persistence.db import get_session
     from aqp.streaming.producers import ProducerSupervisor
 
     captured: dict[str, Any] = {}
 
-    class _FakeClient:
+    class _FakeAdapter:
+        adapter_kind = "stub"
+
+        def is_available(self) -> bool:
+            return True
+
         def alphavantage_stream(self, *, enable: bool, replicas: int = 1) -> dict[str, Any]:
             captured["enable"] = enable
             captured["replicas"] = replicas
             return {"desired_replicas": replicas if enable else 0, "ready": True}
 
-        def k8s_scale_deployment(self, **kwargs: Any) -> dict[str, Any]:
+        def scale_deployment(self, **kwargs: Any) -> dict[str, Any]:
             captured["k8s"] = kwargs
             return {"desired_replicas": kwargs.get("replicas", 0)}
 
@@ -54,7 +66,7 @@ def test_scale_alphavantage_via_proxy(in_memory_db, monkeypatch) -> None:
 
     import aqp.streaming.producers.supervisor as sup_mod
 
-    monkeypatch.setattr(sup_mod, "get_cluster_mgmt_client", lambda: _FakeClient())
+    monkeypatch.setattr(sup_mod, "get_kubernetes_adapter", lambda: _FakeAdapter())
 
     supervisor = ProducerSupervisor()
     with get_session() as session:
