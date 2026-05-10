@@ -231,7 +231,23 @@ def create_connection(spec: AirbyteConnectionSpec) -> dict[str, Any]:
         )
         session.add(row)
         session.flush()
-        return _connection_summary(row)
+        summary = _connection_summary(row)
+        try:
+            from aqp.cache import cache_write_through
+
+            cache_write_through(
+                "airbyte_connectors",
+                {
+                    "id": str(row.source_connector_id),
+                    "name": str(row.name),
+                    "row_id": str(row.id),
+                    "kind": "source",
+                    "runtime": "hybrid",
+                },
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        return summary
 
 
 @router.get("/connections/{connection_id}", response_model=AirbyteConnectionSpec)

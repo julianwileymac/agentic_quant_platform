@@ -1,14 +1,12 @@
-import { Activity, FlaskConical, Network, Play, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Activity, FlaskConical, Network, Play } from "lucide-react";
 
-import { CodeEditor } from "@/components/common/CodeEditor";
+import { ConnectorBuilderForm } from "@/components/airbyte/builder/ConnectorBuilderForm";
 import { type ColumnDef, DataTable } from "@/components/common/DataTable";
 import { MetricsGrid, type Metric } from "@/components/common/MetricsGrid";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/toast";
 import {
   AirbyteApi,
@@ -51,9 +49,6 @@ const TITLE_FOR: Record<AirbyteView, string> = {
  * (`/airbyte/{,connectors,builder,runs}`) render this single component.
  */
 export function AirbyteWorkspace({ view }: Props) {
-  const [selectedConnector, setSelectedConnector] = useState("alpha-vantage");
-  const [configText, setConfigText] = useState("{}");
-
   const health = useApiQuery<AirbyteHealthPayload>({
     queryKey: ["airbyte", "health"],
     path: "/airbyte/health",
@@ -82,34 +77,6 @@ export function AirbyteWorkspace({ view }: Props) {
     staleTime: 15_000,
     select: (raw) => (Array.isArray(raw) ? (raw as AirbyteRun[]) : []),
   });
-
-  const connectorOptions = useMemo(
-    () =>
-      (connectors.data ?? [])
-        .filter((c) => c.kind === "source")
-        .map((c) => ({ value: c.id, label: c.name })),
-    [connectors.data],
-  );
-
-  const queueDiscover = async () => {
-    try {
-      const cfg = parseConfig(configText);
-      const task = await AirbyteApi.discover(selectedConnector, cfg);
-      toast.success(`Discovery queued: ${task.task_id}`);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : (err as Error).message);
-    }
-  };
-
-  const queueDryRun = async () => {
-    try {
-      const cfg = parseConfig(configText);
-      const task = await AirbyteApi.embeddedRead(selectedConnector, cfg);
-      toast.success(`Embedded dry-run queued: ${task.task_id}`);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : (err as Error).message);
-    }
-  };
 
   const queueSync = async (connectionId: string) => {
     try {
@@ -168,44 +135,25 @@ export function AirbyteWorkspace({ view }: Props) {
       ) : null}
 
       {view === "builder" ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FlaskConical className="h-4 w-4" /> Connector development + test runs
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="connector">Source connector</Label>
-              <select
-                id="connector"
-                value={selectedConnector}
-                onChange={(e) => setSelectedConnector(e.target.value)}
-                className="h-9 max-w-md rounded-md border border-[var(--border-default)] bg-[var(--bg-app)] px-3 text-sm font-mono"
-              >
-                {connectorOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label>Config JSON</Label>
-              <div className="h-56 overflow-hidden rounded-md">
-                <CodeEditor language="json" value={configText} onChange={setConfigText} />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={queueDiscover} className="gap-2">
-                <Search className="h-4 w-4" /> Discover streams
-              </Button>
-              <Button onClick={queueDryRun} className="gap-2">
-                <Play className="h-4 w-4" /> Embedded dry-run
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col gap-3">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FlaskConical className="h-4 w-4" /> Visual connector builder (AQP-native)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-xs text-[var(--text-secondary)]">
+              Schema-driven form. Authentication uses the credential
+              picker (whitelist-only) so secrets never sit in
+              free-text inputs. Custom Python lives in
+              <code className="ml-1">aqp/data/fetchers/userland/</code>
+              and runs inside AQP's worker — no
+              <code className="ml-1">AIRBYTE_ENABLE_UNSAFE_CODE</code>
+              required.
+            </CardContent>
+          </Card>
+          <ConnectorBuilderForm />
+        </div>
       ) : null}
 
       {view === "runs" ? (
@@ -391,10 +339,3 @@ function RunsTable({ rows, loading }: { rows: AirbyteRun[]; loading: boolean }) 
   );
 }
 
-function parseConfig(text: string): Record<string, unknown> {
-  const parsed = JSON.parse(text || "{}") as unknown;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Config must be a JSON object");
-  }
-  return parsed as Record<string, unknown>;
-}

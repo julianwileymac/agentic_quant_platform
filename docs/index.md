@@ -73,6 +73,12 @@ flowchart LR
 | --- | --- |
 | [data-plane.md](data-plane.md) | Provider → cache → DuckDB view pipeline |
 | [data-catalog.md](data-catalog.md) | Iceberg catalog + ingest pipeline |
+| [data-self-service.md](data-self-service.md) | Master narrative for the four-phase self-service data fabric expansion |
+| [datasets-catalog.md](datasets-catalog.md) | Kedro-style `BaseDataset` abstraction (data fabric phase 0) |
+| [metadata-cache.md](metadata-cache.md) | Redis prefetch cache backing every entity dropdown (data fabric phase 0) |
+| [data-discovery.md](data-discovery.md) | Active discovery browser unifying ingested + uningested catalog entries (data fabric phase 1) |
+| [airbyte-builder.md](airbyte-builder.md) | Schema-driven Airbyte connector builder + AQP Fetcher codegen (data fabric phase 2) |
+| [dagster-sandbox.md](dagster-sandbox.md) | Ephemeral interactive Dagster + Airbyte sandbox console (data fabric phase 3) |
 | [visualization-layer.md](visualization-layer.md) | Trino-backed Superset and Bokeh exploration layer |
 | [alpha-vantage.md](alpha-vantage.md) | AV provider quota + cache |
 | [streaming.md](streaming.md) | Kafka topic taxonomy + ingester layout |

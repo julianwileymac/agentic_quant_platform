@@ -10,9 +10,23 @@ pages and adds six new entries:
 | **Pipelines Hub** | `/data/pipelines/hub` | `/data-control/*`, `/engine/*`, `/airbyte/*`, `/dbt/*`, `/dagster/*` |
 | **Sinks** | `/data/sinks` | `/sinks` |
 | **Project Datasets** | `/data/datasets/configs` | `/projects/{id}/dataset-configs` |
+| **Discovery** | `/data/discovery` | `/discovery/*` (data fabric phase 1) |
+| **Sandbox** | `/data/sandbox` | `/dagster/sandbox/*` (data fabric phase 3) |
 | **Kafka** | `/streaming/kafka` | `/streaming/kafka/*` (native + cluster-mgmt fallback) |
 | **Flink** | `/streaming/flink` | `/streaming/flink/*` (native + cluster-mgmt fallback) |
 | **Producers** | `/streaming/producers` | `/streaming/producers/*` |
+
+> See also:
+> [docs/datasets-catalog.md](datasets-catalog.md) — the Kedro-style
+> `BaseDataset` abstraction every catalog entry maps to.
+> [docs/metadata-cache.md](metadata-cache.md) — the Redis prefetch
+> cache that powers `<EntityPicker>` dropdowns on every form.
+> [docs/data-discovery.md](data-discovery.md) — unified browser
+> for ingested + uningested catalog entries.
+> [docs/airbyte-builder.md](airbyte-builder.md) — graphical Airbyte
+> builder + AQP Fetcher codegen.
+> [docs/dagster-sandbox.md](dagster-sandbox.md) — ephemeral
+> interactive Dagster + Airbyte sandbox console.
 
 ## Sinks
 

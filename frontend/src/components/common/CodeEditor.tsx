@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 interface CodeEditorProps {
   value: string;
   onChange?: (value: string) => void;
-  language?: "python" | "json" | "sql";
+  language?: "python" | "json" | "sql" | "yaml";
   readOnly?: boolean;
   className?: string;
   height?: string | number;

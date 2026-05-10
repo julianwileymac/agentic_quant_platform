@@ -1,0 +1,67 @@
+# Interactive Dagster sandbox (data fabric phase 3)
+
+This rule scopes
+[`aqp/dagster/sandbox/`](mdc:aqp/dagster/sandbox),
+[`aqp/api/routes/dagster_sandbox.py`](mdc:aqp/api/routes/dagster_sandbox.py),
+[`aqp/tasks/dagster_sandbox_tasks.py`](mdc:aqp/tasks/dagster_sandbox_tasks.py),
+[`aqp/persistence/models_dagster_sandbox.py`](mdc:aqp/persistence/models_dagster_sandbox.py),
+and the frontend
+[`SandboxConsole`](mdc:frontend/src/components/sandbox/SandboxConsole.tsx).
+
+Narrative: [docs/dagster-sandbox.md](mdc:docs/dagster-sandbox.md).
+Phase plan:
+[.cursor/plans/data-self-service-phase-3.plan.md](mdc:.cursor/plans/data-self-service-phase-3.plan.md).
+
+## Hard rules
+
+1. **Sandbox writes never reach the production Redis prefix or the
+   production Iceberg / Polaris endpoints.** Every sandbox key lives
+   under `aqp:sandbox:<session_id>:*`
+   ([`SandboxRedisNamespace`](mdc:aqp/dagster/sandbox/redis_isolation.py)).
+   Production endpoints are substituted via
+   [`SandboxEnvResolver`](mdc:aqp/dagster/sandbox/env_resolver.py).
+   Adding a new outbound endpoint that the sandbox might touch
+   means adding it to `with_sandbox_overrides(...)`.
+2. **Streaming uses the canonical progress frame.**
+   [`execute_sandbox_session`](mdc:aqp/tasks/dagster_sandbox_tasks.py)
+   emits through
+   [`_progress.emit`](mdc:aqp/tasks/_progress.py) with the standard
+   `{task_id, stage, message, timestamp, **extras}` shape (AGENTS
+   rule 4). Don't introduce a custom WebSocket transport.
+3. **Authoritative session state lives in the runtime registry.**
+   [`SandboxRuntime._registry`](mdc:aqp/dagster/sandbox/runtime.py)
+   is the source of truth; the Postgres
+   `dagster_sandbox_sessions` row is best-effort audit. Don't query
+   the ledger to reconstruct execution semantics.
+4. **Teardown is idempotent.** Always call `runtime.teardown()` on
+   the way out; the routine logs but does not raise on missing
+   folders / unreachable Redis. The ledger row's `status` flips to
+   `closed` so the janitor can prune.
+5. **The sandbox never ships secrets in `components_json`.**
+   Component bodies are YAML descriptors. Credentials resolve
+   through [`CredentialResolver`](mdc:aqp/credentials/resolver.py).
+
+## Adding a sandbox feature
+
+1. New component shape → extend
+   [`airbyte_bridge.py`](mdc:aqp/dagster/sandbox/airbyte_bridge.py)
+   or add a sibling translator under
+   [`aqp/dagster/sandbox/`](mdc:aqp/dagster/sandbox).
+2. New asset materialisation behaviour → extend
+   [`SandboxExecutor`](mdc:aqp/dagster/sandbox/executor.py); the
+   fallback walk must remain Dagster-free so laptops without the
+   full code-server still get useful events.
+3. New env override → add a key to
+   [`with_sandbox_overrides`](mdc:aqp/dagster/sandbox/env_resolver.py).
+
+## Don't
+
+- Don't import `dagster.*` at module top level in routes / tasks.
+  The optional dependency is loaded lazily inside
+  `SandboxExecutor.load`.
+- Don't ship a route that mutates `dagster_sandbox_sessions`
+  directly — go through `SandboxRuntime` so the in-memory state
+  stays consistent with the ledger.
+- Don't bypass the amber `[SANDBOX]` indicator in the frontend. The
+  paper-mode guardrail in `frontend.mdc` extends to sandbox
+  sessions.

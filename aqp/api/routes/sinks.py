@@ -173,7 +173,22 @@ def create_endpoint(
         except SinkValidationError as exc:
             session.rollback()
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return SinkSummaryView(**sink_summary(row))
+        view = SinkSummaryView(**sink_summary(row))
+        try:
+            from aqp.cache import cache_write_through
+
+            cache_write_through(
+                "sink_names",
+                {
+                    "id": str(row.id),
+                    "name": str(row.name),
+                    "kind": str(row.kind),
+                    "enabled": "true" if row.enabled else "false",
+                },
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        return view
 
 
 @router.get("/{sink_id}", response_model=SinkSummaryView)
@@ -216,18 +231,41 @@ def patch_endpoint(
         except SinkValidationError as exc:
             session.rollback()
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return SinkSummaryView(**sink_summary(row))
+        view = SinkSummaryView(**sink_summary(row))
+        try:
+            from aqp.cache import cache_write_through
+
+            cache_write_through(
+                "sink_names",
+                {
+                    "id": str(row.id),
+                    "name": str(row.name),
+                    "kind": str(row.kind),
+                    "enabled": "true" if row.enabled else "false",
+                },
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        return view
 
 
 @router.delete("/{sink_id}", status_code=204, response_class=Response)
 def delete_endpoint(sink_id: str) -> Response:
     with get_session() as session:
         try:
+            row = get_sink(session, sink_id)
+            sink_name = str(row.name) if row else None
             delete_sink(session, sink_id)
             session.commit()
         except SinkNotFoundError as exc:
             session.rollback()
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+    try:
+        from aqp.cache import cache_invalidate
+
+        cache_invalidate("sink_names", sink_id, name=sink_name)
+    except Exception:  # noqa: BLE001
+        pass
     return Response(status_code=204)
 
 

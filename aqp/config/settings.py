@@ -137,6 +137,33 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0")
     redis_pubsub_url: str = Field(default="redis://localhost:6379/1")
 
+    # --- Metadata cache (data fabric phase 0) ---
+    # Whitelist-only entity dropdowns (datasets / namespaces / sinks /
+    # connectors / projects / credentials) read from a Redis prefetch
+    # layer. Falls back to in-memory when Redis is unreachable so unit
+    # tests + the local dev loop never hard-fail.
+    cache_enabled: bool = Field(default=True)
+    cache_redis_url: str = Field(default="")  # empty -> reuse redis_url
+    cache_redis_db: int = Field(default=2)
+    cache_key_prefix: str = Field(default="aqp:cache")
+    # Periodic full re-prefetch interval (seconds). Write-through keeps
+    # the cache live; this is a safety-net rebuild for clock drift.
+    cache_refresh_interval_s: int = Field(default=300)
+    # Master data (kinds, namespaces) lives ~24h; instance data
+    # (datasets, connectors) lives 15m. The prefetcher resets both on
+    # every full run.
+    cache_master_ttl_s: int = Field(default=86400)
+    cache_instance_ttl_s: int = Field(default=900)
+    cache_fulltext_index: bool = Field(default=True)
+
+    # --- Airbyte builder (data fabric phase 2) ---
+    # The graphical builder emits AQP-native Fetcher stubs into
+    # ``aqp/data/fetchers/userland/<slug>.py``. The two switches below
+    # gate the write path so production deploys can keep codegen
+    # disabled even when the API is reachable.
+    airbyte_builder_codegen_enabled: bool = Field(default=True)
+    airbyte_builder_overwrite: bool = Field(default=False)
+
     # --- Postgres ---
     postgres_dsn: str = Field(
         default="postgresql+psycopg2://aqp:aqp@localhost:5432/aqp",

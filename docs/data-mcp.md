@@ -67,6 +67,7 @@ are organised by domain under
 | streaming | `data.streaming.kafka.list_topics`, `data.streaming.flink.list_jobs`, `data.streaming.producers.list` |
 | iceberg | `data.iceberg.read_slice`, `data.iceberg.snapshot_history`, `data.iceberg.time_travel_read` |
 | datahub | `data.datahub.lookup`, `data.datahub.sync` (mutates), `data.datahub.sync_log` |
+| discovery | `data.discovery.browse`, `data.discovery.describe`, `data.discovery.promote` (mutates, data fabric phase 1) |
 
 Browse the live catalog at `/data/hub` -> "DataMCP" tab, or
 `GET /data-control/mcp/tools` for the JSON descriptor list.

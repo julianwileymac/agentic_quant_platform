@@ -1,0 +1,68 @@
+# Active discovery surface (data fabric phase 1)
+
+This rule scopes [`aqp/data/discovery/`](mdc:aqp/data/discovery) and
+the matching [`/discovery/*`](mdc:aqp/api/routes/discovery.py) REST
+surface + [`data.discovery.*`](mdc:aqp/data/mcp/tools/discovery.py)
+DataMCPTools.
+
+Narrative: [docs/data-discovery.md](mdc:docs/data-discovery.md).
+Phase plan:
+[.cursor/plans/data-self-service-phase-1.plan.md](mdc:.cursor/plans/data-self-service-phase-1.plan.md).
+
+## Hard rules
+
+1. **Single CRUD path for uningested entries.**
+   `/discovery/entries` is the only sanctioned surface for creating /
+   editing / deleting external (uningested) catalog rows. The
+   `metadata-catalog` routes remain authoritative for ingested
+   datasets.
+2. **Mutations call `cache_write_through`.** After Postgres
+   `commit`, every create / patch / promote synchronously updates
+   the `datasets` cache category via
+   [`cache_write_through`](mdc:aqp/cache/invalidation.py).
+3. **Lineage events use canonical kinds.**
+   `discovery.created` on POST and `discovery.promoted` on the
+   promote endpoint, written through
+   [`LineageWriter`](mdc:aqp/data/catalog/lineage.py).
+4. **Virtual ids are read-only.** Entry ids prefixed with
+   `orphan:` / `library:` / `airbyte:` are synthesised at read time —
+   they have no Postgres row and refuse PATCH / DELETE. Promote
+   them first.
+5. **Agent reads through DataMCPTools only** (AGENTS rule 22).
+   `data.discovery.browse` / `describe` / `promote` are the
+   sanctioned agent surface; never `import aqp.data.discovery` from
+   inside an agent body.
+6. **Rows that go through the discovery service must remain valid
+   `DatasetCatalog` rows.** External entries set
+   `is_ingested=False`, `dataset_kind="external"` (or the suggested
+   kind), and stuff the descriptor into `external_spec_json`. The
+   discovery layer never invents a separate ORM table.
+
+## Lifecycle classification
+
+The `lifecycle_state` literal must be derived from row state — never
+set by free-form input:
+
+- `ingested` ⇐ `is_ingested=True` OR `iceberg_identifier IS NOT NULL`.
+- `external_only` ⇐ `external_spec_json.intent_kind` is one of
+  `external`, `iceberg-orphan`, `airbyte`.
+- `orphan` ⇐ Iceberg table present without a `DatasetCatalog` row.
+- `pending` ⇐ everything else (default).
+
+Don't introduce a new literal without updating the prefetcher,
+DataMCPTool descriptions, and the frontend filter chips at the same
+time.
+
+## Don't
+
+- Don't write to `dataset_catalogs.iceberg_identifier` from a
+  discovery mutation. That column is set by the ingestion path
+  (Airbyte sync, manual register, dataset version flow). Discovery
+  only owns `is_ingested=False` rows.
+- Don't allow agents to mutate via raw HTTP — always go through the
+  `data.discovery.promote` MCP tool so policy + lineage stamping
+  fire.
+- Don't import `MetadataCatalogService` from inside the discovery
+  service. The service is read-only from the catalog wrapper's
+  perspective; the only shared call is `lineage()` on the route
+  level.

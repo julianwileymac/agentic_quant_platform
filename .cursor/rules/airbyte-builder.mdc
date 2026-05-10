@@ -1,0 +1,62 @@
+# Graphical Airbyte connector builder (data fabric phase 2)
+
+This rule scopes
+[`aqp/data/airbyte/builder/`](mdc:aqp/data/airbyte/builder),
+[`aqp/api/routes/airbyte_builder.py`](mdc:aqp/api/routes/airbyte_builder.py),
+and the frontend
+[`ConnectorBuilderForm`](mdc:frontend/src/components/airbyte/builder/ConnectorBuilderForm.tsx).
+
+Narrative: [docs/airbyte-builder.md](mdc:docs/airbyte-builder.md).
+Phase plan:
+[.cursor/plans/data-self-service-phase-2.plan.md](mdc:.cursor/plans/data-self-service-phase-2.plan.md).
+
+## Hard rules
+
+1. **No `AIRBYTE_ENABLE_UNSAFE_CODE`.** Custom Python from the
+   builder lives under
+   [`aqp/data/fetchers/userland/`](mdc:aqp/data/fetchers/userland)
+   and runs inside AQP's worker. Don't add the flag to any
+   deployment manifest in `kubernetes/` or `docker-compose*.yml`.
+2. **Credentials resolve through
+   [`CredentialResolver`](mdc:aqp/credentials/resolver.py)** (AGENTS
+   rule 26). The builder schema's `credential_ref` field stores a
+   `service/account/field` reference, NOT the secret. The codegen
+   templates emit `get_resolver().resolve(CredentialKey(...))`.
+3. **Generated stubs never read `settings.<service>_*` directly.**
+   The codegen test (`tests/data/airbyte/builder/test_codegen.py`)
+   asserts `"settings."` does not appear in the rendered template.
+4. **`aqp/data/fetchers/userland/` is owned by the codegen.** Manual
+   edits move to a sibling module that imports the generated stub.
+   The route refuses to overwrite an existing file unless
+   `AQP_AIRBYTE_BUILDER_OVERWRITE=true`.
+5. **Builder YAML round-trips through
+   [`state_to_yaml`](mdc:aqp/data/airbyte/builder/codegen_yaml.py).**
+   Don't author YAML by hand and stash it in
+   `airbyte_connectors.manifest_yaml` — always go through the
+   draft endpoint so validation fires.
+
+## Schema additions
+
+Adding a builder field means editing
+[`aqp/data/airbyte/builder/schema.py`](mdc:aqp/data/airbyte/builder/schema.py)
+(the Python truth) — the React form generator consumes the JSON
+output without further changes. If a field needs new YAML rendering,
+extend
+[`codegen_yaml.py`](mdc:aqp/data/airbyte/builder/codegen_yaml.py)
+and the corresponding stub template in
+[`codegen_fetcher.py`](mdc:aqp/data/airbyte/builder/codegen_fetcher.py)
+together.
+
+## Don't
+
+- Don't ship a free-text password / API key input in the builder.
+  Credentials always come through `EntityPicker kind="credentials"`.
+- Don't bypass the validation step in the codegen helpers — both
+  `state_to_yaml` and `state_to_fetcher_stub` raise on errors so the
+  UI can surface them.
+- Don't write custom Python directly to `aqp/data/fetchers/userland/`
+  outside the codegen path. The userland tree is generated, not
+  hand-authored.
+- Don't reach for the OSS Airbyte connector registry as a substitute
+  for the builder — the registry is for *importing* curated entries,
+  not for authoring new connectors.

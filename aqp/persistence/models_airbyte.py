@@ -46,6 +46,16 @@ class AirbyteConnectorRow(Base, ProjectScopedMixin):
     streams = Column(JSON, default=list)
     tags = Column(JSON, default=list)
     capabilities = Column(JSON, default=list)
+    # Self-service Airbyte builder (data fabric phase 2 — Alembic 0033).
+    # ``manifest_yaml`` is the round-tripped low-code CDK YAML emitted
+    # from the visual builder. ``aqp_fetcher_path`` is the dotted
+    # module path of an AQP-native :class:`Fetcher` stub generated
+    # under ``aqp/data/fetchers/userland/<slug>.py`` when the user
+    # toggles "Custom Python". ``builder_state_json`` carries the raw
+    # form state so re-opening the builder shows the same values.
+    manifest_yaml = Column(Text, nullable=True)
+    aqp_fetcher_path = Column(String(240), nullable=True)
+    builder_state_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

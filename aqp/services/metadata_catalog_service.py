@@ -300,7 +300,16 @@ class MetadataCatalogService:
                 session.add(row)
                 session.commit()
                 session.refresh(row)
-            return self._row_to_dataset(session, row).to_dict()
+            payload = self._row_to_dataset(session, row).to_dict()
+            # Phase-0 metadata cache write-through: keep entity dropdowns
+            # consistent without waiting for the next prefetch cycle.
+            try:
+                from aqp.cache import cache_write_through
+
+                cache_write_through("datasets", payload)
+            except Exception:  # noqa: BLE001 — cache failure must not break writes
+                logger.debug("metadata cache write-through skipped", exc_info=True)
+            return payload
 
     def lineage(self, dataset_id: str, *, limit: int = 250) -> dict[str, Any]:
         dataset = self.get_dataset(dataset_id)

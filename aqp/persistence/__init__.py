@@ -219,6 +219,7 @@ from aqp.persistence.models_extraction import (
     ExtractionAuditRow,
 )
 from aqp.persistence.models_sinks import SinkRow, SinkVersionRow
+from aqp.persistence.models_dagster_sandbox import DagsterSandboxSessionRow
 from aqp.persistence.models_producers import MarketDataProducerRow
 from aqp.persistence.models_streaming_links import StreamingDatasetLink
 from aqp.persistence.models_lineage import DataLineageEvent
@@ -417,6 +418,8 @@ __all__ = [
     "SinkRow",
     "SinkVersionRow",
     "StreamingDatasetLink",
+    # Dagster sandbox (data fabric phase 3)
+    "DagsterSandboxSessionRow",
     # Data lineage (Phase 2 - data layer unification)
     "DataLineageEvent",
     # DB utilities

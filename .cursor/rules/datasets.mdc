@@ -1,0 +1,64 @@
+# BaseDataset abstraction (data fabric phase 0)
+
+This rule scopes [`aqp/data/datasets/`](mdc:aqp/data/datasets) — the
+Kedro-style typed catalog primitive that the discovery browser, the
+Airbyte builder codegen, and the Dagster sandbox all share.
+
+Narrative walkthrough lives in
+[docs/datasets-catalog.md](mdc:docs/datasets-catalog.md). The master
+plan is `~/.cursor/plans/self-service_data_fabric_phased_*.plan.md`
+and Phase 0 details are in
+[.cursor/plans/data-self-service-phase-0.plan.md](mdc:.cursor/plans/data-self-service-phase-0.plan.md).
+
+## Hard rules
+
+1. **One `_save` path per kind.** `IcebergDataset._save` MUST route
+   through [`iceberg_catalog.append_arrow`](mdc:aqp/data/iceberg_catalog.py)
+   (AGENTS rule 3). Never call PyIceberg directly from a kind.
+2. **Credentials through the resolver.** Any kind that needs auth
+   (canonical example: [`APIDataset`](mdc:aqp/data/datasets/kinds/api.py))
+   reads through
+   [`aqp.credentials.CredentialResolver`](mdc:aqp/credentials/resolver.py).
+   Never read `settings.<service>_*_token` directly inside a kind
+   (AGENTS rule 26).
+3. **Subclasses self-register** through the metaclass hook on
+   [`BaseDataset`](mdc:aqp/data/datasets/base.py). Set `kind` on the
+   class; the metaclass calls
+   [`register_dataset_kind`](mdc:aqp/data/datasets/registry.py) for
+   you. Manual `register_dataset_kind(...)` is allowed only for
+   external aliases.
+4. **`DatasetSpec` is canonical.** Persist
+   [`DatasetSpec`](mdc:aqp/data/datasets/spec.py) (kind, config,
+   medallion_layer, business_metadata, data_contract) — not raw
+   constructor kwargs — into `dataset_catalogs.spec_hash` /
+   `external_spec_json`. Hash changes mean a new row, not an in-place
+   mutation (mirrors AGENTS rules 13 / 15 / 17 / 24).
+5. **Read-only kinds raise `DatasetSaveDisabled`** from `_save`. Set
+   `writable = False` on the class to make the base class raise for
+   you.
+
+## When to add a new kind
+
+Add a kind when the read / write semantics differ in a way that
+config alone can't capture:
+
+- New transport (e.g. `bigquery`, `mongodb`).
+- New on-disk layout (e.g. `delta`, `lance`).
+- New auth / pagination model (e.g. `oauth_api`).
+
+Don't add a kind for a single-source variation that fits inside the
+existing `api` / `parquet` / `csv` config schema.
+
+## Don't
+
+- Don't pickle a `BaseDataset` instance across Celery workers — pass
+  the `DatasetSpec` and rebuild on the worker (AGENTS rule 5).
+- Don't store secrets inside `DatasetSpec.config`. The config is
+  serialised into Postgres + the metadata cache. Secrets live in the
+  credential resolver; the spec carries `credential_service` /
+  `credential_account` references.
+- Don't split a `vt_symbol` on `.` inside a kind — use
+  [`Symbol.parse`](mdc:aqp/core/types.py) (AGENTS rule 1).
+- Don't introduce a new write entry-point for Iceberg from a kind.
+  `IcebergDataset._save` is the single sanctioned path
+  (AGENTS rule 3).

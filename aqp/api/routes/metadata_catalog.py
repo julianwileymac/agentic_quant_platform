@@ -185,7 +185,14 @@ def create_metadata_dataset(payload: MetadataDatasetCreateRequest) -> dict[str, 
             session.add(row)
         session.commit()
         session.refresh(row)
-        return _service.get_dataset(row.id) or {}
+        result = _service.get_dataset(row.id) or {}
+        try:
+            from aqp.cache import cache_write_through
+
+            cache_write_through("datasets", result)
+        except Exception:  # noqa: BLE001
+            pass
+        return result
 
 
 @router.patch("/datasets/{dataset_id}", response_model=MetadataDatasetResponse)

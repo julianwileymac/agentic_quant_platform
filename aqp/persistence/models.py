@@ -659,6 +659,21 @@ class DatasetCatalog(Base, ProjectScopedMixin):
     medallion_layer = Column(String(16), nullable=True, index=True)
     business_metadata = Column(JSON, default=dict)
     data_contract_json = Column(JSON, default=dict)
+    # Self-service data fabric (migration 0032 — phase 0).
+    # ``dataset_kind`` is the alias registered through
+    # :func:`aqp.data.datasets.register_dataset_kind` (e.g. ``iceberg``,
+    # ``parquet``, ``api``, ``external``). ``is_ingested`` is the
+    # discovery-browser lifecycle flag — ``true`` for materialised
+    # rows, ``false`` for "discovered but not yet ingested" entries.
+    # ``spec_hash`` mirrors :meth:`DatasetSpec.compute_hash` so the
+    # cache + lineage walkers can detect drift without loading
+    # payload bytes. ``external_spec_json`` carries the descriptor for
+    # uningested entries (URI, docs, intent kind, suggested
+    # connector).
+    dataset_kind = Column(String(64), nullable=True, index=True)
+    is_ingested = Column(Boolean, nullable=True, index=True)
+    spec_hash = Column(String(64), nullable=True, index=True)
+    external_spec_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

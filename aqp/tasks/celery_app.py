@@ -70,6 +70,8 @@ celery_app = Celery(
         "aqp.tasks.rl_tasks",
         # Analysis umbrella (hash-locked AnalysisSpec + flow catalog).
         "aqp.tasks.analysis_flow_tasks",
+        # Self-service data fabric — interactive Dagster sandbox (phase 3).
+        "aqp.tasks.dagster_sandbox_tasks",
     ],
 )
 

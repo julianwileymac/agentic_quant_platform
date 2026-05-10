@@ -5,7 +5,13 @@
 > See also: [docs/data-layer-unification.md](data-layer-unification.md) for the
 > medallion + active-metadata + lineage layer that wraps the catalog;
 > [docs/data-products.md](data-products.md) for entity-centric data products;
-> [docs/data-mcp.md](data-mcp.md) for the agent-facing tool surface.
+> [docs/data-mcp.md](data-mcp.md) for the agent-facing tool surface;
+> [docs/datasets-catalog.md](datasets-catalog.md) for the Kedro-style
+> `BaseDataset` abstraction that types every catalog entry;
+> [docs/data-discovery.md](data-discovery.md) for the active discovery
+> browser that shows ingested + uningested entries side-by-side;
+> [docs/metadata-cache.md](metadata-cache.md) for the Redis prefetch
+> cache that powers every entity dropdown.
 
 ## Medallion architecture
 

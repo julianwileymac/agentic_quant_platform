@@ -1,0 +1,78 @@
+# Metadata cache (data fabric phase 0)
+
+This rule scopes [`aqp/cache/`](mdc:aqp/cache) — the Redis-backed
+prefetch layer that powers every entity-dropdown in the frontend.
+
+Narrative walkthrough: [docs/metadata-cache.md](mdc:docs/metadata-cache.md).
+Phase plan: [.cursor/plans/data-self-service-phase-0.plan.md](mdc:.cursor/plans/data-self-service-phase-0.plan.md).
+
+## Hard rules
+
+1. **No free-text entity inputs.** Every frontend form that names a
+   dataset, namespace, sink kind, Airbyte connector, project, or
+   credential MUST use
+   [`EntityPicker`](mdc:frontend/src/components/common/EntityPicker.tsx)
+   bound to the matching `CacheCategory`. Free-text inputs are
+   reserved for descriptions / queries / search boxes — never for
+   entity names that exist on the backend.
+2. **Mutation routes call `cache_write_through` after commit.** See
+   [`aqp.cache.invalidation`](mdc:aqp/cache/invalidation.py). The call
+   is synchronous, idempotent, and never raises into the route — a
+   cache failure is logged but the response still succeeds.
+3. **`aqp:cache:*` is reserved.** Don't write to keys under that
+   prefix from anywhere outside [`aqp/cache/`](mdc:aqp/cache). Adding
+   a new category requires a new constant in
+   [`aqp.cache.keys.CACHE_CATEGORIES`](mdc:aqp/cache/keys.py) AND a
+   populator in
+   [`MetadataPrefetcher`](mdc:aqp/cache/prefetch.py).
+4. **Key construction goes through the helpers.** Never hand-craft
+   `f"aqp:cache:{...}"` strings. Use `names_zset(category)`,
+   `by_id_hash(category, id)`, `by_name_hash(category, name)`.
+5. **Settings, not env reads.** Cache config (URL, prefix, TTLs)
+   lives on
+   [`aqp.config.settings.Settings`](mdc:aqp/config/settings.py) under
+   the `cache_*` block (AGENTS rule 7).
+
+## Adding a write-through hook
+
+Mutation routes wire the cache call inside the existing
+`session.commit()` block:
+
+```python
+session.commit()
+session.refresh(row)
+try:
+    from aqp.cache import cache_write_through
+    cache_write_through("datasets", payload)
+except Exception:
+    logger.debug("cache write-through skipped", exc_info=True)
+```
+
+Failures must NEVER raise into the route — staleness is preferred to
+a write failure.
+
+## TTL strategy
+
+- **Master data** (kinds, namespaces, projects) → 24 h. Refreshed by
+  the periodic prefetch.
+- **Instance data** (datasets, connectors, sinks, credentials) → 15
+  min. Refreshed by write-through + the periodic prefetch.
+
+The classes [`MetadataPrefetcher._set_master_ttl` /
+`_set_instance_ttl`](mdc:aqp/cache/prefetch.py) carry these values
+through `pipe.expire`.
+
+## Don't
+
+- Don't use the cache as a feature store, model artefact store, or
+  RAG index. Those have their own homes
+  ([`RedisKVDataset`](mdc:aqp/data/datasets/kinds/redis_kv.py),
+  [`aqp/rag`](mdc:aqp/rag), MLflow / MinIO).
+- Don't re-instantiate `MetadataCache()` per request — use
+  [`get_cache()`](mdc:aqp/cache/client.py).
+- Don't add a Celery task that reaches into Redis directly. Use
+  [`cache_write_through`](mdc:aqp/cache/invalidation.py) /
+  [`cache_invalidate`](mdc:aqp/cache/invalidation.py).
+- Don't query the cache for authoritative data. Postgres remains the
+  source of truth — the cache is a UX accelerator that is allowed to
+  be 15 minutes stale.

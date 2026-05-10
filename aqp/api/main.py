@@ -19,12 +19,15 @@ from aqp.api.routes import (
     analysis as analysis_routes,
     analysis_agents,
     airbyte,
+    airbyte_builder as airbyte_builder_routes,
     auth,
     backtest,
     bots as bots_routes,
     brokers,
+    cache as cache_routes,
     cfpb,
     chat,
+    dagster_sandbox as dagster_sandbox_routes,
     data,
     data_control,
     data_entities,
@@ -32,6 +35,7 @@ from aqp.api.routes import (
     datalinks,
     datasets,
     dataset_presets,
+    discovery as discovery_routes,
     dbt,
     entities,
     factors,
@@ -151,11 +155,26 @@ def _maybe_install_m2m_store() -> None:
         logger.exception("M2M store install failed; resolver will fall back to file/env stores")
 
 
+def _maybe_prefetch_metadata_cache() -> None:
+    """Warm the metadata cache so EntityPicker dropdowns are instant."""
+    if not getattr(settings, "cache_enabled", True):
+        return
+    try:
+        from aqp.cache.lifespan import prefetch_at_startup
+
+        prefetch_at_startup()
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "metadata cache prefetch failed; UI dropdowns may be empty until a write-through fires",
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("AQP API starting | env=%s", settings.env)
     _maybe_run_iceberg_bootstrap()
     _maybe_install_m2m_store()
+    _maybe_prefetch_metadata_cache()
     try:
         yield
     finally:
@@ -213,6 +232,9 @@ app.include_router(market_data_live.router)
 app.include_router(factors.router)
 app.include_router(ml.router)
 app.include_router(metadata_catalog.router)
+app.include_router(cache_routes.router)
+app.include_router(discovery_routes.router)
+app.include_router(dagster_sandbox_routes.router)
 app.include_router(monitoring.router)
 app.include_router(security.router)
 app.include_router(visualizations.router)
@@ -250,6 +272,7 @@ app.include_router(dagster_routes.router)
 app.include_router(datahub_routes.router)
 app.include_router(compute_routes.router)
 app.include_router(airbyte.router)
+app.include_router(airbyte_builder_routes.router)
 app.include_router(service_manager_routes.router)
 
 # --- Inspiration rehydration: dataset presets library ------------------

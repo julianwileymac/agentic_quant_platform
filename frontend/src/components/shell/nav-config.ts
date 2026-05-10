@@ -214,6 +214,22 @@ export const NAV_ITEMS: NavItem[] = [
     submenu: "Data Pipelines",
   },
   {
+    key: "data-discovery",
+    label: "Discovery",
+    href: "/data/discovery",
+    icon: Telescope,
+    group: "Research",
+    submenu: "Data Pipelines",
+  },
+  {
+    key: "data-sandbox",
+    label: "Sandbox",
+    href: "/data/sandbox",
+    icon: FlaskConical,
+    group: "Research",
+    submenu: "Data Pipelines",
+  },
+  {
     key: "data-sinks",
     label: "Sinks",
     href: "/data/sinks",

@@ -94,6 +94,8 @@ import { DataHubRoute } from "@/routes/data/hub/page";
 import { DataExplorerRoute } from "@/routes/data/explorer/page";
 import { DataBrowserRoute } from "@/routes/data/browser/page";
 import { DataSymbolBrowserRoute } from "@/routes/data/browser/[vt_symbol]/page";
+import { DataDiscoveryRoute } from "@/routes/data/discovery/page";
+import { DataSandboxRoute } from "@/routes/data/sandbox/page";
 import { LiveMarketRoute } from "@/routes/data/live/page";
 import { DataIngestRoute } from "@/routes/data/ingest/page";
 import { DataPipelinesRoute } from "@/routes/data/pipelines/page";
@@ -179,6 +181,8 @@ const REAL_ROUTES: Record<string, () => ReactElement> = {
   "/alpha-vantage": AlphaVantageRoute,
   // B4a — Data plane (medium)
   "/data/hub": DataHubRoute,
+  "/data/discovery": DataDiscoveryRoute,
+  "/data/sandbox": DataSandboxRoute,
   "/data/explorer": DataExplorerRoute,
   "/data/browser": DataBrowserRoute,
   "/data/live": LiveMarketRoute,

@@ -20,6 +20,11 @@ glob-scoped sibling rules under [.cursor/rules/](mdc:.cursor/rules):
 | `alembic/versions/**/*.py`, `aqp/persistence/**/*.py` | [migrations-persistence.mdc](mdc:.cursor/rules/migrations-persistence.mdc) | Immutable migrations, `LedgerWriter`, ORM patterns |
 | `aqp/{tasks,api,ws}/**/*.py` | [tasks-api.mdc](mdc:.cursor/rules/tasks-api.mdc) | Celery progress frame shape, idempotency, route↔task layering |
 | `aqp/agents/**/*.py`, `aqp/agents/tools/**/*.py` | [data-mcp.mdc](mdc:.cursor/rules/data-mcp.mdc) | DataMCPTool boundary, no direct Postgres / Iceberg from agent code |
+| `aqp/data/datasets/**/*.py` + bundled kinds | [datasets.mdc](mdc:.cursor/rules/datasets.mdc) | `BaseDataset` ABC, `DatasetSpec` hashing, kind registry, single Iceberg write entry-point per kind |
+| `aqp/cache/**/*.py`, `aqp/api/routes/cache.py`, mutation routes that call `cache_write_through` | [cache.mdc](mdc:.cursor/rules/cache.mdc) | Whitelist-only entity dropdowns, key namespace, write-through, TTL strategy |
+| `aqp/data/discovery/**/*.py`, `aqp/api/routes/discovery.py`, `aqp/data/mcp/tools/discovery.py` | [discovery.mdc](mdc:.cursor/rules/discovery.mdc) | Unified ingested + uningested catalog browser, lifecycle classification, virtual ids are read-only |
+| `aqp/data/airbyte/builder/**/*.py`, `aqp/api/routes/airbyte_builder.py`, `aqp/data/fetchers/userland/**/*.py`, `frontend/src/components/airbyte/builder/**/*.tsx` | [airbyte-builder.mdc](mdc:.cursor/rules/airbyte-builder.mdc) | No `AIRBYTE_ENABLE_UNSAFE_CODE`; CredentialResolver-only; userland tree is generated, not hand-authored |
+| `aqp/dagster/sandbox/**/*.py`, `aqp/api/routes/dagster_sandbox.py`, `aqp/tasks/dagster_sandbox_tasks.py`, `frontend/src/components/sandbox/**/*.tsx` | [dagster-sandbox.mdc](mdc:.cursor/rules/dagster-sandbox.mdc) | Per-session isolation, `aqp:sandbox:*` Redis prefix, ContextVar env override, canonical progress frame |
 | `frontend/**/*.{ts,tsx}`, `webui/**/*.{ts,tsx}` | [frontend.mdc](mdc:.cursor/rules/frontend.mdc) | Vite vs Next.js boundary, throttled WS, kill-switch, sandbox indicator |
 
 Workflow + collaboration cadence: [WORKFLOW.md](mdc:WORKFLOW.md).
