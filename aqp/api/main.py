@@ -100,6 +100,20 @@ from aqp.api.routes import (  # noqa: E402
     users as users_routes,
     workspaces as workspaces_routes,
 )
+# Phase 1 — Experiments + Tests umbrella + polymorphic Resources.
+from aqp.api.routes import (  # noqa: E402
+    experiments as experiments_routes,
+    resources as resources_routes,
+    tests as tests_routes,
+)
+# Phase 4 — Auth0 Action sync endpoint for custom-claim injection.
+from aqp.api.routes import (  # noqa: E402
+    auth0_sync as auth0_sync_routes,
+)
+# Phase 7 — LEAN strategy template catalog + clone-to-workspace REST.
+from aqp.api.routes import (  # noqa: E402
+    strategy_templates as strategy_templates_routes,
+)
 from aqp.config import settings
 from aqp.observability import (
     configure_tracing,
@@ -171,12 +185,32 @@ def _maybe_prefetch_metadata_cache() -> None:
         )
 
 
+def _install_ownership_graph_hooks() -> None:
+    """Register the SQLAlchemy after_flush_postexec listener for ownership events.
+
+    The listener translates tenancy / experiment / resource mutations
+    into :class:`OwnershipEvent` rows on the bus. Idempotent; safe to
+    re-run. The drain task (:mod:`aqp.tasks.ownership_tasks`) handles
+    the projection into Neo4j when ``AQP_OWNERSHIP_GRAPH_STORE=neo4j``.
+    """
+    try:
+        from aqp.graph import install_sqlalchemy_hooks
+
+        install_sqlalchemy_hooks()
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "ownership graph hook install failed; multi-hop ownership reads "
+            "will rely on the periodic full_resync until next restart",
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("AQP API starting | env=%s", settings.env)
     _maybe_run_iceberg_bootstrap()
     _maybe_install_m2m_store()
     _maybe_prefetch_metadata_cache()
+    _install_ownership_graph_hooks()
     try:
         yield
     finally:
@@ -222,6 +256,10 @@ app.include_router(portfolio.router)
 app.include_router(paper.router)
 app.include_router(brokers.router)
 app.include_router(orders_routes.router)
+# Phase 7 — register the more specific ``/strategies/templates`` router
+# BEFORE the catch-all ``/strategies/{strategy_id}`` so the LEAN
+# template catalog isn't shadowed by the existing strategy CRUD.
+app.include_router(strategy_templates_routes.router)
 app.include_router(strategies.router)
 app.include_router(registry.router)
 app.include_router(feature_sets.router)
@@ -293,6 +331,17 @@ app.include_router(workspaces_routes.router)
 app.include_router(projects_routes.router)
 app.include_router(labs_routes.router)
 app.include_router(configs_routes.router)
+
+# --- Phase 1 — Experiments + Tests umbrella + polymorphic Resources ---
+app.include_router(experiments_routes.router)
+app.include_router(tests_routes.router)
+app.include_router(resources_routes.router)
+
+# --- Phase 4 — Auth0 Action sync endpoint ----------------------------
+app.include_router(auth0_sync_routes.router)
+# (Phase 7 strategy_templates router is registered earlier, BEFORE
+# ``strategies.router``, so the ``/strategies/templates`` prefix isn't
+# shadowed by ``/strategies/{strategy_id}``.)
 
 # --- Data layer expansion (sinks / kafka / flink / producers / proxy) --
 app.include_router(sinks_routes.router)

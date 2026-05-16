@@ -1,0 +1,65 @@
+---
+description: LEAN ingester + AST translator + polymorphic Resource catalog. Hard rule 35.
+globs:
+  - "aqp/strategies/lean/**/*.py"
+  - "scripts/ingest_lean_templates.py"
+  - "aqp/data/mcp/tools/strategies.py"
+  - "aqp/api/routes/strategy_templates.py"
+  - "frontend/src/routes/strategy-development/templates/**/*.tsx"
+---
+
+# Strategy template catalog (LEAN + community)
+
+Phase 7 of the multi-tenant rollout. Hard rule 35 in
+[AGENTS.md](mdc:AGENTS.md) is the source of truth.
+
+## Ingestion
+
+- Read-only strategy templates land in the polymorphic
+  [`resources`](mdc:aqp/persistence/models_resources.py) table with
+  ``resource_type='strategy_template'``,
+  ``owner_scope_kind='organization'``, and ``visibility='org'``.
+- The QuantConnect LEAN ingester
+  ([`scripts/ingest_lean_templates.py`](mdc:scripts/ingest_lean_templates.py))
+  is idempotent: re-running with a newer LEAN revision overwrites
+  the matching rows in place + emits a lineage event.
+- New template sources (community frameworks, internal references)
+  add an ingester next to ``ingest_lean_templates.py`` that follows
+  the same upsert pattern.
+
+## Translation
+
+- LEAN -> ``FrameworkAlgorithm`` skeleton lives in
+  [`aqp/strategies/lean/translator.py`](mdc:aqp/strategies/lean/translator.py).
+  The mapping is pure-Python AST rewriting + a small lookup table
+  (`_METHOD_REMAP`, `_CTX_API_REMAP`, `_INDICATOR_NAMES`).
+- Unmapped LEAN API calls become ``# TODO(lean-translate)``
+  comments retaining the original line — never silently dropped.
+- Cloning a template through
+  [`data.strategies.templates.clone_to_workspace`](mdc:aqp/data/mcp/tools/strategies.py)
+  or ``POST /strategies/templates/clone`` writes a new Resource owned
+  by the calling user + a `resource_relations.relation='translated_from'`
+  edge back to the source. The ownership graph projector picks the
+  edge up automatically.
+
+## Agent surface
+
+- Agents browse + clone via the
+  [`data.strategies.templates.*`](mdc:aqp/data/mcp/tools/strategies.py)
+  MCP tools. The clone tool is the only mutator in the family
+  (scope `data:write`).
+- The strategy palette in the Vite frontend reads
+  ``GET /strategies/templates`` and ``GET
+  /strategies/templates/{id}`` so users + agents see the same
+  catalog.
+
+## Don't list
+
+- Don't hand-write strategy template rows — go through the
+  ingester (existing) or the agent surface (clone tool).
+- Don't store a LEAN template under a different ``resource_type``;
+  the strategy_templates cache category filters on the discriminator.
+- Don't translate inside the ingester — translation is the user's
+  opt-in choice at clone time.
+
+Canonical doc: [docs/strategy-templates.md](mdc:docs/strategy-templates.md).

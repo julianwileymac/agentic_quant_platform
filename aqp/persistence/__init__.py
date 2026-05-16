@@ -195,6 +195,20 @@ from aqp.persistence.models_tenancy import (
     User,
     Workspace,
 )
+from aqp.persistence.models_experiments import (
+    EXPERIMENT_KINDS,
+    EXPERIMENT_STATUSES,
+    Experiment,
+    TEST_KINDS,
+    Test,
+)
+from aqp.persistence.models_resources import (
+    OWNER_SCOPE_KINDS,
+    RESOURCE_RELATIONS,
+    RESOURCE_TYPES,
+    Resource,
+    ResourceRelation,
+)
 from aqp.persistence.models_pipelines import (
     DatahubSyncLog,
     DatasetProfile,
@@ -340,6 +354,18 @@ __all__ = [
     "Team",
     "User",
     "Workspace",
+    # Experiments / Tests umbrella (Phase 1 — multi-tenant graph)
+    "EXPERIMENT_KINDS",
+    "EXPERIMENT_STATUSES",
+    "Experiment",
+    "TEST_KINDS",
+    "Test",
+    # Polymorphic Resources (Phase 1 — multi-tenant graph)
+    "OWNER_SCOPE_KINDS",
+    "RESOURCE_RELATIONS",
+    "RESOURCE_TYPES",
+    "Resource",
+    "ResourceRelation",
     # Agents (Phase 3)
     "AgentAnnotation",
     "AgentEvalMetric",

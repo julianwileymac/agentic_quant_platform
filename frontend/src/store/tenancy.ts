@@ -36,6 +36,7 @@ export interface TenancyState {
   setLab: (id: string | null) => void;
   setUser: (id: string | null) => void;
   setOrg: (id: string | null) => void;
+  setTeam: (id: string | null) => void;
   setMode: (mode: ExecutionMode) => void;
   reset: () => void;
 }
@@ -59,7 +60,8 @@ export const useTenancyStore = create<TenancyState>()(
       setProject: (id) => set({ projectId: id }),
       setLab: (id) => set({ labId: id }),
       setUser: (id) => set({ userId: id }),
-      setOrg: (id) => set({ orgId: id }),
+      setOrg: (id) => set({ orgId: id, teamId: null }),
+      setTeam: (id) => set({ teamId: id }),
       setMode: (mode) => set({ mode }),
       reset: () =>
         set({
@@ -90,12 +92,21 @@ export const useTenancyStore = create<TenancyState>()(
 /**
  * Read the active tenancy headers as a plain object — safe to call
  * from non-React contexts (the api client uses this on every request).
+ *
+ * Phase 6 of the multi-tenant rollout added ``X-AQP-Org`` /
+ * ``X-AQP-Team`` so the new ContextBar can pin a specific org /
+ * team and the backend's ``current_context`` dep can validate the
+ * user's membership against them. ``createWsClient`` mirrors the
+ * same header set into WS query params (``aqp_org`` / ``aqp_team``)
+ * since browsers can't set custom WebSocket headers.
  */
 export function getTenancyHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
   const state = useTenancyStore.getState();
   const headers: Record<string, string> = {};
   if (state.userId) headers["X-AQP-User"] = state.userId;
+  if (state.orgId) headers["X-AQP-Org"] = state.orgId;
+  if (state.teamId) headers["X-AQP-Team"] = state.teamId;
   if (state.workspaceId) headers["X-AQP-Workspace"] = state.workspaceId;
   if (state.projectId) headers["X-AQP-Project"] = state.projectId;
   if (state.labId) headers["X-AQP-Lab"] = state.labId;

@@ -76,6 +76,57 @@ logger = logging.getLogger(__name__)
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
+def _token_from_session_cookie(request: Request) -> str | None:
+    """Pull a verified-style access_token out of the ``aqp_session`` cookie.
+
+    The backend-session login flow in :mod:`aqp.api.routes.auth` mints a
+    JWE-encrypted ``aqp_session`` cookie carrying the IdP-issued access
+    token. This helper decrypts it (using the same secret used to mint
+    it) and returns the access_token so the standard JWT path below
+    can validate it. Returns ``None`` for any failure (missing cookie,
+    bad secret, decrypt error, missing token) — the caller falls back
+    to the default user, matching the bearer-less branch.
+    """
+    try:
+        from aqp.config import settings
+    except Exception:
+        return None
+    secret = str(getattr(settings, "auth_session_secret", "") or "")
+    if not secret:
+        return None
+    cookie_name = str(getattr(settings, "auth_session_cookie", "aqp_session") or "aqp_session")
+    token = request.cookies.get(cookie_name)
+    if not token:
+        return None
+    try:
+        from aqp.auth.session import EncryptedCookieStateStore
+    except Exception:
+        return None
+    try:
+        store = EncryptedCookieStateStore(secret=secret, cookie_name=cookie_name)
+        # /auth/callback uses the cookie name as the HKDF salt (see
+        # aqp.api.routes.auth.login_callback); the same identifier
+        # must be passed to .get() so HKDF derives the matching key.
+        payload = store.get(cookie_name, token=token)
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    # session_payload_from_tokens() produces ``token_sets`` with one
+    # entry per audience. We accept the first non-empty access_token —
+    # the backend-session flow only writes one entry today.
+    sets = payload.get("token_sets")
+    if isinstance(sets, list):
+        for entry in sets:
+            if isinstance(entry, dict):
+                tok = entry.get("access_token")
+                if isinstance(tok, str) and tok:
+                    return tok
+    # Some legacy payloads carried the access token at the top level.
+    legacy = payload.get("access_token")
+    return legacy if isinstance(legacy, str) and legacy else None
+
+
 def current_user(
     request: Request,
     x_aqp_user: str | None = Header(default=None, alias="X-AQP-User"),
@@ -87,7 +138,10 @@ def current_user(
         Validate the ``Authorization: Bearer`` JWT against the configured
         issuer / audience. Map the verified ``sub`` claim onto a ``User``
         row, lazily provisioning one (with a default workspace
-        ``Membership``) on first login.
+        ``Membership``) on first login. When no Bearer header is
+        present, fall back to the encrypted ``aqp_session`` cookie set
+        by :http:get:`/auth/callback` — same JWT validation path, just
+        sourced from a server-side session.
 
     Local mode:
         Fall back to the deterministic default user, optionally honoring
@@ -107,7 +161,16 @@ def current_user(
         provider = "local"
 
     if provider != "local":
-        if credentials is None:
+        bearer_token: str | None = (
+            credentials.credentials if credentials is not None else None
+        )
+        if not bearer_token:
+            # Fall back to the encrypted session cookie minted by
+            # /auth/callback. Closes the documented Bearer-only gap so
+            # SSR pages + browsers that don't attach Authorization
+            # still reach the resolved identity.
+            bearer_token = _token_from_session_cookie(request)
+        if not bearer_token:
             # No Authorization header supplied; surface the local default
             # so unauthenticated reads (e.g. health probes) keep working.
             # Routes that strictly require auth chain ``require_authenticated``.
@@ -124,7 +187,7 @@ def current_user(
                 ),
             )
         try:
-            claims = validate_jwt(credentials.credentials, config=oidc_config)
+            claims = validate_jwt(bearer_token, config=oidc_config)
         except InvalidTokenError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -227,11 +290,18 @@ def current_context(
     x_aqp_workspace: str | None = Header(default=None, alias="X-AQP-Workspace"),
     x_aqp_project: str | None = Header(default=None, alias="X-AQP-Project"),
     x_aqp_lab: str | None = Header(default=None, alias="X-AQP-Lab"),
+    x_aqp_org: str | None = Header(default=None, alias="X-AQP-Org"),
+    x_aqp_team: str | None = Header(default=None, alias="X-AQP-Team"),
 ) -> RequestContext:
     """Build a :class:`RequestContext` from the resolved user + headers.
 
     Validates that the user can access the requested workspace/project/lab.
     Falls back to the user's home context when no headers are provided.
+
+    The ``X-AQP-Org`` / ``X-AQP-Team`` headers were added in Phase 6 of
+    the multi-tenant rollout so the frontend's ContextBar can pin a
+    specific org / team. They follow the same membership-check rules
+    as the workspace / project / lab headers.
     """
     if user.is_default:
         ctx = default_context()
@@ -286,6 +356,26 @@ def current_context(
                 detail=f"Cannot access lab {x_aqp_lab}",
             )
         overrides["lab_id"] = x_aqp_lab
+
+    if x_aqp_org:
+        if not user.is_default and not user_can(
+            user, "viewer", scope_kind=SCOPE_ORG, scope_id=x_aqp_org
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Not a member of org {x_aqp_org}",
+            )
+        overrides["org_id"] = x_aqp_org
+
+    if x_aqp_team:
+        if not user.is_default and not user_can(
+            user, "viewer", scope_kind=SCOPE_TEAM, scope_id=x_aqp_team
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Not a member of team {x_aqp_team}",
+            )
+        overrides["team_id"] = x_aqp_team
 
     resolved = ctx.with_overrides(**overrides) if overrides else ctx
     # Bind the active context onto the request-scoped ContextVar so deep

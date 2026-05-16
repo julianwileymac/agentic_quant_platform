@@ -296,10 +296,103 @@ def provision_user_from_claims(claims: dict[str, Any]) -> CurrentUser:
             user_row.last_login_at = datetime.utcnow()
             session.flush()
 
+        # Phase 4 — apply AQP-namespaced custom claims so the Auth0
+        # Action can preconfigure the user's org / team / role chain.
+        # Idempotent: an existing matching Membership is left alone;
+        # a stronger role from a fresh login upgrades the existing
+        # membership. Cross-org cleanup is intentionally NOT done here
+        # — admins remove memberships explicitly.
+        _apply_custom_claims_memberships(session, user_row.id, claims)
+        session.flush()
+
     refreshed = _load_user(auth_subject=sub) or _load_user(email=email)
     if refreshed is None:
         raise RuntimeError(f"Provisioned user sub={sub!r} could not be re-loaded")
     return refreshed
+
+
+def _apply_custom_claims_memberships(
+    session: Any, user_id: str, claims: dict[str, Any]
+) -> None:
+    """Read AQP-namespaced custom claims and upsert matching memberships.
+
+    Recognised claims (see ``docs/auth0-actions.md``):
+
+    - ``https://aqp/org_id`` — string, single org membership.
+    - ``https://aqp/team_id`` — string, single team membership.
+    - ``https://aqp/workspace_id`` — string, single workspace membership.
+    - ``https://aqp/roles`` — array of strings; the **highest** one
+      becomes the membership role on every claim listed above.
+    """
+    from aqp.config.defaults import (
+        ROLE_ADMIN,
+        ROLE_EDITOR,
+        ROLE_OWNER,
+        ROLE_VIEWER,
+        SCOPE_ORG,
+        SCOPE_TEAM,
+        SCOPE_WORKSPACE,
+    )
+    from aqp.persistence.models_tenancy import Membership
+
+    try:
+        from aqp.config import settings
+
+        ns = str(getattr(settings, "auth_claims_namespace", "https://aqp/") or "https://aqp/")
+    except Exception:
+        ns = "https://aqp/"
+    if not ns.endswith("/"):
+        ns += "/"
+
+    role_priority: dict[str, int] = {
+        ROLE_VIEWER: 0,
+        ROLE_EDITOR: 1,
+        ROLE_ADMIN: 2,
+        ROLE_OWNER: 3,
+    }
+    roles_claim = claims.get(f"{ns}roles") or claims.get("roles")
+    best_role = ROLE_VIEWER
+    if isinstance(roles_claim, list):
+        for raw in roles_claim:
+            role_str = str(raw).lower()
+            if role_str in role_priority and role_priority[role_str] > role_priority[best_role]:
+                best_role = role_str
+
+    targets: list[tuple[str, str]] = []
+    for scope_kind, claim_name in (
+        (SCOPE_ORG, "org_id"),
+        (SCOPE_TEAM, "team_id"),
+        (SCOPE_WORKSPACE, "workspace_id"),
+    ):
+        scope_id = claims.get(f"{ns}{claim_name}") or claims.get(claim_name)
+        if isinstance(scope_id, str) and scope_id:
+            targets.append((scope_kind, scope_id))
+
+    for scope_kind, scope_id in targets:
+        existing = (
+            session.query(Membership)
+            .filter(
+                Membership.user_id == user_id,
+                Membership.scope_kind == scope_kind,
+                Membership.scope_id == scope_id,
+            )
+            .one_or_none()
+        )
+        if existing is None:
+            session.add(
+                Membership(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    scope_kind=scope_kind,
+                    scope_id=scope_id,
+                    role=best_role,
+                    live_control=best_role in {ROLE_ADMIN, ROLE_OWNER},
+                )
+            )
+            continue
+        if role_priority.get(existing.role, 0) < role_priority.get(best_role, 0):
+            existing.role = best_role
+            existing.live_control = best_role in {ROLE_ADMIN, ROLE_OWNER}
 
 
 def _safe_claims_subset(claims: dict[str, Any]) -> dict[str, Any]:

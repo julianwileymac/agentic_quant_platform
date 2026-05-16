@@ -75,6 +75,13 @@ celery_app = Celery(
         "aqp.tasks.dagster_sandbox_tasks",
         # HFT / LOB backtest engine (hftbacktest wrapper).
         "aqp.tasks.hft_tasks",
+        # Metadata cache refresh (Phase 0): periodic safety-net rebuild
+        # so missed write-throughs self-heal.
+        "aqp.tasks.cache_tasks",
+        # Ownership graph projection (Phase 2): drains the OwnershipEvent
+        # bus into Neo4j (or no-ops in postgres mode) and periodic
+        # full Postgres -> Neo4j resync for drift recovery.
+        "aqp.tasks.ownership_tasks",
     ],
 )
 
@@ -138,6 +145,10 @@ celery_app.conf.update(
         # HFT / LOB backtests get their own queue so the slow tick-replay
         # workload doesn't compete for the bar-frequency backtest queue.
         "aqp.tasks.hft_tasks.*": {"queue": "hft"},
+        # Cache refresh is light + frequent; default queue is fine.
+        "aqp.tasks.cache_tasks.*": {"queue": "default"},
+        # Ownership graph drains are bursty but light; default queue is fine.
+        "aqp.tasks.ownership_tasks.*": {"queue": "default"},
     },
     beat_schedule={
         "drift-check": {
@@ -155,6 +166,31 @@ celery_app.conf.update(
         "finops-tag-audit": {
             "task": "aqp.tasks.finops_tasks.audit",
             "schedule": 6 * 3600.0,
+        },
+        # Phase 0 — Metadata cache safety-net rebuild. Write-through
+        # keeps the cache live during normal operation; this is the
+        # drift-recovery / TTL-expiry healer. Interval comes from
+        # ``settings.cache_refresh_interval_s`` (default 300 = 5 min).
+        "metadata-cache-refresh": {
+            "task": "aqp.tasks.cache_tasks.refresh_metadata",
+            "schedule": float(getattr(settings, "cache_refresh_interval_s", 300) or 300),
+        },
+        # Phase 2 — Ownership graph drain. Picks events off the bus
+        # and writes them into Neo4j (or no-ops in postgres mode).
+        # Short interval keeps the projection ~lagging Postgres by
+        # only a couple of seconds during normal operation.
+        "ownership-graph-drain": {
+            "task": "aqp.tasks.ownership_tasks.drain_events",
+            "schedule": 5.0,
+        },
+        # Phase 2 — Ownership graph full Postgres -> Neo4j resync.
+        # Periodic safety-net so any missed event-bus deliveries
+        # self-heal. Cheap; runs every 30 min by default.
+        "ownership-graph-resync": {
+            "task": "aqp.tasks.ownership_tasks.full_resync",
+            "schedule": float(
+                getattr(settings, "ownership_resync_interval_s", 1800) or 1800
+            ),
         },
     },
     timezone="UTC",
@@ -237,3 +273,11 @@ def _configure_worker_tracing(*_args, **_kwargs):
         register_celery_signals()
     except Exception:  # pragma: no cover — autolog is optional
         logger.debug("MLflow autolog signals not registered", exc_info=True)
+    # Ownership-graph SQLAlchemy listener — worker-side commits emit
+    # events the drain task will pick up on the next tick. Idempotent.
+    try:
+        from aqp.graph import install_sqlalchemy_hooks
+
+        install_sqlalchemy_hooks()
+    except Exception:  # pragma: no cover — graph layer is optional
+        logger.debug("ownership graph hooks not installed in worker", exc_info=True)

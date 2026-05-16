@@ -401,12 +401,19 @@ services:
       SUPERSET__SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://superset:superset@superset-postgres:5432/superset
       SUPERSET_REDIS_URL: redis://redis:6379/4
       SUPERSET_RESULTS_REDIS_URL: redis://redis:6379/5
+      SUPERSET_CELERY_BROKER_URL: redis://redis:6379/4
+      SUPERSET_CELERY_RESULT_BACKEND: redis://redis:6379/5
       SUPERSET_SECRET_KEY: "${SUPERSET_SECRET_KEY:-aqp_superset_dev_secret_change_me}"
       SUPERSET_GUEST_TOKEN_JWT_SECRET: "${SUPERSET_GUEST_TOKEN_JWT_SECRET:-aqp_superset_guest_secret_change_me}"
     volumes:
       - ./deploy/superset/superset_config.py:/app/pythonpath/superset_config.py:ro
       - superset-home:/app/superset_home
     command: ["celery", "--app=superset.tasks.celery_app:app", "worker", "-O", "fair", "-l", "INFO", "--concurrency=2"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os; os.kill(1, 0)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       superset:
         condition: service_started
@@ -423,12 +430,19 @@ services:
       SUPERSET__SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://superset:superset@superset-postgres:5432/superset
       SUPERSET_REDIS_URL: redis://redis:6379/4
       SUPERSET_RESULTS_REDIS_URL: redis://redis:6379/5
+      SUPERSET_CELERY_BROKER_URL: redis://redis:6379/4
+      SUPERSET_CELERY_RESULT_BACKEND: redis://redis:6379/5
       SUPERSET_SECRET_KEY: "${SUPERSET_SECRET_KEY:-aqp_superset_dev_secret_change_me}"
       SUPERSET_GUEST_TOKEN_JWT_SECRET: "${SUPERSET_GUEST_TOKEN_JWT_SECRET:-aqp_superset_guest_secret_change_me}"
     volumes:
       - ./deploy/superset/superset_config.py:/app/pythonpath/superset_config.py:ro
       - superset-home:/app/superset_home
     command: ["celery", "--app=superset.tasks.celery_app:app", "beat", "-l", "INFO", "-s", "/app/superset_home/celerybeat-schedule"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os; os.kill(1, 0)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       superset:
         condition: service_started

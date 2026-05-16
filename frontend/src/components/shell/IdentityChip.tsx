@@ -1,4 +1,5 @@
-import { LogIn, LogOut, User as UserIcon } from "lucide-react";
+import { LogIn, LogOut, ShieldCheck, User as UserIcon } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +26,8 @@ import { useAuth } from "@/lib/auth";
  * (links to the docs anchor).
  */
 export function IdentityChip() {
-  const { enabled, isAuthenticated, user, logout, loginWithRedirect } = useAuth();
+  const navigate = useNavigate();
+  const { enabled, isAuthenticated, user, claims, logout, loginWithRedirect } = useAuth();
   // Always pull /auth/whoami so the chip shows the same identity the
   // backend resolved (catches misconfigurations where the SPA thinks
   // a user is logged in but the API rejects the JWT).
@@ -75,8 +77,19 @@ export function IdentityChip() {
           ) : null}
           <span className="truncate text-[10px] font-normal text-[var(--text-muted)]">
             via {whoami.data?.auth_provider ?? "local"}
+            {claims.roles.length > 0 ? ` · ${claims.roles.join(", ")}` : ""}
           </span>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={(e) => {
+            e.preventDefault();
+            navigate("/auth/profile");
+          }}
+        >
+          <ShieldCheck className="h-4 w-4" />
+          <span className="flex-1">Profile & memberships</span>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         {enabled && isAuthenticated ? (
           <DropdownMenuItem

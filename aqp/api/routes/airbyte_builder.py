@@ -188,7 +188,10 @@ def put_state(connector_id: str, payload: StateRequest) -> dict[str, Any]:
                 "airbyte_connectors",
                 {
                     "id": cleaned,
-                    "name": str((state.get("metadata") or {}).get("display_name") or cleaned),
+                    "name": cleaned,
+                    "display_name": str(
+                        (state.get("metadata") or {}).get("display_name") or cleaned
+                    ),
                     "kind": "source",
                     "runtime": "hybrid",
                 },

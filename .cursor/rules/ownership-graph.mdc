@@ -1,0 +1,94 @@
+---
+description: Ownership / membership graph + experiments + tests + polymorphic resources. Hard rules 33-34.
+globs:
+  - "aqp/graph/**/*.py"
+  - "aqp/persistence/models_experiments.py"
+  - "aqp/persistence/models_resources.py"
+  - "aqp/persistence/models_tenancy.py"
+  - "aqp/data/mcp/tools/ownership.py"
+  - "aqp/data/mcp/tools/experiments.py"
+  - "aqp/data/mcp/tools/tests.py"
+  - "aqp/tasks/ownership_tasks.py"
+  - "aqp/api/routes/experiments.py"
+  - "aqp/api/routes/tests.py"
+  - "aqp/api/routes/resources.py"
+  - "alembic/versions/0036_experiments_tests.py"
+  - "alembic/versions/0037_experiment_test_linkage.py"
+  - "alembic/versions/0038_polymorphic_resources.py"
+---
+
+# Ownership graph + experiments / tests umbrella
+
+Phase 2 of the multi-tenant rollout. Postgres is the canonical store;
+Neo4j is the secondary projection. Hard rules 33-34 in
+[AGENTS.md](mdc:AGENTS.md) are the source of truth.
+
+## Reads
+
+- Anything that traverses **more than one hop** of the ownership
+  graph (User -> Team -> Workspace -> Project -> Resource, etc.)
+  goes through
+  [`OwnershipGraphStore.traverse`](mdc:aqp/graph/protocol.py) or the
+  `data.ownership.*` MCP tools. Don't hand-write the recursive
+  Postgres join — it will diverge from the Neo4j projection.
+- The Postgres store ([`PostgresOwnershipGraphStore`](mdc:aqp/graph/postgres_store.py))
+  is the bootstrap / fallback when `AQP_OWNERSHIP_GRAPH_STORE=postgres`
+  (the default). The Neo4j store ([`Neo4jOwnershipGraphStore`](mdc:aqp/graph/neo4j_store.py))
+  takes over when the env var is `neo4j`.
+- `data.ownership.list_resources` defaults to **ctx.actor**; tools
+  passing an explicit `user_id` MUST be admin-scoped.
+
+## Writes
+
+- All ownership writes flow through the canonical ORM models
+  ([`Membership`](mdc:aqp/persistence/models_tenancy.py),
+  [`Experiment`](mdc:aqp/persistence/models_experiments.py),
+  [`Test`](mdc:aqp/persistence/models_experiments.py),
+  [`Resource`](mdc:aqp/persistence/models_resources.py),
+  [`ResourceRelation`](mdc:aqp/persistence/models_resources.py)).
+- The SQLAlchemy
+  [`after_flush_postexec`](mdc:aqp/graph/sqlalchemy_hooks.py) hooks
+  translate every commit into [`OwnershipEvent`](mdc:aqp/graph/events.py)
+  rows on the `aqp:ownership:events` Redis stream. The
+  [`drain_events`](mdc:aqp/tasks/ownership_tasks.py) Celery task
+  consumes them in batches of `ownership_sync_batch_size`.
+- The periodic [`full_resync`](mdc:aqp/tasks/ownership_tasks.py)
+  task rebuilds the Neo4j projection from Postgres. Idempotent;
+  safe to run while the API is serving.
+
+## Experiments + Tests umbrella
+
+- Every new run-producing flow MUST populate `experiment_id` (and
+  `test_id` where applicable) on its run row — see hard rule 34.
+- Migration 0037 added the FK columns to every existing typed run
+  table. New `*_runs` tables in future migrations MUST include the
+  FK from day one.
+- The [`LedgerWriter`](mdc:aqp/persistence/ledger.py) `_stamp` chain
+  copies `RequestContext.experiment_id` / `.test_id` onto run rows
+  automatically — most flows just need a populated context.
+
+## Polymorphic Resources
+
+- The `resources` table is the universal handle for any content
+  asset that isn't already a first-class ORM (datasets / bots /
+  agents get their own).
+- Ownership is polymorphic via `(owner_scope_kind, owner_scope_id)` —
+  see :data:`OWNER_SCOPE_KINDS` in
+  [`models_resources`](mdc:aqp/persistence/models_resources.py).
+- The ownership-graph projector translates the Resource into a
+  `(:OwnerKind)-[:OWNS]->(:Resource)` edge in Neo4j.
+- Strategy templates (Phase 7 LEAN ingester) use this table with
+  `resource_type='strategy_template'`; see
+  [strategy-templates.mdc](mdc:.cursor/rules/strategy-templates.mdc).
+
+## Don't list
+
+- Don't hand-write multi-hop joins over the tenancy / experiment /
+  resource tables — go through `OwnershipGraphStore`.
+- Don't bypass `after_flush_postexec` to write directly to Neo4j;
+  the bus is the only sanctioned ingress.
+- Don't write to `aqp:ownership:events` from outside
+  [`aqp/graph/events.py`](mdc:aqp/graph/events.py).
+- Don't add a new `*_runs` table without an `experiment_id` FK.
+
+Canonical doc: [docs/ownership-graph.md](mdc:docs/ownership-graph.md).

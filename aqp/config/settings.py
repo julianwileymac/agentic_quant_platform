@@ -92,6 +92,28 @@ class Settings(BaseSettings):
     auth_project_header: str = Field(default="X-AQP-Project")
     auth_lab_header: str = Field(default="X-AQP-Lab")
     auth_user_header: str = Field(default="X-AQP-User")
+    auth_org_header: str = Field(default="X-AQP-Org")
+    auth_team_header: str = Field(default="X-AQP-Team")
+    # --- Semantic LLM completion cache (Phase 5 multi-tenant rollout) ---
+    # Vectorises the last user-turn of every router_complete call and
+    # cosine-searches an aqp:llm:semantic:* Redis index. Hit returns the
+    # cached completion; miss falls through to the foundational model.
+    # Disabled by default so the base Ollama-only install keeps working
+    # without redis / embeddings configured.
+    llm_semantic_cache_enabled: bool = Field(default=False)
+    llm_semantic_cache_threshold: float = Field(default=0.95)
+    llm_semantic_cache_ttl_seconds: int = Field(default=3600)
+    llm_semantic_cache_max_entries: int = Field(default=10000)
+    # Phase 4 — auth enforcement sweep. ``strict`` returns 401/403 on
+    # violations (production). ``permissive`` logs them + tags the
+    # OTEL span without blocking the request so the rollout can flip
+    # to ``strict`` only when the dashboard shows zero would-be denies.
+    auth_enforce: str = Field(default="strict")  # strict | permissive
+    # AQP-namespaced custom claim prefix injected by the Auth0 Action.
+    # See ``docs/auth0-actions.md``. Decoupled from the issuer URL so
+    # the same Action works against staging / prod tenants without
+    # rebuilding the SPA.
+    auth_claims_namespace: str = Field(default="https://aqp/")
 
     # --- runtime ---
     env: str = Field(default="dev")
@@ -155,6 +177,20 @@ class Settings(BaseSettings):
     cache_master_ttl_s: int = Field(default=86400)
     cache_instance_ttl_s: int = Field(default=900)
     cache_fulltext_index: bool = Field(default=True)
+    # TTL jitter (0-50%) applied on every cache.expire() call to prevent
+    # the thundering-herd / cache-stampede pattern where dozens of keys
+    # expire on the same second and trigger a wave of Postgres rebuilds.
+    cache_ttl_jitter_pct: int = Field(default=10)
+    # L1 in-memory layer (cachetools.TTLCache) in front of the L2 Redis
+    # store. Sub-100ns dropdown reads at the cost of accepting a few
+    # seconds of staleness across worker processes.
+    cache_l1_enabled: bool = Field(default=True)
+    cache_l1_ttl_s: int = Field(default=5)
+    cache_l1_max_entries: int = Field(default=2048)
+    # Single-flight coalescing for cold cache reads — concurrent misses
+    # on the same (category, query) only fire a single Postgres query
+    # while siblings await its result.
+    cache_single_flight_enabled: bool = Field(default=True)
 
     # --- Airbyte builder (data fabric phase 2) ---
     # The graphical builder emits AQP-native Fetcher stubs into
@@ -183,6 +219,22 @@ class Settings(BaseSettings):
     neo4j_password: str = Field(default="aqpneo4j")
     neo4j_database: str = Field(default="neo4j")
     entity_graph_sync_enabled: bool = Field(default=True)
+
+    # --- Ownership graph (Phase 2 of the multi-tenant graph expansion) ---
+    # Postgres remains the canonical store. ``neo4j`` flips reads onto a
+    # mirror projected from the SQLAlchemy after_flush events drained by
+    # :mod:`aqp.tasks.ownership_tasks`. ``postgres`` keeps everything in
+    # Postgres (uses ``WITH RECURSIVE`` queries on the canonical tables).
+    ownership_graph_store: str = Field(default="postgres")  # postgres | neo4j
+    # ``sync`` blocks the FastAPI request on the Neo4j write (only useful
+    # for tests). ``async`` (default) queues events for the drain task.
+    # ``mirror`` writes to both stores from the drain task so reads can
+    # cross-check during rollout.
+    ownership_sync_mode: str = Field(default="async")  # sync | async | mirror
+    ownership_sync_batch_size: int = Field(default=500)
+    # The full Postgres -> Neo4j resync runs on this cadence to heal
+    # any events lost between an outage and recovery. Cheap to run.
+    ownership_resync_interval_s: int = Field(default=1800)
     active_instrument_cache_ttl_seconds: int = Field(default=300)
     service_control_enabled: bool = Field(default=False)
     service_log_tail_lines: int = Field(default=200)

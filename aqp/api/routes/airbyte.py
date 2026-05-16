@@ -235,11 +235,21 @@ def create_connection(spec: AirbyteConnectionSpec) -> dict[str, Any]:
         try:
             from aqp.cache import cache_write_through
 
+            # NB: ``airbyte_connectors`` represents *connector types*
+            # (e.g. ``source-snowflake``), not connection instances.
+            # MetadataPrefetcher._populate_airbyte_connectors stores
+            # the connector_id as the zset member; write-through must
+            # do the same or the dropdown loses entries between full
+            # prefetches. The connection's display name moves to the
+            # by_id_hash payload as ``display_name`` / ``connection_name``.
+            connector_id = str(row.source_connector_id)
             cache_write_through(
                 "airbyte_connectors",
                 {
-                    "id": str(row.source_connector_id),
-                    "name": str(row.name),
+                    "id": connector_id,
+                    "name": connector_id,
+                    "display_name": str(row.name),
+                    "connection_name": str(row.name),
                     "row_id": str(row.id),
                     "kind": "source",
                     "runtime": "hybrid",

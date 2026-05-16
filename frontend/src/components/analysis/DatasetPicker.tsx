@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { EntityPicker } from "@/components/common/EntityPicker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type DatasetColumn, getDatasetColumns } from "@/lib/analysis/api";
@@ -55,11 +56,16 @@ export function DatasetPicker({ value, onChange }: Props) {
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
       <div className="flex flex-col gap-1">
         <Label htmlFor="ds-identifier">Iceberg identifier</Label>
-        <Input
-          id="ds-identifier"
+        {/* Phase 6 — whitelist-only dataset picker. Falls back to
+            free-text only when the cache returns nothing (e.g. a
+            brand-new namespace not yet ingested). */}
+        <EntityPicker
+          kind="datasets"
+          value={value.identifier || null}
+          onChange={(next) => onChange({ ...value, identifier: next ?? "" })}
+          allowCustom
           placeholder="aqp_silver_yfinance.equities_daily"
-          value={value.identifier}
-          onChange={(e) => onChange({ ...value, identifier: e.target.value })}
+          secondaryField="iceberg_identifier"
         />
         <p className="text-xs text-[var(--text-secondary)]">
           {busy
@@ -68,7 +74,7 @@ export function DatasetPicker({ value, onChange }: Props) {
               ? `Error: ${error}`
               : value.columns.length > 0
                 ? `${value.columns.length} columns`
-                : "Press blur to load columns"}
+                : "Pick a dataset to load columns"}
         </p>
       </div>
       <div className="flex flex-col gap-1">

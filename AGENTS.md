@@ -304,6 +304,52 @@ These hold across the codebase. Any PR that violates one will be sent back.
  [`SandboxRuntime.janitor`](aqp/dagster/sandbox/runtime.py) tears
  down expired folders + Redis namespaces.
  See [docs/dagster-sandbox.md](docs/dagster-sandbox.md).
+33. **All ownership / membership queries that traverse more than
+ one hop go through
+ [`aqp.graph.OwnershipGraphStore`](aqp/graph/protocol.py).** Postgres
+ stays the canonical store for nodes + edges
+ (`organizations / teams / users / memberships / workspaces /
+ projects / labs / experiments / tests / resources /
+ resource_relations`). Neo4j is the secondary projection driven by
+ SQLAlchemy `after_flush_postexec` hooks
+ ([`aqp.graph.sqlalchemy_hooks`](aqp/graph/sqlalchemy_hooks.py))
+ that emit [`OwnershipEvent`](aqp/graph/events.py) rows onto the
+ `aqp:ownership:events` Redis stream; the
+ [`drain_events`](aqp/tasks/ownership_tasks.py) Celery task applies
+ them via `OwnershipGraphStore.apply_events`. Don't hand-write
+ joins over the canonical tables — they will diverge from the
+ graph projection and the MCP catalog will return stale results.
+ New ownership-graph readers register through `data.ownership.*`
+ DataMCPTools. See [docs/ownership-graph.md](docs/ownership-graph.md).
+34. **Every new run-producing flow MUST populate `experiment_id`
+ (and `test_id` where applicable) on its run row.** The Phase 1
+ umbrella tables [`experiments`](aqp/persistence/models_experiments.py)
+ + [`tests`](aqp/persistence/models_experiments.py) sit above every
+ existing typed run table (`ml_experiment_runs`, `rl_runs`,
+ `analysis_runs`, `backtest_runs`, `bot_deployments`,
+ `strategy_tests`, `paper_trading_runs`, `agent_runs_v2`,
+ `agent_runs`). Don't add a new `*_runs` table without an
+ `experiment_id` FK (Alembic 0037 added the columns on the
+ existing ones). The
+ [`LedgerWriter`](aqp/persistence/ledger.py) `_stamp` chain copies
+ `RequestContext.experiment_id` / `.test_id` onto the row when set
+ — most new flows just need a populated `RequestContext` to opt in.
+ See [docs/experiments-tests.md](docs/experiments-tests.md).
+35. **Read-only strategy templates (LEAN, community, internal
+ references) are loaded as
+ [`resources`](aqp/persistence/models_resources.py) rows with
+ `resource_type='strategy_template'`.** The AST translator lives at
+ [`aqp/strategies/lean/translator.py`](aqp/strategies/lean/translator.py)
+ and is reachable from agents via the
+ [`data.strategies.templates.clone_to_workspace`](aqp/data/mcp/tools/strategies.py)
+ MCP tool. New translators (community frameworks, hand-rolled
+ reference libraries) register the same way — subclass the
+ translator's pattern + add a new
+ [`@register_data_mcp_tool`](aqp/data/mcp/registry.py) entry.
+ The cloned strategy carries a
+ `resource_relations.relation='translated_from'` edge back to the
+ source template so the ownership graph can audit provenance. See
+ [docs/strategy-templates.md](docs/strategy-templates.md).
 
 ## Common workflows
 

@@ -73,25 +73,57 @@ class MetadataPrefetcher:
         results["airbyte_connectors"] = self._populate_airbyte_connectors(session)
         results["projects"] = self._populate_projects(session)
         results["credentials"] = self._populate_credentials(session)
+        # Phase 5 — tenancy + spec + resource categories
+        results["organizations"] = self._populate_simple(
+            session, "organizations", "aqp.persistence.models_tenancy", "Organization"
+        )
+        results["teams"] = self._populate_simple(
+            session, "teams", "aqp.persistence.models_tenancy", "Team"
+        )
+        results["users"] = self._populate_users(session)
+        results["workspaces"] = self._populate_simple(
+            session, "workspaces", "aqp.persistence.models_tenancy", "Workspace"
+        )
+        results["labs"] = self._populate_simple(
+            session, "labs", "aqp.persistence.models_tenancy", "Lab"
+        )
+        results["experiments"] = self._populate_simple(
+            session,
+            "experiments",
+            "aqp.persistence.models_experiments",
+            "Experiment",
+        )
+        results["tests"] = self._populate_simple(
+            session, "tests", "aqp.persistence.models_experiments", "Test"
+        )
+        results["agents"] = self._populate_simple(
+            session,
+            "agents",
+            "aqp.persistence.models_agents",
+            "AgentSpecRow",
+        )
+        results["bots"] = self._populate_simple(
+            session, "bots", "aqp.persistence.models_bots", "Bot"
+        )
+        results["rl_experiments"] = self._populate_simple(
+            session,
+            "rl_experiments",
+            "aqp.persistence.models_rl",
+            "RLExperimentSpec",
+        )
+        results["analysis_specs"] = self._populate_simple(
+            session,
+            "analysis_specs",
+            "aqp.persistence.models_analysis",
+            "AnalysisSpec",
+        )
+        results["resources"] = self._populate_resources(session)
+        results["strategy_templates"] = self._populate_strategy_templates(session)
 
     def _stamp(self, pipe: Any, category: str) -> None:
         """Record a cache freshness stamp for the category."""
         try:
             pipe.set(category_stamp(category), datetime.utcnow().isoformat())  # type: ignore[attr-defined]
-        except Exception:  # noqa: BLE001
-            pass
-
-    def _set_master_ttl(self, pipe: Any, key: str) -> None:
-        ttl = max(60, int(settings.cache_master_ttl_s))
-        try:
-            pipe.expire(key, ttl)
-        except Exception:  # noqa: BLE001
-            pass
-
-    def _set_instance_ttl(self, pipe: Any, key: str) -> None:
-        ttl = max(60, int(settings.cache_instance_ttl_s))
-        try:
-            pipe.expire(key, ttl)
         except Exception:  # noqa: BLE001
             pass
 
@@ -358,6 +390,199 @@ class MetadataPrefetcher:
         self.cache.expire(zkey, settings.cache_instance_ttl_s)
         self.cache.set_string(category_stamp("credentials"), datetime.utcnow().isoformat())
         return len(names)
+
+    # ------------------------------------------------------------------
+    # Phase 5 populators (generic + per-category overrides)
+    # ------------------------------------------------------------------
+    def _populate_simple(
+        self,
+        session: Session,
+        category: str,
+        module: str,
+        attr: str,
+    ) -> int:
+        """Generic populator for categories that have a single ``name`` column.
+
+        Reads every row from the named ORM model and uses ``id`` /
+        ``name`` (or ``slug``) for the zset + by_id hash. Categories
+        with richer payloads override with a dedicated populator below.
+        """
+        try:
+            module_obj = __import__(module, fromlist=[attr])
+            model = getattr(module_obj, attr)
+        except Exception:  # noqa: BLE001
+            return 0
+        try:
+            rows = session.execute(select(model)).scalars().all()
+        except SQLAlchemyError:
+            return 0
+        zkey = names_zset(category)
+        self.cache.delete(zkey)
+        if not rows:
+            return 0
+        mapping: dict[str, float] = {}
+        for row in rows:
+            name = str(
+                getattr(row, "name", None)
+                or getattr(row, "display_name", None)
+                or getattr(row, "slug", None)
+                or getattr(row, "id", "")
+            )
+            if not name:
+                continue
+            mapping[name] = 0.0
+            id_key = by_id_hash(category, str(row.id))
+            payload = {
+                "id": str(row.id),
+                "name": name,
+            }
+            for opt in ("slug", "kind", "status", "workspace_id", "project_id", "org_id"):
+                value = getattr(row, opt, None)
+                if value is not None:
+                    payload[opt] = str(value)
+            self.cache.hset(id_key, payload)
+            self.cache.expire(id_key, settings.cache_master_ttl_s)
+        if mapping:
+            self.cache.zadd(zkey, mapping)
+        self.cache.expire(zkey, settings.cache_master_ttl_s)
+        self.cache.set_string(category_stamp(category), datetime.utcnow().isoformat())
+        return len(rows)
+
+    def _populate_users(self, session: Session) -> int:
+        """Users: zset on email, payload includes display_name + auth_subject."""
+        try:
+            from aqp.persistence.models_tenancy import User
+        except Exception:  # noqa: BLE001
+            return 0
+        try:
+            rows = session.execute(select(User)).scalars().all()
+        except SQLAlchemyError:
+            return 0
+        zkey = names_zset("users")
+        self.cache.delete(zkey)
+        if not rows:
+            return 0
+        mapping: dict[str, float] = {}
+        for row in rows:
+            email = str(getattr(row, "email", "") or "")
+            if not email:
+                continue
+            mapping[email] = 0.0
+            id_key = by_id_hash("users", str(row.id))
+            self.cache.hset(
+                id_key,
+                {
+                    "id": str(row.id),
+                    "name": email,
+                    "email": email,
+                    "display_name": str(getattr(row, "display_name", "") or ""),
+                    "auth_subject": str(getattr(row, "auth_subject", "") or ""),
+                    "status": str(getattr(row, "status", "") or ""),
+                },
+            )
+            self.cache.expire(id_key, settings.cache_master_ttl_s)
+        self.cache.zadd(zkey, mapping)
+        self.cache.expire(zkey, settings.cache_master_ttl_s)
+        self.cache.set_string(category_stamp("users"), datetime.utcnow().isoformat())
+        return len(rows)
+
+    def _populate_resources(self, session: Session) -> int:
+        """Polymorphic Resources — zset on slug, payload carries ownership."""
+        try:
+            from aqp.persistence.models_resources import Resource
+        except Exception:  # noqa: BLE001
+            return 0
+        try:
+            rows = session.execute(select(Resource)).scalars().all()
+        except SQLAlchemyError:
+            return 0
+        zkey = names_zset("resources")
+        self.cache.delete(zkey)
+        if not rows:
+            return 0
+        mapping: dict[str, float] = {}
+        for row in rows:
+            slug = str(getattr(row, "slug", "") or "")
+            if not slug:
+                continue
+            mapping[slug] = 0.0
+            id_key = by_id_hash("resources", str(row.id))
+            self.cache.hset(
+                id_key,
+                {
+                    "id": str(row.id),
+                    "name": str(row.name),
+                    "slug": slug,
+                    "resource_type": str(row.resource_type),
+                    "uri": str(getattr(row, "uri", "") or ""),
+                    "owner_scope_kind": str(row.owner_scope_kind),
+                    "owner_scope_id": str(row.owner_scope_id),
+                    "workspace_id": str(getattr(row, "workspace_id", "") or ""),
+                    "visibility": str(getattr(row, "visibility", "private") or "private"),
+                    "tags": getattr(row, "tags", None) or [],
+                },
+            )
+            self.cache.expire(id_key, settings.cache_instance_ttl_s)
+        self.cache.zadd(zkey, mapping)
+        self.cache.expire(zkey, settings.cache_instance_ttl_s)
+        self.cache.set_string(category_stamp("resources"), datetime.utcnow().isoformat())
+        return len(rows)
+
+    def _populate_strategy_templates(self, session: Session) -> int:
+        """LEAN / community templates — a filtered view over ``resources``.
+
+        Strategy templates ARE resources (``resource_type='strategy_template'``)
+        — this category is a convenience subset so the strategy
+        composer dropdown doesn't need to filter client-side.
+        """
+        try:
+            from aqp.persistence.models_resources import Resource
+        except Exception:  # noqa: BLE001
+            return 0
+        try:
+            rows = (
+                session.execute(
+                    select(Resource).where(
+                        Resource.resource_type == "strategy_template"
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        except SQLAlchemyError:
+            return 0
+        zkey = names_zset("strategy_templates")
+        self.cache.delete(zkey)
+        if not rows:
+            return 0
+        mapping: dict[str, float] = {}
+        for row in rows:
+            slug = str(getattr(row, "slug", "") or "")
+            if not slug:
+                continue
+            mapping[slug] = 0.0
+            id_key = by_id_hash("strategy_templates", str(row.id))
+            meta = dict(row.meta or {})
+            self.cache.hset(
+                id_key,
+                {
+                    "id": str(row.id),
+                    "name": str(row.name),
+                    "slug": slug,
+                    "uri": str(getattr(row, "uri", "") or ""),
+                    "description": str(getattr(row, "description", "") or ""),
+                    "asset_class": str(meta.get("asset_class") or ""),
+                    "tags": getattr(row, "tags", None) or [],
+                    "framework": str(meta.get("framework") or "lean"),
+                },
+            )
+            self.cache.expire(id_key, settings.cache_master_ttl_s)
+        self.cache.zadd(zkey, mapping)
+        self.cache.expire(zkey, settings.cache_master_ttl_s)
+        self.cache.set_string(
+            category_stamp("strategy_templates"), datetime.utcnow().isoformat()
+        )
+        return len(rows)
 
 
 def _dataset_payload(row: Any) -> dict[str, Any]:

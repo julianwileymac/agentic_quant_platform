@@ -42,6 +42,15 @@ const DEFAULT_SECONDARY: Partial<Record<CacheCategory, string>> = {
   airbyte_connectors: "kind",
   sink_names: "kind",
   projects: "workspace_id",
+  workspaces: "org_id",
+  labs: "workspace_id",
+  experiments: "kind",
+  tests: "assertion_kind",
+  users: "email",
+  agents: "kind",
+  bots: "kind",
+  resources: "resource_type",
+  strategy_templates: "framework",
 };
 
 const PLACEHOLDER_LABEL: Record<CacheCategory, string> = {
@@ -53,6 +62,21 @@ const PLACEHOLDER_LABEL: Record<CacheCategory, string> = {
   projects: "Select project...",
   credentials: "Select credential...",
   dataset_kinds: "Select dataset kind...",
+  // Phase 5 tenancy + specs
+  organizations: "Select organization...",
+  teams: "Select team...",
+  users: "Select user...",
+  workspaces: "Select workspace...",
+  labs: "Select lab...",
+  experiments: "Select experiment...",
+  tests: "Select test...",
+  agents: "Select agent spec...",
+  bots: "Select bot...",
+  rl_experiments: "Select RL experiment...",
+  analysis_specs: "Select analysis spec...",
+  // Phase 5 + 7 polymorphic content
+  resources: "Select resource...",
+  strategy_templates: "Select strategy template...",
 };
 
 /**

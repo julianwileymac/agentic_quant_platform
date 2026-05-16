@@ -375,7 +375,12 @@ def login_callback(
         scope=tokens.scope,
     )
     state_store = EncryptedCookieStateStore(secret=secret, cookie_name=SESSION_COOKIE)
-    session_token = state_store.set(state, payload)
+    # Use the cookie name as the HKDF salt. The OAuth state cannot be
+    # used as the salt because :func:`aqp.auth.deps.current_user` reads
+    # the cookie on subsequent requests without access to the original
+    # ``state``. Per-session salting is preserved by the OAuth state +
+    # nonce already inside the JWE payload.
+    session_token = state_store.set(SESSION_COOKIE, payload)
     return_to = str(tx_payload.get("return_to") or "/")
     response = RedirectResponse(url=return_to, status_code=302)
     response.set_cookie(

@@ -119,10 +119,14 @@ def get_oidc_config() -> OIDCConfig | None:
             settings.auth_provider,
         )
         return None
+    jwks_ttl = int(getattr(settings, "auth_oidc_jwks_ttl_seconds", 3600) or 3600)
+    leeway = int(getattr(settings, "auth_oidc_leeway_seconds", 60) or 60)
     return OIDCConfig(
         issuer=issuer,
         audience=audience,
         client_id=str(settings.auth_oidc_client_id or "").strip(),
+        jwks_ttl_seconds=jwks_ttl,
+        leeway_seconds=leeway,
     )
 
 

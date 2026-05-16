@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import re
 import threading
 from collections.abc import Iterable, Mapping
@@ -26,6 +27,27 @@ from typing import Any
 from aqp.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+# --------------------------------------------------------------- helpers
+
+
+def jitter_ttl(base_ttl: int, *, pct: int | None = None) -> int:
+    """Spread expirations so simultaneous-write batches don't expire as a wave.
+
+    Returns ``base_ttl + random(0, base_ttl * pct/100)`` rounded to whole
+    seconds. ``pct`` defaults to :attr:`Settings.cache_ttl_jitter_pct`
+    (10% out of the box) so prefetch + write-through share a single
+    knob. Floor at 60 seconds so the in-memory backend never sees a
+    nonsense zero TTL.
+    """
+    base = max(60, int(base_ttl))
+    if pct is None:
+        pct = int(getattr(settings, "cache_ttl_jitter_pct", 10) or 0)
+    pct = max(0, min(50, int(pct)))
+    if pct == 0:
+        return base
+    return base + int(random.random() * base * pct / 100.0)
 
 
 # --------------------------------------------------------------- in-memory fallback
@@ -174,6 +196,61 @@ def _glob_to_regex(pattern: str) -> re.Pattern[str]:
 # --------------------------------------------------------------- client
 
 
+class _L1Cache:
+    """Per-process tiny TTL cache in front of the L2 Redis client.
+
+    Sub-100ns gets at the cost of accepting up to
+    :attr:`Settings.cache_l1_ttl_s` of staleness across worker
+    processes. Disabled when ``cache_l1_enabled=False`` so production
+    deploys with tight consistency requirements can opt out.
+    """
+
+    def __init__(
+        self,
+        *,
+        max_entries: int,
+        ttl_seconds: int,
+    ) -> None:
+        from collections import OrderedDict
+
+        self._lock = threading.RLock()
+        self._cache: OrderedDict[str, tuple[float, Any]] = OrderedDict()
+        self._max = max(64, int(max_entries))
+        self._ttl = max(1, int(ttl_seconds))
+
+    def get(self, key: str) -> tuple[bool, Any]:
+        import time
+
+        with self._lock:
+            entry = self._cache.get(key)
+            if entry is None:
+                return False, None
+            expires_at, value = entry
+            if time.time() >= expires_at:
+                self._cache.pop(key, None)
+                return False, None
+            # LRU bookkeeping — move to end.
+            self._cache.move_to_end(key)
+            return True, value
+
+    def set(self, key: str, value: Any) -> None:
+        import time
+
+        with self._lock:
+            self._cache[key] = (time.time() + self._ttl, value)
+            self._cache.move_to_end(key)
+            while len(self._cache) > self._max:
+                self._cache.popitem(last=False)
+
+    def invalidate(self, key: str) -> None:
+        with self._lock:
+            self._cache.pop(key, None)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
+
+
 class MetadataCache:
     """High-level cache client used by routes, services, and the prefetcher.
 
@@ -181,6 +258,16 @@ class MetadataCache:
     The class is intentionally narrow: callers should never reach for
     ``self._client`` directly; if a needed verb is missing, add it
     here.
+
+    Three layers:
+
+    1. **L1** — in-process LRU TTL (5s default). Sub-100ns hits.
+    2. **L2** — Redis (or the in-memory fallback). Sub-millisecond hits.
+    3. **Postgres** — the canonical source the prefetcher pulls from.
+
+    Reads check L1 before L2; writes invalidate L1 on the affected
+    keys. Single-flight locks coalesce concurrent cold L2 reads on the
+    same key.
     """
 
     def __init__(
@@ -196,6 +283,16 @@ class MetadataCache:
         self._memory: _MemoryBackend | None = (
             None if self._client is not None else _MemoryBackend()
         )
+        self._l1: _L1Cache | None = (
+            _L1Cache(
+                max_entries=int(getattr(settings, "cache_l1_max_entries", 2048) or 2048),
+                ttl_seconds=int(getattr(settings, "cache_l1_ttl_s", 5) or 5),
+            )
+            if bool(getattr(settings, "cache_l1_enabled", True))
+            else None
+        )
+        self._single_flight_locks: dict[str, threading.Lock] = {}
+        self._sf_lock = threading.Lock()
 
     # ------------------------------------------------- bootstrap helpers
     @staticmethod
@@ -240,6 +337,7 @@ class MetadataCache:
     def zadd(self, key: str, mapping: Mapping[str, float]) -> int:
         if not mapping:
             return 0
+        self._invalidate_l1_for(key)
         if self._client is not None:
             return int(self._client.zadd(key, dict(mapping)))
         assert self._memory is not None
@@ -248,6 +346,7 @@ class MetadataCache:
     def zrem(self, key: str, *members: str) -> int:
         if not members:
             return 0
+        self._invalidate_l1_for(key)
         if self._client is not None:
             return int(self._client.zrem(key, *members))
         assert self._memory is not None
@@ -272,67 +371,160 @@ class MetadataCache:
         Uses ``ZRANGEBYLEX`` on Redis (sub-millisecond) and falls back
         to a Python sort on the in-memory backend. Members are stored
         verbatim (case preserved) but matched case-insensitively.
+
+        L1 + single-flight: identical concurrent reads on the same
+        ``(key, prefix, offset, count)`` deduplicate into a single L2
+        call and the result is briefly cached for sub-second
+        re-renders of the same dropdown.
         """
-        if self._client is not None:
-            min_token = f"[{prefix.lower()}" if prefix else "-"
-            max_token = f"[{prefix.lower()}\xff" if prefix else "+"
+        l1_key = f"zlex|{key}|{prefix}|{offset}|{count}"
+        if self._l1 is not None:
+            hit, cached = self._l1.get(l1_key)
+            if hit:
+                return list(cached)
+
+        def _fetch() -> list[str]:
+            if self._client is not None:
+                min_token = f"[{prefix.lower()}" if prefix else "-"
+                max_token = f"[{prefix.lower()}\xff" if prefix else "+"
+                try:
+                    raw = self._client.zrangebylex(
+                        key,
+                        min_token,
+                        max_token,
+                        start=offset,
+                        num=count,
+                    )
+                except Exception:  # noqa: BLE001
+                    # ZRANGEBYLEX requires equal scores; if scoring drifted,
+                    # fall back to ZRANGE with a python filter.
+                    raw = self._client.zrange(key, 0, -1)
+                    lower = prefix.lower()
+                    if lower:
+                        raw = [m for m in raw if str(m).lower().startswith(lower)]
+                    raw = raw[offset : offset + count] if count > 0 else raw[offset:]
+                return [str(m) for m in raw]
+            assert self._memory is not None
+            return self._memory.zrange_lex(
+                key, prefix=prefix, offset=offset, count=count
+            )
+
+        result = self._single_flight(l1_key, _fetch)
+        if self._l1 is not None:
+            self._l1.set(l1_key, list(result))
+        return result
+
+    # ------------------------------------------------- single-flight
+    def _single_flight(self, key: str, fn: Any) -> Any:
+        """Coalesce concurrent fetches on the same logical key.
+
+        Without single-flight, a cold dropdown loaded from 10 browser
+        tabs would issue 10 identical Postgres queries. With it, the
+        first call holds the lock + fetches; siblings block, then
+        observe the cached value the first call writes back. Disabled
+        by setting ``cache_single_flight_enabled=False``.
+        """
+        if not bool(getattr(settings, "cache_single_flight_enabled", True)):
+            return fn()
+        with self._sf_lock:
+            lock = self._single_flight_locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                self._single_flight_locks[key] = lock
+        with lock:
+            # L1 may have been populated by the previous holder; re-check.
+            if self._l1 is not None:
+                hit, cached = self._l1.get(key)
+                if hit:
+                    return cached
             try:
-                raw = self._client.zrangebylex(
-                    key,
-                    min_token,
-                    max_token,
-                    start=offset,
-                    num=count,
-                )
-            except Exception:  # noqa: BLE001
-                # ZRANGEBYLEX requires equal scores; if scoring drifted,
-                # fall back to ZRANGE with a python filter.
-                raw = self._client.zrange(key, 0, -1)
-                lower = prefix.lower()
-                if lower:
-                    raw = [m for m in raw if str(m).lower().startswith(lower)]
-                raw = raw[offset : offset + count] if count > 0 else raw[offset:]
-            return [str(m) for m in raw]
-        assert self._memory is not None
-        return self._memory.zrange_lex(
-            key, prefix=prefix, offset=offset, count=count
-        )
+                return fn()
+            finally:
+                # Drop the lock object so it can be GC'd; concurrent
+                # callers grab a fresh lock on the next attempt.
+                with self._sf_lock:
+                    self._single_flight_locks.pop(key, None)
 
     # ------------------------------------------------- hash verbs
     def hset(self, key: str, mapping: Mapping[str, Any]) -> int:
         normalised = {k: _stringify(v) for k, v in mapping.items()}
         if not normalised:
             return 0
+        # Invalidate any L1 entry derived from this key so the next
+        # read goes through to Redis. Cheap: L1 is a small dict.
+        self._invalidate_l1_for(key)
         if self._client is not None:
             return int(self._client.hset(key, mapping=normalised))
         assert self._memory is not None
         return self._memory.hset(key, normalised)
 
     def hgetall(self, key: str) -> dict[str, Any]:
-        if self._client is not None:
-            raw = self._client.hgetall(key) or {}
-        else:
-            assert self._memory is not None
-            raw = self._memory.hgetall(key)
-        return {str(k): _maybe_parse_json(v) for k, v in raw.items()}
+        l1_key = f"hgetall|{key}"
+        if self._l1 is not None:
+            hit, cached = self._l1.get(l1_key)
+            if hit:
+                return dict(cached)
+
+        def _fetch() -> dict[str, Any]:
+            if self._client is not None:
+                raw = self._client.hgetall(key) or {}
+            else:
+                assert self._memory is not None
+                raw = self._memory.hgetall(key)
+            return {str(k): _maybe_parse_json(v) for k, v in raw.items()}
+
+        result = self._single_flight(l1_key, _fetch)
+        if self._l1 is not None:
+            self._l1.set(l1_key, dict(result))
+        return result
 
     def hdel(self, key: str, *fields: str) -> int:
         if not fields:
             return 0
+        self._invalidate_l1_for(key)
         if self._client is not None:
             return int(self._client.hdel(key, *fields))
         assert self._memory is not None
         return self._memory.hdel(key, *fields)
 
+    def _invalidate_l1_for(self, key: str) -> None:
+        """Drop every L1 entry derived from *key*.
+
+        L1 keys all encode the underlying Redis key as a suffix
+        (``zlex|<key>|...``, ``hgetall|<key>``). Walking the small L1
+        dict is cheap; this keeps the multi-tier consistency simple
+        without trying to track exact dependency edges.
+        """
+        if self._l1 is None:
+            return
+        # Iterate over a snapshot since invalidate mutates.
+        try:
+            with self._l1._lock:  # noqa: SLF001 - intentional internal access
+                keys = [k for k in self._l1._cache if key in k]  # noqa: SLF001
+            for k in keys:
+                self._l1.invalidate(k)
+        except Exception:  # noqa: BLE001
+            # Worst case the L1 keeps a stale entry until its TTL
+            # expires; that's the documented consistency window.
+            return
+
     # ------------------------------------------------- key admin
-    def expire(self, key: str, ttl_seconds: int) -> None:
+    def expire(self, key: str, ttl_seconds: int, *, jitter: bool = True) -> None:
+        """Set a TTL on *key*.
+
+        By default applies :func:`jitter_ttl` so simultaneous-write
+        batches don't expire on the same second. Pass ``jitter=False``
+        when the caller has already pre-jittered the value or wants a
+        hard, predictable expiration (e.g. lock keys).
+        """
         if ttl_seconds <= 0:
             return
+        actual = jitter_ttl(int(ttl_seconds)) if jitter else int(ttl_seconds)
         if self._client is not None:
-            self._client.expire(key, int(ttl_seconds))
+            self._client.expire(key, actual)
             return
         assert self._memory is not None
-        self._memory.expire(key, int(ttl_seconds))
+        self._memory.expire(key, actual)
 
     def set_string(self, key: str, value: str, *, ttl_seconds: int | None = None) -> None:
         if self._client is not None:
@@ -354,6 +546,8 @@ class MetadataCache:
     def delete(self, *keys: str) -> int:
         if not keys:
             return 0
+        for k in keys:
+            self._invalidate_l1_for(k)
         if self._client is not None:
             return int(self._client.delete(*keys))
         assert self._memory is not None
@@ -501,5 +695,6 @@ __all__ = [
     "MetadataCache",
     "cache_iter_categories",
     "get_cache",
+    "jitter_ttl",
     "reset_cache_singleton",
 ]

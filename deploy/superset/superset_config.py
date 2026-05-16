@@ -79,6 +79,21 @@ RESULTS_BACKEND = _redis_cache_from_url(
 )
 RESULTS_BACKEND_USE_MSGPACK = True
 
+
+class CeleryConfig:
+    broker_url = os.getenv("SUPERSET_CELERY_BROKER_URL", _redis_url)
+    result_backend = os.getenv("SUPERSET_CELERY_RESULT_BACKEND", _results_redis_url)
+    imports = (
+        "superset.sql_lab",
+        "superset.tasks.scheduler",
+        "superset.tasks.thumbnails",
+    )
+    worker_prefetch_multiplier = 1
+    task_acks_late = False
+
+
+CELERY_CONFIG = CeleryConfig
+
 SQLLAB_TIMEOUT = int(os.getenv("SUPERSET_SQLLAB_TIMEOUT_SECONDS", "60"))
 SQLLAB_ASYNC_TIME_LIMIT_SEC = int(os.getenv("SUPERSET_SQLLAB_ASYNC_TIME_LIMIT_SECONDS", "3600"))
 

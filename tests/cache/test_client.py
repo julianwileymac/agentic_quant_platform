@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from aqp.cache.client import MetadataCache, reset_cache_singleton
+from aqp.cache.client import MetadataCache, get_cache, reset_cache_singleton
 from aqp.cache.keys import by_id_hash, names_zset
 from aqp.cache.invalidation import cache_invalidate, cache_write_through
 from aqp.config import settings
@@ -58,7 +58,11 @@ def test_write_through_and_invalidate_cycle() -> None:
         "datasets",
         {"id": "t2", "name": "trades_intraday", "iceberg_identifier": "aqp_silver_demo.intra"},
     )
-    cache = _fresh_cache()
+    # ``cache_write_through`` writes through :func:`get_cache` (the
+    # process-wide singleton). Reading from a separate ``MetadataCache``
+    # instance would land on a different in-memory backend, so the
+    # assertion must use the same singleton.
+    cache = get_cache()
     page = cache.zrange_lex(names_zset("datasets"), prefix="trades", offset=0, count=10)
     assert sorted(page) == ["trades_eod", "trades_intraday"]
     cache_invalidate("datasets", "t1", name="trades_eod")

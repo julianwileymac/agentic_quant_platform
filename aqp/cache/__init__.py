@@ -23,7 +23,7 @@ rule that scopes this package is :file:`.cursor/rules/cache.mdc`.
 """
 from __future__ import annotations
 
-from aqp.cache.client import MetadataCache, get_cache
+from aqp.cache.client import MetadataCache, get_cache, jitter_ttl
 from aqp.cache.invalidation import cache_invalidate, cache_write_through
 from aqp.cache.prefetch import MetadataPrefetcher
 
@@ -33,4 +33,5 @@ __all__ = [
     "cache_invalidate",
     "cache_write_through",
     "get_cache",
+    "jitter_ttl",
 ]

@@ -11,6 +11,8 @@ import { AnalysisRunsRoute } from "@/routes/analysis/runs/page";
 import { AnalysisRunDetailRoute } from "@/routes/analysis/runs/[id]/page";
 import { CallbackRoute } from "@/routes/auth/callback/page";
 import { LoginRoute } from "@/routes/auth/login/page";
+import { ProfileRoute } from "@/routes/auth/profile/page";
+import { StrategyTemplatesPage } from "@/routes/strategy-development/templates/page";
 import { AirbyteRoute } from "@/routes/airbyte/page";
 import { AlphaVantageRoute } from "@/routes/alpha-vantage/page";
 import { AlphaVantageAdminRoute } from "@/routes/alpha-vantage/admin/page";
@@ -280,6 +282,8 @@ const REAL_ROUTES: Record<string, () => ReactElement> = {
  * URL parameters, but resolved through the same AppShell.
  */
 const DYNAMIC_ROUTES: RouteObject[] = [
+  // Phase 6 — Auth profile + scope inspector (lives inside the AppShell).
+  { path: "auth/profile", element: <ProfileRoute /> },
   { path: "bots/builder", element: <BotBuilderRoute /> },
   { path: "bots/:id", element: <BotDetailRoute /> },
   // Phase 5 — dialectical debate viewer
@@ -366,6 +370,8 @@ const DYNAMIC_ROUTES: RouteObject[] = [
       { path: "run-comparator", element: <RunComparatorRoute /> },
       { path: "document-library", element: <DocumentLibraryRoute /> },
       { path: "library", element: <StrategyLibraryRoute /> },
+      // Phase 7 — LEAN strategy template browser + clone-to-workspace
+      { path: "templates", element: <StrategyTemplatesPage /> },
     ],
   },
 ];

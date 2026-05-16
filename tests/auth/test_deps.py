@@ -36,6 +36,8 @@ def test_current_context_derives_scopes_from_memberships(monkeypatch: pytest.Mon
         x_aqp_workspace=None,
         x_aqp_project=None,
         x_aqp_lab=None,
+        x_aqp_org=None,
+        x_aqp_team=None,
     )
     assert ctx.user_id == user.id
     assert ctx.org_id == "org-1"
@@ -64,6 +66,8 @@ def test_workspace_override_clears_project_and_lab(monkeypatch: pytest.MonkeyPat
         x_aqp_workspace="ws-2",
         x_aqp_project=None,
         x_aqp_lab=None,
+        x_aqp_org=None,
+        x_aqp_team=None,
     )
     assert ctx.workspace_id == "ws-2"
     assert ctx.project_id is None
@@ -89,5 +93,7 @@ def test_workspace_override_requires_membership(monkeypatch: pytest.MonkeyPatch)
             x_aqp_workspace="ws-denied",
             x_aqp_project=None,
             x_aqp_lab=None,
+            x_aqp_org=None,
+            x_aqp_team=None,
         )
     assert exc.value.status_code == 403

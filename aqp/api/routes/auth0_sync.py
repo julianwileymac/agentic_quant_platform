@@ -1,0 +1,246 @@
+"""``/_internal/auth0/sync`` — M2M-secured endpoint for Auth0 Actions.
+
+The Auth0 Action invokes this endpoint during the login pipeline
+(``onExecutePostLogin``) and uses the response to inject AQP-namespaced
+custom claims into the access token before it's signed. See
+``docs/auth0-actions.md`` for the Action snippet.
+
+The endpoint is intentionally outside the normal ``/auth/...`` prefix
+so the Cloudflare Tunnel / Nginx rewrite rules can keep it on a
+separate path that only the Auth0 IPs are allowed to hit (defense in
+depth on top of the M2M token requirement).
+
+Authorization: requires an M2M Bearer token whose audience matches
+``settings.auth_m2m_audience``. Unauthenticated requests get a 401.
+"""
+from __future__ import annotations
+
+import logging
+
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from pydantic import BaseModel, Field
+
+from aqp.auth.oidc import (
+    InvalidTokenError,
+    JWKSUnavailableError,
+    OIDCError,
+    get_oidc_config,
+    validate_jwt,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/_internal/auth0", tags=["auth0-sync"])
+
+
+# ---------------------------------------------------------------------------
+# M2M token verification dep
+# ---------------------------------------------------------------------------
+
+
+def require_m2m_token(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> dict:
+    """Verify the M2M Bearer token and return its claims.
+
+    The token must:
+
+    - be issued by the same OIDC tenant configured via
+      ``AQP_AUTH_OIDC_ISSUER``;
+    - carry ``aud=AQP_AUTH_M2M_AUDIENCE`` (defaults to
+      ``AQP_AUTH_OIDC_AUDIENCE`` when M2M-specific audience is unset);
+    - be signed by the issuer's JWKS.
+
+    Returns the verified claims dict so the route handler can audit
+    which Action invoked it.
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Bearer token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = authorization.split(None, 1)[1].strip()
+
+    cfg = get_oidc_config()
+    if cfg is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OIDC is not configured",
+        )
+
+    try:
+        from aqp.config import settings
+
+        m2m_audience = (
+            str(getattr(settings, "auth_m2m_audience", "") or "").strip()
+            or cfg.audience
+        )
+    except Exception:
+        m2m_audience = cfg.audience
+
+    # Build a per-call config so the M2M audience can differ from the
+    # SPA audience (Auth0 best practice).
+    from aqp.auth.oidc import OIDCConfig
+
+    m2m_cfg = OIDCConfig(
+        issuer=cfg.issuer,
+        audience=m2m_audience,
+        client_id=cfg.client_id,
+        jwks_ttl_seconds=cfg.jwks_ttl_seconds,
+        leeway_seconds=cfg.leeway_seconds,
+    )
+
+    try:
+        return validate_jwt(token, config=m2m_cfg)
+    except InvalidTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+            headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+        ) from exc
+    except JWKSUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except OIDCError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+
+
+# ---------------------------------------------------------------------------
+# Request / response shapes
+# ---------------------------------------------------------------------------
+
+
+class Auth0SyncRequest(BaseModel):
+    """Payload the Auth0 Action sends on every login."""
+
+    user_id: str = Field(
+        ..., description="Auth0 user id, e.g. 'auth0|abc' or 'google-oauth2|123'."
+    )
+    email: str | None = Field(default=None)
+    organization_id: str | None = Field(
+        default=None,
+        description=(
+            "Standard Auth0 ``org_id`` claim when the user logged in via "
+            "an Auth0 Organization."
+        ),
+    )
+    organization_name: str | None = Field(default=None)
+    requested_claims: dict | None = Field(
+        default=None,
+        description=(
+            "Optional hint from the SPA (e.g. ``{'workspace_id': 'ws-1'}``) "
+            "letting the operator pre-pin the active context."
+        ),
+    )
+
+
+class Auth0SyncResponse(BaseModel):
+    """Custom claims the Action injects into the access token.
+
+    Every key is namespaced under ``settings.auth_claims_namespace``
+    (default ``https://aqp/``) so it can never collide with reserved
+    JWT claims. The Action passes this dict directly to
+    ``api.accessToken.setCustomClaim`` so the SPA + backend see a
+    uniform claim namespace.
+    """
+
+    org_id: str | None = None
+    team_id: str | None = None
+    workspace_id: str | None = None
+    project_id: str | None = None
+    lab_id: str | None = None
+    roles: list[str] = Field(default_factory=list)
+    internal_user_id: str | None = None
+    is_new_user: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.post("/sync", response_model=Auth0SyncResponse)
+def auth0_sync(
+    body: Auth0SyncRequest,
+    _claims: dict = Depends(require_m2m_token),
+) -> Auth0SyncResponse:
+    """Lazy-provision an internal user + return custom claims for the JWT.
+
+    The Auth0 Action invokes this on every login. The response is
+    injected into the access token via ``setCustomClaim`` so the
+    backend's :func:`aqp.auth.user.provision_user_from_claims` chain
+    sees the user's org / team / role on the very first request.
+    """
+    from aqp.config.defaults import DEFAULT_WORKSPACE_ID, ROLE_VIEWER
+    from aqp.persistence.db import get_session
+    from aqp.persistence.models_tenancy import Membership, User
+
+    is_new = False
+    with get_session() as session:
+        user_row = (
+            session.query(User).filter(User.auth_subject == body.user_id).one_or_none()
+        )
+        if user_row is None and body.email:
+            user_row = (
+                session.query(User).filter(User.email == body.email.lower()).one_or_none()
+            )
+
+        if user_row is None:
+            # The actual user-row creation happens on the first request
+            # the SPA makes (provision_user_from_claims). Here we just
+            # return the default workspace claim so the Action injects
+            # something useful even before the row exists.
+            internal_user_id = None
+            is_new = True
+            org_id = body.organization_id
+            workspace_id = DEFAULT_WORKSPACE_ID
+            roles: list[str] = [ROLE_VIEWER]
+        else:
+            internal_user_id = user_row.id
+            roles = sorted(
+                {
+                    m.role
+                    for m in (
+                        session.query(Membership)
+                        .filter(Membership.user_id == user_row.id)
+                        .all()
+                    )
+                }
+            )
+            ws_membership = (
+                session.query(Membership)
+                .filter(
+                    Membership.user_id == user_row.id,
+                    Membership.scope_kind == "workspace",
+                )
+                .first()
+            )
+            workspace_id = (
+                ws_membership.scope_id if ws_membership else DEFAULT_WORKSPACE_ID
+            )
+            org_membership = (
+                session.query(Membership)
+                .filter(
+                    Membership.user_id == user_row.id,
+                    Membership.scope_kind == "org",
+                )
+                .first()
+            )
+            org_id = org_membership.scope_id if org_membership else body.organization_id
+
+    return Auth0SyncResponse(
+        org_id=org_id,
+        workspace_id=workspace_id,
+        roles=roles,
+        internal_user_id=internal_user_id,
+        is_new_user=is_new,
+    )
+
+
+__all__ = ["router"]

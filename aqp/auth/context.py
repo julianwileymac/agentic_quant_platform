@@ -52,6 +52,14 @@ class RequestContext:
     project_id: str | None = None
     lab_id: str | None = None
     run_id: str | None = None
+    # Phase 1 umbrella ids. Threaded through :class:`LedgerWriter._stamp`
+    # onto every run row that grew the matching FK in migration 0037.
+    # Most flows leave these ``None``; only experiment-aware code paths
+    # (the new ``/experiments/...`` routes, the analysis-lab composer
+    # save action, the bot lifecycle when launched from an experiment)
+    # populate them.
+    experiment_id: str | None = None
+    test_id: str | None = None
     role: str | None = None
     live_control: bool = False
     extras: dict[str, Any] = field(default_factory=dict)
@@ -81,6 +89,8 @@ class RequestContext:
             project_id=self.project_id,
             lab_id=self.lab_id,
             run_id=rid,
+            experiment_id=self.experiment_id,
+            test_id=self.test_id,
             role=self.role,
             live_control=self.live_control,
             extras=dict(self.extras),
@@ -117,6 +127,8 @@ class RequestContext:
             "project_id": self.project_id,
             "lab_id": self.lab_id,
             "run_id": self.run_id,
+            "experiment_id": self.experiment_id,
+            "test_id": self.test_id,
             "role": self.role,
             "live_control": self.live_control,
             "extras": dict(self.extras),
@@ -133,6 +145,8 @@ class RequestContext:
             ("project_id", self.project_id),
             ("lab_id", self.lab_id),
             ("run_id", self.run_id),
+            ("experiment_id", self.experiment_id),
+            ("test_id", self.test_id),
         ):
             if value:
                 out[key] = str(value)

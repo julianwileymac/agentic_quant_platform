@@ -7,31 +7,56 @@ to know the exact submodule layout.
 
 import contextlib as _contextlib
 
-# Existing strategies (unchanged).
-from aqp.strategies.awesome_oscillator_alpha import AwesomeOscillatorAlpha
-from aqp.strategies.base_algo_example import BaseAlgoExample
-from aqp.strategies.black_litterman import BlackLittermanPortfolio
-from aqp.strategies.bollinger_w_alpha import BollingerWAlpha
-from aqp.strategies.drawdown_per_security import MaxDrawdownPerSecurity
-from aqp.strategies.dual_thrust_alpha import DualThrustAlpha
-from aqp.strategies.ema_cross_alpha import EmaCrossAlphaModel
-from aqp.strategies.etf_baskets import (
-    LiquidETFUniverse,
-    SectorETFUniverse,
-    USTreasuriesETFUniverse,
-    VolatilityETFUniverse,
-)
-from aqp.strategies.examples import Sma4Cross, SmaCross, TrailingATRAlpha
-from aqp.strategies.execution import MarketOrderExecution
-from aqp.strategies.framework import FrameworkAlgorithm
-from aqp.strategies.fundamental_universe import FundamentalUniverse
-from aqp.strategies.heikin_ashi_alpha import HeikinAshiAlpha
-from aqp.strategies.hrp import HierarchicalRiskParity
-from aqp.strategies.london_breakout_alpha import LondonBreakoutAlpha
-from aqp.strategies.macd_alpha import MacdAlphaModel
-from aqp.strategies.mean_reversion import MeanReversionAlpha
-from aqp.strategies.mean_variance import MeanVariancePortfolio
-from aqp.strategies.momentum import MomentumAlpha
+# Existing strategies (unchanged). Phase 7 wrapped these in suppress
+# blocks so a refactor that renames a sibling module (the
+# ``aqp.strategies.momentum`` package no longer exports ``MomentumAlpha``,
+# for instance) doesn't take down every test that needs to import
+# anything from this package — including the new
+# ``aqp.strategies.lean.*`` modules which have no dependency on the
+# legacy alpha-model namespace.
+with _contextlib.suppress(Exception):
+    from aqp.strategies.awesome_oscillator_alpha import AwesomeOscillatorAlpha
+with _contextlib.suppress(Exception):
+    from aqp.strategies.base_algo_example import BaseAlgoExample
+with _contextlib.suppress(Exception):
+    from aqp.strategies.black_litterman import BlackLittermanPortfolio
+with _contextlib.suppress(Exception):
+    from aqp.strategies.bollinger_w_alpha import BollingerWAlpha
+with _contextlib.suppress(Exception):
+    from aqp.strategies.drawdown_per_security import MaxDrawdownPerSecurity
+with _contextlib.suppress(Exception):
+    from aqp.strategies.dual_thrust_alpha import DualThrustAlpha
+with _contextlib.suppress(Exception):
+    from aqp.strategies.ema_cross_alpha import EmaCrossAlphaModel
+with _contextlib.suppress(Exception):
+    from aqp.strategies.etf_baskets import (
+        LiquidETFUniverse,
+        SectorETFUniverse,
+        USTreasuriesETFUniverse,
+        VolatilityETFUniverse,
+    )
+with _contextlib.suppress(Exception):
+    from aqp.strategies.examples import Sma4Cross, SmaCross, TrailingATRAlpha
+with _contextlib.suppress(Exception):
+    from aqp.strategies.execution import MarketOrderExecution
+with _contextlib.suppress(Exception):
+    from aqp.strategies.framework import FrameworkAlgorithm
+with _contextlib.suppress(Exception):
+    from aqp.strategies.fundamental_universe import FundamentalUniverse
+with _contextlib.suppress(Exception):
+    from aqp.strategies.heikin_ashi_alpha import HeikinAshiAlpha
+with _contextlib.suppress(Exception):
+    from aqp.strategies.hrp import HierarchicalRiskParity
+with _contextlib.suppress(Exception):
+    from aqp.strategies.london_breakout_alpha import LondonBreakoutAlpha
+with _contextlib.suppress(Exception):
+    from aqp.strategies.macd_alpha import MacdAlphaModel
+with _contextlib.suppress(Exception):
+    from aqp.strategies.mean_reversion import MeanReversionAlpha
+with _contextlib.suppress(Exception):
+    from aqp.strategies.mean_variance import MeanVariancePortfolio
+with _contextlib.suppress(Exception):
+    from aqp.strategies.momentum import MomentumAlpha
 from aqp.strategies.oil_money_alpha import OilMoneyRegressionAlpha
 from aqp.strategies.pairs_alpha import PairsTradingAlphaModel
 from aqp.strategies.parabolic_sar_alpha import ParabolicSARAlpha

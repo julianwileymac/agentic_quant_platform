@@ -70,14 +70,54 @@ class LedgerWriter:
     def project_id(self) -> str | None:
         return getattr(self.context, "project_id", None)
 
+    @property
+    def experiment_id(self) -> str | None:
+        """Active experiment id (Phase 1 umbrella).
+
+        Threaded onto every run-table row that grew an ``experiment_id``
+        FK in migration 0037. Pulled from
+        :attr:`RequestContext.experiment_id` (added in the same phase) or
+        any object that exposes the attribute via duck-typing.
+        """
+        return getattr(self.context, "experiment_id", None)
+
+    @property
+    def test_id(self) -> str | None:
+        """Active test id (Phase 1 umbrella).
+
+        Only ``strategy_tests`` (and any future per-assertion run table)
+        carries this column.
+        """
+        return getattr(self.context, "test_id", None)
+
     def _stamp(self, row: Any) -> Any:
-        """Stamp a fresh ORM row with the active tenancy fields if absent."""
+        """Stamp a fresh ORM row with the active tenancy fields if absent.
+
+        Also propagates the optional umbrella ids (``experiment_id`` /
+        ``test_id``) when the row has the matching attribute and the
+        attribute is currently empty. This is what closes the loop on
+        AGENTS.md rule 34 — flows that pass an experiment-aware context
+        get correctly linked rows without each call-site remembering to
+        set the column manually.
+        """
         if self.owner_user_id and getattr(row, "owner_user_id", None) in (None, ""):
             row.owner_user_id = self.owner_user_id
         if self.workspace_id and getattr(row, "workspace_id", None) in (None, ""):
             row.workspace_id = self.workspace_id
         if self.project_id and hasattr(row, "project_id") and getattr(row, "project_id", None) in (None, ""):
             row.project_id = self.project_id
+        if (
+            self.experiment_id
+            and hasattr(row, "experiment_id")
+            and getattr(row, "experiment_id", None) in (None, "")
+        ):
+            row.experiment_id = self.experiment_id
+        if (
+            self.test_id
+            and hasattr(row, "test_id")
+            and getattr(row, "test_id", None) in (None, "")
+        ):
+            row.test_id = self.test_id
         return row
 
     # --- generic ----

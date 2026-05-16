@@ -221,6 +221,38 @@ def router_complete(
         # is present, so pass a placeholder so calls go through.
         call_kwargs.setdefault("api_key", "EMPTY")
 
+    # Phase 5 — Semantic LLM completion cache. Disabled by default;
+    # opt-in via AQP_LLM_SEMANTIC_CACHE_ENABLED=true. When a hit is
+    # found above ``llm_semantic_cache_threshold`` we return the
+    # cached response WITHOUT calling litellm. The check is a no-op
+    # when the cache is disabled, Redis is down, or no embedding
+    # provider is reachable.
+    semantic_cache = None
+    if not tools:  # tool-calling completions are not safely cacheable
+        try:
+            from aqp.llm.cache import get_semantic_cache
+
+            semantic_cache = get_semantic_cache()
+            cached = semantic_cache.lookup(msgs, full_model)
+            if cached is not None:
+                logger.debug(
+                    "router_complete semantic cache HIT model=%s similarity=%.3f",
+                    full_model,
+                    cached.similarity,
+                )
+                return LLMResult(
+                    content=cached.content,
+                    model=full_model,
+                    provider=handle.spec.slug,
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                    total_tokens=0,
+                    cost_usd=0.0,
+                    raw=cached.to_openai_shape(),
+                )
+        except Exception:  # noqa: BLE001
+            logger.debug("semantic cache lookup failed; falling through", exc_info=True)
+
     response = litellm.completion(
         model=full_model,
         messages=msgs,
@@ -241,6 +273,14 @@ def router_complete(
     completion_tokens = int(usage.get("completion_tokens") or 0)
     total_tokens = int(usage.get("total_tokens") or (prompt_tokens + completion_tokens))
     cost = compute_cost(full_model, prompt_tokens, completion_tokens)
+
+    # Store on the way out so the next semantically-similar prompt
+    # gets the cache hit. Best-effort — silent failure is fine.
+    if semantic_cache is not None and not tools:
+        try:
+            semantic_cache.store(msgs, full_model, response)
+        except Exception:  # noqa: BLE001
+            logger.debug("semantic cache store failed", exc_info=True)
 
     return LLMResult(
         content=content,
