@@ -57,6 +57,43 @@ def start_evaluation(config: dict, checkpoint: str) -> TaskAccepted:
     return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
 
 
+@router.post("/halt-all")
+def halt_all_rl() -> dict[str, Any]:
+    """Halt every running RL train / paper / evaluate / replay run.
+
+    Idempotent kill-switch fan-out target. Selects every
+    :class:`~aqp.persistence.models_rl.RLRun` with
+    ``status in {pending, running}`` and a populated ``task_id`` and
+    asks Celery to revoke + terminate the worker process. Each row
+    is flipped to ``status="halted"`` so the lab UI updates without a
+    polling delay.
+    """
+    from sqlalchemy import select as _select
+
+    from aqp.persistence.db import get_session
+    from aqp.persistence.models_rl import RLRun
+    from aqp.tasks.celery_app import celery_app as _celery
+
+    revoked: list[str] = []
+    failed: list[dict[str, str]] = []
+    with get_session() as s:
+        rows = (
+            s.execute(_select(RLRun).where(RLRun.status.in_(["pending", "running"])))
+            .scalars()
+            .all()
+        )
+        for row in rows:
+            tid = (row.task_id or "").strip()
+            if tid:
+                try:
+                    _celery.control.revoke(tid, terminate=True, signal="SIGTERM")
+                    revoked.append(tid)
+                except Exception as exc:  # noqa: BLE001
+                    failed.append({"task_id": tid, "error": str(exc)})
+            row.status = "halted"
+    return {"stopped": len(revoked), "task_ids": revoked, "failures": failed}
+
+
 _APPLICATIONS: dict[str, dict[str, Any]] = {
     "stock_trading": {
         "label": "Single-stock trading",

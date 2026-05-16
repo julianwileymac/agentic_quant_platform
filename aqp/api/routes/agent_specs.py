@@ -30,6 +30,7 @@ class AgentSpecSummary(BaseModel):
     n_rag_clauses: int
     memory_kind: str
     annotations: list[str] = Field(default_factory=list)
+    template_target: str = "utility"
 
 
 class AgentSpecDetail(AgentSpecSummary):
@@ -75,6 +76,7 @@ def list_specs() -> list[AgentSpecSummary]:
             n_rag_clauses=len(s.rag),
             memory_kind=s.memory.kind,
             annotations=s.annotations,
+            template_target=getattr(s, "template_target", "utility"),
         )
         for s in list_agent_specs()
     ]
@@ -98,6 +100,7 @@ def get_spec_detail(name: str) -> AgentSpecDetail:
         n_rag_clauses=len(s.rag),
         memory_kind=s.memory.kind,
         annotations=s.annotations,
+        template_target=getattr(s, "template_target", "utility"),
         payload=payload,
     )
 
@@ -234,6 +237,80 @@ def get_run_v2(run_id: str) -> AgentRunV2Detail:
         )
 
 
+@router.get("/runs/v2/{run_id}/decisions")
+def list_run_decisions(run_id: str, limit: int = Query(default=200, ge=1, le=2000)) -> list[dict[str, Any]]:
+    """List decisions emitted by an agent run.
+
+    Decisions are persisted as :class:`MemoryEpisode` rows whose ``meta``
+    blob carries a ``run_id``. We do a best-effort lookup keyed by that
+    field; if the role-keyed memory layer has no rows for this run the
+    result is an empty list (idempotent, never 500s).
+    """
+    from aqp.persistence.models_memory import MemoryEpisode
+
+    with get_session() as session:
+        rows = (
+            session.execute(
+                select(MemoryEpisode)
+                .where(MemoryEpisode.meta.contains({"run_id": run_id}))
+                .order_by(desc(MemoryEpisode.created_at))
+                .limit(limit)
+            )
+            .scalars()
+            .all()
+        )
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        meta = r.meta or {}
+        out.append(
+            {
+                "id": r.id,
+                "run_id": run_id,
+                "vt_symbol": r.vt_symbol or meta.get("vt_symbol"),
+                "ts": str(r.created_at) if r.created_at else None,
+                "action": meta.get("action"),
+                "size_pct": meta.get("size_pct"),
+                "confidence": meta.get("confidence"),
+                "rationale": r.lesson or meta.get("rationale"),
+                "provider": meta.get("provider"),
+            }
+        )
+    return out
+
+
+@router.get("/runs/v2/{run_id}/reflections")
+def list_run_reflections(run_id: str, limit: int = Query(default=200, ge=1, le=2000)) -> list[dict[str, Any]]:
+    """List reflections written by an agent run.
+
+    Backed by :class:`MemoryReflection`; identical lookup pattern to
+    :func:`list_run_decisions`. Returns ``[]`` when no reflections were
+    persisted for this run.
+    """
+    from aqp.persistence.models_memory import MemoryReflection
+
+    with get_session() as session:
+        rows = (
+            session.execute(
+                select(MemoryReflection)
+                .where(MemoryReflection.meta.contains({"run_id": run_id}))
+                .order_by(desc(MemoryReflection.created_at))
+                .limit(limit)
+            )
+            .scalars()
+            .all()
+        )
+    return [
+        {
+            "id": r.id,
+            "run_id": run_id,
+            "ts": str(r.created_at) if r.created_at else None,
+            "text": r.lesson,
+            "tags": (r.meta or {}).get("tags") or [],
+        }
+        for r in rows
+    ]
+
+
 @router.post("/runs/v2/{run_id}/replay", response_model=AgentRunV2Detail)
 def replay_run(run_id: str) -> AgentRunV2Detail:
     """Re-run an agent against the exact spec version that produced ``run_id``."""
@@ -265,6 +342,59 @@ def replay_run(run_id: str) -> AgentRunV2Detail:
         spec_version_id=row.spec_version_id,
         steps=[s.__dict__ for s in result.steps],
     )
+
+
+@router.post("/halt")
+def halt_agents(engage_risk: bool = Query(default=True)) -> dict[str, Any]:
+    """Halt every running spec-driven agent run.
+
+    Idempotent kill-switch fan-out target wired to the topbar
+    ``KillSwitch`` component
+    (``frontend/src/components/common/KillSwitch.tsx``). Selects every
+    ``AgentRunV2`` in ``status="running"`` (or ``"pending"``) with a
+    ``task_id`` and asks Celery to revoke + terminate them. Each row is
+    flipped to ``status="halted"`` so the run-detail UI reflects the
+    new state immediately.
+
+    When ``engage_risk=true`` (the default) the global risk kill switch
+    is also engaged so any in-flight order submissions are blocked at
+    the order path while the halt rolls.
+    """
+    from aqp.persistence.models_agents import AgentRunV2
+    from aqp.tasks.celery_app import celery_app as _celery
+
+    revoked: list[str] = []
+    failed: list[dict[str, str]] = []
+
+    if engage_risk:
+        try:
+            from aqp.risk.kill_switch import engage as _engage_kill
+
+            _engage_kill("agents.halt: kill_switch fanout")
+        except Exception as exc:  # noqa: BLE001
+            failed.append({"step": "engage_kill_switch", "error": str(exc)})
+
+    with get_session() as session:
+        rows = session.execute(
+            select(AgentRunV2).where(AgentRunV2.status.in_(["running", "pending"]))
+        ).scalars().all()
+        for row in rows:
+            tid = (row.task_id or "").strip()
+            if tid:
+                try:
+                    _celery.control.revoke(tid, terminate=True, signal="SIGTERM")
+                    revoked.append(tid)
+                except Exception as exc:  # noqa: BLE001
+                    failed.append({"task_id": tid, "error": str(exc)})
+            row.status = "halted"
+            row.error = (row.error or "") + "\nhalted by kill switch"
+
+    return {
+        "stopped": len(revoked),
+        "task_ids": revoked,
+        "failures": failed,
+        "risk_kill_switch_engaged": engage_risk,
+    }
 
 
 @router.get("/evaluations")

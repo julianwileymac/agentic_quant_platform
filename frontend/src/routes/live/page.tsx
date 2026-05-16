@@ -101,8 +101,8 @@ export function LiveDeskRoute() {
   });
 
   const positionsQuery = useApiQuery<PositionRow[]>({
-    queryKey: ["positions"],
-    path: `/portfolio/positions`,
+    queryKey: ["positions", "flat"],
+    path: `/portfolio/positions/flat`,
     refetchInterval: streaming ? 5_000 : false,
     select: (raw) => (Array.isArray(raw) ? raw : []),
   });

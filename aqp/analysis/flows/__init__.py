@@ -30,6 +30,7 @@ for _name in (
     "imputation",
     "regression",
     "time_series",
+    "optimal_control",  # loaded before derivatives so the latter can import LucicTseFlowParams
     "derivatives",
     "portfolio",
     "factors",

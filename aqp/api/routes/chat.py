@@ -12,6 +12,7 @@ from aqp.api.schemas import (
     ChatResponse,
     ChatThreadCreate,
     ChatThreadSummary,
+    TaskAccepted,
 )
 from aqp.llm.ollama_client import deep_llm, quick_llm
 from aqp.llm.prompts import SYSTEM_QUANT_ASSISTANT
@@ -98,6 +99,34 @@ def chat(req: ChatRequest) -> ChatResponse:
             "completion": result.completion_tokens,
             "total": result.total_tokens,
         },
+    )
+
+
+@router.post("/messages", response_model=TaskAccepted)
+def messages_async(req: ChatRequest) -> TaskAccepted:
+    """Async chat completion — returns a ``task_id`` to subscribe to.
+
+    Used by the Vite chat surface (``frontend/src/routes/chat/page.tsx``)
+    which opens ``/chat/stream/{task_id}`` and renders the worker's
+    ``delta`` / ``done`` frames into the assistant bubble.
+
+    The synchronous ``POST /chat`` route above is preserved verbatim
+    for the legacy webui; this surface is purely additive.
+    """
+    # Inline import per .cursor/rules/tasks-api.mdc (no Celery imports
+    # at FastAPI route module top level — circular import risk).
+    from aqp.tasks.chat_tasks import chat_completion
+
+    payload_context = req.context.model_dump() if req.context else None
+    async_result = chat_completion.delay(
+        prompt=req.prompt,
+        session_id=req.session_id,
+        tier=req.tier,
+        context=payload_context,
+    )
+    return TaskAccepted(
+        task_id=async_result.id,
+        stream_url=f"/chat/stream/{async_result.id}",
     )
 
 

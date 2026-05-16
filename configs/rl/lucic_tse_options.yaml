@@ -1,0 +1,64 @@
+name: "Lucic-Tse Portfolio Options Market Making"
+description: >
+  SAC learns to scale the Lucic-Tse gamma_inv (inventory penalty) and
+  base_spread knobs across an SPX-style option chain. The agent's
+  reward is the JAX-computed expected vol-arb PnL minus a quadratic
+  inventory penalty across the whole strike x expiry surface.
+
+env:
+  class: LucicTsePortfolioEnv
+  module_path: aqp.rl.envs.lucic_tse_options_env
+  kwargs:
+    horizon: 500
+    spot: 100.0
+    n_strikes: 7
+    n_expiries: 4
+    gamma_inv: 0.05
+    base_spread: 0.05
+    hedge_cost: 0.001
+    realized_vol: 0.20
+    implied_vol: 0.22
+    vol_drift_scale: 0.005
+
+reward:
+  composite:
+    - class: VolArbPnLTerm
+      module_path: aqp.rl.rewards.vol_arb_pnl
+      kwargs:
+        weight: 1.0
+    - class: InventoryQuadraticPenaltyTerm
+      module_path: aqp.rl.rewards.inventory_quadratic
+      kwargs:
+        weight: 0.1
+        phi: 1.0e-4
+
+terminations:
+  - class: RiskBreachTermination
+    module_path: aqp.rl.terminations.risk_breach
+    kwargs:
+      inventory_cap: 1000.0
+      vega_cap: 5000.0
+
+agent:
+  class: SB3Adapter
+  module_path: aqp.rl.agents.sb3_adapter
+  kwargs:
+    algorithm: SAC
+    policy: MlpPolicy
+    learning_rate: 0.0003
+    buffer_size: 100000
+    batch_size: 256
+    tau: 0.005
+    gamma: 0.99
+    train_freq: 1
+    gradient_steps: 1
+
+training:
+  total_timesteps: 200000
+  eval_freq: 10000
+  checkpoint_freq: 25000
+  verbose: 1
+
+mlflow:
+  experiment: aqp-lucic-tse-options
+  register_model_as: aqp.lucic_tse_options

@@ -481,6 +481,120 @@ async def deploy_bot_route(
     return TaskAccepted(task_id=handle.id, stream_url=f"/chat/stream/{handle.id}")
 
 
+@router.post("/halt-all")
+async def halt_all_bots(
+    session: AsyncSession = Depends(async_session_dep),
+) -> dict[str, Any]:
+    """Halt every active bot deployment.
+
+    Idempotent kill-switch fan-out target. Selects every
+    :class:`BotDeployment` with ``status in {pending, running}`` and a
+    populated ``task_id`` and revokes the underlying Celery task. For
+    ``target='paper'`` deployments we additionally publish the stop
+    signal so the long-running paper session loop drains gracefully.
+    """
+    from aqp.tasks.celery_app import celery_app as _celery
+    from aqp.tasks.paper_tasks import publish_stop_signal
+
+    revoked: list[str] = []
+    paper_signals: list[str] = []
+    failed: list[dict[str, str]] = []
+
+    rows = (
+        (
+            await session.execute(
+                select(BotDeployment).where(BotDeployment.status.in_(["pending", "running"]))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for row in rows:
+        tid = (row.task_id or "").strip()
+        if not tid:
+            continue
+        try:
+            _celery.control.revoke(tid, terminate=True, signal="SIGTERM")
+            revoked.append(tid)
+        except Exception as exc:  # noqa: BLE001
+            failed.append({"task_id": tid, "error": str(exc)})
+        if (row.target or "").lower() == "paper":
+            try:
+                publish_stop_signal(tid, reason="bots.halt-all: kill_switch fanout")
+                paper_signals.append(tid)
+            except Exception as exc:  # noqa: BLE001
+                failed.append({"task_id": tid, "error": f"paper-stop: {exc}"})
+        row.status = "halted"
+        row.error = (row.error or "") + "\nhalted by kill switch"
+    await session.commit()
+
+    return {
+        "stopped": len(revoked),
+        "task_ids": revoked,
+        "paper_stop_signals": paper_signals,
+        "failures": failed,
+    }
+
+
+@router.post("/{bot_ref}/halt")
+async def halt_bot(
+    bot_ref: str,
+    session: AsyncSession = Depends(async_session_dep),
+) -> dict[str, Any]:
+    """Halt every active deployment for a single bot.
+
+    Wired to the per-bot ``BotsApi.halt`` button in
+    ``frontend/src/lib/api/bots.ts``. Mirrors :func:`halt_all_bots`
+    but scopes the revoke fan-out to one bot's deployments.
+    """
+    from aqp.tasks.celery_app import celery_app as _celery
+    from aqp.tasks.paper_tasks import publish_stop_signal
+
+    row = await _get_row(session, bot_ref)
+    revoked: list[str] = []
+    paper_signals: list[str] = []
+    failed: list[dict[str, str]] = []
+
+    deployments = (
+        (
+            await session.execute(
+                select(BotDeployment).where(
+                    BotDeployment.bot_id == row.id,
+                    BotDeployment.status.in_(["pending", "running"]),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for d in deployments:
+        tid = (d.task_id or "").strip()
+        if not tid:
+            continue
+        try:
+            _celery.control.revoke(tid, terminate=True, signal="SIGTERM")
+            revoked.append(tid)
+        except Exception as exc:  # noqa: BLE001
+            failed.append({"task_id": tid, "error": str(exc)})
+        if (d.target or "").lower() == "paper":
+            try:
+                publish_stop_signal(tid, reason=f"bot:{bot_ref}:halt")
+                paper_signals.append(tid)
+            except Exception as exc:  # noqa: BLE001
+                failed.append({"task_id": tid, "error": f"paper-stop: {exc}"})
+        d.status = "halted"
+        d.error = (d.error or "") + "\nhalted by per-bot halt"
+    await session.commit()
+
+    return {
+        "bot": bot_ref,
+        "stopped": len(revoked),
+        "task_ids": revoked,
+        "paper_stop_signals": paper_signals,
+        "failures": failed,
+    }
+
+
 @router.post("/{bot_ref}/chat", response_model=TaskAccepted)
 async def chat_bot(
     bot_ref: str,

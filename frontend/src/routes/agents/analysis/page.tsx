@@ -1,6 +1,7 @@
 import { Activity, BarChart3, Layers } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
+import { AgentTeamConsole } from "@/components/agents/AgentTeamConsole";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -26,6 +27,20 @@ const TILES = [
 ];
 
 export function AnalysisAgentsHubRoute() {
+  // ``?spec=<name>`` deep-links from the Agent Templates Gallery render
+  // the AgentTeamConsole inline against the requested spec; otherwise
+  // we fall back to the curated tile overview.
+  const [searchParams] = useSearchParams();
+  const spec = searchParams.get("spec");
+  if (spec && spec.trim()) {
+    return (
+      <AgentTeamConsole
+        specName={spec.trim()}
+        title="Analysis Agent"
+        description="Critic / analyst spec dispatched from the Agent Templates Gallery."
+      />
+    );
+  }
   return (
     <PageContainer
       title="Analysis Agents"

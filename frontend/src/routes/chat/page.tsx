@@ -60,27 +60,30 @@ export function ChatRoute() {
     const prompt = draft.trim();
     if (!prompt) return;
     setBusy(true);
-    setTurns((prev) => [
-      ...prev,
-      { role: "user", content: prompt },
-      { role: "assistant", content: "" },
-    ]);
+    // Append the user turn first so the user sees their message
+    // immediately. The assistant placeholder is appended only after
+    // we have the task_id back, otherwise the streaming effect's
+    // `last.taskId === taskId` guard would never match and the
+    // accumulated `delta` chunks would never land in the bubble.
+    setTurns((prev) => [...prev, { role: "user", content: prompt }]);
     setDraft("");
     try {
       const res = await apiFetch<ChatTaskResponse>("/chat/messages", {
         method: "POST",
         body: JSON.stringify({ prompt }),
       });
+      setTurns((prev) => [
+        ...prev,
+        { role: "assistant", content: "", taskId: res.task_id },
+      ]);
       setTaskId(res.task_id);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : (err as Error).message;
       toast.error(`Chat send failed: ${msg}`);
-      setTurns((prev) => {
-        if (prev.length === 0) return prev;
-        const next = [...prev];
-        next[next.length - 1] = { role: "assistant", content: `(error) ${msg}` };
-        return next;
-      });
+      setTurns((prev) => [
+        ...prev,
+        { role: "assistant", content: `(error) ${msg}` },
+      ]);
     } finally {
       setBusy(false);
     }

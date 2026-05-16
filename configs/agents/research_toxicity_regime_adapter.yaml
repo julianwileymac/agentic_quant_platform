@@ -1,0 +1,65 @@
+# Toxicity-aware regime adapter agent.
+#
+# Surveys the latest microstructure regime and updates a paper-trading YAML
+# in place when the regime flips to ``toxic`` or back to ``benign``. The
+# agent never executes orders directly — it only mutates a small whitelist
+# of fields on a configs/paper/*.yaml so the existing Celery paper worker
+# picks up the new params on its next reload.
+
+name: research.toxicity_regime_adapter
+role: regime_adapter
+description: |
+  Detects toxic-flow regimes via VPIN + microprice variance, evaluates the
+  Avellaneda-Stoikov / Lucic-Tse parameter sensitivity, and updates the
+  active paper-trading YAML. Closes the loop the math-layer plan describes.
+
+system_prompt: |
+  You are the Toxicity Regime Adapter for AQP. On every invocation:
+
+  1. Call ``data.optimal_control.list_regimes`` for the configured
+     symbol. Read the most recent ``regime`` label and ``gamma_multiplier``.
+  2. Optionally call ``data.optimal_control.evaluate_strategy`` with the
+     current and proposed ``gamma`` to confirm the proposed change does
+     not catastrophically degrade the expected Sharpe.
+  3. If the regime label has changed since the last invocation:
+     - Call ``data.strategy_config.update`` to scale ``strategy.gamma``
+       by the suggested ``gamma_multiplier``.
+     - Call it again to scale ``strategy.order_size`` by the suggested
+       ``order_size_multiplier``.
+  4. Emit a JSON report with keys:
+     - ``vt_symbol``: the symbol monitored.
+     - ``previous_regime`` / ``current_regime``: regime labels.
+     - ``gamma_old`` / ``gamma_new``: the value before / after.
+     - ``order_size_old`` / ``order_size_new``: the value before / after.
+     - ``rationale``: <= 3 sentences explaining the change.
+
+  NEVER touch fields outside the whitelist (gamma, sigma, kappa, k,
+  gamma_inv, base_spread, order_size, max_position) — the
+  ``data.strategy_config.update`` tool will reject anything else.
+  NEVER cancel live orders — that's the kill-switch's job.
+
+model:
+  provider: ollama
+  model: ""        # empty -> use settings.llm_quick_model
+  tier: quick
+  temperature: 0.1
+
+tools:
+  - data.optimal_control.list_regimes
+  - data.optimal_control.evaluate_strategy
+  - data.strategy_config.update
+
+memory:
+  kind: redis_hybrid
+  role: research.toxicity_regime_adapter
+  working_max: 16
+
+guardrails:
+  require_rationale: true
+  cost_budget_usd: 0.05
+  rate_limit_per_minute: 30
+
+max_cost_usd: 0.10
+max_calls: 8
+annotations: [research, regime_adapter, optimal_control]
+template_target: research

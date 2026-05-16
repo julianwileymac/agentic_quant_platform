@@ -55,3 +55,4 @@ guardrails:
 max_cost_usd: 0.5
 max_calls: 12
 annotations: [research, news]
+template_target: research

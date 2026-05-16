@@ -1,18 +1,28 @@
-"""HFT/LOB strategy stubs.
+"""HFT / LOB strategy library.
 
 Each strategy contains the *signal math* from the corresponding
-hftbacktest example notebook, but the engine plumbing (order
-submission, queue model, latency simulation) is deferred to the future
-LOB adapter described in
-``extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md``.
+hftbacktest example notebook. The engine integration is provided by
+:class:`aqp.backtest.hft.LobBacktestEngine` (the in-process Numba+Rust
+driver loop) so calling ``run()`` on any of these strategies now
+materialises orders against a live order book.
+
+Two of the strategies — :class:`GLFTMM` and :class:`AvellanedaStoikovMM`
+— delegate the closed-form quote math to
+:mod:`aqp.optimal_control.avellaneda_stoikov`. That keeps the per-bar
+``on_event`` body pure-Python and import-cheap, while the JAX-compiled
+helpers do the actual numeric work.
 """
 from __future__ import annotations
 
 import logging
-import math
 
 from aqp.core.registry import register
 from aqp.data.microstructure import depth_slope, microprice, order_book_imbalance
+from aqp.optimal_control.avellaneda_stoikov import (
+    AvellanedaStoikovParams,
+    compute_optimal_quotes,
+    glft_closed_form,
+)
 from aqp.strategies.lob import LobState, LobStrategy, OrderIntent
 
 logger = logging.getLogger(__name__)
@@ -20,10 +30,12 @@ logger = logging.getLogger(__name__)
 
 @register("GLFTMM", source="hftbacktest", category="market_making")
 class GLFTMM(LobStrategy):
-    """Gueant-Lehalle-Fernandez-Tapia closed-form market making.
+    """Guéant-Lehalle-Fernandez-Tapia closed-form market making.
 
-    Reservation price = mid - q * gamma * sigma^2 * (T - t).
-    Optimal half-spread = gamma * sigma^2 * (T - t) + (2/gamma) * ln(1 + gamma/k).
+    Quotes are computed by
+    :func:`aqp.optimal_control.avellaneda_stoikov.glft_closed_form`,
+    which encodes the steady-state Avellaneda-Stoikov approximation
+    derived in Guéant et al. 2013 eq. (4.3).
     """
 
     strategy_id = "glft_mm"
@@ -43,18 +55,103 @@ class GLFTMM(LobStrategy):
         self.max_position = max_position
 
     def on_event(self, state: LobState) -> list[OrderIntent]:
-        mid = state.mid_price
-        q = state.position
-        # reservation price (T - t taken as 1 in steady state)
-        reservation = mid - q * self.gamma * (self.sigma ** 2)
-        half_spread = self.gamma * (self.sigma ** 2) + (2.0 / self.gamma) * math.log(1 + self.gamma / self.kappa)
-        bid_price = reservation - half_spread
-        ask_price = reservation + half_spread
+        result = glft_closed_form(
+            mid_price=state.mid_price,
+            inventory=state.position,
+            gamma=self.gamma,
+            sigma=self.sigma,
+            kappa=self.kappa,
+        )
         intents: list[OrderIntent] = []
         if state.position < self.max_position:
-            intents.append(OrderIntent(side="buy", price=bid_price, quantity=self.order_size, post_only=True, tag="glft_bid"))
+            intents.append(
+                OrderIntent(
+                    side="buy",
+                    price=result.bid,
+                    quantity=self.order_size,
+                    post_only=True,
+                    tag="glft_bid",
+                )
+            )
         if state.position > -self.max_position:
-            intents.append(OrderIntent(side="sell", price=ask_price, quantity=self.order_size, post_only=True, tag="glft_ask"))
+            intents.append(
+                OrderIntent(
+                    side="sell",
+                    price=result.ask,
+                    quantity=self.order_size,
+                    post_only=True,
+                    tag="glft_ask",
+                )
+            )
+        return intents
+
+
+@register("AvellanedaStoikovMM", source="aqp", category="market_making")
+class AvellanedaStoikovMM(LobStrategy):
+    """Full finite-horizon Avellaneda-Stoikov market making.
+
+    Differs from :class:`GLFTMM` by tracking an explicit horizon
+    ``T_minus_t`` that decays each ``on_event`` call. Quotes widen
+    near terminal close to encourage inventory unwind. Uses the
+    JAX-compiled solver from
+    :func:`aqp.optimal_control.avellaneda_stoikov.compute_optimal_quotes`.
+    """
+
+    strategy_id = "avellaneda_stoikov_mm"
+
+    def __init__(
+        self,
+        gamma: float = 0.1,
+        sigma: float = 0.01,
+        k: float = 1.5,
+        order_size: float = 1.0,
+        max_position: float = 10.0,
+        horizon: float = 1.0,
+    ) -> None:
+        self.params = AvellanedaStoikovParams(
+            gamma=gamma, sigma=sigma, k=k, T_minus_t=horizon
+        )
+        self.order_size = order_size
+        self.max_position = max_position
+        self._initial_horizon = horizon
+        self._t_minus_t = horizon
+
+    def on_event(self, state: LobState) -> list[OrderIntent]:
+        result = compute_optimal_quotes(
+            mid_price=state.mid_price,
+            inventory=state.position,
+            gamma=self.params.gamma,
+            sigma=self.params.sigma,
+            k=self.params.k,
+            T_minus_t=max(self._t_minus_t, 1e-6),
+        )
+        # Decay horizon by ~1/2000 of the initial horizon per event so a
+        # day's worth of ticks roughly traverses [horizon, 0]. The runner
+        # can override by writing directly to ``self._t_minus_t``.
+        self._t_minus_t = max(
+            self._t_minus_t - self._initial_horizon / 2000.0, 1e-6
+        )
+        intents: list[OrderIntent] = []
+        if state.position < self.max_position:
+            intents.append(
+                OrderIntent(
+                    side="buy",
+                    price=result.bid,
+                    quantity=self.order_size,
+                    post_only=True,
+                    tag="avst_bid",
+                )
+            )
+        if state.position > -self.max_position:
+            intents.append(
+                OrderIntent(
+                    side="sell",
+                    price=result.ask,
+                    quantity=self.order_size,
+                    post_only=True,
+                    tag="avst_ask",
+                )
+            )
         return intents
 
 

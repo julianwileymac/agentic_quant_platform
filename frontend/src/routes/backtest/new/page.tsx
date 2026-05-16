@@ -1,10 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, PlayCircle } from "lucide-react";
+import { useMemo } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { z } from "zod";
 
 import { PageContainer } from "@/components/shell/PageContainer";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -49,14 +51,42 @@ const DEFAULTS: Values = {
   kwargs: `{\n  "alpha_model": {\n    "class": "MeanReversionAlpha",\n    "module_path": "aqp.strategies.mean_reversion",\n    "kwargs": {"lookback": 20, "z_threshold": 2.0}\n  }\n}`,
 };
 
+/**
+ * When the Agent Templates Gallery deep-links here with ``?agent=<spec>``
+ * the spec is preselected on the backtest. The strategy class is held
+ * fixed (``FrameworkAlgorithm`` is the agent-aware shell that drives a
+ * spec at every bar) and the chosen ``AgentSpec`` is wired in via
+ * ``kwargs.agent_spec`` so the backtest task can dispatch the right
+ * runtime invocation.
+ */
+function valuesWithAgent(agentSpec: string | null): Values {
+  if (!agentSpec) return DEFAULTS;
+  const kwargsObj = {
+    agent_spec: { name: agentSpec },
+    alpha_model: {
+      class: "AgenticAlphaShell",
+      module_path: "aqp.strategies.agentic.agent_alpha",
+      kwargs: { spec_name: agentSpec },
+    },
+  };
+  return {
+    ...DEFAULTS,
+    runName: `backtest-${agentSpec.replace(/[^a-zA-Z0-9._-]+/g, "-")}`,
+    kwargs: JSON.stringify(kwargsObj, null, 2),
+  };
+}
+
 export function BacktestNewRoute() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const agentSpec = searchParams.get("agent");
+  const defaults = useMemo(() => valuesWithAgent(agentSpec), [agentSpec]);
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
     control,
-  } = useForm<Values>({ resolver: zodResolver(formSchema), defaultValues: DEFAULTS });
+  } = useForm<Values>({ resolver: zodResolver(formSchema), defaultValues: defaults });
 
   const onSubmit = async (v: Values) => {
     const symbols = v.symbols.split(",").map((s) => s.trim()).filter(Boolean);
@@ -98,13 +128,24 @@ export function BacktestNewRoute() {
   return (
     <PageContainer
       title="New backtest"
-      subtitle="Compose a one-off backtest. Bot-scoped backtests live under each bot's detail page."
+      subtitle={
+        agentSpec
+          ? `Spec ${agentSpec} preloaded from Agent Templates — kwargs prefilled to drive the AgenticAlphaShell.`
+          : "Compose a one-off backtest. Bot-scoped backtests live under each bot's detail page."
+      }
       extra={
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/backtest">
-            <ArrowLeft className="h-4 w-4" /> All runs
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {agentSpec ? (
+            <Badge variant="outline" className="font-mono text-xs">
+              agent: {agentSpec}
+            </Badge>
+          ) : null}
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/backtest">
+              <ArrowLeft className="h-4 w-4" /> All runs
+            </Link>
+          </Button>
+        </div>
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 gap-4 lg:grid-cols-2">

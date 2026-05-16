@@ -48,3 +48,4 @@ guardrails:
 max_cost_usd: 1.5
 max_calls: 20
 annotations: [research, equity]
+template_target: research

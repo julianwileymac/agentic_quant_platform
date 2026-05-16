@@ -65,6 +65,40 @@ def stop_paper(task_id: str, reason: str = "manual") -> dict[str, Any]:
     return {"task_id": task_id, "reason": reason, "ok": True}
 
 
+@router.post("/stop-all")
+def stop_all_paper(reason: str = "kill_switch") -> dict[str, Any]:
+    """Halt every active paper trading session.
+
+    Idempotent kill-switch fan-out target — selects every
+    :class:`PaperTradingRun` in ``status in {pending, starting,
+    running}`` with a populated ``task_id`` and asks the session loop
+    to drain via :func:`publish_stop_signal`. The session itself
+    finalises ``stopped_at`` / ``status`` on the next watchdog tick.
+    """
+    stopped: list[str] = []
+    failed: list[dict[str, str]] = []
+    with get_session() as s:
+        rows = (
+            s.execute(
+                select(PaperTradingRun).where(
+                    PaperTradingRun.status.in_(["pending", "starting", "running"])
+                )
+            )
+            .scalars()
+            .all()
+        )
+    for row in rows:
+        tid = (row.task_id or "").strip()
+        if not tid:
+            continue
+        try:
+            publish_stop_signal(tid, reason=reason)
+            stopped.append(tid)
+        except Exception as exc:  # noqa: BLE001
+            failed.append({"task_id": tid, "error": str(exc)})
+    return {"stopped": len(stopped), "task_ids": stopped, "failures": failed, "reason": reason}
+
+
 @router.get("/runs", response_model=list[PaperRunSummary])
 def list_paper_runs(limit: int = 50) -> list[PaperRunSummary]:
     with get_session() as s:

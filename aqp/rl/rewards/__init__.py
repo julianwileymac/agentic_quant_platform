@@ -19,6 +19,7 @@ from aqp.rl.rewards.cost import (
     TurnoverPenaltyTerm,
 )
 from aqp.rl.rewards.gating import MarginCallTerm, TurbulenceGateTerm
+from aqp.rl.rewards.inventory_quadratic import InventoryQuadraticPenaltyTerm
 from aqp.rl.rewards.pnl import LogReturnTerm, PnLTerm
 from aqp.rl.rewards.risk import (
     DrawdownPenaltyTerm,
@@ -27,11 +28,13 @@ from aqp.rl.rewards.risk import (
     VolatilityPenaltyTerm,
 )
 from aqp.rl.rewards.shaping import PotentialBasedShaping
+from aqp.rl.rewards.vol_arb_pnl import VolArbPnLTerm
 
 __all__ = [
     "BenchmarkOutperformanceTerm",
     "CashIdlePenaltyTerm",
     "DrawdownPenaltyTerm",
+    "InventoryQuadraticPenaltyTerm",
     "LogReturnTerm",
     "MarginCallTerm",
     "PnLTerm",
@@ -43,5 +46,6 @@ __all__ = [
     "TransactionCostTerm",
     "TurbulenceGateTerm",
     "TurnoverPenaltyTerm",
+    "VolArbPnLTerm",
     "VolatilityPenaltyTerm",
 ]

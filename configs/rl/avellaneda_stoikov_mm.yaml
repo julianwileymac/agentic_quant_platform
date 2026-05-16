@@ -1,0 +1,67 @@
+name: "Avellaneda-Stoikov Market Making"
+description: >
+  PPO learns to dynamically scale the Avellaneda-Stoikov half-spread
+  and inventory skew under stylised Cox-process arrivals. Uses the
+  graduated MarketMakingEnv (JAX-compiled compute_optimal_quotes
+  closed-form under the hood) plus a quadratic inventory penalty so
+  the agent gets squeezed when it overstays its risk budget.
+
+env:
+  class: MarketMakingEnv
+  module_path: aqp.rl.envs.market_making_env
+  kwargs:
+    horizon: 1000
+    inventory_cap: 50.0
+    gamma: 0.1
+    sigma: 0.01
+    k: 1.5
+    arrival_intensity: 0.5
+    order_size: 1.0
+
+reward:
+  composite:
+    - class: PnLTerm
+      module_path: aqp.rl.rewards.pnl
+      kwargs:
+        weight: 1.0
+    - class: InventoryQuadraticPenaltyTerm
+      module_path: aqp.rl.rewards.inventory_quadratic
+      kwargs:
+        weight: 1.0
+        phi: 1.0e-3
+
+terminations:
+  - class: RiskBreachTermination
+    module_path: aqp.rl.terminations.risk_breach
+    kwargs:
+      inventory_cap: 50.0
+      vega_cap: 1.0e9   # ignored for single-asset MM
+
+agent:
+  class: SB3Adapter
+  module_path: aqp.rl.agents.sb3_adapter
+  kwargs:
+    algorithm: PPO
+    policy: MlpPolicy
+    learning_rate: 0.0003
+    n_steps: 1024
+    batch_size: 64
+    n_epochs: 10
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_range: 0.2
+    ent_coef: 0.005
+
+training:
+  total_timesteps: 250000
+  eval_freq: 10000
+  checkpoint_freq: 25000
+  verbose: 1
+
+mlflow:
+  experiment: aqp-avellaneda-stoikov-mm
+  register_model_as: aqp.avellaneda_stoikov_mm
+
+evaluation:
+  episodes: 20
+  baselines: [glft_closed_form]

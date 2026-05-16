@@ -1,18 +1,34 @@
-"""Limit-order-book strategy ABC (stub).
+"""Limit-order-book strategy contract.
 
-Engine integration is deferred — see
-``extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md`` for the full prompt
-that drives the future hftbacktest LOB adapter implementation.
+Three primitives:
 
-Today this file provides:
-- ``OrderIntent`` dataclass — the minimal order schema strategies emit.
-- ``LobStrategy`` ABC — every HFT strategy under ``aqp/strategies/hft/``
-  subclasses this.
-- ``LobState`` dataclass — what the engine passes into ``on_event``.
+- :class:`OrderIntent` — the minimal order schema a ``LobStrategy``
+  emits, designed to map 1:1 onto ``hftbacktest`` order primitives
+  (``hbt.submit_buy_order`` / ``hbt.submit_sell_order`` /
+  ``hbt.cancel`` / ``hbt.elapse``).
+- :class:`LobState` — the per-event snapshot the engine passes into
+  ``on_event``.
+- :class:`LobStrategy` — the ABC every HFT strategy under
+  :mod:`aqp.strategies.hft` subclasses.
 
-Strategies authored against this contract are wired through the future
-``aqp/backtest/hft.py::LobBacktestEngine``. Until then they list under
-``/data/microstructure`` in the UI as "Engine pending".
+The driver is :class:`aqp.backtest.hft.LobBacktestEngine`. When the
+``[hft]`` extra is not installed, calling :meth:`LobStrategy.run`
+raises an :class:`ImportError` with install instructions instead of
+``NotImplementedError``.
+
+Helper methods on :class:`LobStrategy`
+======================================
+
+The ABC ships three helper methods that strategy bodies use to build
+``OrderIntent`` records without re-implementing the same boilerplate:
+
+- :meth:`buy` — emit a buy intent.
+- :meth:`sell` — emit a sell intent.
+- :meth:`cancel_all` — emit a synthetic ``OrderIntent(order_type="cancel")``
+  the engine translates into ``hbt.cancel(order_id)`` for every live order.
+
+Subclasses still override :meth:`on_event` to express the actual signal
+math; the helpers just keep the bodies pure-Python and import-cheap.
 """
 from __future__ import annotations
 
@@ -32,13 +48,18 @@ class OrderIntent:
     """Minimal LOB-aware order intent.
 
     Fields chosen to map cleanly onto ``hftbacktest`` order submission
-    primitives (`hbt.submit_buy_order`, `hbt.submit_sell_order`).
+    primitives (``hbt.submit_buy_order``, ``hbt.submit_sell_order``,
+    ``hbt.cancel``).
+
+    A ``cancel`` intent uses ``order_type="cancel"`` and carries the
+    ``order_id`` to cancel via the ``tag`` field. The engine translates
+    that into ``hbt.cancel(asset_no, order_id)`` directly.
     """
 
     side: Literal["buy", "sell"]
     price: float
     quantity: float
-    order_type: Literal["limit", "market"] = "limit"
+    order_type: Literal["limit", "market", "cancel"] = "limit"
     time_in_force: Literal["gtc", "ioc", "fok", "gtx"] = "gtc"
     post_only: bool = True
     tag: str | None = None
@@ -77,9 +98,7 @@ class LobStrategy(ABC):
     """ABC for limit-order-book strategies.
 
     Subclasses implement :meth:`on_event` to react to each book/trade
-    update. The future LOB engine drives this loop; until the engine
-    ships, strategies that try to run will raise ``NotImplementedError``
-    via :meth:`run`.
+    update. The driver is :class:`aqp.backtest.hft.LobBacktestEngine`.
     """
 
     strategy_id: str = "lob_strategy"
@@ -96,17 +115,74 @@ class LobStrategy(ABC):
         """Optional override for trade-tick updates. Defaults to ``on_event``."""
         return self.on_event(state)
 
-    def run(self, *args, **kwargs):
-        """Stub entry point — engine integration is deferred.
+    # ------------------------------------------------------------------
+    # OrderIntent builder helpers (keep ``on_event`` bodies concise).
+    # ------------------------------------------------------------------
 
-        See ``extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md`` for the
-        future-work spec; the ``LobBacktestEngine`` will replace this
-        method with a real driver loop.
-        """
-        raise NotImplementedError(
-            "LOB engine integration is deferred. See "
-            "extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md for the next step."
+    @staticmethod
+    def buy(
+        price: float,
+        quantity: float,
+        *,
+        post_only: bool = True,
+        time_in_force: Literal["gtc", "ioc", "fok", "gtx"] = "gtc",
+        order_type: Literal["limit", "market"] = "limit",
+        tag: str | None = None,
+    ) -> OrderIntent:
+        """Construct a buy :class:`OrderIntent`."""
+        return OrderIntent(
+            side="buy",
+            price=float(price),
+            quantity=float(quantity),
+            post_only=post_only,
+            time_in_force=time_in_force,
+            order_type=order_type,
+            tag=tag,
         )
+
+    @staticmethod
+    def sell(
+        price: float,
+        quantity: float,
+        *,
+        post_only: bool = True,
+        time_in_force: Literal["gtc", "ioc", "fok", "gtx"] = "gtc",
+        order_type: Literal["limit", "market"] = "limit",
+        tag: str | None = None,
+    ) -> OrderIntent:
+        """Construct a sell :class:`OrderIntent`."""
+        return OrderIntent(
+            side="sell",
+            price=float(price),
+            quantity=float(quantity),
+            post_only=post_only,
+            time_in_force=time_in_force,
+            order_type=order_type,
+            tag=tag,
+        )
+
+    @staticmethod
+    def cancel(order_id: str, *, side: Literal["buy", "sell"] = "buy") -> OrderIntent:
+        """Construct a cancel intent. The engine maps ``tag`` to ``hbt.cancel``."""
+        return OrderIntent(
+            side=side,
+            price=0.0,
+            quantity=0.0,
+            order_type="cancel",
+            tag=order_id,
+        )
+
+    def run(self, *args, **kwargs):
+        """Run this strategy through :class:`LobBacktestEngine`.
+
+        Available only when the ``[hft]`` extra is installed (which
+        provides ``hftbacktest>=2.0``). Without it, the import below
+        raises :class:`ImportError` with install instructions.
+        """
+        from aqp.backtest.hft import LobBacktestEngine
+
+        engine = LobBacktestEngine()
+        return engine.run(self, *args, **kwargs)
 
 
 __all__ = ["LobState", "LobStrategy", "OrderIntent"]

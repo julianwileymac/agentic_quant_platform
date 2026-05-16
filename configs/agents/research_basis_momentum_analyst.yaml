@@ -27,3 +27,4 @@ guardrails:
 max_cost_usd: 0.75
 max_calls: 8
 annotations: ["research", "commodity", "basis"]
+template_target: research

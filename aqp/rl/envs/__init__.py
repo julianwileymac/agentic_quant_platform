@@ -12,7 +12,10 @@ from aqp.rl.envs.finrl_crypto_env import FinRLCryptoEnv
 from aqp.rl.envs.finrl_portfolio_cov_env import FinRLPortfolioCovEnv
 from aqp.rl.envs.finrl_stock_env import FinRLStockTradingEnv
 from aqp.rl.envs.finrl_stock_np_env import FinRLStockTradingNpEnv
-from aqp.rl.envs.market_making_env import MarketMakingEnv
+from aqp.rl.envs.lucic_tse_options_env import LucicTsePortfolioEnv
+from aqp.rl.envs.market_making_env import MarketMakingEnv, MarketMakingStubEnv
+from aqp.rl.envs.mbtgym_adapter import MbtGymAdapterEnv
+from aqp.rl.envs.optimal_execution_env import OptimalExecutionEnv
 from aqp.rl.envs.options_env import OptionsTradingEnv
 from aqp.rl.envs.portfolio_env import PortfolioAllocationEnv
 from aqp.rl.envs.stock_trading_discrete import StockTradingDiscreteEnv
@@ -24,7 +27,11 @@ __all__ = [
     "FinRLPortfolioCovEnv",
     "FinRLStockTradingEnv",
     "FinRLStockTradingNpEnv",
+    "LucicTsePortfolioEnv",
     "MarketMakingEnv",
+    "MarketMakingStubEnv",
+    "MbtGymAdapterEnv",
+    "OptimalExecutionEnv",
     "OptionsTradingEnv",
     "PortfolioAllocationEnv",
     "StockTradingDiscreteEnv",

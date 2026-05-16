@@ -50,3 +50,4 @@ guardrails:
 max_cost_usd: 1.0
 max_calls: 20
 annotations: [selection, alpha_base]
+template_target: selection

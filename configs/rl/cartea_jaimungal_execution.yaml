@@ -1,0 +1,66 @@
+name: "Cartea-Jaimungal Optimal Execution"
+description: >
+  PPO learns a feedback liquidation rate for a finite-horizon block
+  trade and is benchmarked against the closed-form Cartea-Jaimungal
+  optimal trading rate. The benchmark is the linear-quadratic ansatz
+  solved by aqp.optimal_control.cartea_jaimungal — the agent's job is
+  to outperform that closed form when the assumed dynamics break
+  (mean-reverting / jumpy mid).
+
+env:
+  class: OptimalExecutionEnv
+  module_path: aqp.rl.envs.optimal_execution_env
+  kwargs:
+    horizon: 200
+    initial_inventory: 100.0
+    sigma: 0.01
+    phi: 1.0e-4
+    alpha: 1.0e-3
+    kappa: 1.0
+
+reward:
+  composite:
+    - class: PnLTerm
+      module_path: aqp.rl.rewards.pnl
+      kwargs:
+        weight: 1.0
+    - class: InventoryQuadraticPenaltyTerm
+      module_path: aqp.rl.rewards.inventory_quadratic
+      kwargs:
+        weight: 1.0
+        phi: 1.0e-4
+
+terminations:
+  - class: HorizonTermination
+    module_path: aqp.rl.terminations.horizon
+    kwargs:
+      horizon: 200
+
+agent:
+  class: SB3Adapter
+  module_path: aqp.rl.agents.sb3_adapter
+  kwargs:
+    algorithm: PPO
+    policy: MlpPolicy
+    learning_rate: 0.0003
+    n_steps: 512
+    batch_size: 64
+    n_epochs: 10
+    gamma: 0.995
+    gae_lambda: 0.95
+    clip_range: 0.2
+    ent_coef: 0.0
+
+training:
+  total_timesteps: 150000
+  eval_freq: 5000
+  checkpoint_freq: 25000
+  verbose: 1
+
+mlflow:
+  experiment: aqp-cartea-jaimungal-execution
+  register_model_as: aqp.cartea_jaimungal_execution
+
+evaluation:
+  episodes: 50
+  baselines: [twap, cartea_jaimungal_closed_form]

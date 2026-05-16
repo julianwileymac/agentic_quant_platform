@@ -1,0 +1,50 @@
+name: "Paper — Avellaneda-Stoikov Quotes"
+description: >
+  Paper-trading recipe driving the AvellanedaStoikovMM strategy from
+  aqp.strategies.hft.alphas. The toxicity-aware regime adapter
+  (configs/agents/research_toxicity_regime_adapter.yaml) updates the
+  ``gamma`` / ``order_size`` knobs in place when the microstructure
+  regime flips; the paper loop hot-reloads on the next cycle.
+
+session:
+  run_name: avst-paper
+  heartbeat_seconds: 30
+  state_flush_every_bars: 10
+  initial_cash: 100000.0
+  history_window_bars: 500
+  stop_on_kill_switch: true
+  dry_run: true                # flip to false once credentials are wired
+
+strategy:
+  class: AvellanedaStoikovMM
+  module_path: aqp.strategies.hft.alphas
+  # The following kwargs are *whitelisted* for the
+  # data.strategy_config.update DataMCPTool — the regime adapter
+  # rewrites them in place when toxicity flips. See
+  # docs/microstructure-toxicity.md for the loop.
+  kwargs:
+    gamma: 0.1
+    sigma: 0.01
+    k: 1.5
+    order_size: 1.0
+    max_position: 10.0
+    horizon: 1.0
+
+brokerage:
+  class: AlpacaBrokerage
+  module_path: aqp.trading.brokerages.alpaca
+  kwargs:
+    paper: true
+
+feed:
+  class: AlpacaDataFeed
+  module_path: aqp.trading.feeds.alpaca_feed
+  kwargs:
+    subscription: iex
+
+risk:
+  max_position_pct: 0.10
+  max_daily_loss_pct: 0.01
+  max_drawdown_pct: 0.10
+  max_concentration_pct: 0.20
+  max_gross_exposure: 0.5

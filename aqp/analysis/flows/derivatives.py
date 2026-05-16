@@ -529,6 +529,156 @@ def bachelier_flow(
     )
 
 
+# ---------------------------------------------------------------------------
+# JAX/fast-vollib accelerated Greeks surface — drop-in fast path for
+# ``derivatives.greeks_surface``. Uses the same params model so existing
+# saved AnalysisSpec rows can switch flows by name without re-validating.
+# ---------------------------------------------------------------------------
+
+
+@register_analysis_flow(
+    name="derivatives.greeks_surface_jax",
+    namespace="derivatives",
+    label="Greeks surface (JAX/vmap)",
+    description=(
+        "Δ/Γ/ν/Θ/ρ surface across strikes × expiries computed with the "
+        "JAX-vmap or fast-vollib backend from aqp.options.greeks_jax. "
+        "Drop-in fast path for derivatives.greeks_surface."
+    ),
+    params_model=GreeksSurfaceParams,
+    requires_dataset=False,
+    tags=("derivatives", "greeks", "jax"),
+    optional_dependencies=("jax", "jaxlib", "fast-vollib"),
+)
+def greeks_surface_jax_flow(
+    df: Any, params: GreeksSurfaceParams, ctx: FlowContext
+) -> FlowResult:
+    if not params.strikes or not params.expiries:
+        return FlowResult(
+            flow="derivatives.greeks_surface_jax",
+            error="strikes and expiries must be non-empty",
+        )
+    grid = pricing.greeks_grid(
+        spot=params.spot,
+        strikes=np.asarray(params.strikes, dtype=float),
+        expiries=np.asarray(params.expiries, dtype=float),
+        rate=params.rate,
+        vol=params.vol,
+        option_type=params.option_type,
+        dividend_yield=params.dividend_yield,
+        use_jax=True,  # type: ignore[arg-type]
+    )
+    rows: list[dict[str, Any]] = []
+    for i, t in enumerate(params.expiries):
+        for j, k in enumerate(params.strikes):
+            rows.append(
+                {
+                    "expiry": float(t),
+                    "strike": float(k),
+                    "price": float(grid["price"][i, j]),
+                    "delta": float(grid["delta"][i, j]),
+                    "gamma": float(grid["gamma"][i, j]),
+                    "vega": float(grid["vega"][i, j]),
+                    "theta": float(grid["theta"][i, j]),
+                    "rho": float(grid["rho"][i, j]),
+                }
+            )
+    chart = {
+        "data": [
+            {
+                "type": "heatmap",
+                "x": list(map(float, params.strikes)),
+                "y": list(map(float, params.expiries)),
+                "z": grid["gamma"].tolist(),
+                "colorbar": {"title": "gamma"},
+                "name": "gamma",
+            }
+        ],
+        "layout": {
+            "title": f"Gamma surface ({params.option_type}) — JAX backend",
+            "xaxis": {"title": "strike"},
+            "yaxis": {"title": "expiry"},
+        },
+    }
+    metrics = {
+        "n_strikes": len(params.strikes),
+        "n_expiries": len(params.expiries),
+        "vol": float(params.vol),
+        "rate": float(params.rate),
+    }
+    try:
+        from aqp.options.greeks_jax import is_available
+
+        metrics["jax_backend"] = bool(is_available())
+    except Exception:  # noqa: BLE001
+        metrics["jax_backend"] = False
+    return FlowResult(
+        flow="derivatives.greeks_surface_jax",
+        metrics=metrics,
+        rows=rows,
+        chart=chart,
+        arrow_table=coerce_arrow(rows),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Lucic-Tse quotes (alias of optimal_control.lucic_tse_portfolio_quotes
+# under the derivatives namespace so the lab UI surfaces it next to the
+# BSM / SABR flows). Reuses the same params model.
+# ---------------------------------------------------------------------------
+
+
+# Register the derivatives-namespace alias of the Lucic-Tse flow only
+# when ``aqp.analysis.flows.optimal_control`` imported successfully.
+# The init block in this package loads ``optimal_control`` first.
+try:
+    from aqp.analysis.flows.optimal_control import (
+        LucicTseFlowParams,
+        lucic_tse_portfolio_quotes_flow as _oc_lucic_tse_runner,
+    )
+
+    @register_analysis_flow(
+        name="derivatives.lucic_tse_quotes",
+        namespace="derivatives",
+        label="Lucic-Tse portfolio quotes",
+        description=(
+            "Lucic-Tse (2024-2026) optimal bid/ask quote matrix across an "
+            "option chain. See aqp.options.portfolio_mm for the closed-form "
+            "Riccati derivation."
+        ),
+        params_model=LucicTseFlowParams,
+        requires_dataset=False,
+        tags=("derivatives", "options", "market_making", "lucic_tse"),
+        optional_dependencies=("jax", "jaxlib", "fast-vollib"),
+    )
+    def lucic_tse_quotes_flow(
+        df: Any, params: LucicTseFlowParams, ctx: FlowContext
+    ) -> FlowResult:
+        res = _oc_lucic_tse_runner(df, params, ctx)
+        # Re-stamp the flow name so the persisted run row reads
+        # ``derivatives.lucic_tse_quotes`` in the lab.
+        return FlowResult(
+            flow="derivatives.lucic_tse_quotes",
+            metrics=res.metrics,
+            rows=res.rows,
+            chart=res.chart,
+            arrow_table=res.arrow_table,
+            artifacts=res.artifacts,
+            error=res.error,
+        )
+
+except Exception:  # noqa: BLE001
+    logger.debug("derivatives.lucic_tse_quotes alias not registered", exc_info=True)
+
+    def lucic_tse_quotes_flow(  # type: ignore[no-redef]
+        df: Any, params: Any, ctx: FlowContext
+    ) -> FlowResult:
+        return FlowResult(
+            flow="derivatives.lucic_tse_quotes",
+            error="aqp.analysis.flows.optimal_control failed to import",
+        )
+
+
 _ = pd  # keep import in case future flows want pandas
 
 
@@ -544,7 +694,9 @@ __all__ = [
     "bachelier_flow",
     "bsm_flow",
     "greeks_surface_flow",
+    "greeks_surface_jax_flow",
     "implied_vol_flow",
+    "lucic_tse_quotes_flow",
     "mc_asian_flow",
     "mc_barrier_flow",
     "mc_european_flow",

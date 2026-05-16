@@ -1,6 +1,7 @@
 import { Newspaper, Search, Telescope } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
+import { AgentTeamConsole } from "@/components/agents/AgentTeamConsole";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -26,6 +27,21 @@ const TILES = [
 ];
 
 export function ResearchAgentsHubRoute() {
+  // The Agent Templates Gallery deep-links specs into this hub via
+  // ``?spec=<name>``. In that case render the AgentTeamConsole pointed
+  // at the requested spec; without a query param fall back to the
+  // tiles overview that lists the curated leaf consoles.
+  const [searchParams] = useSearchParams();
+  const spec = searchParams.get("spec");
+  if (spec && spec.trim()) {
+    return (
+      <AgentTeamConsole
+        specName={spec.trim()}
+        title="Research Agent"
+        description="Spec-driven research persona dispatched from the Agent Templates Gallery."
+      />
+    );
+  }
   return (
     <PageContainer
       title="Research Agents"

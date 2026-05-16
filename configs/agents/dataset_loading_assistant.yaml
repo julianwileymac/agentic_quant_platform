@@ -78,3 +78,4 @@ guardrails:
 max_cost_usd: 0.20
 max_calls: 12
 annotations: [data_layer, onboarding, dataset_loading]
+template_target: utility

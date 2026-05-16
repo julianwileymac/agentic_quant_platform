@@ -53,6 +53,9 @@ Use this as your first lookup when answering "where does X live?".
 | [aqp/ml/](aqp/ml/) | ML model factory, feature engineering, deployments, AlphaBacktestExperiment, lightweight workbench flows, adhoc helpers | [docs/ml-framework.md](docs/ml-framework.md), [docs/ml-libraries.md](docs/ml-libraries.md), [docs/ml-alpha-backtest.md](docs/ml-alpha-backtest.md), [docs/ml-flows.md](docs/ml-flows.md) |
 | [aqp/mlops/](aqp/mlops/) | MLflow autolog hooks, lineage helpers | [docs/observability.md](docs/observability.md) |
 | [aqp/observability/](aqp/observability/) | OTEL setup, tracers | [docs/observability.md](docs/observability.md) |
+| [aqp/optimal_control/](aqp/optimal_control/) | JAX-compiled HJB solvers — Avellaneda-Stoikov, Cartea-Jaimungal-Penalva | [docs/optimal-control.md](docs/optimal-control.md) |
+| [aqp/options/portfolio_mm.py](aqp/options/portfolio_mm.py) + [aqp/options/greeks_jax.py](aqp/options/greeks_jax.py) | Lucic-Tse Riccati portfolio quoting + JAX/vmap Greek surface | [docs/portfolio-options-mm.md](docs/portfolio-options-mm.md) |
+| [aqp/backtest/hft.py](aqp/backtest/hft.py) | hftbacktest LOB backtest engine driving the 5 strategies under `aqp/strategies/hft/` | [docs/hft-backtest.md](docs/hft-backtest.md) |
 | [aqp/persistence/](aqp/persistence/) | SQLAlchemy ORM (15+ model files) + `LedgerWriter` | [docs/erd.md](docs/erd.md), [docs/data-dictionary.md](docs/data-dictionary.md) |
 | [aqp/providers/](aqp/providers/) | Data-feed adapters (yfinance, AV, IBKR, …) | [docs/data-plane.md](docs/data-plane.md) |
 | [aqp/rag/](aqp/rag/) | Hierarchical Redis RAG (Alpha-GPT levels × first/second/third-order corpora) | [docs/rag.md](docs/rag.md) |
@@ -406,7 +409,11 @@ docker exec aqp-api alembic upgrade head
 | Add a factor expression primitive | [aqp/data/factor_expression.py::_FUNCS](aqp/data/factor_expression.py) |
 | Add an HFT metric | [aqp/backtest/hft_metrics.py](aqp/backtest/hft_metrics.py) — and surface in `hft_summary()` if appropriate |
 | Add a chart-pattern detector | [aqp/data/patterns.py](aqp/data/patterns.py) — call from `detect_all` |
-| Wire a future LOB strategy | Subclass [aqp/strategies/lob.py::LobStrategy](aqp/strategies/lob.py); engine integration in [extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md](extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md) |
+| Wire a future LOB strategy | Subclass [aqp/strategies/lob.py::LobStrategy](aqp/strategies/lob.py); use the ``buy``/``sell``/``cancel`` helpers; drive through [aqp/backtest/hft.py::LobBacktestEngine](aqp/backtest/hft.py) |
+| Add an HJB solver | New module under [aqp/optimal_control/](aqp/optimal_control/); pure JAX kernel decorated with `@jax.jit`; route the public API through [aqp/optimal_control/hjb_solver.py](aqp/optimal_control/hjb_solver.py); add a flow under [aqp/analysis/flows/optimal_control.py](aqp/analysis/flows/optimal_control.py) and a DataMCPTool under [aqp/data/mcp/tools/optimal_control.py](aqp/data/mcp/tools/optimal_control.py). See [docs/optimal-control.md](docs/optimal-control.md) |
+| Add a Lucic-Tse hedging term | Extend [aqp/options/portfolio_mm.py](aqp/options/portfolio_mm.py); use ``jnp.einsum``-only matrix ops, no Python loops. Add a flow under [aqp/analysis/flows/optimal_control.py](aqp/analysis/flows/optimal_control.py). See [docs/portfolio-options-mm.md](docs/portfolio-options-mm.md) |
+| Run an HFT LOB backtest | `POST /backtest/lob` (returns task_id) — body: `{strategy, dataset_preset, latency_profile, queue_model, max_events}`. UI at `/backtest/lob`. Direct: `LobBacktestEngine().run(strategy, dataset_preset=...)`. See [docs/hft-backtest.md](docs/hft-backtest.md) |
+| Trigger a toxicity-aware regime update | Run the [optimal_control.toxicity_regime](aqp/analysis/flows/optimal_control.py) flow on a microstructure slice → the [research.toxicity_regime_adapter](configs/agents/research_toxicity_regime_adapter.yaml) agent reads the result via `data.optimal_control.list_regimes` and writes back to `configs/paper/*.yaml` via `data.strategy_config.update`. See [docs/microstructure-toxicity.md](docs/microstructure-toxicity.md) |
 
 ## Don't list
 

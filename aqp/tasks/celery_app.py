@@ -27,6 +27,7 @@ celery_app = Celery(
         "aqp.tasks.backtest_tasks",
         "aqp.tasks.training_tasks",
         "aqp.tasks.agent_tasks",
+        "aqp.tasks.chat_tasks",
         "aqp.tasks.agentic_backtest_tasks",
         "aqp.tasks.finetune_tasks",
         "aqp.tasks.ingestion_tasks",
@@ -72,6 +73,8 @@ celery_app = Celery(
         "aqp.tasks.analysis_flow_tasks",
         # Self-service data fabric — interactive Dagster sandbox (phase 3).
         "aqp.tasks.dagster_sandbox_tasks",
+        # HFT / LOB backtest engine (hftbacktest wrapper).
+        "aqp.tasks.hft_tasks",
     ],
 )
 
@@ -102,6 +105,7 @@ celery_app.conf.update(
         "aqp.tasks.feature_set_tasks.*": {"queue": "ml"},
         "aqp.tasks.equity_report_tasks.*": {"queue": "agents"},
         "aqp.tasks.llm_tasks.*": {"queue": "default"},
+        "aqp.tasks.chat_tasks.*": {"queue": "default"},
         "aqp.tasks.entity_tasks.*": {"queue": "agents"},
         "aqp.tasks.datahub_tasks.*": {"queue": "ingestion"},
         "aqp.tasks.airbyte_tasks.*": {"queue": "ingestion"},
@@ -131,6 +135,9 @@ celery_app.conf.update(
         # Analysis flows: light compute fan-out via the existing agents queue
         # (matches aqp.tasks.analysis_tasks routing for symmetry).
         "aqp.tasks.analysis_flow_tasks.*": {"queue": "agents"},
+        # HFT / LOB backtests get their own queue so the slow tick-replay
+        # workload doesn't compete for the bar-frequency backtest queue.
+        "aqp.tasks.hft_tasks.*": {"queue": "hft"},
     },
     beat_schedule={
         "drift-check": {

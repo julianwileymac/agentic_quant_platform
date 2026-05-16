@@ -46,11 +46,13 @@ from aqp.api.routes import (
     gdelt,
     health,
     identifiers,
+    lob_backtest as lob_backtest_routes,
     market_data_live,
     memory,
     metadata_catalog,
     ml,
     monitoring,
+    orders as orders_routes,
     paper,
     portfolio,
     rag,
@@ -212,12 +214,14 @@ app.include_router(chat.router)
 app.include_router(agents.router)
 app.include_router(agentic.router)
 app.include_router(backtest.router)
+app.include_router(lob_backtest_routes.router)
 app.include_router(rl.router)
 app.include_router(data.router)
 app.include_router(alpha_vantage.router)
 app.include_router(portfolio.router)
 app.include_router(paper.router)
 app.include_router(brokers.router)
+app.include_router(orders_routes.router)
 app.include_router(strategies.router)
 app.include_router(registry.router)
 app.include_router(feature_sets.router)

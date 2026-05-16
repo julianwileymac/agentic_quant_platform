@@ -46,7 +46,8 @@ flowchart LR
 | Stage | Docs |
 | --- | --- |
 | **Research** | [analysis-framework.md](analysis-framework.md), [analysis-lab.md](analysis-lab.md), [analysis-flows.md](analysis-flows.md), [factor-research.md](factor-research.md), [ml-framework.md](ml-framework.md), [ml-libraries.md](ml-libraries.md), [ml-alpha-backtest.md](ml-alpha-backtest.md), [ml-flows.md](ml-flows.md), [ml-preprocessing-pipeline.md](ml-preprocessing-pipeline.md), [ml-builder.md](ml-builder.md), [ml-testing.md](ml-testing.md), [rl-framework.md](rl-framework.md), [rl-lab.md](rl-lab.md), [rl-components.md](rl-components.md), [rl-iceberg.md](rl-iceberg.md), [strategy-browser.md](strategy-browser.md), [data-plane.md](data-plane.md), [data-catalog.md](data-catalog.md), [data-pipelines-hub.md](data-pipelines-hub.md), [visualization-layer.md](visualization-layer.md) |
-| **Backtest** | [backtest-engines.md](backtest-engines.md), [strategy-lifecycle.md](strategy-lifecycle.md) |
+| **Backtest** | [backtest-engines.md](backtest-engines.md), [hft-backtest.md](hft-backtest.md), [strategy-lifecycle.md](strategy-lifecycle.md) |
+| **Optimal control** | [optimal-control.md](optimal-control.md), [portfolio-options-mm.md](portfolio-options-mm.md), [microstructure-toxicity.md](microstructure-toxicity.md) |
 | **Agentic** | [agentic-pipeline.md](agentic-pipeline.md), [providers.md](providers.md) |
 | **Bots** | [bots.md](bots.md) (smallest deployable unit; aggregates universe + strategy + engine + ML + agents + RAG + metrics) |
 | **Paper / Live** | [paper-trading.md](paper-trading.md), [live-market.md](live-market.md), [streaming.md](streaming.md), [streaming-admin.md](streaming-admin.md) |
@@ -101,6 +102,10 @@ flowchart LR
 | [ml-testing.md](ml-testing.md) | Interactive ML testing workbench |
 | [backtest-engines.md](backtest-engines.md) | Engine catalogue + invariants (vbt-pro primary, event-driven, ZVT, AAT, fallback) |
 | [vbtpro-integration.md](vbtpro-integration.md) | Deep vectorbt-pro integration: modes, hooks, agent + ML components, walk-forward |
+| [hft-backtest.md](hft-backtest.md) | hftbacktest-driven LOB engine, ``LobStrategy`` API, latency / queue models |
+| [optimal-control.md](optimal-control.md) | JAX-compiled HJB solvers — Avellaneda-Stoikov + Cartea-Jaimungal-Penalva |
+| [portfolio-options-mm.md](portfolio-options-mm.md) | Lucic-Tse 2024-2026 portfolio-level options market making |
+| [microstructure-toxicity.md](microstructure-toxicity.md) | Toxicity regime detection + agent-driven YAML mutation loop |
 | [strategy-lifecycle.md](strategy-lifecycle.md) | draft → backtested → paper → live |
 | [strategy-browser.md](strategy-browser.md) | Data-browser → strategy spec UX |
 

@@ -61,3 +61,4 @@ guardrails:
 max_cost_usd: 0.30
 max_calls: 6
 annotations: [optimization, mutation]
+template_target: utility

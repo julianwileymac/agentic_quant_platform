@@ -256,6 +256,32 @@ dagster-aqp = [
     "dagster-k8s==0.28.21",
 ]
 
+# ---------------------------------------------------------------------------
+# Optimal-control + HFT math layer.
+#
+# ``optimal-control`` ships the JAX-compiled Avellaneda-Stoikov /
+# Cartea-Jaimungal / Lucic-Tse solvers in ``aqp/optimal_control/`` and
+# ``aqp/options/portfolio_mm.py``. JAX/jaxlib are CPU-only here; users
+# that want CUDA/Metal can ``pip install "jax[cuda12_pip]"`` afterwards.
+#
+# ``hft`` ships the hftbacktest LOB engine wrapped by
+# ``aqp.backtest.hft.LobBacktestEngine``. The hftbacktest wheel depends on
+# Maturin + a Rust toolchain at install time on most platforms — see
+# docs/installation.md.
+# ---------------------------------------------------------------------------
+optimal-control = [
+    "jax>=0.4.30",
+    "jaxlib>=0.4.30",
+    "finhjb>=0.1.6",
+    "fast-vollib>=0.1.4",
+    "mbt-gym @ git+https://github.com/JJJerome/mbt_gym@main",
+]
+hft = [
+    "hftbacktest>=2.0.0",
+    "numba>=0.61",
+    "polars>=1.0",
+]
+
 data-plane = [
     "agentic-quant-platform[fred,sec,gdelt,iceberg,regulatory]",
 ]
@@ -271,7 +297,7 @@ visualization = [
     "acryl-datahub[datahub-rest,superset]>=0.13",
 ]
 full = [
-    "agentic-quant-platform[auth,alpaca,ibkr,tradier,otel,cli,paper,streaming,vectorbt,backtesting,ml,ml-torch,ml-forecast,ml-anomaly,ml-keras,ml-tensorflow,ml-transformers,portfolio,ml-structural,serving,llm-finance,fred,sec,gdelt,iceberg,regulatory,agents-rag,compute,sources,datahub-sync,dagster-aqp,dbt,entity-graph,visualization]",
+    "agentic-quant-platform[auth,alpaca,ibkr,tradier,otel,cli,paper,streaming,vectorbt,backtesting,ml,ml-torch,ml-forecast,ml-anomaly,ml-keras,ml-tensorflow,ml-transformers,portfolio,ml-structural,serving,llm-finance,fred,sec,gdelt,iceberg,regulatory,agents-rag,compute,sources,datahub-sync,dagster-aqp,dbt,entity-graph,visualization,optimal-control,hft]",
 ]
 dev = [
     "pytest>=7.4",
@@ -317,3 +343,6 @@ disallow_untyped_defs = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "requires_hft: tests that need the optional [hft] extra (hftbacktest + Rust toolchain)",
+]

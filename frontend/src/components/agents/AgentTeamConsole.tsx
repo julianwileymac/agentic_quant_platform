@@ -1,5 +1,6 @@
 import { Loader2, Play } from "lucide-react";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { MetricsGrid, type Metric } from "@/components/common/MetricsGrid";
 import { PageContainer } from "@/components/shell/PageContainer";
@@ -24,8 +25,16 @@ interface Props {
  * `/agents/{selection,trader,research/*,analysis/*}` from a single
  * `AgentSpec` name. Posts to `POST /agents/runs/v2/sync` and renders
  * the populated `AgentRunDetail` as a metrics grid + raw output JSON.
+ *
+ * The hardcoded ``specName`` prop on each leaf page acts as a default;
+ * when the user lands on the page from the Agent Templates Gallery the
+ * ``?spec=<name>`` query param overrides it, so deep-links land on the
+ * right registered spec without forking dozens of route files.
  */
 export function AgentTeamConsole({ specName, title, description, defaultPrompt }: Props) {
+  const [searchParams] = useSearchParams();
+  const specOverride = searchParams.get("spec");
+  const effectiveSpecName = specOverride && specOverride.trim() ? specOverride.trim() : specName;
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<AgentRunDetail | null>(null);
   const [vtSymbol, setVtSymbol] = useState("");
@@ -49,7 +58,7 @@ export function AgentTeamConsole({ specName, title, description, defaultPrompt }
       if (modelId.trim()) inputs.model_id = modelId.trim();
       if (strategyId.trim()) inputs.strategy_id = strategyId.trim();
 
-      const res = await AgentsApi.runSpecSync(specName, inputs);
+      const res = await AgentsApi.runSpecSync(effectiveSpecName, inputs);
       setResult(res);
       toast.success(`run ${(res.id ?? "").slice(0, 12)} ${res.status ?? "ok"}`);
     } catch (err) {
@@ -89,7 +98,7 @@ export function AgentTeamConsole({ specName, title, description, defaultPrompt }
       title={title}
       subtitle={
         <span>
-          {description ?? "Spec-driven agent console."} <code className="font-mono">{specName}</code>
+          {description ?? "Spec-driven agent console."} <code className="font-mono">{effectiveSpecName}</code>
         </span>
       }
       extra={result?.status ? <Badge variant="secondary">{result.status}</Badge> : null}

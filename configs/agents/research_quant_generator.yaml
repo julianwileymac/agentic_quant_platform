@@ -68,3 +68,4 @@ guardrails:
 max_cost_usd: 0.50
 max_calls: 12
 annotations: [research, debate, quant_generator]
+template_target: research

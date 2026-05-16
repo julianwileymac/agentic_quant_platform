@@ -19,7 +19,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from aqp.core.types import Symbol
 from aqp.observability import get_tracer
@@ -46,10 +46,36 @@ class _Subscription:
 
 _SUBS: dict[str, _Subscription] = {}
 
+# Most-recent payload reference price, keyed by ``(channel_id, vt_symbol)``.
+# Populated by ``_feed_loop`` via :func:`_cache_reference_price` so
+# ``GET /live/book`` can synthesise a sane mid price without a separate
+# Redis read on every poll.
+_LAST_PAYLOAD: dict[tuple[str, str], float] = {}
+
 
 class SubscribeRequest(BaseModel):
-    venue: str = Field(..., description="alpaca | ibkr | kafka | simulated")
-    symbols: list[str] = Field(..., description="Ticker strings (AAPL, SPY, ...)")
+    """Live-feed subscribe payload.
+
+    Accepts both the legacy ``{venue, symbols}`` shape used by the
+    Next.js webui and the simplified ``{vt_symbols}`` shape used by the
+    Vite Live Trading Desk (``frontend/src/routes/live/page.tsx``).
+    When the simplified shape is used, ``venue`` defaults to
+    ``"simulated"`` so the desk works against the deterministic replay
+    feed without forcing operators to choose a venue up front.
+    """
+
+    venue: str | None = Field(
+        default=None,
+        description="alpaca | ibkr | kafka | simulated. Defaults to 'simulated' when only vt_symbols is provided.",
+    )
+    symbols: list[str] | None = Field(
+        default=None,
+        description="Ticker strings (AAPL, SPY, ...) — legacy shape.",
+    )
+    vt_symbols: list[str] | None = Field(
+        default=None,
+        description="vt_symbols (AAPL.NASDAQ, ...) — frontend shape; aliased onto 'symbols'.",
+    )
     poll_cadence_seconds: float = Field(default=5.0)
     kafka_topic: str | None = Field(
         default=None,
@@ -61,6 +87,16 @@ class SubscribeRequest(BaseModel):
         description="bar | quote | tick | signal -- how KafkaDataFeed materializes "
         "records. Ignored for non-kafka venues.",
     )
+
+    @model_validator(mode="after")
+    def _normalize(self) -> "SubscribeRequest":
+        if self.vt_symbols and not self.symbols:
+            self.symbols = list(self.vt_symbols)
+        if not self.venue:
+            self.venue = "simulated"
+        if not self.symbols:
+            raise ValueError("at least one of symbols/vt_symbols must be provided")
+        return self
 
 
 class SubscribeResponse(BaseModel):
@@ -189,6 +225,9 @@ async def _feed_loop(sub: _Subscription) -> None:
                 payload = _event_to_payload(event)
                 if payload is None:
                     continue
+                # Cache the most-recent reference price so ``GET /live/book``
+                # can synthesise a sane ladder without a Redis round-trip.
+                _cache_reference_price(sub.channel_id, payload)
                 try:
                     # ``publish`` is sync -- run in a worker thread and use the
                     # ``live`` namespace so it lands on ``aqp:live:<channel_id>``.
@@ -278,6 +317,40 @@ def _event_to_payload(event: Any) -> dict[str, Any] | None:
     return None
 
 
+def _cache_reference_price(channel_id: str, payload: dict[str, Any]) -> None:
+    """Stash the latest reference price for a symbol on a channel.
+
+    The synthesised order book in ``GET /live/book`` reads from this
+    cache so the desk's depth ladder always centres around the most
+    recent live tick.
+    """
+    vt = payload.get("vt_symbol")
+    if not vt:
+        return
+    kind = payload.get("kind")
+    price: float | None = None
+    if kind == "bar":
+        try:
+            price = float(payload.get("close") or 0.0) or None
+        except (TypeError, ValueError):
+            price = None
+    elif kind == "quote":
+        try:
+            bid = float(payload.get("bid_close") or 0.0)
+            ask = float(payload.get("ask_close") or 0.0)
+            if bid > 0 and ask > 0:
+                price = (bid + ask) / 2.0
+        except (TypeError, ValueError):
+            price = None
+    elif kind == "tick":
+        try:
+            price = float(payload.get("last") or 0.0) or None
+        except (TypeError, ValueError):
+            price = None
+    if price and price > 0:
+        _LAST_PAYLOAD[(channel_id, str(vt))] = price
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -355,6 +428,135 @@ def list_subscriptions() -> list[dict[str, Any]]:
         {"channel_id": s.channel_id, "venue": s.venue, "symbols": s.symbols}
         for s in _SUBS.values()
     ]
+
+
+# ---------------------------------------------------------------------------
+# Frontend helpers — history bars + best-effort order book
+# ---------------------------------------------------------------------------
+
+
+@router.get("/history")
+def history(vt_symbol: str, limit: int = 240, interval: str = "1d") -> list[dict[str, Any]]:
+    """Return the most recent OHLC seed for a symbol.
+
+    Used by ``frontend/src/routes/live/page.tsx`` to seed the WebGL OHLC
+    chart before the live WebSocket starts emitting bars. The shape
+    matches ``OhlcSeed`` in ``frontend/src/components/charts/OhlcChart.tsx``:
+    ``{ time, open, high, low, close, volume? }`` with ``time`` as a unix
+    second integer.
+    """
+    import datetime as _dt
+
+    from aqp.core.types import DataNormalizationMode
+    from aqp.data.duckdb_engine import DuckDBHistoryProvider
+
+    if limit <= 0:
+        return []
+
+    try:
+        sym = Symbol.parse(vt_symbol) if "." in vt_symbol else Symbol(ticker=vt_symbol)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"invalid vt_symbol: {vt_symbol}") from exc
+
+    end = _dt.datetime.utcnow()
+    # Daily bars covering ~`limit` trading days; minute bars need a far
+    # tighter window. Both modes ask for slightly more days than `limit`
+    # to cover weekends / holidays and then trim at the tail.
+    if interval == "1d":
+        start = end - _dt.timedelta(days=int(limit * 1.6) + 7)
+    else:
+        start = end - _dt.timedelta(days=14)
+
+    provider = DuckDBHistoryProvider()
+    try:
+        bars = provider.get_bars_normalized(
+            [sym], start, end,
+            interval=interval,
+            normalization=DataNormalizationMode.ADJUSTED,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("history fetch failed for %s: %s", vt_symbol, exc)
+        return []
+
+    if bars is None or bars.empty:
+        return []
+
+    # The frame is multi-symbol but we asked for one. Sort by time and
+    # tail to ``limit`` rows so the chart never blows up on huge ranges.
+    bars = bars.sort_values("timestamp").tail(int(limit))
+    out: list[dict[str, Any]] = []
+    for _, row in bars.iterrows():
+        ts = row.get("timestamp")
+        if ts is None:
+            continue
+        try:
+            unix_seconds = int(ts.timestamp()) if hasattr(ts, "timestamp") else int(ts)
+        except Exception:  # noqa: BLE001
+            continue
+        out.append(
+            {
+                "time": unix_seconds,
+                "open": float(row.get("open") or 0.0),
+                "high": float(row.get("high") or 0.0),
+                "low": float(row.get("low") or 0.0),
+                "close": float(row.get("close") or 0.0),
+                "volume": float(row.get("volume") or 0.0),
+            }
+        )
+    return out
+
+
+@router.get("/book")
+def book(vt_symbol: str, depth: int = 10) -> dict[str, list[dict[str, float]]]:
+    """Best-effort order book for a symbol.
+
+    AQP's live feeds (Alpaca / IBKR / simulated / Kafka) do not expose
+    L2 depth in the unified event stream; the WebSocket relay carries
+    bars, quotes, ticks, and signals. So this endpoint synthesises a
+    small symmetric book around the latest known mid price for the
+    requested symbol when an active subscription has emitted at least
+    one quote / tick / bar. When no reference is known, returns empty
+    arrays — the frontend already polls every 1.5 s and degrades
+    gracefully.
+
+    Returned shape matches ``OrderBookLevel`` in
+    ``frontend/src/components/live/OrderBook.tsx``:
+    ``{ bids: [{ price, size, cumulative }], asks: [...] }``.
+    """
+    if depth <= 0:
+        return {"bids": [], "asks": []}
+
+    # Find the latest reference price published on any active subscription
+    # that owns this symbol. ``aqp:live:<channel>`` payloads are JSON
+    # blobs, so we keep a lightweight in-memory cache of the most-recent
+    # quote per (channel_id, vt_symbol) keyed by ``_event_to_payload``.
+    reference: float | None = None
+    for sub in _SUBS.values():
+        # Symbols may be tickers or vt_symbols; match either.
+        if vt_symbol in sub.symbols or vt_symbol.split(".")[0] in sub.symbols:
+            ref = _LAST_PAYLOAD.get((sub.channel_id, vt_symbol))
+            if ref is None and "." in vt_symbol:
+                ref = _LAST_PAYLOAD.get((sub.channel_id, vt_symbol.split(".")[0]))
+            if ref is not None:
+                reference = ref
+                break
+
+    if reference is None or reference <= 0:
+        return {"bids": [], "asks": []}
+
+    # Generate a synthetic book: 1 cent ladder, geometric size decay.
+    bids: list[dict[str, float]] = []
+    asks: list[dict[str, float]] = []
+    cum_bid = 0.0
+    cum_ask = 0.0
+    for i in range(int(depth)):
+        offset = (i + 1) * 0.01
+        size = max(1.0, 1000.0 * (0.85 ** i))
+        cum_bid += size
+        cum_ask += size
+        bids.append({"price": round(reference - offset, 4), "size": size, "cumulative": cum_bid})
+        asks.append({"price": round(reference + offset, 4), "size": size, "cumulative": cum_ask})
+    return {"bids": bids, "asks": asks}
 
 
 @router.websocket("/stream/{channel_id}")

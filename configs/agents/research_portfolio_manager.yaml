@@ -60,3 +60,4 @@ guardrails:
 max_cost_usd: 0.60
 max_calls: 10
 annotations: [research, debate, portfolio_manager]
+template_target: research

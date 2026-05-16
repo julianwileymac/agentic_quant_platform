@@ -120,6 +120,32 @@ def get_positions(
     return compute_positions(start=_parse_dt(start), end=_parse_dt(end))
 
 
+@router.get("/positions/flat")
+def get_positions_flat(
+    start: str | None = None,
+    end: str | None = None,
+) -> list[dict[str, Any]]:
+    """Flat array of positions for UIs that want a list, not a `{positions, n_symbols}` envelope.
+
+    Used by the Vite Live Trading Desk
+    (``frontend/src/routes/live/page.tsx``) which renders a
+    ``PositionRow[]`` directly. The ``avg_price`` alias is added so
+    ``frontend/src/components/live/PositionTable.tsx`` doesn't need to
+    know about the legacy ``avg_cost`` field name.
+    """
+    raw = compute_positions(start=_parse_dt(start), end=_parse_dt(end))
+    rows = raw.get("positions") or []
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        item = dict(r)
+        if "avg_price" not in item and "avg_cost" in item:
+            item["avg_price"] = item.get("avg_cost")
+        out.append(item)
+    return out
+
+
 @router.get("/pnl")
 def get_pnl(
     start: str | None = None,

@@ -24,3 +24,4 @@ guardrails:
 max_cost_usd: 1.5
 max_calls: 50
 annotations: ["analysis", "stat_arb"]
+template_target: analysis

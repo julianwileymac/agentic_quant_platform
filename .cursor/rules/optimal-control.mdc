@@ -1,0 +1,132 @@
+---
+description: Optimal-control / HJB math layer (Avellaneda-Stoikov, Cartea-Jaimungal, Lucic-Tse) and the hftbacktest LOB engine. Apply when working under aqp/optimal_control/, aqp/options/portfolio_mm.py, aqp/options/greeks_jax.py, aqp/backtest/hft.py, aqp/strategies/hft/, aqp/analysis/flows/optimal_control.py, aqp/data/mcp/tools/optimal_control.py, aqp/data/mcp/tools/strategy_config.py, aqp/rl/envs/{market_making_env,lucic_tse_options_env,optimal_execution_env,mbtgym_adapter}.py, configs/rl/avellaneda_stoikov_mm.yaml, configs/rl/lucic_tse_options.yaml, configs/rl/cartea_jaimungal_execution.yaml, configs/agents/research_toxicity_regime_adapter.yaml.
+globs:
+  - aqp/optimal_control/**/*.py
+  - aqp/options/portfolio_mm.py
+  - aqp/options/greeks_jax.py
+  - aqp/backtest/hft.py
+  - aqp/strategies/hft/**/*.py
+  - aqp/strategies/lob.py
+  - aqp/analysis/flows/optimal_control.py
+  - aqp/data/mcp/tools/optimal_control.py
+  - aqp/data/mcp/tools/strategy_config.py
+  - aqp/rl/envs/market_making_env.py
+  - aqp/rl/envs/lucic_tse_options_env.py
+  - aqp/rl/envs/optimal_execution_env.py
+  - aqp/rl/envs/mbtgym_adapter.py
+  - aqp/tasks/hft_tasks.py
+  - aqp/api/routes/lob_backtest.py
+  - configs/rl/avellaneda_stoikov_mm.yaml
+  - configs/rl/lucic_tse_options.yaml
+  - configs/rl/cartea_jaimungal_execution.yaml
+  - configs/agents/research_toxicity_regime_adapter.yaml
+  - tests/optimal_control/**/*.py
+  - tests/options/test_portfolio_mm.py
+  - tests/options/test_greeks_jax.py
+  - tests/analysis/test_optimal_control_flows.py
+  - tests/data/mcp/test_optimal_control_tools.py
+  - tests/data/mcp/test_strategy_config_tool.py
+  - tests/rl/envs/test_market_making_env_avst.py
+  - tests/backtest/test_lob_engine.py
+alwaysApply: false
+---
+
+# Optimal-control / HJB math layer
+
+This rule scopes the JAX-compiled optimal-control core, the
+Lucic-Tse portfolio options market-maker, and the hftbacktest LOB
+engine. Narrative: [docs/optimal-control.md](mdc:docs/optimal-control.md),
+[docs/portfolio-options-mm.md](mdc:docs/portfolio-options-mm.md),
+[docs/hft-backtest.md](mdc:docs/hft-backtest.md),
+[docs/microstructure-toxicity.md](mdc:docs/microstructure-toxicity.md).
+
+## Hard rules
+
+1. **Single solver entry-point per problem.** New AvSt logic ships
+   inside [aqp/optimal_control/avellaneda_stoikov.py](mdc:aqp/optimal_control/avellaneda_stoikov.py)
+   exposed via ``compute_optimal_quotes`` / ``glft_closed_form`` /
+   ``quote_grid``. New CJ logic ships inside
+   [aqp/optimal_control/cartea_jaimungal.py](mdc:aqp/optimal_control/cartea_jaimungal.py)
+   exposed via ``solve`` / ``optimal_trading_rate`` /
+   ``optimal_liquidation_value``. New Lucic-Tse logic ships inside
+   [aqp/options/portfolio_mm.py](mdc:aqp/options/portfolio_mm.py).
+   Don't open-code the math inside a strategy / env / agent body.
+2. **JAX kernels stay pure.** Functions decorated with ``@jax.jit``
+   take only static-or-traced inputs and contain no I/O, no globals,
+   no Python control flow keyed on traced values. The wrapper public
+   functions can do all the orchestration; the inner kernel must be
+   trace-compatible.
+3. **No Python `for` loops in matrix ops.** Lucic-Tse uses
+   ``jnp.einsum`` and broadcasted ops only. AvSt grid evaluation uses
+   ``jax.vmap``. The fast path through these solvers is what makes
+   the closed forms tractable in real time.
+4. **Analysis flows write to gold tier.** The flows in
+   [aqp/analysis/flows/optimal_control.py](mdc:aqp/analysis/flows/optimal_control.py)
+   live under namespace ``optimal_control`` so
+   ``AnalysisRuntime`` writes to ``aqp_gold_analysis_optimal_control``
+   per AGENTS rule 21. Don't override ``output_namespace`` to write
+   anywhere else.
+5. **Agents call the math through DataMCPTools.** The four agent-
+   facing tools are ``data.optimal_control.solve_hjb``,
+   ``data.optimal_control.evaluate_strategy``,
+   ``data.optimal_control.list_regimes``, and
+   ``data.strategy_config.update``. Add new tools under
+   [aqp/data/mcp/tools/optimal_control.py](mdc:aqp/data/mcp/tools/optimal_control.py)
+   or [aqp/data/mcp/tools/strategy_config.py](mdc:aqp/data/mcp/tools/strategy_config.py);
+   register via ``@register_data_mcp_tool``. Per AGENTS rule 22,
+   agents NEVER read Iceberg / Postgres / Redis directly.
+6. **Whitelist all writes.** ``data.strategy_config.update`` only
+   accepts a small set of fields (``gamma``, ``sigma``, ``kappa``,
+   ``k``, ``gamma_inv``, ``base_spread``, ``order_size``,
+   ``max_position``). Adding a new whitelisted field requires an ADR
+   note documenting the threat model and the lineage event the change
+   produces.
+7. **HFT progress emits use the canonical frame.** The
+   [run_lob_backtest](mdc:aqp/tasks/hft_tasks.py) task emits
+   ``{task_id, stage, message, timestamp, **extras}`` with the extras
+   ``events_processed`` / ``equity`` / ``position``. Adding fields to
+   ``extras`` is fine; renaming is not (AGENTS rule 4).
+8. **RL envs auto-register through the metaclass.** Set ``rl_kind``
+   and ``rl_alias`` (and optional ``rl_tags`` / ``rl_source`` /
+   ``rl_category``); the
+   [`RLComponent`](mdc:aqp/rl/core/base.py) metaclass calls
+   ``register`` for you. Don't decorate manually.
+
+## Optional dependency hygiene
+
+- Pure-Python fallbacks for AvSt / CJ ship alongside the JAX paths so
+  the modules import cleanly without ``[optimal-control]``.
+- ``aqp/options/greeks_jax.py`` returns ``None`` when neither JAX nor
+  ``fast_vollib`` are installed; ``aqp.analysis.pricing.greeks_grid``
+  routes through it and falls back to the SciPy double-loop.
+- ``aqp/backtest/hft.py`` imports ``hftbacktest`` lazily inside
+  ``run`` and raises ``ImportError`` with install instructions when
+  the extra is missing.
+
+## Don't
+
+- Don't import ``hftbacktest`` at module top in any AQP file. Lazy-
+  import inside the function that uses it.
+- Don't call ``litellm.completion`` / ``OllamaClient`` directly from
+  these modules — agent / RL bodies use ``router_complete`` per
+  AGENTS rule 2.
+- Don't write to a non-``aqp_gold_analysis_optimal_control``
+  namespace from a flow registered under namespace ``optimal_control``.
+- Don't bypass ``data.strategy_config.update``'s whitelist by adding
+  a sibling tool that writes a different YAML field.
+- Don't replace the ``MarketMakingEnv`` registration alias. The
+  graduated env keeps ``rl_alias = "MarketMakingEnv"`` so existing
+  configs keep loading; the legacy stylised env survives as
+  ``MarketMakingStubEnv``.
+
+## When in doubt
+
+1. Read [docs/optimal-control.md](mdc:docs/optimal-control.md) for the
+   math.
+2. Read the relevant scoped rule:
+   - [AGENTS.md](mdc:AGENTS.md) hard rules — full list.
+   - [tasks-api.mdc](mdc:.cursor/rules/tasks-api.mdc) — Celery + REST
+     layering.
+   - [data-mcp.mdc](mdc:.cursor/rules/data-mcp.mdc) — DataMCP boundary.
+3. Search the code: ``rg "compute_optimal_quotes|compute_lucic_tse_quotes|LobBacktestEngine" aqp/``.
+4. Still stuck → ask. Don't guess and ship.

@@ -176,12 +176,37 @@ def greeks_grid(
     vol: float = 0.2,
     option_type: Literal["call", "put"] = "call",
     dividend_yield: float = 0.0,
+    use_jax: bool | None = None,
 ) -> dict[str, np.ndarray]:
     """Build a 2D Greek surface across ``(strike, expiry)``.
 
     Returns a dict with arrays of shape ``(len(expiries), len(strikes))``
     keyed ``price``, ``delta``, ``gamma``, ``vega``, ``theta``, ``rho``.
+
+    Auto-routes through the JAX/fast-vollib fast path in
+    :func:`aqp.options.greeks_jax.greeks_grid_jax` when the
+    ``optimal-control`` extra is installed; falls back to this scipy
+    double-loop otherwise. Pass ``use_jax=False`` to force the scipy
+    path (mostly useful in tests).
     """
+    if use_jax is not False:
+        try:
+            from aqp.options.greeks_jax import greeks_grid_jax
+        except Exception:  # noqa: BLE001
+            greeks_grid_jax = None  # type: ignore[assignment]
+        if greeks_grid_jax is not None:
+            jax_out = greeks_grid_jax(
+                spot=spot,
+                strikes=np.asarray(strikes, dtype=float),
+                expiries=np.asarray(expiries, dtype=float),
+                rate=rate,
+                vol=vol,
+                option_type=option_type,
+                dividend_yield=dividend_yield,
+            )
+            if jax_out is not None:
+                return jax_out
+
     K = np.asarray(strikes, dtype=float).reshape(1, -1)
     T = np.asarray(expiries, dtype=float).reshape(-1, 1)
     out_shape = (T.size, K.size)

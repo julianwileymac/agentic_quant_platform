@@ -22,20 +22,30 @@ interface FactorPrimitive {
 
 interface EvalResult {
   rows: Array<Record<string, unknown>>;
-  columns: string[];
+  columns?: string[];
+  summary?: Record<string, unknown>;
+  n_rows?: number;
+  n_symbols?: number;
   duration_seconds?: number;
   error?: string;
 }
 
 export function FactorWorkbench() {
+  // Backend exposes operator metadata at GET /factors/operators (the
+  // expressions DSL uses Mean / Std / Rank / etc., capitalised). We
+  // alias the response into the existing FactorPrimitive shape so
+  // the Primitives table renders unchanged.
   const primitives = useApiQuery<FactorPrimitive[]>({
-    queryKey: ["factors", "primitives"],
-    path: "/factors/primitives",
+    queryKey: ["factors", "operators"],
+    path: "/factors/operators",
     select: (raw) => (Array.isArray(raw) ? (raw as FactorPrimitive[]) : []),
   });
 
   const [vtSymbol, setVtSymbol] = useState("AAPL.NASDAQ");
-  const [expression, setExpression] = useState("(close - sma(close, 20)) / std(close, 20)");
+  // Default formula uses the canonical DSL operator names registered
+  // in aqp/api/routes/factors.py::OPERATOR_DOCS. Lower-case helpers
+  // like sma() / std() are not part of the registered operator set.
+  const [expression, setExpression] = useState("(close - Mean(close, 20)) / Std(close, 20)");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<EvalResult | null>(null);
 
@@ -43,9 +53,17 @@ export function FactorWorkbench() {
     setBusy(true);
     setResult(null);
     try {
-      const res = await apiFetch<EvalResult>("/factors/evaluate", {
+      // /factors/preview is the synchronous formula sandbox — returns
+      // a sample row set + IC summary directly. /factors/evaluate is
+      // reserved for the async Alphalens / MLflow tear-sheet workflow
+      // and returns TaskAccepted with a stream_url instead.
+      const res = await apiFetch<EvalResult>("/factors/preview", {
         method: "POST",
-        body: JSON.stringify({ vt_symbol: vtSymbol, expression }),
+        body: JSON.stringify({
+          symbols: [vtSymbol],
+          formula: expression,
+          rows: 50,
+        }),
       });
       setResult(res);
     } catch (err) {

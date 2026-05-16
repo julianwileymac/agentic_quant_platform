@@ -150,6 +150,25 @@ class AgentSpec(BaseModel):
     max_cost_usd: float = 1.0
     max_calls: int = 20
     annotations: list[str] = Field(default_factory=list)
+    template_target: Literal[
+        "backtest",
+        "research",
+        "selection",
+        "trader",
+        "analysis",
+        "live",
+        "paper",
+        "utility",
+    ] = Field(
+        default="utility",
+        description=(
+            "Which UI flow the Agent Templates page should open for this spec. "
+            "'backtest' routes to the AgentBacktestWizard; the per-team values "
+            "('research'/'selection'/'trader'/'analysis') route to the matching "
+            "AgentTeamConsole; 'live' / 'paper' route to the live/paper desks; "
+            "'utility' falls back to the generic registry detail page."
+        ),
+    )
     extras: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("tools", mode="before")

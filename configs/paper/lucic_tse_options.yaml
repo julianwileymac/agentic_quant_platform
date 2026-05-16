@@ -1,0 +1,49 @@
+name: "Paper — Lucic-Tse Options Portfolio"
+description: >
+  Paper-trading recipe driving the Lucic-Tse portfolio options
+  market-making framework. Quotes the entire SPX option chain via the
+  JAX-compiled aqp.options.portfolio_mm.compute_lucic_tse_quotes; the
+  toxicity-aware regime adapter scales gamma_inv and base_spread when
+  the regime flips.
+
+session:
+  run_name: lucic-tse-paper
+  heartbeat_seconds: 30
+  state_flush_every_bars: 10
+  initial_cash: 1000000.0
+  history_window_bars: 500
+  stop_on_kill_switch: true
+  dry_run: true
+
+strategy:
+  class: LucicTsePortfolioStrategy
+  module_path: aqp.strategies.hft.alphas
+  # The following kwargs are *whitelisted* for the
+  # data.strategy_config.update DataMCPTool. See
+  # docs/portfolio-options-mm.md for the closed-form derivation.
+  kwargs:
+    gamma_inv: 0.05
+    base_spread: 0.05
+    hedge_cost: 0.001
+    n_strikes: 7
+    n_expiries: 4
+    inventory_cap_per_strike: 100.0
+
+brokerage:
+  class: TradierBrokerage
+  module_path: aqp.trading.brokerages.tradier
+  kwargs:
+    paper: true
+
+feed:
+  class: AlpacaDataFeed
+  module_path: aqp.trading.feeds.alpaca_feed
+  kwargs:
+    subscription: iex
+
+risk:
+  max_position_pct: 0.10
+  max_daily_loss_pct: 0.02
+  max_drawdown_pct: 0.10
+  max_concentration_pct: 0.30
+  max_gross_exposure: 0.5

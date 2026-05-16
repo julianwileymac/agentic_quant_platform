@@ -56,6 +56,7 @@ import { BacktestRoute } from "@/routes/backtest/page";
 import { BacktestDetailRoute } from "@/routes/backtest/[id]/page";
 import { BacktestIterateRoute } from "@/routes/backtest/iterate/page";
 import { BacktestNewRoute } from "@/routes/backtest/new/page";
+import { LobBacktestRoute } from "@/routes/backtest/lob/page";
 import { BotsRoute } from "@/routes/bots/page";
 import { BotDetailRoute } from "@/routes/bots/[id]/page";
 import { BotNewRoute } from "@/routes/bots/new/page";
@@ -273,6 +274,8 @@ const DYNAMIC_ROUTES: RouteObject[] = [
   { path: "backtest/new", element: <BacktestNewRoute /> },
   // Phase 4 — agent-driven iterative optimisation surface
   { path: "backtest/iterate", element: <BacktestIterateRoute /> },
+  // HFT / LOB backtest wizard (math-layer expansion).
+  { path: "backtest/lob", element: <LobBacktestRoute /> },
   { path: "rl/runs/:id", element: <RlRunDetailRoute /> },
   // Phase 3 dynamic routes.
   { path: "strategies/:id", element: <StrategyDetailRoute /> },
