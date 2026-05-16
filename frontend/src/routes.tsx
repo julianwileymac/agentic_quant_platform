@@ -144,6 +144,21 @@ import { KafkaTopicDetailRoute } from "@/routes/streaming/kafka/topics/[name]/pa
 import { FlinkJobDetailRoute } from "@/routes/streaming/flink/jobs/[name]/page";
 import { ProducerDetailRoute } from "@/routes/streaming/producers/[name]/page";
 import { StrategyNewRoute } from "@/routes/strategies/new/page";
+// Consolidated `/strategy-development/*` umbrella — see docs/strategy-development.md.
+import { StrategyDevLayoutRoute } from "@/routes/strategy-development/layout";
+import { StrategyDevIndexRoute } from "@/routes/strategy-development/page";
+import { StrategyComposerRoute as StrategyDevComposerPage } from "@/routes/strategy-development/composer/page";
+import { SimulationCreatorRoute } from "@/routes/strategy-development/simulation/page";
+import { IdeationRoute } from "@/routes/strategy-development/ideation/page";
+import { SinglePredictRoute } from "@/routes/strategy-development/single-predict/page";
+import { PredictBatchRoute } from "@/routes/strategy-development/predict-batch/page";
+import { CompareModelsRoute } from "@/routes/strategy-development/compare-models/page";
+import { ScenarioPerturbationRoute } from "@/routes/strategy-development/scenario-perturbation/page";
+import { HistoricalEvalRoute } from "@/routes/strategy-development/historical-eval/page";
+import { LiveTestRoute } from "@/routes/strategy-development/live-test/page";
+import { RunComparatorRoute } from "@/routes/strategy-development/run-comparator/page";
+import { DocumentLibraryRoute } from "@/routes/strategy-development/document-library/page";
+import { StrategyLibraryRoute } from "@/routes/strategy-development/library/page";
 import { stubRoute } from "@/routes/stub";
 import { VisualizationsRoute } from "@/routes/visualizations/page";
 import { AgentCrewEditorRoute } from "@/routes/workflows/agent/page";
@@ -328,19 +343,49 @@ const DYNAMIC_ROUTES: RouteObject[] = [
   { path: "analysis/lab/composer", element: <AnalysisComposerRoute /> },
   { path: "analysis/runs", element: <AnalysisRunsRoute /> },
   { path: "analysis/runs/:id", element: <AnalysisRunDetailRoute /> },
+  // Consolidated `/strategy-development/*` umbrella. The parent route
+  // mounts `StrategyDevLayout` (sub-nav + KPI strip + Outlet); each
+  // child is a normal page that reads / writes the shared
+  // `StrategyDevContext`. Nested children pre-empt the flat
+  // `/strategy-development` REAL_ROUTES entry above for any path that
+  // matches a sub-route.
+  {
+    path: "strategy-development",
+    element: <StrategyDevLayoutRoute />,
+    children: [
+      { index: true, element: <StrategyDevIndexRoute /> },
+      { path: "composer", element: <StrategyDevComposerPage /> },
+      { path: "simulation", element: <SimulationCreatorRoute /> },
+      { path: "ideation", element: <IdeationRoute /> },
+      { path: "single-predict", element: <SinglePredictRoute /> },
+      { path: "predict-batch", element: <PredictBatchRoute /> },
+      { path: "compare-models", element: <CompareModelsRoute /> },
+      { path: "scenario-perturbation", element: <ScenarioPerturbationRoute /> },
+      { path: "historical-eval", element: <HistoricalEvalRoute /> },
+      { path: "live-test", element: <LiveTestRoute /> },
+      { path: "run-comparator", element: <RunComparatorRoute /> },
+      { path: "document-library", element: <DocumentLibraryRoute /> },
+      { path: "library", element: <StrategyLibraryRoute /> },
+    ],
+  },
 ];
 
-const childRoutes: RouteObject[] = NAV_ITEMS.map((item) => {
-  const Component = REAL_ROUTES[item.href];
-  const element = Component ? <Component /> : stubRoute(item);
-  if (item.href === "/") {
-    return { index: true, element } satisfies RouteObject;
-  }
-  return {
-    path: item.href.replace(/^\//, ""),
-    element,
-  } satisfies RouteObject;
-});
+const childRoutes: RouteObject[] = NAV_ITEMS
+  // Routes under the consolidated `/strategy-development/*` umbrella
+  // are mounted via the nested layout route below; skip them in the
+  // flat childRoutes generation so the layout actually wraps them.
+  .filter((item) => !item.href.startsWith("/strategy-development"))
+  .map((item) => {
+    const Component = REAL_ROUTES[item.href];
+    const element = Component ? <Component /> : stubRoute(item);
+    if (item.href === "/") {
+      return { index: true, element } satisfies RouteObject;
+    }
+    return {
+      path: item.href.replace(/^\//, ""),
+      element,
+    } satisfies RouteObject;
+  });
 
 export const router = createBrowserRouter([
   // Auth routes live OUTSIDE the AppShell so the IdP redirect / loading

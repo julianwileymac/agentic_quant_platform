@@ -1,0 +1,48 @@
+name: "Naive Bayes Sentiment"
+description: >
+  Bag-of-words Multinomial Naive Bayes classifier on per-bar news
+  headlines / sentiment tweets. Trains lazily on `text` +
+  `sentiment_label` columns when no pre-trained model is supplied.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [AAPL, MSFT, GOOGL, AMZN, META, NVDA]
+    alpha_model:
+      class: NaiveBayesSentimentAlpha
+      module_path: aqp.strategies.ml.nb_sentiment
+      kwargs:
+        text_column: text
+        train_text_column: sentiment_label
+        margin_threshold: 0.2
+        hold_bars: 1
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs:
+        max_positions: 6
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        max_position_pct: 0.2
+        max_drawdown_pct: 0.15
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2022-01-01"
+    end: "2024-12-31"

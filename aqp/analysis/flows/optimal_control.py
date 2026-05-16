@@ -489,13 +489,117 @@ def toxicity_regime_flow(
     )
 
 
+# ---------------------------------------------------------------------------
+# Obizhaeva-Wang dynamic optimal execution
+# ---------------------------------------------------------------------------
+
+
+class OWLiquidationParams(FlowParams):
+    """Parameters for ``optimal_control.obizhaeva_wang_solve``.
+
+    The defaults reproduce the canonical 1-share / 1-period example
+    from Obizhaeva & Wang (2013) so a flow run with no arguments
+    yields a recognisable trajectory.
+    """
+
+    total_shares: float = Field(default=1.0, description="Quantity to liquidate")
+    horizon: float = Field(default=1.0, gt=0.0, description="Liquidation horizon")
+    resilience: float = Field(default=1.0, gt=0.0, description="Book resilience rho")
+    impact_coeff: float = Field(default=1.0, gt=0.0, description="Linear-impact lambda")
+    grid_points: int = Field(default=64, ge=2, le=4_096)
+    rho_sweep_low: float = Field(default=0.1, gt=0.0, description="Sensitivity sweep low end")
+    rho_sweep_high: float = Field(default=5.0, gt=0.0, description="Sensitivity sweep high end")
+    rho_sweep_points: int = Field(default=32, ge=4, le=512)
+
+
+@register_analysis_flow(
+    name="optimal_control.obizhaeva_wang_solve",
+    namespace="optimal_control",
+    label="Obizhaeva-Wang liquidation",
+    description=(
+        "Closed-form Obizhaeva-Wang (2013) optimal liquidation under "
+        "linear impact + finite resilience. Returns the discrete-"
+        "continuous-discrete trade trajectory plus the cost sensitivity "
+        "to the resilience parameter rho. Pairs with "
+        "aqp.strategies.hft.obizhaeva_wang_exec.ObizhaevaWangExecution."
+    ),
+    params_model=OWLiquidationParams,
+    requires_dataset=False,
+    tags=("optimal_control", "execution", "obizhaeva_wang"),
+    optional_dependencies=("jax", "jaxlib"),
+)
+def obizhaeva_wang_solve_flow(
+    df: Any, params: OWLiquidationParams, ctx: FlowContext
+) -> FlowResult:
+    from aqp.optimal_control.obizhaeva_wang import (
+        ObizhaevaWangParams,
+        cost_vs_resilience,
+        solve as solve_ow,
+    )
+
+    p = ObizhaevaWangParams(
+        total_shares=params.total_shares,
+        horizon=params.horizon,
+        resilience=params.resilience,
+        impact_coeff=params.impact_coeff,
+        grid_points=params.grid_points,
+    )
+    result = solve_ow(p)
+    rho_grid = np.linspace(
+        params.rho_sweep_low, params.rho_sweep_high, params.rho_sweep_points
+    )
+    sweep = cost_vs_resilience(p, rho_grid=rho_grid)
+
+    rows = []
+    for t, executed in zip(result.times.tolist(), result.cumulative_executed.tolist()):
+        rows.append({"t": float(t), "cumulative_executed": float(executed)})
+    sweep_rows = [
+        {"rho": float(r), "expected_cost": float(c)}
+        for r, c in zip(sweep["rho"].tolist(), sweep["expected_cost"].tolist())
+    ]
+
+    chart = {
+        "data": [
+            {
+                "type": "scatter",
+                "mode": "lines+markers",
+                "x": [r["t"] for r in rows],
+                "y": [r["cumulative_executed"] for r in rows],
+                "name": "cumulative executed",
+            },
+        ],
+        "layout": {
+            "title": "Obizhaeva-Wang optimal execution trajectory",
+            "xaxis": {"title": "t"},
+            "yaxis": {"title": "cumulative qty"},
+        },
+    }
+    metrics = {
+        "initial_chunk": float(result.initial_chunk),
+        "terminal_chunk": float(result.terminal_chunk),
+        "continuous_total": float(result.continuous_total),
+        "continuous_rate": float(result.continuous_rate),
+        "expected_cost": float(result.expected_cost),
+        "rho_used": float(params.resilience),
+    }
+    return FlowResult(
+        flow="optimal_control.obizhaeva_wang_solve",
+        metrics=metrics,
+        rows=rows,
+        chart=chart,
+        arrow_table=coerce_arrow(rows + sweep_rows),
+    )
+
+
 __all__ = [
     "AvSTQuoteParams",
     "CJLiquidationParams",
     "LucicTseFlowParams",
+    "OWLiquidationParams",
     "ToxicityRegimeParams",
     "avellaneda_stoikov_quotes_flow",
     "cartea_jaimungal_liquidation_flow",
     "lucic_tse_portfolio_quotes_flow",
+    "obizhaeva_wang_solve_flow",
     "toxicity_regime_flow",
 ]

@@ -1,0 +1,49 @@
+name: "Cross-Sectional Residual Mean Reversion"
+description: >
+  Factor-neutralised residual mean reversion. Regresses each stock's
+  returns on market/size/value factors then trades the residual.
+  Equivalent to a 'short alpha, long beta' rule: when the residual
+  is positive we expect mean reversion against the factor model.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [AAPL, MSFT, GOOGL, JPM, JNJ, XOM]
+    alpha_model:
+      class: CrossSectionalResidualAlpha
+      module_path: aqp.strategies.stat_arb.cross_sectional_residual
+      kwargs:
+        lookback: 60
+        factor_columns: [mkt_excess, smb, hml]
+        z_threshold: 0.5
+        hold_bars: 5
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs:
+        max_positions: 6
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        max_position_pct: 0.2
+        max_drawdown_pct: 0.15
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 250000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2022-01-01"
+    end: "2024-12-31"

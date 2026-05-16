@@ -526,6 +526,111 @@ class RedisVectorStore:
             )
         return out
 
+    def search_text(
+        self,
+        query_text: str,
+        *,
+        corpus: str,
+        level: str,
+        k: int = 10,
+    ) -> list[VectorHit]:
+        """BM25 (RediSearch FT.SEARCH) over the ``text`` TEXT field.
+
+        Used by :mod:`aqp.rag.hybrid_retrieval` to fuse a sparse hit
+        list with the existing dense KNN results. Falls back to the
+        in-memory store if RediSearch is missing (no scoring, just
+        substring match).
+        """
+        if not query_text.strip():
+            return []
+        if self._client is None or not self._ensure_index(corpus, level):
+            if self._mem is None:
+                return []
+            # Naïve substring scan for the in-memory fallback.
+            bucket = self._mem._store.get((corpus, level), {})
+            hits: list[VectorHit] = []
+            q = query_text.lower()
+            for doc_id, (_, rec) in bucket.items():
+                if q in rec.text.lower():
+                    hits.append(
+                        VectorHit(
+                            doc_id=doc_id,
+                            score=1.0,
+                            text=rec.text,
+                            corpus=rec.corpus,
+                            level=rec.level,
+                            order=rec.order,
+                            l1=rec.l1,
+                            l2=rec.l2,
+                            vt_symbol=rec.vt_symbol,
+                            as_of=rec.as_of,
+                            source_id=rec.source_id,
+                            chunk_idx=rec.chunk_idx,
+                            meta=rec.meta,
+                        )
+                    )
+                    if len(hits) >= k:
+                        break
+            return hits
+        try:
+            from redis.commands.search.query import Query  # type: ignore[import-not-found]
+        except Exception:  # pragma: no cover
+            return []
+        # FT.SEARCH text query with BM25 scoring.
+        safe = (
+            query_text.replace("|", " ")
+            .replace("&", " ")
+            .replace("(", " ")
+            .replace(")", " ")
+        )
+        q = (
+            Query(f"@text:({safe})")
+            .return_fields(
+                "text",
+                "corpus",
+                "level",
+                "order",
+                "l1",
+                "l2",
+                "vt_symbol",
+                "as_of",
+                "source_id",
+                "chunk_idx",
+                "meta",
+            )
+            .paging(0, int(k))
+            .dialect(2)
+        )
+        try:
+            res = self._client.ft(self._index_name(corpus, level)).search(q)
+        except Exception:  # noqa: BLE001
+            logger.exception("RediSearch text query failed; returning empty result.")
+            return []
+        out: list[VectorHit] = []
+        for doc in res.docs:
+            try:
+                meta = json.loads(getattr(doc, "meta", "") or "{}")
+            except Exception:
+                meta = {}
+            out.append(
+                VectorHit(
+                    doc_id=str(doc.id).split(":", 3)[-1],
+                    score=1.0,
+                    text=str(getattr(doc, "text", "")),
+                    corpus=str(getattr(doc, "corpus", "")),
+                    level=str(getattr(doc, "level", "")),
+                    order=str(getattr(doc, "order", "")),
+                    l1=str(getattr(doc, "l1", "") or ""),
+                    l2=str(getattr(doc, "l2", "") or ""),
+                    vt_symbol=str(getattr(doc, "vt_symbol", "") or ""),
+                    as_of=str(getattr(doc, "as_of", "") or ""),
+                    source_id=str(getattr(doc, "source_id", "") or ""),
+                    chunk_idx=int(float(getattr(doc, "chunk_idx", 0) or 0)),
+                    meta=meta,
+                )
+            )
+        return out
+
     # ------------------------------------------------------------------ small helpers used by HierarchicalRAG
     def get(self, corpus: str, level: str, doc_id: str) -> VectorHit | None:
         if self._client is None:

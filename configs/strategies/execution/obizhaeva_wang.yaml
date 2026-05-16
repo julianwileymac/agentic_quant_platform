@@ -1,0 +1,25 @@
+name: "Obizhaeva-Wang Dynamic Execution"
+description: >
+  Discrete-continuous-discrete liquidation trajectory under linear
+  price impact + finite book resilience (Obizhaeva & Wang 2013).
+  Used together with the analysis flow
+  `optimal_control.obizhaeva_wang_solve` for offline cost analysis.
+
+strategy:
+  class: ObizhaevaWangExecution
+  module_path: aqp.strategies.hft.obizhaeva_wang_exec
+  kwargs:
+    total_shares: 100.0
+    horizon_seconds: 3600.0
+    resilience: 1.0
+    impact_coeff: 1.0
+    tick_quantity: 1.0
+
+backtest:
+  class: LobBacktestEngine
+  module_path: aqp.backtest.hft
+  kwargs:
+    latency_profile: intp_order_latency
+    queue_model: probabilistic
+    dataset_preset: lob_btcusdt_sample
+    max_events: 500000

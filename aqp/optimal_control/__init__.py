@@ -41,17 +41,27 @@ from aqp.optimal_control.hjb_solver import (
     solve_cj,
     value_function_to_arrow,
 )
+from aqp.optimal_control.obizhaeva_wang import (
+    ObizhaevaWangParams,
+    ObizhaevaWangResult,
+    cost_vs_resilience,
+    solve as solve_obizhaeva_wang,
+)
 
 __all__ = [
     "AvellanedaStoikovParams",
     "AvellanedaStoikovResult",
     "CarteaJaimungalParams",
     "CarteaJaimungalResult",
+    "ObizhaevaWangParams",
+    "ObizhaevaWangResult",
     "compute_optimal_quotes",
+    "cost_vs_resilience",
     "glft_closed_form",
     "optimal_liquidation_value",
     "optimal_trading_rate",
     "solve_avst",
     "solve_cj",
+    "solve_obizhaeva_wang",
     "value_function_to_arrow",
 ]

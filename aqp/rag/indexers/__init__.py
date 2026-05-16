@@ -28,6 +28,7 @@ from aqp.rag.indexers.fundamentals_indexer import (
 )
 from aqp.rag.indexers.news_indexer import index_news_sentiment
 from aqp.rag.indexers.performance_indexer import index_performance
+from aqp.rag.indexers.research_papers_indexer import index_research_papers
 from aqp.rag.indexers.sec_indexer import index_sec_filings
 from aqp.rag.indexers.uspto_indexer import (
     index_uspto_assignments,
@@ -45,6 +46,7 @@ __all__ = [
     "index_financial_ratios",
     "index_news_sentiment",
     "index_performance",
+    "index_research_papers",
     "index_sec_filings",
     "index_sec_xbrl",
     "index_uspto_assignments",
@@ -69,6 +71,7 @@ INDEXER_REGISTRY = {
     "uspto_patents": index_uspto_patents,
     "uspto_trademarks": index_uspto_trademarks,
     "uspto_assignments": index_uspto_assignments,
+    "research_papers": index_research_papers,
 }
 
 

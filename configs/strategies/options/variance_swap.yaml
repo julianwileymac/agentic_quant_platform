@@ -1,0 +1,25 @@
+name: "Synthetic Variance Swap"
+description: >
+  Static-replication portfolio that mimics a variance swap payoff via
+  Carr-Madan: weighted strip of OTM puts (below forward) and OTM
+  calls (above forward), with weights ~ 1 / K**2.
+
+strategy:
+  class: VarianceSwapSynthetic
+  module_path: aqp.strategies.options.variance_swap
+  kwargs:
+    underlying: SPY.NYSE
+    open_day_of_week: 0  # Monday
+    n_strikes: 11
+    strike_width: 5.0
+    side: long  # buys realised variance, pays the strike
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 500000.0
+    commission_pct: 0.001
+    slippage_bps: 5.0
+    start: "2020-01-01"
+    end: "2024-12-31"

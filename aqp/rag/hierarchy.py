@@ -253,6 +253,58 @@ class HierarchicalRAG:
         self._audit(query, hits, plan_level=level, plan_corpus=corpus or "", context=context)
         return hits
 
+    def query_hybrid(
+        self,
+        query: str,
+        *,
+        corpus: str,
+        level: str = "l2",
+        k: int = 8,
+        dense_weight: float = 1.0,
+        sparse_weight: float = 1.0,
+        rerank: bool = True,
+        context: Any | None = None,
+    ) -> list[RAGHit]:
+        """Hybrid dense + sparse retrieval via Reciprocal Rank Fusion.
+
+        Best suited to corpora where exact-token matches matter as
+        much as semantic similarity — e.g. the ``research_papers``
+        corpus where authors / theorem names / variable symbols need
+        to be retrieved verbatim.
+
+        Falls back to dense-only retrieval if the sparse path
+        (RediSearch BM25) is unavailable.
+        """
+        from aqp.rag.hybrid_retrieval import FusionWeights, reciprocal_rank_fusion
+
+        qvec = self.embedder.embed_one(query)
+        dense_hits = self.store.search(qvec, k=k * 3, corpus=corpus, level=level)
+        try:
+            sparse_hits = self.store.search_text(
+                query, corpus=corpus, level=level, k=k * 3
+            )
+        except Exception:  # noqa: BLE001
+            sparse_hits = []
+        fused = reciprocal_rank_fusion(
+            dense_hits=dense_hits,
+            sparse_hits=sparse_hits,
+            weights=FusionWeights(dense=dense_weight, sparse=sparse_weight),
+            top_k=k * 3 if rerank else k,
+        )
+        if rerank and fused:
+            ranked = get_reranker().rerank(query, fused)
+            fused = [h for h, _ in ranked]
+        hits = [RAGHit.from_vector(h) for h in fused[:k]]
+        hits = self._filter_for_context(hits, context)
+        self._audit(
+            query,
+            hits,
+            plan_level=level,
+            plan_corpus=corpus,
+            context=context,
+        )
+        return hits
+
     def walk(self, plan: RAGPlan, *, context: Any | None = None) -> list[RAGHit]:
         """Top-down navigation L0 → L1 → L2 → L3 (paper Section 3.2).
 

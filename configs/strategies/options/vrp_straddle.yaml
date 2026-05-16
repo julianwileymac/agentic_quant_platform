@@ -1,0 +1,26 @@
+name: "VRP Delta-Hedged Short Straddle"
+description: >
+  Short ATM straddle, delta-hedged with the underlying. Harvests the
+  variance-risk premium (implied > realised vol over time). The
+  delta-hedge inner loop fires when aggregate portfolio delta
+  exceeds the configured tolerance.
+
+strategy:
+  class: VRPDeltaHedgedStraddle
+  module_path: aqp.strategies.options.vrp_straddle
+  kwargs:
+    underlying: SPY.NYSE
+    open_day_of_week: 0  # Monday
+    dte_days: 7
+    contracts: 1
+    delta_tolerance: 0.1
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 250000.0
+    commission_pct: 0.001
+    slippage_bps: 5.0
+    start: "2020-01-01"
+    end: "2024-12-31"

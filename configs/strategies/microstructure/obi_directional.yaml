@@ -1,0 +1,26 @@
+name: "OBI Directional Alpha (HFT)"
+description: >
+  Multi-snapshot order-book-imbalance directional alpha (Stanford
+  HFT 2016). Fires market orders when the rolling z-score of OBI
+  breaches the configured enter threshold. Pairs naturally with the
+  hftbacktest LobBacktestEngine.
+
+strategy:
+  class: OBIDirectionalAlpha
+  module_path: aqp.strategies.hft.obi_directional
+  kwargs:
+    window: 64
+    enter_z: 2.0
+    exit_z: 0.3
+    order_size: 1.0
+    max_position: 10.0
+    microprice_edge_bps: 0.5
+
+backtest:
+  class: LobBacktestEngine
+  module_path: aqp.backtest.hft
+  kwargs:
+    latency_profile: intp_order_latency
+    queue_model: probabilistic
+    dataset_preset: lob_btcusdt_sample
+    max_events: 1000000

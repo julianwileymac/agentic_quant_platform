@@ -1,0 +1,50 @@
+name: "Residual Momentum (Blitz et al.)"
+description: >
+  Momentum on idiosyncratic returns after Fama-French factor
+  neutralisation. Empirically more stable than raw-price momentum
+  because it strips out the systematic risk-on / risk-off swings.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [AAPL, MSFT, GOOGL, JPM, JNJ, XOM, AMZN, META, NVDA, BAC]
+    alpha_model:
+      class: ResidualMomentumAlpha
+      module_path: aqp.strategies.momentum.residual_momentum
+      kwargs:
+        lookback: 252
+        formation_period: 126
+        factor_columns: [mkt_excess, smb, hml]
+        top_quantile: 0.2
+        bottom_quantile: 0.2
+        hold_bars: 21
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs:
+        max_positions: 4
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        max_position_pct: 0.25
+        max_drawdown_pct: 0.2
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 250000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2020-01-01"
+    end: "2024-12-31"

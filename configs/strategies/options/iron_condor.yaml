@@ -1,0 +1,28 @@
+name: "Short Iron Condor"
+description: >
+  Short iron condor on SPY: long OTM put + short OTM put +
+  short OTM call + long OTM call. Strike placement scales with
+  realised vol via `short_iv_mult` (sigma units). Emergency unwind
+  fires when spot breaches a short strike by `breach_buffer`.
+
+strategy:
+  class: IronCondorAlpha
+  module_path: aqp.strategies.options.iron_condor
+  kwargs:
+    underlying: SPY.NYSE
+    open_day_of_week: 0  # Monday
+    dte_days: 30
+    short_iv_mult: 1.0
+    wing_width: 5.0
+    vol_lookback: 20
+    breach_buffer: 0.05
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 250000.0
+    commission_pct: 0.001
+    slippage_bps: 5.0
+    start: "2020-01-01"
+    end: "2024-12-31"

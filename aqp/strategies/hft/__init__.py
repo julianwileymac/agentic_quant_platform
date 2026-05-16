@@ -20,13 +20,31 @@ from aqp.strategies.hft.alphas import (
     ImbalanceAlphaMM,
     QueueAwareMM,
 )
+from aqp.strategies.hft.automated_technical_search import (
+    BootstrapTechSearchAlpha,
+    TechnicalRule,
+    bootstrap_baseline,
+    evaluate_rule,
+    search_rules,
+)
+from aqp.strategies.hft.microprice import MicropriceAlpha
+from aqp.strategies.hft.obi_directional import OBIDirectionalAlpha
+from aqp.strategies.hft.obizhaeva_wang_exec import ObizhaevaWangExecution
 
 
 __all__ = [
     "AvellanedaStoikovMM",
     "BasisAlphaMM",
+    "BootstrapTechSearchAlpha",
     "GLFTMM",
     "GridMM",
     "ImbalanceAlphaMM",
+    "MicropriceAlpha",
+    "OBIDirectionalAlpha",
+    "ObizhaevaWangExecution",
     "QueueAwareMM",
+    "TechnicalRule",
+    "bootstrap_baseline",
+    "evaluate_rule",
+    "search_rules",
 ]

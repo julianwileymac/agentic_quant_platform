@@ -29,8 +29,8 @@ from typing import Literal
 logger = logging.getLogger(__name__)
 
 
-KnowledgeOrder = Literal["first", "second", "third"]
-KNOWLEDGE_ORDERS: tuple[KnowledgeOrder, ...] = ("first", "second", "third")
+KnowledgeOrder = Literal["first", "second", "third", "theory"]
+KNOWLEDGE_ORDERS: tuple[KnowledgeOrder, ...] = ("first", "second", "third", "theory")
 
 
 @dataclass(frozen=True)
@@ -193,6 +193,18 @@ OrderCatalog: tuple[OrderCorpus, ...] = (
         l2="patent_assignment",
         iceberg="aqp_uspto.assignments",
         description="USPTO patent assignment events (M&A signal).",
+    ),
+    # --- theory order: research-paper corpus --------------------------
+    OrderCorpus(
+        name="research_papers",
+        order="theory",
+        l1="research",
+        l2="papers",
+        iceberg=None,
+        description=(
+            "Math-aware research-paper corpus. Source PDFs parsed by the "
+            "marker / nougat / mathpix selector chain in aqp.rag.parsers."
+        ),
     ),
 )
 # fmt: on

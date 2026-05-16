@@ -1,0 +1,50 @@
+name: "SVM FX Trend-Following"
+description: >
+  Support-vector-machine classifier-based FX trend signal. Fits an
+  RBF SVM on lagged log-returns + EMAs + realised-vol features and
+  trades only when the class-probability margin exceeds the
+  configured threshold.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [EURUSD, GBPUSD, USDJPY]
+    alpha_model:
+      class: SVMFXTrendAlpha
+      module_path: aqp.strategies.ml.svm_fx_trend
+      kwargs:
+        lags: 5
+        train_window: 300
+        margin_threshold: 0.1
+        hold_bars: 1
+        C: 1.0
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs:
+        max_positions: 3
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        max_position_pct: 0.4
+        max_drawdown_pct: 0.15
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0001
+    slippage_bps: 1.0
+    start: "2020-01-01"
+    end: "2024-12-31"

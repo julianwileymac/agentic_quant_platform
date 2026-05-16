@@ -1,0 +1,49 @@
+name: "ANN Crypto Decile Classifier"
+description: >
+  Small MLP classifier on technical features. Predicts the decile of
+  next-bar return; longs the top decile and shorts the bottom decile
+  when the predicted probability mass exceeds the threshold.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [BTC, ETH]
+    alpha_model:
+      class: ANNCryptoDecileAlpha
+      module_path: aqp.strategies.ml.ann_crypto_decile
+      kwargs:
+        hidden_layer_sizes: [32, 16]
+        train_window: 500
+        decile_threshold: 0.2
+        n_deciles: 10
+        hold_bars: 1
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs:
+        max_positions: 2
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        max_position_pct: 0.5
+        max_drawdown_pct: 0.25
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 50000.0
+    commission_pct: 0.001
+    slippage_bps: 5.0
+    start: "2022-01-01"
+    end: "2024-12-31"

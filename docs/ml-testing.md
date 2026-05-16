@@ -1,5 +1,11 @@
 # Interactive ML testing workbench
 
+> **Superseded by [strategy-development.md](strategy-development.md).**
+> The webui `/ml/test` page is preserved for legacy bookmarks but the
+> canonical surfaces now live as sibling sub-routes of
+> `/strategy-development/*` on the new Vite frontend. The endpoint
+> table below is still authoritative — only the frontend changed.
+
 > The `/ml/test` page lets users validate deployed models with single
 > rows, batch slices, A/B comparisons, perturbation sweeps, CSV
 > uploads, and live streaming — all wired through the same

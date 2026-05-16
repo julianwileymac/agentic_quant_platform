@@ -1,0 +1,62 @@
+name: "Multi-Cluster Mean Reversion"
+description: >
+  Cross-sectional statistical arbitrage on cluster-residual returns.
+  Stocks within each cluster (industry / GICS / PCA-derived) are
+  regressed against their cluster mean; we short overperformers and
+  buy underperformers, with dollar-neutral weight normalisation.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [AAPL, MSFT, GOOGL, AMZN, META, NVDA, JPM, BAC, GS, MS, XOM, CVX]
+    alpha_model:
+      class: MultiClusterMeanReversionAlpha
+      module_path: aqp.strategies.stat_arb.multi_cluster
+      kwargs:
+        lookback: 20
+        z_threshold: 0.5
+        hold_bars: 5
+        weight_cap: 0.2
+        clusters:
+          AAPL: tech
+          MSFT: tech
+          GOOGL: tech
+          AMZN: tech
+          META: tech
+          NVDA: tech
+          JPM: finance
+          BAC: finance
+          GS: finance
+          MS: finance
+          XOM: energy
+          CVX: energy
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs:
+        max_positions: 10
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        max_position_pct: 0.15
+        max_drawdown_pct: 0.15
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 250000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2022-01-01"
+    end: "2024-12-31"

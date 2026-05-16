@@ -218,6 +218,26 @@ class Settings(BaseSettings):
     rag_audit_enabled: bool = Field(default=True)
     rag_compress_threshold: float = Field(default=0.15)
     rag_working_max: int = Field(default=64)
+    # Math-aware research-paper RAG (2026 research-report consolidation).
+    rag_pdf_parser: str = Field(
+        default="marker",
+        description=(
+            "Preferred PDF parser for the research_papers corpus. Selector "
+            "chain falls back to nougat / mathpix / pypdf when unavailable."
+        ),
+    )
+    rag_paper_root: Path = Field(
+        default=Path("./data/research_papers"),
+        description="Filesystem root where uploaded research PDFs are stored.",
+    )
+    rag_paper_max_mb: int = Field(
+        default=50,
+        description="Maximum single-PDF upload size in megabytes.",
+    )
+    # MathPix credentials are typically resolved via CredentialResolver,
+    # but Settings exposes the keys so docker / k8s envs can set them.
+    mathpix_app_id: str = Field(default="")
+    mathpix_app_key: str = Field(default="")
 
     # --- Agent runtime / observability ---
     agent_run_artifact_dir: Path = Field(default=Path("./data/agent_runs"))

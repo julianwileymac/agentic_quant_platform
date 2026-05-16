@@ -1,0 +1,24 @@
+name: "Microprice Deviation Alpha"
+description: >
+  Stoikov microprice estimator. Fires market orders when the
+  microprice deviates from the midprice by more than `threshold_bps`,
+  i.e. the volume-weighted fair value strongly disagrees with the
+  centre of the spread.
+
+strategy:
+  class: MicropriceAlpha
+  module_path: aqp.strategies.hft.microprice
+  kwargs:
+    threshold_bps: 1.5
+    order_size: 1.0
+    max_position: 10.0
+    cooldown_events: 50
+
+backtest:
+  class: LobBacktestEngine
+  module_path: aqp.backtest.hft
+  kwargs:
+    latency_profile: intp_order_latency
+    queue_model: probabilistic
+    dataset_preset: lob_btcusdt_sample
+    max_events: 500000

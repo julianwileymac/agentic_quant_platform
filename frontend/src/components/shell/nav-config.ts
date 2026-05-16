@@ -2,6 +2,7 @@ import {
   Activity,
   AppWindow,
   BarChart3,
+  Beaker,
   Bot,
   Boxes,
   Brain,
@@ -350,6 +351,17 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "learn", label: "Learn / Taxonomy", href: "/learn", icon: Sparkles, group: "Research" },
   { key: "learn-sources", label: "Source Libraries", href: "/learn/sources", icon: Compass, group: "Research" },
 
+  // Consolidated strategy authoring + testing umbrella. See
+  // docs/strategy-development.md. Replaces the fragmented ml-test entry
+  // (factor workbench / backtest list / monte carlo / optimizer remain
+  // standalone because they are *consumption*, not authoring, surfaces).
+  {
+    key: "strategy-dev",
+    label: "Strategy Development",
+    href: "/strategy-development",
+    icon: Beaker,
+    group: "Lab",
+  },
   { key: "backtest", label: "Backtests", href: "/backtest", icon: LineChart, group: "Lab" },
   { key: "optimizer", label: "Optimizer", href: "/optimizer", icon: Gauge, group: "Lab" },
   { key: "monte-carlo", label: "Monte Carlo", href: "/monte-carlo", icon: FlaskConical, group: "Lab" },
@@ -357,7 +369,9 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "ml", label: "ML Training", href: "/ml/training", icon: Brain, group: "Lab", submenu: "ML" },
   { key: "ml-builder", label: "ML Builder", href: "/ml/builder", icon: CircuitBoard, group: "Lab", submenu: "ML" },
   { key: "ml-datasets", label: "ML Datasets", href: "/ml/datasets", icon: Database, group: "Lab", submenu: "ML" },
-  { key: "ml-test", label: "ML Test", href: "/ml/test", icon: FlaskConical, group: "Lab", submenu: "ML" },
+  // `/ml/test` superseded by the consolidated `/strategy-development/*`
+  // surface above. The flat route still exists in REAL_ROUTES so old
+  // bookmarks keep working until the legacy webui retires.
   { key: "ml-models", label: "ML Models", href: "/ml/models", icon: Grid3x3, group: "Lab", submenu: "ML" },
   { key: "ml-zoo", label: "ML Model Zoo", href: "/ml/zoo", icon: Sparkles, group: "Lab", submenu: "ML" },
 

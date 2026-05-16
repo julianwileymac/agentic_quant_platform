@@ -18,13 +18,16 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
 from aqp.tasks._progress import emit, emit_done, emit_error
 from aqp.tasks.celery_app import celery_app
+
+if TYPE_CHECKING:
+    from aqp.core.types import Symbol
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +98,51 @@ def predict_single(
         raise
 
 
+def _load_iceberg_slice(
+    iceberg_identifier: str,
+    *,
+    symbols: list[Symbol],
+    start_ts: pd.Timestamp,
+    end_ts: pd.Timestamp,
+) -> pd.DataFrame:
+    """Load a slice of an Iceberg table as a tidy bars dataframe.
+
+    All reads go through :func:`aqp.data.iceberg_catalog.read_arrow`
+    (AGENTS.md rule 3). We do best-effort row-filtering by symbol /
+    timestamp columns when they look like the standard medallion-bar
+    schema (``vt_symbol``, ``timestamp`` / ``ts``).
+    """
+    from aqp.data import iceberg_catalog
+
+    arrow_tbl = iceberg_catalog.read_arrow(iceberg_identifier)
+    frame = arrow_tbl.to_pandas()
+    if frame.empty:
+        return frame
+    # Symbol filter — accept ``vt_symbol`` or ``symbol`` columns.
+    vt_col = next(
+        (c for c in ("vt_symbol", "symbol", "ticker") if c in frame.columns),
+        None,
+    )
+    if vt_col and symbols:
+        wanted = {s.vt_symbol for s in symbols}
+        # Fall back to ticker-only equality when vt_symbol isn't dotted.
+        if vt_col == "ticker":
+            wanted |= {s.ticker for s in symbols}
+        frame = frame[frame[vt_col].astype(str).isin(wanted)]
+    # Time filter — accept ``timestamp`` / ``ts`` / ``datetime``.
+    ts_col = next(
+        (c for c in ("timestamp", "ts", "datetime", "as_of") if c in frame.columns),
+        None,
+    )
+    if ts_col:
+        # Coerce defensively; some catalogs store epoch microseconds.
+        coerced = pd.to_datetime(frame[ts_col], errors="coerce", utc=False)
+        frame = frame.assign(_aqp_ts=coerced)
+        frame = frame[(frame["_aqp_ts"] >= start_ts) & (frame["_aqp_ts"] <= end_ts)]
+        frame = frame.drop(columns=["_aqp_ts"])
+    return frame.reset_index(drop=True)
+
+
 @celery_app.task(bind=True, name="aqp.tasks.ml_test_tasks.predict_batch")
 def predict_batch(
     self,
@@ -106,7 +154,14 @@ def predict_batch(
     last_n: int = 200,
     iceberg_identifier: str | None = None,
 ) -> dict[str, Any]:
-    """Run inference over an Iceberg slice and return a sample of signals."""
+    """Run inference over an Iceberg slice (or DuckDB bars) and return signals.
+
+    When ``iceberg_identifier`` is supplied we read the slice via
+    :func:`aqp.data.iceberg_catalog.read_arrow` (AGENTS.md rule 3 — no
+    raw PyIceberg in task code). Otherwise we fall back to the existing
+    DuckDB bars path. This closes the documented gap where
+    ``iceberg_identifier`` was echoed but unused.
+    """
     task_id = self.request.id or f"local-{uuid.uuid4().hex[:8]}"
     emit(task_id, "start", f"Batch prediction for deployment {deployment_id}")
     try:
@@ -123,14 +178,31 @@ def predict_batch(
             raise ValueError("symbols is required")
         start_ts = pd.Timestamp(start or settings.default_start)
         end_ts = pd.Timestamp(end or settings.default_end)
-        provider = DuckDBHistoryProvider()
-        bars = provider.get_bars(parsed, start=start_ts, end=end_ts)
+
+        source = "duckdb"
+        if iceberg_identifier:
+            emit(
+                task_id,
+                "loading",
+                f"Reading Iceberg slice {iceberg_identifier}",
+            )
+            bars = _load_iceberg_slice(
+                iceberg_identifier,
+                symbols=parsed,
+                start_ts=start_ts,
+                end_ts=end_ts,
+            )
+            source = "iceberg"
+        else:
+            provider = DuckDBHistoryProvider()
+            bars = provider.get_bars(parsed, start=start_ts, end=end_ts)
         if bars.empty:
             raise RuntimeError(
-                f"No bars between {start_ts.date()} and {end_ts.date()} for {symbols}"
+                f"No rows between {start_ts.date()} and {end_ts.date()} for {symbols}"
+                f" (source={source})"
             )
         alpha = DeployedModelAlpha(deployment_id=deployment_id)
-        emit(task_id, "running", f"Scoring {len(bars)} bars")
+        emit(task_id, "running", f"Scoring {len(bars)} rows from {source}")
         signals = alpha.generate_signals(
             bars=bars, universe=parsed, context={"current_time": end_ts}
         )
@@ -140,6 +212,7 @@ def predict_batch(
             "n_bars": int(len(bars)),
             "n_signals": int(len(signals)),
             "iceberg_identifier": iceberg_identifier,
+            "source": source,
             "signals": rows,
         }
         emit_done(task_id, result)

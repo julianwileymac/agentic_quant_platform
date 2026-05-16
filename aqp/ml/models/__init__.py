@@ -11,6 +11,8 @@ import contextlib
 with contextlib.suppress(Exception):
     from aqp.ml.models.tree import CatBoostModel, LGBModel, XGBModel  # noqa: F401
 with contextlib.suppress(Exception):
+    from aqp.ml.models.naive_bayes import NaiveBayesSentimentModel  # noqa: F401
+with contextlib.suppress(Exception):
     from aqp.ml.models.linear import LinearModel  # noqa: F401
 with contextlib.suppress(Exception):
     from aqp.ml.models.ensemble import DEnsembleModel  # noqa: F401

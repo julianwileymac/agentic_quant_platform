@@ -1,0 +1,48 @@
+name: "Dual Momentum (Antonacci)"
+description: >
+  Combines relative + absolute momentum. Picks the highest trailing
+  return asset; if that asset still underperforms the cash proxy
+  (e.g. TLT bonds), bails out to the cash proxy. Mitigates the
+  prolonged-drawdown weakness of pure relative momentum.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [SPY, EFA, EEM, IEF, TLT]
+    alpha_model:
+      class: DualMomentumAlpha
+      module_path: aqp.strategies.momentum.dual_momentum
+      kwargs:
+        formation_period: 126
+        cash_proxy: TLT.NASDAQ
+        hold_bars: 21
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs:
+        max_positions: 1
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        max_position_pct: 1.0
+        max_drawdown_pct: 0.2
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2018-01-01"
+    end: "2024-12-31"

@@ -1,0 +1,48 @@
+name: "Sector Momentum Rotation"
+description: >
+  Rank sector ETFs by 6-12 month formation return, go long the top
+  decile, and gate all allocations behind a long-term SMA filter on
+  the broad market. Sits in cash during broad-market downtrends.
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: SectorETFUniverse
+      module_path: aqp.strategies.etf_baskets
+      kwargs: {}
+    alpha_model:
+      class: SectorMomentumRotationAlpha
+      module_path: aqp.strategies.momentum.sector_rotation
+      kwargs:
+        formation_period: 126
+        top_decile: 0.2
+        market_proxy: SPY.NYSE
+        market_sma_window: 200
+        hold_bars: 21
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio
+      kwargs:
+        max_positions: 5
+    risk_model:
+      class: BasicRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs:
+        max_position_pct: 0.3
+        max_drawdown_pct: 0.2
+    execution_model:
+      class: MarketOrderExecution
+      module_path: aqp.strategies.execution
+      kwargs: {}
+
+backtest:
+  class: EventDrivenBacktester
+  module_path: aqp.backtest.engine
+  kwargs:
+    initial_cash: 100000.0
+    commission_pct: 0.0005
+    slippage_bps: 2.0
+    start: "2020-01-01"
+    end: "2024-12-31"
