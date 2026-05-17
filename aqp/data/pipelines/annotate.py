@@ -227,6 +227,18 @@ def annotate_table(
                 }
             )
         result.column_docs = cleaned
+    if not result.description:
+        family_hint = str((extra_meta or {}).get("family") or "").strip()
+        n_columns = len(metadata.get("fields") or [])
+        if family_hint:
+            result.description = (
+                f"Dataset family {family_hint} materialized as "
+                f"{iceberg_identifier} with {n_columns} columns."
+            )
+        else:
+            result.description = (
+                f"Iceberg table {iceberg_identifier} with {n_columns} columns."
+            )
 
     if persist:
         try:
@@ -245,6 +257,7 @@ def annotate_table(
                 load_mode="managed",
                 llm_annotations=result.to_dict(),
                 column_docs=result.column_docs,
+                description=result.description,
                 tags=result.tags,
                 meta={
                     "iceberg_identifier": iceberg_identifier,
@@ -263,10 +276,7 @@ def annotate_table(
             from aqp.data.chroma_store import ChromaStore
 
             store = ChromaStore()
-            description = (
-                result.description
-                or f"Iceberg table {iceberg_identifier} with {len(metadata.get('fields') or [])} columns."
-            )
+            description = result.description
             store.datasets.upsert(
                 ids=[iceberg_identifier],
                 documents=[description],

@@ -79,6 +79,7 @@ def register_dataset_version(
     engine_meta: dict[str, Any] | None = None,
     summary_row_count: int | None = None,
     summary_symbol_count: int | None = None,
+    description: str | None = None,
 ) -> dict[str, Any]:
     """Persist a dataset catalog/version row and return lineage ids.
 
@@ -116,6 +117,10 @@ def register_dataset_version(
     pipeline_kind = engine_meta.pop("pipeline_kind", None)
     entity_extraction_status = engine_meta.pop("entity_extraction_status", None)
     rows_written_hint = engine_meta.pop("rows_written", None)
+    annotation_description = ""
+    if isinstance(llm_annotations, dict):
+        annotation_description = str(llm_annotations.get("description") or "").strip()
+    effective_description = str(description or "").strip() or annotation_description or None
 
     try:
         if df is not None and not df.empty:
@@ -172,6 +177,7 @@ def register_dataset_version(
                     frequency=frequency,
                     storage_uri=storage_uri,
                     schema_json=schema,
+                    description=effective_description,
                     tags=list(tags or []),
                     meta=dict(meta or {}),
                     iceberg_identifier=iceberg_identifier,
@@ -210,6 +216,8 @@ def register_dataset_version(
                     }
                 if column_docs:
                     catalog.column_docs = list(column_docs)
+                if effective_description:
+                    catalog.description = effective_description
                 if compute_backend:
                     catalog.compute_backend = compute_backend
                 if dagster_asset_key:
@@ -311,6 +319,7 @@ def register_iceberg_dataset(
     load_mode: str = "managed",
     llm_annotations: dict[str, Any] | None = None,
     column_docs: list[dict[str, Any]] | None = None,
+    description: str | None = None,
     tags: list[str] | None = None,
     meta: dict[str, Any] | None = None,
     row_count: int | None = None,
@@ -345,6 +354,7 @@ def register_iceberg_dataset(
         source_uri=source_uri,
         llm_annotations=llm_annotations,
         column_docs=column_docs,
+        description=description,
     )
 
 

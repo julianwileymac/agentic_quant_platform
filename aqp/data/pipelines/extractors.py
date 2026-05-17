@@ -1,4 +1,4 @@
-"""Streaming extractors for CSV / NDJSON / JSON-array inputs.
+"""Streaming extractors for CSV / NDJSON / JSON-array / Parquet inputs.
 
 Every extractor yields :class:`pyarrow.Table` chunks of bounded row size
 so the materialize step can append to Iceberg without ever holding more
@@ -38,7 +38,7 @@ class MemberRef:
 
     path: str
     archive_path: str | None
-    format: str
+    format: str  # csv | ndjson | json_array | parquet | unknown
     delimiter: str | None
 
     @property
@@ -309,6 +309,34 @@ def iter_json_array_chunks(
         yield _rows_to_arrow(rows)
 
 
+def iter_parquet_chunks(
+    member: MemberRef,
+    *,
+    chunk_rows: int = 50_000,
+) -> Iterator[pa.Table]:
+    """Yield chunks for Parquet members (filesystem or zip member)."""
+    try:
+        import pyarrow.parquet as pq
+    except ImportError:  # pragma: no cover
+        logger.warning("pyarrow.parquet unavailable; skipping %s", member.display_name)
+        return
+
+    try:
+        if member.archive_path:
+            with open_member(member) as fh:
+                payload = fh.read()
+            if not payload:
+                return
+            parquet_file = pq.ParquetFile(pa.BufferReader(payload))
+        else:
+            parquet_file = pq.ParquetFile(member.path)
+        for batch in parquet_file.iter_batches(batch_size=max(1, int(chunk_rows))):
+            if batch.num_rows:
+                yield pa.Table.from_batches([batch])
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("parquet stream failed for %s: %s", member.display_name, exc)
+
+
 def _rows_to_arrow(rows: list[dict[str, Any]]) -> pa.Table:
     """Convert a list of dicts to a pyarrow Table with stringified values.
 
@@ -346,7 +374,9 @@ def _rows_to_arrow(rows: list[dict[str, Any]]) -> pa.Table:
 
 def iter_member_chunks(member: MemberRef, *, chunk_rows: int = 50_000) -> Iterator[pa.Table]:
     """Dispatch by ``member.format`` to the right streaming reader."""
-    if member.format == "csv":
+    if member.format == "parquet":
+        yield from iter_parquet_chunks(member, chunk_rows=chunk_rows)
+    elif member.format == "csv":
         yield from iter_csv_chunks(member, chunk_rows=chunk_rows)
     elif member.format == "ndjson":
         yield from iter_ndjson_chunks(member, chunk_rows=chunk_rows)

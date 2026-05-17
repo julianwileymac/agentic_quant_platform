@@ -424,6 +424,9 @@ class Settings(BaseSettings):
     default_end: str = Field(default="2024-12-31")
 
     local_data_roots: str = Field(default="")
+    # Host->container mapping used by local ingest APIs/tasks.
+    # Format: "C:/host/root=>/container/root,/another/host=>/another/container"
+    local_ingest_path_map: str = Field(default="")
     market_bars_provider: str = Field(default="auto")
     fundamentals_provider: str = Field(default="auto")
     universe_provider: str = Field(default="managed_snapshot")
@@ -735,6 +738,25 @@ class Settings(BaseSettings):
             for p in self.local_data_roots.split(",")
             if p.strip()
         ]
+
+    @property
+    def local_ingest_path_map_pairs(self) -> list[tuple[str, str]]:
+        pairs: list[tuple[str, str]] = []
+        for raw in self.local_ingest_path_map.split(","):
+            entry = raw.strip()
+            if not entry:
+                continue
+            if "=>" in entry:
+                left, right = entry.split("=>", 1)
+            elif "|" in entry:
+                left, right = entry.split("|", 1)
+            else:
+                continue
+            host = left.strip()
+            container = right.strip()
+            if host and container:
+                pairs.append((host, container))
+        return pairs
 
     @property
     def otel_enabled(self) -> bool:

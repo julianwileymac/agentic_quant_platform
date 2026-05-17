@@ -34,9 +34,20 @@ from aqp.data.loading_templates import (
     get_loading_template,
     list_loading_templates,
 )
+from aqp.data.pipelines.local_paths import (
+    LocalPathResolutionError,
+    resolve_local_ingest_path,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["data-pipelines"])
+
+
+def _resolve_ingest_path_or_400(raw_path: str) -> Path:
+    try:
+        return resolve_local_ingest_path(raw_path, require_exists=True)
+    except LocalPathResolutionError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 class StreamPreviewRequest(BaseModel):
@@ -200,9 +211,7 @@ class AlphaVantageHistoryIngestRequest(BaseModel):
 
 @router.post("/pipelines/ingest", response_model=TaskAccepted)
 def ingest_path(req: IngestPathRequest) -> TaskAccepted:
-    p = Path(req.path).expanduser()
-    if not p.exists():
-        raise HTTPException(400, f"path does not exist: {p}")
+    p = _resolve_ingest_path_or_400(req.path)
 
     from aqp.tasks.ingestion_tasks import ingest_local_path
 
@@ -330,9 +339,7 @@ def run_loading_template(template_id: str, req: LoadingTemplateRunRequest) -> di
         path = str(payload.get("path") or "").strip()
         if not path:
             raise HTTPException(400, "path is required")
-        p = Path(path).expanduser()
-        if not p.exists():
-            raise HTTPException(400, f"path does not exist: {p}")
+        p = _resolve_ingest_path_or_400(path)
         from aqp.tasks.ingestion_tasks import ingest_local_path
 
         async_result = ingest_local_path.delay(
@@ -398,9 +405,7 @@ def queue_alpha_vantage_intraday_delta(req: AlphaVantageIntradayDeltaRequest) ->
 @router.get("/pipelines/discovery/preview")
 def discovery_preview(path: str) -> dict[str, Any]:
     """Run a read-only discovery walk and return the candidate datasets."""
-    p = Path(path).expanduser()
-    if not p.exists():
-        raise HTTPException(400, f"path does not exist: {p}")
+    p = _resolve_ingest_path_or_400(path)
     try:
         from aqp.data.pipelines import discover_datasets
 
@@ -444,9 +449,7 @@ def director_plan_preview(
     consolidate / split / rename the dataset families before kicking
     off an ingest.
     """
-    p = Path(path).expanduser()
-    if not p.exists():
-        raise HTTPException(400, f"path does not exist: {p}")
+    p = _resolve_ingest_path_or_400(path)
     try:
         from aqp.data.pipelines import (
             discover_datasets,
@@ -513,9 +516,7 @@ def ingest_regulatory(req: RegulatoryIngestRequest) -> TaskAccepted:
     if unknown:
         raise HTTPException(400, f"unknown regulatory sources: {unknown}")
 
-    root = Path(req.host_root).expanduser()
-    if not root.exists():
-        raise HTTPException(400, f"host_root does not exist: {root}")
+    root = _resolve_ingest_path_or_400(req.host_root)
 
     paths: list[str] = []
     namespace_per_path: dict[str, str] = {}

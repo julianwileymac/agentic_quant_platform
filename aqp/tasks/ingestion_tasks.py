@@ -7,6 +7,10 @@ from datetime import date, datetime
 from typing import Any
 
 from aqp.config import settings
+from aqp.data.pipelines.local_paths import (
+    LocalPathResolutionError,
+    resolve_local_ingest_path,
+)
 from aqp.tasks._progress import emit, emit_done, emit_error
 from aqp.tasks.celery_app import celery_app
 
@@ -654,12 +658,23 @@ def load_local_directory(
     Iceberg-managed catalog.
     """
     task_id = self.request.id or "local"
-    emit(task_id, "start", f"Loading {format} from {source_dir}…")
+    try:
+        resolved_source_dir = resolve_local_ingest_path(
+            source_dir, require_exists=True
+        )
+    except LocalPathResolutionError as exc:
+        emit_error(task_id, str(exc))
+        raise
+    emit(
+        task_id,
+        "start",
+        f"Loading {format} from {resolved_source_dir} (input={source_dir})…",
+    )
     try:
         from aqp.data.ingestion import LocalDirectoryLoader
 
         loader = LocalDirectoryLoader(
-            source_dir=source_dir,
+            source_dir=str(resolved_source_dir),
             format=format,
             glob=glob,
             column_map=column_map,
@@ -693,7 +708,16 @@ def ingest_local_path(
     verifier-retry, and LLM annotation.
     """
     task_id = self.request.id or "local"
-    emit(task_id, "start", f"Ingesting {path} → iceberg ns={namespace or 'aqp'}")
+    try:
+        resolved_path = resolve_local_ingest_path(path, require_exists=True)
+    except LocalPathResolutionError as exc:
+        emit_error(task_id, str(exc))
+        raise
+    emit(
+        task_id,
+        "start",
+        f"Ingesting {resolved_path} (input={path}) → iceberg ns={namespace or 'aqp'}",
+    )
 
     def _progress(phase: str, message: str) -> None:
         emit(task_id, phase, message)
@@ -709,7 +733,7 @@ def ingest_local_path(
             allowed_namespaces=allowed_namespaces,
         )
         report = pipe.run_path(
-            path=path,
+            path=str(resolved_path),
             namespace=namespace,
             table_prefix=table_prefix,
             annotate=bool(annotate),
@@ -790,10 +814,27 @@ def ingest_local_paths_with_director(
         )
         for path in paths:
             ns = namespace_per_path.get(path) or "aqp"
-            emit(task_id, "running", f"→ source={path} namespace={ns}")
+            try:
+                resolved_path = resolve_local_ingest_path(path, require_exists=True)
+            except LocalPathResolutionError as exc:
+                logger.exception("ingest source path resolution failed for %s", path)
+                errors.append(f"{path}: {exc}")
+                sources.append(
+                    {
+                        "source_path": path,
+                        "namespace": ns,
+                        "errors": [str(exc)],
+                    }
+                )
+                continue
+            emit(
+                task_id,
+                "running",
+                f"→ source={resolved_path} (input={path}) namespace={ns}",
+            )
             try:
                 report = pipe.run_path(
-                    path=path,
+                    path=str(resolved_path),
                     namespace=ns,
                     annotate=bool(annotate),
                 )

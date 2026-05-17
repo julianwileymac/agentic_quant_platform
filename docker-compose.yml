@@ -206,6 +206,7 @@ services:
       AQP_S3_ACCESS_KEY: ""
       AQP_S3_SECRET_KEY: ""
       AQP_S3_REGION: "${AQP_S3_REGION:-us-east-1}"
+      AQP_LOCAL_INGEST_PATH_MAP: "${AQP_LOCAL_INGEST_PATH_MAP:-C:/Users/Julian Wiley/Data=>/host-data,C:/Users/Julian Wiley/Downloads=>/host-downloads}"
       # Browser frontends call the API directly from these dev/preview ports.
       # :3000 = legacy Next.js webui, :3001 = Vite dev, :3002 = compose preview.
       AQP_WEBUI_CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3002,http://127.0.0.1:3002
@@ -219,6 +220,7 @@ services:
     volumes:
       - .:/app
       - /var/run/docker.sock:/var/run/docker.sock
+      - "${AQP_HOST_DATA_ROOT:-C:/Users/Julian Wiley/Data}:/host-data:ro"
       - "C:/Users/Julian Wiley/Downloads:/host-downloads:ro"
       # Persistent Iceberg warehouse + staging on the host drive. Tear
       # down the entire stack and the catalog still survives here.
@@ -271,11 +273,13 @@ services:
       AQP_S3_ACCESS_KEY: ""
       AQP_S3_SECRET_KEY: ""
       AQP_S3_REGION: "${AQP_S3_REGION:-us-east-1}"
+      AQP_LOCAL_INGEST_PATH_MAP: "${AQP_LOCAL_INGEST_PATH_MAP:-C:/Users/Julian Wiley/Data=>/host-data,C:/Users/Julian Wiley/Downloads=>/host-downloads}"
       HOME: /app
       CREWAI_STORAGE_DIR: /app/data/crewai
       XDG_DATA_HOME: /app/data/xdg
     volumes:
       - .:/app
+      - "${AQP_HOST_DATA_ROOT:-C:/Users/Julian Wiley/Data}:/host-data:ro"
       - "C:/Users/Julian Wiley/Downloads:/host-downloads:ro"
       - "C:/aqp-warehouse:/warehouse"
     depends_on:

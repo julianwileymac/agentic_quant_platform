@@ -30,7 +30,17 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-_TABULAR_EXTS = {".csv", ".tsv", ".psv", ".txt", ".json", ".ndjson", ".jsonl"}
+_TABULAR_EXTS = {
+    ".csv",
+    ".tsv",
+    ".psv",
+    ".txt",
+    ".json",
+    ".ndjson",
+    ".jsonl",
+    ".parquet",
+    ".pq",
+}
 _ARCHIVE_EXTS = {".zip"}
 _NON_TABULAR_EXTS = {
     ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".tiff", ".tif",
@@ -96,9 +106,21 @@ def _dedup_key(file_name: str) -> str:
     return f"{stem}{p.suffix}".lower()
 
 
+def _leaf_name(path_like: str) -> str:
+    text = str(path_like or "").replace("\\", "/")
+    return text.rsplit("/", 1)[-1]
+
+
+def _dedup_base(file_name: str) -> str:
+    dedup = _dedup_key(_leaf_name(file_name))
+    return Path(dedup).stem.lower()
+
+
 def _guess_format_and_delim(sample_bytes: bytes, name: str) -> tuple[str, str | None]:
-    """Return ``(format, delimiter)``: format ∈ csv|json|ndjson|unknown."""
+    """Return ``(format, delimiter)``: format ∈ csv|json|ndjson|parquet|unknown."""
     lower = name.lower()
+    if lower.endswith((".parquet", ".pq")) or sample_bytes[:4] == b"PAR1":
+        return "parquet", None
     if lower.endswith((".ndjson", ".jsonl")):
         return "ndjson", None
     if lower.endswith(".json"):
@@ -144,7 +166,7 @@ class DiscoveredMember:
 
     path: str
     archive_path: str | None
-    format: str  # csv | ndjson | json_array | unknown
+    format: str  # csv | ndjson | json_array | parquet | unknown
     delimiter: str | None
     size_bytes: int
     row_estimate: int | None = None
@@ -300,8 +322,22 @@ def _detect_columns(sample_bytes: bytes, fmt: str, delimiter: str | None) -> lis
     return []
 
 
+def _detect_parquet_columns(member: DiscoveredMember) -> list[str]:
+    if member.archive_path:
+        # Keep discovery light; nested archive-parquet schema introspection is
+        # deferred to extraction/materialization.
+        return []
+    try:
+        import pyarrow.parquet as pq
+
+        parquet_file = pq.ParquetFile(member.path)
+        return list(parquet_file.schema_arrow.names)
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def _file_family(file_name: str) -> str:
-    stem = Path(file_name).stem
+    stem = Path(_leaf_name(file_name)).stem
     # Strip double-extension cases like ``foo.json.zip``.
     if "." in stem:
         stem = stem.split(".")[0]
@@ -426,11 +462,22 @@ def _member_dedup_signature(m: DiscoveredMember) -> str:
     members sharing this signature are treated as duplicates of each
     other in :func:`discover_datasets`.
     """
-    outer_dedup = _dedup_key(Path(m.path).name)
+    outer_base = _dedup_base(Path(m.path).name)
     if not m.archive_path:
-        return outer_dedup
-    inner_leaf = m.archive_path.split("::", 1)[0].split("/")[-1]
-    return f"{outer_dedup}::{inner_leaf.lower()}"
+        return outer_base
+    inner_leaf = _leaf_name(m.archive_path.split("::", 1)[0])
+    inner_base = _dedup_base(inner_leaf)
+    return f"{outer_base}::{inner_base}"
+
+
+def _member_preference_score(member: DiscoveredMember) -> tuple[int, float]:
+    format_score = {
+        "parquet": 3,
+        "csv": 2,
+        "json_array": 1,
+        "ndjson": 1,
+    }.get(str(member.format or "").lower(), 0)
+    return (format_score, float(member.outer_mtime or 0.0))
 
 
 def discover_datasets(path: Path | str) -> list[DiscoveredDataset]:
@@ -517,7 +564,7 @@ def discover_datasets(path: Path | str) -> list[DiscoveredDataset]:
         # Other (non-tabular) members go to extras, also deduped.
         if m.format == "other":
             extras_key = _member_dedup_signature(m)
-            inner_leaf = (m.archive_path or m.path).split("/")[-1].lower()
+            inner_leaf = _leaf_name(m.archive_path or m.path).lower()
             if inner_leaf.endswith(".xml"):
                 has_xml_assets = True
             if extras_key in extras_seen:
@@ -534,24 +581,32 @@ def discover_datasets(path: Path | str) -> list[DiscoveredDataset]:
             continue
 
         # Family from archive_path member name when present, else file stem.
-        leaf = (m.archive_path or m.path).split("/")[-1]
+        leaf = _leaf_name(m.archive_path or m.path)
         family = _family_key(m.subdir, leaf)
         family_key = (m.subdir, family)
         sig = _member_dedup_signature(m)
         dedup_key = (m.subdir, family, sig)
         existing = seen_dedup.get(dedup_key)
         if existing is not None:
-            # Newer mtime wins; older one becomes a recorded duplicate.
-            losing = m if existing.outer_mtime >= m.outer_mtime else existing
-            winner = existing if losing is m else m
+            # Prefer richer formats (parquet > csv > json), then newer mtime.
+            existing_score = _member_preference_score(existing)
+            candidate_score = _member_preference_score(m)
+            winner = existing if existing_score >= candidate_score else m
+            losing = m if winner is existing else existing
             seen_dedup[dedup_key] = winner
+            if existing.format != m.format:
+                reason = "duplicate-format-priority-suppressed"
+            else:
+                reason = "duplicate-suffix-suppressed"
             duplicates_per_family.setdefault(family_key, []).append(
                 {
                     "path": losing.path,
                     "archive_path": losing.archive_path,
                     "size_bytes": int(losing.size_bytes),
                     "kept_path": winner.path,
-                    "reason": "duplicate-suffix-suppressed",
+                    "kept_format": winner.format,
+                    "suppressed_format": losing.format,
+                    "reason": reason,
                 }
             )
             if winner is not existing:
@@ -579,8 +634,8 @@ def discover_datasets(path: Path | str) -> list[DiscoveredDataset]:
         if ds is None:
             continue
         ds.notes.append(
-            f"Suppressed {len(dups)} duplicate-suffixed copy/copies "
-            "(kept newest mtime per dedup key)."
+            f"Suppressed {len(dups)} duplicate copy/copies "
+            "(kept parquet-over-csv priority, then newest mtime per dedup key)."
         )
         ds.inventory_extra.extend(dups)
 
@@ -589,6 +644,9 @@ def discover_datasets(path: Path | str) -> list[DiscoveredDataset]:
         if not ds.members:
             continue
         first = ds.members[0]
+        if first.format == "parquet":
+            ds.sample_columns = _detect_parquet_columns(first)
+            continue
         zf = None
         try:
             if first.archive_path:
