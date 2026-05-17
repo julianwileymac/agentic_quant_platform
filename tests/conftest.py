@@ -47,6 +47,8 @@ def in_memory_db(monkeypatch: pytest.MonkeyPatch):
         from aqp.persistence import (  # noqa: F401
             models_events,
             models_fundamentals,
+            models_ingestion_ledger,
+            models_instrument_catalog,
             models_instruments,
             models_lineage,
             models_macro,
@@ -61,10 +63,17 @@ def in_memory_db(monkeypatch: pytest.MonkeyPatch):
         pass
     from aqp.persistence.models import Base
 
+    from sqlalchemy.pool import StaticPool
+
+    # StaticPool keeps a single shared connection for an in-memory SQLite
+    # database, so route handlers that open fresh sessions see the same
+    # schema + rows that the test fixture seeded. Without this, every new
+    # connection gets its own empty in-memory DB.
     engine = create_engine(
         "sqlite:///:memory:",
         future=True,
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=engine)
     Session = sessionmaker(bind=engine, autocommit=False, autoflush=False, future=True)
@@ -90,6 +99,11 @@ def in_memory_db(monkeypatch: pytest.MonkeyPatch):
         "aqp.api.routes.datasets",
         "aqp.api.routes.data_control",
         "aqp.api.routes.data_entities",
+        # Phase 4 data-fabric routers (Sept 2026 refactor).
+        "aqp.api.routes.feeds",
+        "aqp.api.routes.instrument_catalog",
+        "aqp.api.routes.orchestration",
+        "aqp.api.routes.lineage",
         "aqp.services.portfolio_service",
         "aqp.data.catalog",
         "aqp.data.catalog.active_metadata",

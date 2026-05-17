@@ -29,7 +29,7 @@ The doc has three sections:
 
 ## 1. The spec-pattern is the skill-artifact pattern
 
-### The four spec runtimes
+### The five spec runtimes
 
 | Spec | Runtime | Versions table | Canonical doc |
 | --- | --- | --- | --- |
@@ -37,6 +37,17 @@ The doc has three sections:
 | [`BotSpec`](../aqp/bots/spec.py) | [`BotRuntime`](../aqp/bots/runtime.py) | `bot_versions` | [bots.md](bots.md) |
 | [`RLExperimentSpec`](../aqp/rl/spec.py) | [`RLRuntime`](../aqp/rl/runtime.py) | `rl_experiment_versions` | [rl-framework.md](rl-framework.md) |
 | [`AnalysisSpec`](../aqp/analysis/spec.py) | [`AnalysisRuntime`](../aqp/analysis/runtime.py) | `analysis_spec_versions` | [analysis-framework.md](analysis-framework.md) |
+| [`WorkflowSpec`](../aqp/agents/orchestration/spec.py) | [`WorkflowRuntime`](../aqp/agents/orchestration/runtime.py) | `workflow_spec_versions` | [workflow-studio.md](workflow-studio.md) |
+
+`WorkflowSpec` (Phase 5 of the additive orchestration refactor) sits
+**above** the four classic runtimes: it composes them through the
+[`OrchestrationAdapter`](../aqp/agents/orchestration/base.py)
+registry. A workflow can wrap an existing `AgentRuntime` invocation
+(via the `LangGraphAdapter` / `CrewProcessAdapter` / `DialecticalDebateAdapter`)
+or chain deterministic fusion + risk-overlay execution (via
+`SignalFusionAdapter` + `WeightCentricExecutionAdapter`). All five
+runtimes share the same hash-locked + immutable + ledger-backed
+semantics described below.
 
 Each is:
 

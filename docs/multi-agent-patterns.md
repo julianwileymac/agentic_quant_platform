@@ -294,6 +294,59 @@ flowchart TD
 
 ---
 
+## Orchestration adapter topologies (Phase 7 addition)
+
+The additive orchestration refactor adds a sibling abstraction —
+[`OrchestrationAdapter`](../aqp/agents/orchestration/base.py) — that
+exposes the five canonical patterns above as **first-class registry
+components**. The patterns themselves don't change; the new
+``WorkflowRuntime`` wraps them behind a metaclass-registered alias so
+operators can mix-and-match without editing graph builders by hand.
+
+Seven shipping adapter kinds (see
+[ADAPTER_KINDS](../aqp/agents/orchestration/registry.py)):
+
+| Adapter | Kind | Wraps | Inspiration |
+| --- | --- | --- | --- |
+| [`LangGraphAdapter`](../aqp/agents/orchestration/adapters/langgraph_adapter.py) | `graph` | The five canonical builders in [aqp/agents/graph/builder.py](../aqp/agents/graph/builder.py) + `build_dialectical_debate_graph` | aqp |
+| [`CrewProcessAdapter`](../aqp/agents/orchestration/adapters/crew_adapter.py) | `crew` | [`run_research_crew`](../aqp/agents/crew.py) + [`run_trader_crew`](../aqp/agents/trading/crew.py) — CrewAI sequential / hierarchical | finrobot |
+| [`DialecticalDebateAdapter`](../aqp/agents/orchestration/adapters/debate_adapter.py) | `debate` | [`build_dialectical_debate_graph`](../aqp/agents/graph/dialectical.py) with bounded rounds + forced judge synthesis | tradingagents |
+| [`AutomationScheduleAdapter`](../aqp/agents/orchestration/adapters/schedule_adapter.py) | `schedule` | Celery beat — enqueues [`aqp.tasks.orchestration_tasks.run_workflow`](../aqp/tasks/orchestration_tasks.py) | daily_stock_analysis |
+| [`SignalFusionAdapter`](../aqp/agents/orchestration/adapters/fusion_adapter.py) | `fusion` | Deterministic [`synthesize`](../aqp/agents/trading/fusion.py) over debate + quant + model contributors | vibe_trading |
+| [`WeightCentricExecutionAdapter`](../aqp/agents/orchestration/adapters/weight_centric_adapter.py) | `execution` | [`WeightCentricPipeline`](../aqp/rl/portfolio/pipeline.py) + [`RiskLimits`](../aqp/risk/limits.py) (rule 38) | finrl |
+| (Phase 7 future) `WorkflowStudioAdapter` | `studio` | Interactive workflow graph editor | langflow |
+
+### Why use adapters over a hand-rolled builder?
+
+- **Discoverability**: every adapter shows up in the Phase 5 studio
+  dropdown via `data.orchestration.list_adapters` — operators don't
+  need to read code.
+- **Halt parity**: the runtime polls `should_halt(state)` between
+  every adapter transition; new adapters inherit that contract for
+  free.
+- **Replay parity**: every spec snapshotted into
+  `workflow_spec_versions` is replayable by `workflow_version_id`
+  through `/workflows/runs/{run_id}/replay`.
+- **Telemetry parity**: each transition opens a
+  [`node_span`](../aqp/agents/observability.py) so per-adapter
+  latency / cost / branch decisions land on the same OTEL trace as
+  every legacy agent run.
+
+### When to use an adapter vs a graph builder
+
+| Choose adapter when | Choose graph builder when |
+| --- | --- |
+| You want it in the studio dropdown | The flow is hard-coded into a service |
+| You need to replay it by version id | One-off internal pipeline |
+| You want bounded-debate / cooperative-cancel without writing them | You're already inside a builder body |
+| The flow ships as YAML for ops | The flow is built dynamically per request |
+
+Adapters delegate to graph builders internally — they are **wrappers,
+not replacements**. Adding a new adapter never invalidates an existing
+builder.
+
+---
+
 ## Adding a new pattern
 
 1. Identify which of the five it most resembles. Don't invent a

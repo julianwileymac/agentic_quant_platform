@@ -23,6 +23,13 @@ import { apiFetch } from "@/lib/api/client";
  * ``/bots/halt-all`` (bot deployment halt) AND ``/rl/halt-all``
  * (the underlying RL training loop); both are in the list already
  * so no per-kind entry is required.
+ *
+ * ``/workflows/halt`` (Phase 6 of the orchestration refactor) fans
+ * out into every active ``workflow_runs`` row dispatched via
+ * :class:`WorkflowRuntime`. The endpoint refuses (503) when
+ * ``AQP_ORCHESTRATION_STUDIO_ENABLED`` is off; in that case the
+ * other halt endpoints still fire and the aggregate toast surfaces
+ * the workflow rejection as a partial failure.
  */
 const HALT_ENDPOINTS: ReadonlyArray<{ path: string; label: string }> = [
   { path: "/agents/halt", label: "spec-driven agent runs (all cohorts)" },
@@ -30,6 +37,7 @@ const HALT_ENDPOINTS: ReadonlyArray<{ path: string; label: string }> = [
   { path: "/paper/stop-all", label: "paper trading sessions" },
   { path: "/bots/halt-all", label: "live bot deployments (incl. rl_trading)" },
   { path: "/rl/halt-all", label: "RL train / paper / replay runs" },
+  { path: "/workflows/halt", label: "workflow runs (WorkflowRuntime dispatches)" },
 ];
 
 /**

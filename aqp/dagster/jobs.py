@@ -7,6 +7,7 @@ from aqp.dagster.alphavantage_intraday import (
     ALPHAVANTAGE_INTRADAY_JOBS,
     alphavantage_intraday_delta_job,
 )
+from aqp.dagster.assets.feature_materializer import materialize_features
 from aqp.dagster.partitions import daily_partitions
 
 
@@ -89,6 +90,7 @@ ALL_JOBS = [
     datahub_sync_job,
     time_partitioned_sources_job,
     alphavantage_intraday_partition_job,
+    materialize_features,
     *ALPHAVANTAGE_INTRADAY_JOBS,
 ]
 
@@ -101,6 +103,7 @@ __all__ = [
     "datahub_sync_job",
     "entity_extraction_job",
     "full_data_refresh_job",
+    "materialize_features",
     "profiling_job",
     "regulatory_refresh_job",
     "time_partitioned_sources_job",

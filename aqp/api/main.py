@@ -12,12 +12,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from aqp.api.routes import (
+    agent_health as agent_health_routes,
     agent_specs,
     agentic,
     agents,
     alpha_vantage,
     analysis as analysis_routes,
     analysis_agents,
+    analytics_ml as analytics_ml_routes,
+    analytics_portfolio as analytics_portfolio_routes,
     airbyte,
     airbyte_builder as airbyte_builder_routes,
     auth,
@@ -89,6 +92,10 @@ from aqp.api.routes import (  # noqa: E402
     engine as engine_routes,
     entity_registry as entity_registry_routes,
     fetchers as fetcher_routes,
+    feeds as feeds_routes,
+    instrument_catalog as instrument_catalog_routes,
+    lineage as lineage_routes,
+    orchestration as orchestration_routes,
     service_manager as service_manager_routes,
 )
 # Tenancy (multi-tenant resource ownership refactor)
@@ -118,6 +125,9 @@ from aqp.api.routes import (  # noqa: E402
 # Hybrid agentic-RL Phase 4 — Alpha Researcher + Strategy Executor REST.
 from aqp.api.routes import (  # noqa: E402
     quant_agents as quant_agents_routes,
+)
+from aqp.api.routes import (  # noqa: E402
+    workflows as workflows_routes,
 )
 from aqp.config import settings
 from aqp.observability import (
@@ -303,6 +313,11 @@ app.include_router(uspto.router)
 # --- Phase 6 of the agentic-RAG expansion: spec/team/RAG/memory ---------
 app.include_router(agent_specs.router)
 app.include_router(research_agents.router)
+# Phase 5 (orchestration refactor) — interactive workflow studio API.
+# Mounts unconditionally; each route gates on
+# settings.orchestration_studio_enabled and returns 503 when off so
+# existing routes are completely unaffected.
+app.include_router(workflows_routes.router)
 app.include_router(selection_agents.router)
 app.include_router(trader_agents.router)
 app.include_router(analysis_agents.router)
@@ -311,6 +326,9 @@ app.include_router(memory.router)
 
 # --- Analysis umbrella (hash-locked AnalysisSpec + flow catalog) -------
 app.include_router(analysis_routes.router)
+app.include_router(analytics_portfolio_routes.router)
+app.include_router(analytics_ml_routes.router)
+app.include_router(agent_health_routes.router)
 
 # --- Data fabric expansion (Phase 5/6/7 of data-fabric expansion) -------
 app.include_router(engine_routes.router)
@@ -323,6 +341,18 @@ app.include_router(ingest_wizard_routes.router)
 app.include_router(airbyte.router)
 app.include_router(airbyte_builder_routes.router)
 app.include_router(service_manager_routes.router)
+app.include_router(feeds_routes.router, prefix="/api/v1/feeds", tags=["feeds"])
+app.include_router(
+    instrument_catalog_routes.router,
+    prefix="/api/v1/instruments",
+    tags=["instruments"],
+)
+app.include_router(
+    orchestration_routes.router,
+    prefix="/api/v1/orchestration",
+    tags=["orchestration"],
+)
+app.include_router(lineage_routes.router, prefix="/api/v1/lineage", tags=["lineage"])
 
 # --- Inspiration rehydration: dataset presets library ------------------
 app.include_router(dataset_presets.router)
@@ -371,6 +401,23 @@ try:
     app.include_router(_build_data_mcp_router())
 except Exception:  # noqa: BLE001 - MCP server is optional at boot
     logger.warning("DataMCP HTTP router not mounted", exc_info=True)
+
+
+# --- Codebase MCP server router ----------------------------------------
+# Mirrors /mcp/data. Exposes CODEBASE_MCP_TOOLS (codebase.search /
+# codebase.get_repo_graph / codebase.find_definition /
+# codebase.find_references / codebase.elaborate_finding) via streamable
+# HTTP so Cursor / Claude Desktop / external scripts can navigate the
+# AQP repository through the same tool catalog AgentRuntime sees via
+# the bridge.
+try:
+    from aqp.codebase.mcp.server import (
+        build_codebase_mcp_router as _build_codebase_mcp_router,
+    )
+
+    app.include_router(_build_codebase_mcp_router())
+except Exception:  # noqa: BLE001 - codebase MCP is optional at boot
+    logger.warning("CodebaseMCP HTTP router not mounted", exc_info=True)
 
 
 # ---------------------------------------------------------------------------

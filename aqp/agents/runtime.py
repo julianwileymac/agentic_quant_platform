@@ -20,11 +20,12 @@ spec; use the graph builder when chaining specs.
 """
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import time
 import uuid
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -34,6 +35,70 @@ from aqp.config import settings
 from aqp.llm.providers.router import router_complete
 
 logger = logging.getLogger(__name__)
+
+
+# ----------------------------------------------------------------------------
+# Cooperative cancel hook for the Phase 2 orchestration refactor.
+#
+# ``WorkflowRuntime`` sets a zero-arg callable on this ContextVar inside
+# ``set_cooperative_cancel_check`` before invoking the legacy ``AgentRuntime``
+# through an adapter. ``_invoke_llm`` polls the callable between tool-loop
+# iterations so a flipped kill switch (or a per-run halt token) interrupts a
+# long agent run within the
+# ``AQP_ORCHESTRATION_HALT_CHECK_TIMEOUT_SECONDS`` SLA.
+#
+# When unset (the default for every legacy call site), ``_check_cooperative_cancel``
+# is a no-op so existing tasks and routes behave identically to the pre-refactor
+# build.
+# ----------------------------------------------------------------------------
+
+_COOPERATIVE_CANCEL_CHECK: contextvars.ContextVar[Callable[[], bool] | None] = (
+    contextvars.ContextVar("aqp_agent_runtime_cancel_check", default=None)
+)
+
+
+class CooperativeCancel(RuntimeError):
+    """Raised by :class:`AgentRuntime` when the cancel hook fires mid-loop."""
+
+
+def set_cooperative_cancel_check(
+    check: Callable[[], bool] | None,
+) -> contextvars.Token[Callable[[], bool] | None]:
+    """Install a cooperative-cancel callable on the current context.
+
+    Returns the ContextVar token so the caller can restore the prior
+    value with :func:`reset_cooperative_cancel_check`. ``WorkflowRuntime``
+    pairs every ``set_*`` with the matching ``reset_*`` in a ``finally``
+    so legacy non-orchestrated agent runs never see the hook.
+    """
+    return _COOPERATIVE_CANCEL_CHECK.set(check)
+
+
+def reset_cooperative_cancel_check(
+    token: contextvars.Token[Callable[[], bool] | None],
+) -> None:
+    """Restore the prior cancel hook value (use the token from ``set_*``)."""
+    _COOPERATIVE_CANCEL_CHECK.reset(token)
+
+
+def _check_cooperative_cancel() -> None:
+    """Raise :class:`CooperativeCancel` when the active hook signals halt.
+
+    Silently no-ops when no hook is installed (every legacy call site).
+    Failures in the hook itself fail-closed: an exception in the
+    callable is treated as "no halt requested" so a flaky cancel-check
+    cannot crash an in-flight agent run.
+    """
+    check = _COOPERATIVE_CANCEL_CHECK.get()
+    if check is None:
+        return
+    try:
+        triggered = bool(check())
+    except Exception:  # noqa: BLE001
+        logger.debug("cooperative cancel hook raised", exc_info=True)
+        return
+    if triggered:
+        raise CooperativeCancel("cooperative cancel hook returned True")
 
 
 @dataclass
@@ -147,6 +212,9 @@ class AgentRuntime:
         except GuardrailViolation as exc:
             logger.warning("Guardrail violation in %s: %s", self.spec.name, exc)
             result = self._finalise(status="rejected", output={}, error=str(exc))
+        except CooperativeCancel as exc:
+            logger.info("AgentRuntime halted by cooperative cancel for %s", self.spec.name)
+            result = self._finalise(status="halted", output={}, error=str(exc))
         except Exception as exc:  # noqa: BLE001
             logger.exception("AgentRuntime failed for %s", self.spec.name)
             result = self._finalise(status="error", output={}, error=str(exc))
@@ -591,6 +659,12 @@ class AgentRuntime:
         working: list[dict[str, Any]] = list(messages)
         last_result: Any = None
         for turn in range(self._MAX_TOOL_TURNS + 1):
+            # Cooperative cancel: ``WorkflowRuntime`` (or any caller that
+            # registered a hook via :func:`set_cooperative_cancel_check`)
+            # can short-circuit the tool loop between turns. The legacy
+            # zero-hook path is a no-op so existing agent runs are
+            # untouched.
+            _check_cooperative_cancel()
             start = time.perf_counter()
             try:
                 res = router_complete(
@@ -779,7 +853,10 @@ def runtime_for(spec_name: str, **kwargs: Any) -> AgentRuntime:
 __all__ = [
     "AgentRunResult",
     "AgentRuntime",
+    "CooperativeCancel",
     "GuardrailViolation",
     "StepRecord",
+    "reset_cooperative_cancel_check",
     "runtime_for",
+    "set_cooperative_cancel_check",
 ]

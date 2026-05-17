@@ -131,6 +131,49 @@ Common violations to flag:
 - Should compile via
   `aqp.data.expressions_dsl.compile_to_factor_node`.
 
+**Phase 1 (K8s/Docker SDK extension) addenda**
+- New cluster-side method that imports `kubernetes.client.*Api`
+  outside `aqp/kubernetes/adapters/in_cluster.py`.
+- Docker SDK call without `Accept-Encoding: identity` override
+  (the documented gigabyte-tarball latency bug).
+- `read_namespaced_pod_log(follow=True)` without
+  `_preload_content=False` + `kubernetes.watch.Watch().stream(...)`
+  consumption (the documented sparse-log hang).
+- Free-text input naming a pod / namespace / container in any
+  frontend form — should use an `EntityPicker kind="pods"` (and
+  add the cache category if missing).
+
+**Phase 2 (Codebase MCP) addenda**
+- LLM call inside any module under `aqp/codebase/` that doesn't
+  route through `router_complete` (rule 2).
+- Path read in a `CodebaseMCPTool` without
+  `policy.enforce_path_inside_workspace` + secret-glob check.
+- ORM imports inside `aqp/codebase/` or `aqp/agents/`.
+- `exec` / `eval` of any file's contents.
+
+**Phase 3 (pgvector) addenda**
+- Direct `psycopg.connect` / raw SQL from agent / runtime code
+  reading or writing pgvector tables — must go through the
+  `data.vector.*` DataMCPTool family or `PgVectorDataset`.
+- New embedding write path that bypasses `HierarchicalRAG.index_chunks`.
+- Free-text input naming a vector index in the frontend — should
+  use `EntityPicker kind="vector_indexes"`.
+
+**Phase 4 (Vite analytics) addenda**
+- `streamlit` added to `pyproject.toml` / `requirements*.txt` /
+  the docker-compose stack.
+- `fig.show()` anywhere in the FastAPI / Celery codebase.
+- Raw `WebSocket` listener in the frontend that bypasses the
+  throttled pipeline in `frontend/src/lib/ws/`.
+
+**Phase 5 (Agent stall watchdog) addenda**
+- New AgentRuntime constructor inside the watchdog body — the
+  watchdog only mutates row status + revokes the Celery task.
+- Direct Redis publish from the watchdog task — must use
+  `emit_done` from `aqp/tasks/_progress.py`.
+- Direct ORM read from agent code to compute "is run stalled" —
+  must go through `data.agents.health` MCP tool.
+
 Output format:
 - One bullet per violation with: severity (critical/warning/suggestion),
   rule number, file + line, current code snippet, suggested fix.

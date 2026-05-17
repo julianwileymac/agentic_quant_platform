@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     case,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, relationship
 
 
@@ -26,6 +27,9 @@ class Base(DeclarativeBase):
 
 def _uuid() -> str:
     return str(uuid.uuid4())
+
+
+_JSONB_COMPAT = JSON().with_variant(JSONB(), "postgresql")
 
 
 # Tenancy mixins live in their own module to avoid circular imports;
@@ -1201,6 +1205,18 @@ class DataSource(Base):
     version = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    loader_class_path = Column(String(255), nullable=True)
+    # Dot-path for importlib resolution, e.g.
+    # "aqp.data.fetchers.api.yfinance.YFinanceFetcher". Optional today; the
+    # Phase 3 ``sync_feed`` task uses it to resolve the loader. When NULL, the
+    # task falls back to existing ``register_source_fetcher`` slug lookup.
+    rate_limit_params = Column(_JSONB_COMPAT, nullable=True)
+    # Per-row rate limit override. Schema:
+    # {"requests_per_minute": int, "requests_per_second": float,
+    #  "burst": int, "cooldown_seconds": float, "daily_limit": int|None}.
+    # Falls through to the fetcher class default ``RateLimit`` when NULL.
+    execution_schedule = Column(String(100), nullable=True)
+    # CRON expression read by the Phase 3 sync scheduler.
 
 
 class IdentifierLink(Base):

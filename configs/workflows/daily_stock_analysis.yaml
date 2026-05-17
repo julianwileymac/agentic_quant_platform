@@ -1,0 +1,27 @@
+name: research.daily_stock_analysis_v1
+description: |
+  Daily research workflow mirroring the inspiration/daily_stock_analysis pattern
+  but routed through AQP-safe primitives. The actual workload is the existing
+  `build_full_pipeline_graph` (research -> selection -> trader -> analysis);
+  this YAML simply wraps it as a schedulable WorkflowSpec so the
+  AutomationScheduleAdapter can enqueue it on Celery beat.
+adapter: LangGraphAdapter
+adapter_kind: graph
+params:
+  builder: full_pipeline
+  use_langgraph: null
+  builder_kwargs: {}
+max_rounds: 1
+schedule:
+  cron: "30 13 * * 1-5"   # 13:30 UTC, Mon-Fri (just before US market open)
+  timezone: UTC
+  enabled: false           # operator must flip AQP_ORCHESTRATION_SCHEDULE_ENABLED first
+guardrails:
+  cost_budget_usd: 3.0
+  max_calls: 60
+  max_duration_seconds: 900
+annotations:
+  - research
+  - daily
+  - automation
+template_target: research

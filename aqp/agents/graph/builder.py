@@ -468,8 +468,131 @@ def build_quant_research_pipeline_graph(
     return compiled
 
 
+def _fusion_node(state: AgentState) -> AgentState:
+    """Run :class:`SignalFusionAdapter` against the current state.
+
+    Used by :func:`build_dialectical_with_fusion_graph` as a graph
+    node so the LangGraph compiled flow can stitch fusion directly
+    between the debate verdict and ``emit_signal_event``. Fully
+    additive — only included in the new builder; the five canonical
+    builders above are unchanged.
+    """
+    from aqp.agents.orchestration.adapters.fusion_adapter import SignalFusionAdapter
+    from aqp.agents.orchestration.types import AdapterContext
+
+    adapter = SignalFusionAdapter()
+    ctx = AdapterContext(
+        workflow_run_id=state.get("workflow_run_id") or state.get("run_id") or "",
+        workflow_spec_name=state.get("workflow_spec_name") or "dialectical_with_fusion",
+        request_id=state.get("task_id") or "",
+        extras={"params": {}},
+    )
+    result = adapter.invoke(state, ctx)
+    if isinstance(result.state, dict):
+        for k, v in result.state.items():
+            state[k] = v  # type: ignore[literal-required]
+    return state
+
+
+def _weight_centric_node(state: AgentState) -> AgentState:
+    """Run :class:`WeightCentricExecutionAdapter` against the current state."""
+    from aqp.agents.orchestration.adapters.weight_centric_adapter import (
+        WeightCentricExecutionAdapter,
+    )
+    from aqp.agents.orchestration.types import AdapterContext
+
+    adapter = WeightCentricExecutionAdapter()
+    ctx = AdapterContext(
+        workflow_run_id=state.get("workflow_run_id") or state.get("run_id") or "",
+        workflow_spec_name=state.get("workflow_spec_name") or "dialectical_with_fusion",
+        request_id=state.get("task_id") or "",
+        extras={"params": {}},
+    )
+    result = adapter.invoke(state, ctx)
+    if isinstance(result.state, dict):
+        for k, v in result.state.items():
+            state[k] = v  # type: ignore[literal-required]
+    return state
+
+
+def build_dialectical_with_fusion_graph(
+    *,
+    use_langgraph: bool | None = None,
+    checkpointer: RedisCheckpointer | None = None,
+):
+    """Phase 4 optional composite: debate -> fusion -> weight-centric -> emit.
+
+    Gated on ``settings.orchestration_fusion_enabled``. When the flag
+    is off the builder raises :class:`RuntimeError` so the operator
+    sees a clean refusal instead of silently constructing a graph
+    whose downstream adapters would no-op. Existing builders are
+    untouched.
+
+    Sequence:
+
+    1. ``research.bull_researcher``
+    2. ``research.bear_researcher``
+    3. ``research.portfolio_manager`` (sets ``debate_verdict``)
+    4. ``fusion`` (writes ``fusion_inputs`` / ``fusion_output``)
+    5. ``weight_centric`` (writes risk-overlaid ``target_weights``)
+    6. Existing :func:`_emit_signal_event_node` (the SOLE producer of
+       a :class:`aqp.core.types.SignalEvent`) OR
+       :func:`_reject_decision_log_node` when the risk overlay vetoes.
+    """
+    from aqp.config import settings
+
+    if not getattr(settings, "orchestration_fusion_enabled", False):
+        raise RuntimeError(
+            "build_dialectical_with_fusion_graph requires "
+            "AQP_ORCHESTRATION_FUSION_ENABLED=true"
+        )
+
+    nodes: list[tuple[str, NodeFn]] = [
+        ("bull_researcher", _agent_node("research.bull_researcher", output_slot="bull_argument")),
+        ("bear_researcher", _agent_node("research.bear_researcher", output_slot="bear_argument")),
+        ("portfolio_manager", _agent_node("research.portfolio_manager", output_slot="debate_verdict")),
+        ("fusion", _fusion_node),
+        ("weight_centric", _weight_centric_node),
+        ("emit_signal_event", _emit_signal_event_node),
+        ("reject_decision_log", _reject_decision_log_node),
+    ]
+    if use_langgraph is False:
+        return SequentialGraph(nodes, checkpointer=checkpointer)
+    try:
+        from langgraph.graph import END, START, StateGraph  # type: ignore[import-not-found]
+
+        from aqp.agents.graph.conditions import risk_simulator_approves
+    except Exception:  # pragma: no cover
+        return SequentialGraph(nodes, checkpointer=checkpointer)
+
+    graph = StateGraph(dict)
+    for name, fn in nodes:
+        graph.add_node(name, fn)
+    graph.add_edge(START, "bull_researcher")
+    graph.add_edge("bull_researcher", "bear_researcher")
+    graph.add_edge("bear_researcher", "portfolio_manager")
+    graph.add_edge("portfolio_manager", "fusion")
+    graph.add_edge("fusion", "weight_centric")
+    graph.add_conditional_edges(
+        "weight_centric",
+        risk_simulator_approves,
+        {
+            "emit_signal_event": "emit_signal_event",
+            "reject_decision_log": "reject_decision_log",
+        },
+    )
+    graph.add_edge("emit_signal_event", END)
+    graph.add_edge("reject_decision_log", END)
+    try:
+        compiled = graph.compile(checkpointer=checkpointer if checkpointer else None)
+    except TypeError:
+        compiled = graph.compile()
+    return compiled
+
+
 __all__ = [
     "SequentialGraph",
+    "build_dialectical_with_fusion_graph",
     "build_full_pipeline_graph",
     "build_quant_research_pipeline_graph",
     "build_research_debate_graph",

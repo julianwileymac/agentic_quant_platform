@@ -168,6 +168,22 @@ except Exception:  # noqa: BLE001 - optional import path
     _bridge_logging.getLogger(__name__).debug(
         "DataMCP bridge unavailable; skipping auto-install", exc_info=True
     )
+
+
+# Auto-merge every CodebaseMCP tool too. Codebase tools share the
+# same TOOL_REGISTRY so AgentSpec.tools can mix data and codebase
+# tools transparently. Failure is non-fatal; the codebase package
+# is optional (tree-sitter / ripgrep may not be installed).
+try:
+    from aqp.agents.tools.codebase_mcp_bridge import install_codebase_mcp_tools
+
+    _installed_codebase_mcp_tools = install_codebase_mcp_tools(TOOL_REGISTRY)
+except Exception:  # noqa: BLE001 - optional import path
+    import logging as _bridge_logging  # type: ignore[no-redef]
+
+    _bridge_logging.getLogger(__name__).debug(
+        "CodebaseMCP bridge unavailable; skipping auto-install", exc_info=True
+    )
     _installed_data_mcp_tools = []
 
 

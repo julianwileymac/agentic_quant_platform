@@ -68,18 +68,26 @@ def make_bridge_tool_class(mcp_tool_name: str) -> type:
     the validated kwargs, and returns the JSON-serialised
     :class:`MCPToolResult`. AgentRuntime's tool dispatch loop already
     expects a string-shaped return so this fits cleanly.
+
+    Note on local names: we use ``_tool_name`` / ``_tool_desc`` /
+    ``_tool_schema`` instead of ``name`` / ``description`` /
+    ``args_schema`` to avoid the Python ≥3.13 scoping bug where the
+    class body annotation ``description: str = description`` raises
+    ``NameError`` because the class scope does not see the enclosing
+    function variable when the annotation and the RHS share a name.
     """
     if mcp_tool_name not in DATA_MCP_TOOLS:
         raise KeyError(f"unknown DataMCPTool {mcp_tool_name!r}")
     cls = DATA_MCP_TOOLS[mcp_tool_name]
-    args_schema = cls.args_schema
-    description = (cls.description or "").strip()
+    _tool_name = cls.name
+    _tool_desc = (cls.description or "").strip()
+    _tool_schema = cls.args_schema
     bridge_class_name = f"DataMCP_{cls.__name__}_Bridge"
 
     class _BridgeTool(_CrewAIBaseTool):  # type: ignore[misc, valid-type]
-        name: str = cls.name
-        description: str = description
-        args_schema: type[BaseModel] | None = args_schema
+        name: str = _tool_name
+        description: str = _tool_desc
+        args_schema: type[BaseModel] | None = _tool_schema
 
         def _run(self, **kwargs: Any) -> str:  # type: ignore[override]
             tool = get_data_mcp_tool(mcp_tool_name)

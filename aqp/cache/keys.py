@@ -51,9 +51,15 @@ CACHE_CATEGORIES: Final[tuple[str, ...]] = (
     "bots",
     "rl_experiments",
     "analysis_specs",
+    # Orchestration control plane (additive refactor, Phase 5)
+    "workflows",
     # Polymorphic content + LEAN templates (Phase 5 + Phase 7)
     "strategy_templates",
     "resources",
+    # pgvector control plane (Phase 3 refactor) — whitelist of vector
+    # indexes the frontend EntityPicker can offer; corresponds 1:1 to
+    # the pgvector tables created by alembic 0045.
+    "vector_indexes",
 )
 
 
@@ -74,6 +80,7 @@ ORG_SCOPED_CATEGORIES: Final[frozenset[str]] = frozenset(
         "bots",
         "rl_experiments",
         "analysis_specs",
+        "workflows",
         "resources",
     }
 )

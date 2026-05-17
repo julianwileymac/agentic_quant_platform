@@ -244,6 +244,109 @@ class ClusterMgmtClient:
             params={"replicas": replicas},
         )
 
+    # --------- pod-level ops (Phase 1) ---------------------------------
+    def list_pods(
+        self, *, namespace: str, label_selector: str | None = None
+    ) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {}
+        if label_selector:
+            params["label_selector"] = label_selector
+        return self._request(
+            "GET", f"/pods/{namespace}", params=params or None
+        ) or []
+
+    def pod_exec(
+        self,
+        *,
+        namespace: str,
+        name: str,
+        command: list[str],
+        container: str | None = None,
+        timeout_seconds: int = 60,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "command": list(command),
+            "timeout_seconds": int(timeout_seconds),
+        }
+        if container:
+            body["container"] = container
+        return self._request(
+            "POST",
+            f"/pods/{namespace}/{name}/exec",
+            json_body=body,
+        )
+
+    def pod_logs_stream(
+        self,
+        *,
+        namespace: str,
+        name: str,
+        container: str | None = None,
+        since_seconds: int | None = None,
+        tail_lines: int | None = None,
+        follow: bool = True,
+        max_lines: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Batch the management API's log frames into a list.
+
+        The rpi management API exposes a WebSocket for true streaming;
+        the HTTP fallback here returns a bounded batch so AQP can
+        forward the frames to its own WebSocket consumers (the
+        ``/cluster/pods/{ns}/{name}/logs/stream`` route on the AQP
+        side). For a true streaming proxy, attach to the management
+        WebSocket directly from the adapter — left as a future
+        extension.
+        """
+        params: dict[str, Any] = {"follow": "true" if follow else "false"}
+        if container:
+            params["container"] = container
+        if since_seconds is not None:
+            params["since_seconds"] = int(since_seconds)
+        if tail_lines is not None:
+            params["tail_lines"] = int(tail_lines)
+        if max_lines is not None:
+            params["max_lines"] = int(max_lines)
+        return self._request(
+            "GET",
+            f"/pods/{namespace}/{name}/logs",
+            params=params,
+        ) or []
+
+    def pod_get_archive(
+        self,
+        *,
+        namespace: str,
+        name: str,
+        path: str,
+        container: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"path": path}
+        if container:
+            params["container"] = container
+        return self._request(
+            "GET",
+            f"/pods/{namespace}/{name}/archive",
+            params=params,
+        )
+
+    def pod_put_archive(
+        self,
+        *,
+        namespace: str,
+        name: str,
+        path: str,
+        data_b64: str,
+        container: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"path": path, "data_b64": data_b64}
+        if container:
+            body["container"] = container
+        return self._request(
+            "POST",
+            f"/pods/{namespace}/{name}/archive",
+            json_body=body,
+        )
+
 
 _singleton: ClusterMgmtClient | None = None
 

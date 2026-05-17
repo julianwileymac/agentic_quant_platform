@@ -87,6 +87,7 @@ def build_dialectical_debate_graph(
     *,
     use_langgraph: bool | None = None,
     checkpointer: RedisCheckpointer | None = None,
+    max_rounds: int = 1,
 ):
     """Compose the Bull/Bear/PortfolioManager pipeline.
 
@@ -100,7 +101,34 @@ def build_dialectical_debate_graph(
     - ``bear_argument`` ← ``research.bear_researcher``.
     - ``debate_verdict`` ← ``research.portfolio_manager`` (or the
       deterministic fallback).
+
+    Bounded rounds (Phase 2 additive refactor)
+    -----------------------------------------
+    ``max_rounds`` defaults to ``1`` so the existing single-shot
+    callers (every site that landed before the orchestration refactor)
+    keep their original three-node ``bull → bear → portfolio_manager``
+    shape — that path is what
+    [tests/agents/test_orchestration_flags.py](../../tests/agents/test_orchestration_flags.py)
+    pins as the legacy contract.
+
+    Setting ``max_rounds >= 2`` opts into the bounded multi-round
+    debate semantics needed by the ``DialecticalDebateAdapter`` that
+    Phase 2 ships:
+
+    * Each round runs Bull then Bear once, updates
+      ``state["research_debate"]["count"]`` (the existing
+      :class:`ResearchDebateState` slot), and routes back through
+      :func:`aqp.agents.graph.conditions.should_continue_debate`.
+    * Once ``count >= 2 * max_rounds`` the graph routes directly to
+      ``portfolio_manager`` for the deterministic judge synthesis.
+    * ``DialecticalDebateAdapter`` enforces the cap a second time in
+      :class:`aqp.agents.orchestration.runtime.WorkflowRuntime` so a
+      future LangGraph upgrade that ignores the predicate still
+      cannot blow the budget.
     """
+    if max_rounds < 1:
+        raise ValueError(f"max_rounds must be >= 1, got {max_rounds!r}")
+
     nodes: list[tuple[str, NodeFn]] = [
         ("bull_researcher", _agent_node("research.bull_researcher", output_slot="bull_argument")),
         ("bear_researcher", _agent_node("research.bear_researcher", output_slot="bear_argument")),
@@ -110,28 +138,134 @@ def build_dialectical_debate_graph(
         ),
     ]
     if use_langgraph is False:
-        return SequentialGraph(nodes, checkpointer=checkpointer)
+        if max_rounds == 1:
+            return SequentialGraph(nodes, checkpointer=checkpointer)
+        return _BoundedDebateSequentialGraph(
+            nodes,
+            checkpointer=checkpointer,
+            max_rounds=max_rounds,
+        )
     try:
         from langgraph.graph import END, START, StateGraph  # type: ignore[import-not-found]
     except Exception:  # pragma: no cover - dep guard
-        return SequentialGraph(nodes, checkpointer=checkpointer)
+        if max_rounds == 1:
+            return SequentialGraph(nodes, checkpointer=checkpointer)
+        return _BoundedDebateSequentialGraph(
+            nodes,
+            checkpointer=checkpointer,
+            max_rounds=max_rounds,
+        )
 
     graph = StateGraph(dict)
     for name, fn in nodes:
         graph.add_node(name, fn)
-    # Bull and bear run concurrently in LangGraph (both depend only on
-    # the upstream proposed_alpha + simulation_verdict slots), then
-    # both feed the portfolio manager.
-    graph.add_edge(START, "bull_researcher")
-    graph.add_edge(START, "bear_researcher")
-    graph.add_edge("bull_researcher", "portfolio_manager")
-    graph.add_edge("bear_researcher", "portfolio_manager")
-    graph.add_edge("portfolio_manager", END)
+
+    if max_rounds == 1:
+        # Bull and bear run concurrently in LangGraph (both depend only on
+        # the upstream proposed_alpha + simulation_verdict slots), then
+        # both feed the portfolio manager.
+        graph.add_edge(START, "bull_researcher")
+        graph.add_edge(START, "bear_researcher")
+        graph.add_edge("bull_researcher", "portfolio_manager")
+        graph.add_edge("bear_researcher", "portfolio_manager")
+        graph.add_edge("portfolio_manager", END)
+    else:
+        # Bounded rounds: Bull -> Bear -> conditional gate -> back to Bull
+        # until ``should_continue_debate`` returns the manager node. The
+        # gate's ``max_rounds`` arg matches the kwarg so the predicate
+        # falls through deterministically.
+        from aqp.agents.graph.conditions import should_continue_debate
+
+        graph.add_edge(START, "bull_researcher")
+        graph.add_edge("bull_researcher", "bear_researcher")
+        graph.add_conditional_edges(
+            "bear_researcher",
+            lambda state: should_continue_debate(
+                state,
+                max_rounds=max_rounds,
+                bull_node="bull_researcher",
+                bear_node="bear_researcher",
+                judge_node="portfolio_manager",
+            ),
+            {
+                "bull_researcher": "bull_researcher",
+                "bear_researcher": "bear_researcher",
+                "portfolio_manager": "portfolio_manager",
+            },
+        )
+        graph.add_edge("portfolio_manager", END)
+
     try:
         compiled = graph.compile(checkpointer=checkpointer if checkpointer else None)
     except TypeError:
         compiled = graph.compile()
     return compiled
+
+
+class _BoundedDebateSequentialGraph(SequentialGraph):
+    """Fallback runner that enforces ``max_rounds`` without LangGraph.
+
+    Wraps the existing :class:`SequentialGraph` so the same
+    :meth:`invoke` / :meth:`stream` signature stays intact. Loops
+    Bull → Bear up to ``max_rounds`` times, updating the existing
+    ``research_debate.count`` slot the conditional gate predicate
+    reads, then runs the portfolio manager exactly once.
+    """
+
+    def __init__(
+        self,
+        nodes: list[tuple[str, "NodeFn"]],
+        *,
+        checkpointer: RedisCheckpointer | None = None,
+        max_rounds: int = 2,
+    ) -> None:
+        super().__init__(nodes, checkpointer=checkpointer)
+        self.max_rounds = max(1, int(max_rounds))
+        self._node_map: dict[str, NodeFn] = dict(nodes)
+
+    def invoke(self, state=None, *, thread_id=None):  # type: ignore[override]
+        current = dict(state or {})
+        debate = dict(current.get("research_debate") or {})
+        debate.setdefault("count", 0)
+        debate.setdefault("bull_history", [])
+        debate.setdefault("bear_history", [])
+        current["research_debate"] = debate
+
+        for _ in range(self.max_rounds):
+            current = self._node_map["bull_researcher"](current)
+            debate = dict(current.get("research_debate") or debate)
+            debate["count"] = int(debate.get("count", 0)) + 1
+            current["research_debate"] = debate
+            current = self._node_map["bear_researcher"](current)
+            debate = dict(current.get("research_debate") or debate)
+            debate["count"] = int(debate.get("count", 0)) + 1
+            current["research_debate"] = debate
+
+        current = self._node_map["portfolio_manager"](current)
+        return current
+
+    def stream(self, state=None, *, thread_id=None):  # type: ignore[override]
+        current = dict(state or {})
+        debate = dict(current.get("research_debate") or {})
+        debate.setdefault("count", 0)
+        debate.setdefault("bull_history", [])
+        debate.setdefault("bear_history", [])
+        current["research_debate"] = debate
+
+        for _round in range(self.max_rounds):
+            current = self._node_map["bull_researcher"](current)
+            debate = dict(current.get("research_debate") or debate)
+            debate["count"] = int(debate.get("count", 0)) + 1
+            current["research_debate"] = debate
+            yield {"bull_researcher": dict(current)}
+            current = self._node_map["bear_researcher"](current)
+            debate = dict(current.get("research_debate") or debate)
+            debate["count"] = int(debate.get("count", 0)) + 1
+            current["research_debate"] = debate
+            yield {"bear_researcher": dict(current)}
+
+        current = self._node_map["portfolio_manager"](current)
+        yield {"portfolio_manager": dict(current)}
 
 
 def _portfolio_manager_with_agent(spec_name: str) -> NodeFn:

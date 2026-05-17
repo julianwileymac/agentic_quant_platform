@@ -227,6 +227,14 @@ from aqp.persistence.models_pipelines import (
     PipelineManifestRow,
     PipelineRunRow,
 )
+from aqp.persistence.models_instrument_catalog import (
+    CatalogFeedEdge,
+    InstrumentCatalog,
+)
+from aqp.persistence.models_ingestion_ledger import (
+    FabricVersionSnapshot,
+    IngestionLedgerRow,
+)
 from aqp.persistence.models_entity_registry import (
     EntityAnnotation,
     EntityDatasetLink,
@@ -469,6 +477,11 @@ __all__ = [
     "DagsterSandboxSessionRow",
     # Data lineage (Phase 2 - data layer unification)
     "DataLineageEvent",
+    # Data fabric foundation (Phase 1)
+    "CatalogFeedEdge",
+    "FabricVersionSnapshot",
+    "IngestionLedgerRow",
+    "InstrumentCatalog",
     # DB utilities
     "async_engine",
     "async_session_dep",

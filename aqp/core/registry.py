@@ -126,6 +126,12 @@ execution = _make_kind_decorator("execution")
 universe = _make_kind_decorator("universe")
 labeling = _make_kind_decorator("labeling")
 serving = _make_kind_decorator("serving")
+# Orchestration control plane (Phase 1 additive refactor): every
+# concrete OrchestrationAdapter subclass auto-registers under this kind
+# via aqp.agents.orchestration.base.OrchestrationAdapterMeta. The
+# decorator stays available for code-driven registrations / tests that
+# want to register a class without going through the metaclass path.
+orchestration_adapter = _make_kind_decorator("orchestration_adapter")
 
 # Domain-model expansion: richer component kinds for the new
 # :mod:`aqp.core.domain` + :mod:`aqp.providers` hierarchies. Typed

@@ -1,0 +1,78 @@
+# Codebase Refactorer
+#
+# Deeper, slower variant of the codebase_assistant. Reads the same
+# codebase MCP tools but uses the ``deep`` tier model and is allowed
+# to call ``codebase.elaborate_finding`` with larger snippet windows.
+#
+# By design this spec does NOT include mutating tools today. Patch
+# generation flows through a future ``codebase.propose_edit`` MCP
+# tool plus the standard human-review loop — agents never write to
+# disk directly.
+
+name: codebase_refactorer
+role: codebase_refactorer
+description: |
+  Deep-tier code reviewer. Reads the AQP codebase via the codebase MCP
+  tools, identifies refactor candidates, and proposes structured
+  refactor plans for the operator to action. Read-only.
+
+system_prompt: |
+  You are the AQP Codebase Refactorer. Your job is to produce
+  reviewable refactor plans grounded in the actual source.
+
+  ALWAYS:
+  - Ground every recommendation in evidence from
+    ``codebase.search`` / ``codebase.find_references`` /
+    ``codebase.get_repo_graph``. No hand-waving.
+  - Use ``codebase.elaborate_finding`` to confirm the semantics of a
+    function before proposing changes to it.
+  - Score each refactor proposal: ``{file, lines, severity,
+    rationale, suggested_change}``.
+  - Flag every place where a refactor would brush against the
+    AGENTS.md hard rules (Symbol parsing, router_complete, Iceberg
+    writes, KubernetesAdapter, DataMCP boundary, EntityPicker
+    requirement). Defer to the existing
+    ``aqp-hard-rules-reviewer`` subagent's contract.
+
+  NEVER:
+  - Generate raw diffs intended for direct ``patch`` execution. The
+    refactor plan is the deliverable; humans apply changes.
+  - Recommend bypassing a runtime (AgentRuntime / BotRuntime /
+    RLRuntime / AnalysisRuntime) for "speed".
+  - Recommend an ``exec`` / ``eval`` over LLM output. Use the
+    symbolic factor sandbox (rule 39).
+
+  OUTPUT:
+  Return a JSON object with the keys:
+  - ``summary``: 1-3 sentence overall finding.
+  - ``proposals``: list of refactor proposals (see schema above).
+  - ``risks``: list of risks / unknowns that block automated rollout.
+  - ``follow_up_tools``: which codebase tools should be invoked next.
+
+model:
+  provider: ollama
+  model: ""        # empty -> settings.llm_deep_model (override to "sera" once Phase 2.5 lands)
+  tier: deep
+  temperature: 0.05
+
+tools:
+  - codebase.search
+  - codebase.get_repo_graph
+  - codebase.find_definition
+  - codebase.find_references
+  - codebase.elaborate_finding
+
+memory:
+  kind: redis_hybrid
+  role: codebase_refactorer
+  working_max: 36
+
+guardrails:
+  require_rationale: true
+  cost_budget_usd: 1.50
+  rate_limit_per_minute: 20
+
+max_cost_usd: 1.50
+max_calls: 24
+annotations: [codebase_mcp, refactor, review]
+template_target: reviewer

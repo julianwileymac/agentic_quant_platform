@@ -1,0 +1,80 @@
+---
+description: Codebase MCP server boundary — native AQP package mirroring aqp/data/mcp/. All LLM-driven elaboration goes through router_complete; all RAG reads/writes go through HierarchicalRAG; no ORM imports inside aqp/agents/.
+globs:
+  - "aqp/codebase/**/*.py"
+  - "aqp/agents/tools/codebase_mcp_bridge.py"
+  - "configs/agents/codebase_*.yaml"
+  - "tests/codebase/**/*.py"
+alwaysApply: false
+---
+
+# Codebase MCP — local boundary rule
+
+The codebase MCP server is a **native AQP package** that mirrors the
+layout of [aqp/data/mcp/](mdc:aqp/data/mcp/). It is NOT an adapter for
+external tools (`mcp-codebase-searcher`, `CodeGraphContext`, `gitingest`)
+— those are inspiration, never production code paths.
+
+## Scope
+
+- [aqp/codebase/mcp/](mdc:aqp/codebase/mcp/) — `base`, `registry`,
+  `policy`, `server`, `index/`, `tools/`.
+- [aqp/agents/tools/codebase_mcp_bridge.py](mdc:aqp/agents/tools/codebase_mcp_bridge.py)
+  — auto-install of every `CodebaseMCPTool` into `TOOL_REGISTRY`.
+- [configs/agents/codebase_assistant.yaml](mdc:configs/agents/codebase_assistant.yaml),
+  [configs/agents/codebase_refactorer.yaml](mdc:configs/agents/codebase_refactorer.yaml).
+- [tests/codebase/](mdc:tests/codebase/).
+
+## Hard rules (in addition to the global 39)
+
+1. **Rule 2 (LLM calls).** Any tool that summarises / explains a node
+   routes through `router_complete` from
+   [aqp/llm/providers/router.py](mdc:aqp/llm/providers/router.py).
+   No `litellm.completion` / vendor SDK / raw HTTP to an LLM endpoint.
+2. **Rule 11 (RAG).** Code embeddings flow through
+   `HierarchicalRAG.index_chunks` into the new `code_chunks` corpus.
+   The corpus is registered in
+   [aqp/rag/orders.py](mdc:aqp/rag/orders.py) with `backend='pgvector'`.
+   Do not write directly to Redis or pgvector from the indexer.
+3. **Rule 22 (DataMCP boundary).** Agents reach the codebase only
+   through `CodebaseMCPTool` subclasses. The bridge in
+   [aqp/agents/tools/codebase_mcp_bridge.py](mdc:aqp/agents/tools/codebase_mcp_bridge.py)
+   auto-installs them into `TOOL_REGISTRY`. No ORM imports inside any
+   module under `aqp/codebase/` or `aqp/agents/`.
+4. **Policy.** `policy.enforce_path_inside_workspace` and
+   `policy.enforce_no_secret_globs` are mandatory in every tool's
+   `invoke()` path. Secrets denied by default: `.env`, `*.pem`,
+   `secrets/*`, `*.key`, `id_rsa*`.
+5. **No `exec` / `eval` of file contents.** Ever.
+6. **AST parsing via tree-sitter.** Use the language bank in
+   `aqp/codebase/mcp/index/ast_index.py`. Add new languages by
+   extending that file, not by spawning shell parsers.
+
+## Tool surface (must be in `CODEBASE_MCP_TOOLS`)
+
+- `codebase.search(query, *, language=None, kind=None, k=20, mode='hybrid')`
+- `codebase.get_repo_graph(*, file=None, depth=1)`
+- `codebase.find_definition(symbol)`
+- `codebase.find_references(symbol)`
+- `codebase.elaborate_finding(file, range, *, model_alias=None)` —
+  `router_complete(tier='quick', max_tokens=200)` by default.
+
+## Don't
+
+- Don't put a free-text LLM endpoint in an env var without a
+  matching `aqp.credentials.CredentialResolver` lookup (rule 26).
+- Don't bypass the `code_chunks` RAG corpus when storing embeddings —
+  the corpus is the dimension-discriminator + lineage source.
+- Don't import `aqp.persistence.*` from inside `aqp/codebase/` or
+  `aqp/agents/`.
+- Don't depend on Cursor's host machine path layout in tests — all
+  paths are workspace-root relative.
+
+## Mount points
+
+- HTTP: `/mcp/codebase/*` via `build_codebase_mcp_router()` mounted in
+  [aqp/api/main.py](mdc:aqp/api/main.py) next to the existing
+  `_build_data_mcp_router()` block.
+- stdio: console script `aqp-codebase-mcp` registered under
+  `[project.scripts]` in [pyproject.toml](mdc:pyproject.toml) next to
+  the existing `aqp-data-mcp`.

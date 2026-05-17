@@ -68,9 +68,17 @@ are organised by domain under
 | iceberg | `data.iceberg.read_slice`, `data.iceberg.snapshot_history`, `data.iceberg.time_travel_read` |
 | datahub | `data.datahub.lookup`, `data.datahub.sync` (mutates), `data.datahub.sync_log` |
 | discovery | `data.discovery.browse`, `data.discovery.describe`, `data.discovery.promote` (mutates, data fabric phase 1) |
+| orchestration | `data.orchestration.list_adapters`, `.list_runs`, `.get_run`, `.list_workflows`, `.fusion_inputs_for_run`, `.health` (Phase 3 + Phase 6 of the additive orchestration refactor) |
+| automation | `data.automation.list_schedules`, `data.automation.get_schedule_status` (Phase 3) |
 
 Browse the live catalog at `/data/hub` -> "DataMCP" tab, or
 `GET /data-control/mcp/tools` for the JSON descriptor list.
+
+The orchestration + automation tools are read-only and degrade
+cleanly when the Phase 5 ``workflow_runs`` table hasn't been
+provisioned yet (return empty list + ``table_present=False`` rather
+than raising). See [workflow-studio.md](workflow-studio.md) for the
+operator flow they back.
 
 ## Policy boundary
 

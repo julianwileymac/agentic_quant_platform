@@ -91,4 +91,26 @@ PROVIDERS: dict[str, ProviderSpec] = {
         default_quick_model="nemotron",
         requires_api_key=False,
     ),
+    # SERA (Ai2 Open Coding Agents) — released January 2026. Hosted
+    # via ``ai2-sera-cli`` ``sera --modal`` or a self-hosted vLLM
+    # endpoint (``deploy-sera --model allenai/SERA-32B``). Both expose
+    # an OpenAI-compatible API so we route through LiteLLM's
+    # ``openai/`` adapter.
+    #
+    # SERA is opt-in: the operator must set ``AQP_SERA_ENABLED=true``
+    # and configure ``sera_endpoint`` + ``sera_api_key`` (resolved via
+    # CredentialResolver, rule 26) before agents see it. The codebase
+    # MCP ``codebase.elaborate_finding`` tool already accepts a
+    # ``model_alias`` arg so refactor specs can prefer SERA without
+    # any other change.
+    "sera": ProviderSpec(
+        slug="sera",
+        litellm_prefix="openai/",
+        env_key="AQP_SERA_API_KEY",
+        settings_attr="sera_api_key",
+        base_url_attr="sera_endpoint",
+        default_deep_model="allenai/SERA-32B",
+        default_quick_model="allenai/SERA-14B",
+        requires_api_key=False,
+    ),
 }

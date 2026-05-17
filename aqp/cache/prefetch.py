@@ -117,6 +117,15 @@ class MetadataPrefetcher:
             "aqp.persistence.models_analysis",
             "AnalysisSpec",
         )
+        # Phase 5 (orchestration refactor) — workflow specs registry
+        # surfaces in <EntityPicker kind="workflows" />. Safe-degrades
+        # to zero rows when the Phase 5 alembic migration hasn't run.
+        results["workflows"] = self._populate_simple(
+            session,
+            "workflows",
+            "aqp.persistence.models_workflows",
+            "WorkflowSpecRow",
+        )
         results["resources"] = self._populate_resources(session)
         results["strategy_templates"] = self._populate_strategy_templates(session)
 

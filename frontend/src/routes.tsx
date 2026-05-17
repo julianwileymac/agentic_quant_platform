@@ -9,6 +9,11 @@ import { AnalysisLabRoute } from "@/routes/analysis/lab/page";
 import { AnalysisComposerRoute } from "@/routes/analysis/lab/composer/page";
 import { AnalysisRunsRoute } from "@/routes/analysis/runs/page";
 import { AnalysisRunDetailRoute } from "@/routes/analysis/runs/[id]/page";
+// Phase 4 — interactive analytics (NOT Streamlit).
+import { PortfolioAnalyticsRoute } from "@/routes/analytics/portfolio/[runId]/page";
+import { MlAnalyticsRoute } from "@/routes/analytics/ml/[runId]/page";
+// Phase 5 — agent stall watchdog dashboard.
+import { AgentHealthRoute } from "@/routes/agents/health/page";
 import { CallbackRoute } from "@/routes/auth/callback/page";
 import { LoginRoute } from "@/routes/auth/login/page";
 import { ProfileRoute } from "@/routes/auth/profile/page";
@@ -177,6 +182,14 @@ import { VisualizationsRoute } from "@/routes/visualizations/page";
 import { AgentCrewEditorRoute } from "@/routes/workflows/agent/page";
 import { DataPipelineEditorRoute } from "@/routes/workflows/data/page";
 import { StrategyComposerRoute } from "@/routes/workflows/strategy/page";
+// Additive orchestration refactor (Phase 5) — WorkflowSpec studio.
+// Studio index lives at /workflows (orchestration spec registry).
+// Detail at /workflows/specs/:name (namespaced to avoid colliding with the
+// existing /workflows/{agent,data,strategy} editor sub-routes).
+// Run inspector at /workflows/runs/:runId.
+import { WorkflowsHomeRoute } from "@/routes/workflows/page";
+import { WorkflowDetailRoute } from "@/routes/workflows/[name]/page";
+import { WorkflowRunRoute } from "@/routes/workflows/runs/[runId]/page";
 
 import { NAV_ITEMS } from "@/components/shell/nav-config";
 
@@ -253,6 +266,10 @@ const REAL_ROUTES: Record<string, () => ReactElement> = {
   "/ml/training": MlTrainingRoute,
   "/rl": RlHomeRoute,
   "/rl/lab": RlLabRoute,
+  // Additive orchestration refactor (Phase 5) — Workflow Studio index.
+  // The page itself short-circuits to a "studio disabled" banner unless
+  // AQP_ORCHESTRATION_STUDIO_ENABLED=true on the backend (HTTP 503).
+  "/workflows": WorkflowsHomeRoute,
   "/workflows/agent": AgentCrewEditorRoute,
   "/workflows/data": DataPipelineEditorRoute,
   "/workflows/strategy": StrategyComposerRoute,
@@ -363,6 +380,16 @@ const DYNAMIC_ROUTES: RouteObject[] = [
   { path: "analysis/lab/composer", element: <AnalysisComposerRoute /> },
   { path: "analysis/runs", element: <AnalysisRunsRoute /> },
   { path: "analysis/runs/:id", element: <AnalysisRunDetailRoute /> },
+  // Phase 4 — interactive analytics
+  { path: "analytics/portfolio/:runId", element: <PortfolioAnalyticsRoute /> },
+  { path: "analytics/ml/:runId", element: <MlAnalyticsRoute /> },
+  // Phase 5 — agent stall watchdog dashboard
+  { path: "agents/health", element: <AgentHealthRoute /> },
+  // Additive orchestration refactor (Phase 5) — Workflow Studio dynamic routes.
+  // Detail page is namespaced under /workflows/specs so the path doesn't
+  // shadow the existing /workflows/{agent,data,strategy} editor entries.
+  { path: "workflows/specs/:name", element: <WorkflowDetailRoute /> },
+  { path: "workflows/runs/:runId", element: <WorkflowRunRoute /> },
   // Consolidated `/strategy-development/*` umbrella. The parent route
   // mounts `StrategyDevLayout` (sub-nav + KPI strip + Outlet); each
   // child is a normal page that reads / writes the shared

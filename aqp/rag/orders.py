@@ -250,6 +250,22 @@ OrderCatalog: tuple[OrderCorpus, ...] = (
             "iterations and pick the best deployment candidate."
         ),
     ),
+    # --- theory: codebase symbols (Phase 2 — Codebase MCP) -----------
+    OrderCorpus(
+        name="code_chunks",
+        order="theory",
+        l1="codebase",
+        l2="symbols",
+        iceberg=None,
+        description=(
+            "Semantic chunks of AQP source code (Python / TypeScript / "
+            "SQL / Markdown) keyed by file + symbol. Indexed by the "
+            "Codebase MCP server (aqp/codebase/mcp/) and queried via "
+            "codebase.search. Designed for pgvector backend once "
+            "Phase 3 lands; today routes through HierarchicalRAG's "
+            "active backend (Redis by default)."
+        ),
+    ),
 )
 # fmt: on
 

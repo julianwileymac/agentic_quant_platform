@@ -401,6 +401,10 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "monitor", label: "Monitor", href: "/monitor", icon: Activity, group: "Execution" },
   { key: "crew", label: "Crew Trace", href: "/crew", icon: Bot, group: "Execution" },
 
+  // Additive orchestration refactor (Phase 5) — Workflow Studio surfaces the
+  // hash-locked WorkflowSpec registry + WorkflowRuntime dispatches. Lives
+  // alongside the existing crew / strategy editors.
+  { key: "wf-studio", label: "Workflow Studio", href: "/workflows", icon: Workflow, group: "Workflows" },
   { key: "wf-agent", label: "Agent Crew Editor", href: "/workflows/agent", icon: Workflow, group: "Workflows" },
   { key: "wf-strategy", label: "Strategy Composer", href: "/workflows/strategy", icon: Workflow, group: "Workflows" },
 

@@ -78,6 +78,38 @@ def has_kill_switch(state: AgentState) -> bool:
         return False
 
 
+def should_halt(state: AgentState) -> bool:
+    """Combined kill-switch + per-run halt-token gate.
+
+    Returns ``True`` when either:
+
+    1. The global :func:`has_kill_switch` Redis flag is set (the
+       operator clicked the topbar KillSwitch / hit one of the five
+       canonical halt endpoints), or
+    2. The current state carries a truthy ``halt_token`` slot — the
+       Phase 6 ``/workflows/halt`` endpoint sets this on every active
+       :class:`OrchestrationState` so the in-process
+       :class:`aqp.agents.orchestration.runtime.WorkflowRuntime` can
+       short-circuit even when Redis is unreachable.
+
+    The Phase 2 ``WorkflowRuntime`` calls this between every adapter
+    transition and the ``DialecticalDebateAdapter`` inner round, so a
+    flipped switch is observed within the
+    ``AQP_ORCHESTRATION_HALT_CHECK_TIMEOUT_SECONDS`` SLA.
+
+    Fails closed: if anything raises during the kill-switch read we
+    treat the lookup as ``False`` (matching :func:`has_kill_switch`)
+    so a Redis outage cannot block in-flight runs from completing —
+    operators can still revoke through the watchdog path.
+    """
+    try:
+        if bool(state.get("halt_token")):
+            return True
+    except Exception:  # pragma: no cover - state is always a Mapping
+        return False
+    return bool(has_kill_switch(state))
+
+
 def risk_simulator_approves(
     state: AgentState,
     *,
@@ -115,4 +147,5 @@ __all__ = [
     "should_consult_rag",
     "should_continue_debate",
     "should_continue_risk",
+    "should_halt",
 ]

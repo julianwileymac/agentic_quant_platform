@@ -523,6 +523,117 @@ class Settings(BaseSettings):
     cluster_mgmt_url: str = Field(default="")
     cluster_mgmt_token: str = Field(default="")
 
+    # --- Pod-level ops (Phase 1 — K8s/Docker SDK extension) ---
+    # Docker SDK base URL override (defaults to ``docker.from_env()``).
+    # On Linux this is typically ``unix:///var/run/docker.sock``; on
+    # Windows ``npipe:////./pipe/docker_engine``. Leave empty to inherit
+    # ``DOCKER_HOST`` via the SDK's standard discovery.
+    docker_sdk_base_url: str = Field(default="")
+    # Per-request timeout the Docker SDK client uses for HTTP calls.
+    docker_sdk_timeout: int = Field(default=60)
+    # Disable ``Accept-Encoding: gzip,deflate`` on the SDK's underlying
+    # requests session. The default ``True`` mirrors the documented
+    # gigabyte-tarball fix (without it ``get_archive`` saturates CPU on
+    # large pod-archive pulls).
+    docker_sdk_disable_compression: bool = Field(default=True)
+    # Maximum wall-clock seconds a single ``stream_pod_logs`` call is
+    # allowed to run before the route hard-closes the upstream watch.
+    # The frontend kill-switch / nav can still re-attach.
+    k8s_pod_log_max_seconds: int = Field(default=600)
+    # Maximum line count per ``stream_pod_logs`` batch (back-pressure).
+    k8s_pod_log_max_lines: int = Field(default=10000)
+    # Default deadline for ``exec_in_pod`` when no per-call timeout is
+    # passed (covers a single Celery / agent command).
+    k8s_exec_default_timeout: int = Field(default=120)
+
+    # --- Codebase MCP (Phase 2) -------------------------------------------
+    # Root the codebase MCP is allowed to read. Defaults to the process
+    # CWD when empty so local dev / CI just works. In docker images set
+    # this to the in-container repo mount (``/workspace/aqp`` etc).
+    codebase_workspace_root: str = Field(default="")
+    # Optional override for the ripgrep binary; empty means
+    # ``shutil.which('rg')`` is used.
+    codebase_ripgrep_path: str = Field(default="")
+    # Extra secret globs (CSV) to merge with the default deny-list in
+    # :mod:`aqp.codebase.mcp.policy`.
+    codebase_secret_globs: str = Field(default="")
+    # Maximum file size (in KB) the codebase indexer will read in a
+    # single pass. Larger files are skipped to keep tool latency
+    # bounded (the agent can use ``codebase.search`` instead).
+    codebase_max_file_kb: int = Field(default=1024)
+
+    # --- SERA (Phase 2.5, opt-in code provider) ---------------------------
+    # OpenAI-compatible endpoint for the Ai2 SERA-32B / SERA-14B code
+    # model. Two paths today: ``sera --modal`` (Modal-hosted, the
+    # easiest), or ``deploy-sera --model allenai/SERA-32B``
+    # (self-hosted vLLM). The provider entry in
+    # ``aqp/llm/providers/catalog.py`` routes through LiteLLM's
+    # ``openai/`` adapter pointed at this URL.
+    sera_enabled: bool = Field(default=False)
+    sera_endpoint: str = Field(default="")
+    sera_api_key: str = Field(default="")
+    sera_model: str = Field(default="allenai/SERA-32B")
+
+    # --- pgvector control plane (Phase 3) ---------------------------------
+    # Default embedding dimension matches BGE-M3 (and the
+    # ``rag_chunks.embedding`` column type set by alembic 0045). Other
+    # embedding models record their own dim via the ``embedding_model``
+    # discriminator column on each row.
+    pgvector_dim: int = Field(default=1024)
+    pgvector_hnsw_m: int = Field(default=16)
+    pgvector_hnsw_ef_construction: int = Field(default=64)
+    # Per-corpus backend overrides. Format: ``corpus=backend`` CSV,
+    # e.g. ``code_chunks=pgvector,bars_daily=redis``. Empty means
+    # every corpus uses ``settings.rag_backend_default``.
+    rag_backend_default: str = Field(default="redis")  # redis | pgvector | dual
+    rag_backend_overrides: str = Field(default="code_chunks=pgvector")
+
+    # --- Agent stall watchdog (Phase 5) -----------------------------------
+    # ``agent_runs_v2`` rows older than this with ``status='running'`` and
+    # no recent ``agent_run_steps`` rows get marked halted by the
+    # watchdog Celery beat task. Rows that are ``status='pending'``
+    # longer than ``2 * agent_stall_threshold_seconds`` are also halted.
+    agent_stall_threshold_seconds: int = Field(default=300)
+    agent_watchdog_enabled: bool = Field(default=True)
+    agent_watchdog_period_seconds: int = Field(default=60)
+
+    # --- Orchestration control plane (additive refactor, Phase 0-6) -------
+    # All knobs default to ``False`` so the new ``WorkflowRuntime`` +
+    # ``OrchestrationAdapter`` machinery stays dormant until an operator
+    # opts in. Existing builders / runtimes / routes keep their current
+    # behaviour with every flag below set to ``False``.
+    #
+    # ``orchestration_studio_enabled`` gates the new ``/workflows`` API
+    #   surface and the Vite studio routes (Phase 5).
+    # ``orchestration_crew_adapter_enabled`` allows the ``CrewProcessAdapter``
+    #   to register; CrewAI stays imported lazily so cold installs without
+    #   the dep still boot (Phase 2).
+    # ``orchestration_fusion_enabled`` activates the optional
+    #   ``build_dialectical_with_fusion_graph`` builder and the
+    #   ``SignalFusionAdapter`` / ``WeightCentricExecutionAdapter`` (Phase 4).
+    # ``orchestration_schedule_enabled`` activates the Celery beat entry
+    #   for the ``AutomationScheduleAdapter`` (Phase 3).
+    # ``orchestration_workflow_versioning_enabled`` allows the workflow
+    #   spec registry to snapshot into ``workflow_spec_versions`` (Phase 5).
+    # ``orchestration_kill_propagation_enabled`` extends the watchdog +
+    #   ``KillSwitch`` UI to fan halts out into in-flight ``WorkflowRun``
+    #   rows (Phase 6).
+    orchestration_studio_enabled: bool = Field(default=False)
+    orchestration_crew_adapter_enabled: bool = Field(default=False)
+    orchestration_fusion_enabled: bool = Field(default=False)
+    orchestration_schedule_enabled: bool = Field(default=False)
+    orchestration_workflow_versioning_enabled: bool = Field(default=False)
+    orchestration_kill_propagation_enabled: bool = Field(default=False)
+    # Default max debate rounds for ``DialecticalDebateAdapter`` /
+    # ``build_dialectical_debate_graph``. The runtime enforces the cap
+    # so a Bull/Bear loop cannot run unbounded even if a spec forgets
+    # to set its own.
+    orchestration_max_debate_rounds: int = Field(default=2)
+    # Per-node halt check timeout used by ``WorkflowRuntime`` between
+    # adapter transitions. Kept short so a flipped kill switch is
+    # observed inside the SLA from ``docs/orchestration-refactor-rollout.md``.
+    orchestration_halt_check_timeout_seconds: float = Field(default=1.0)
+
     # --- Streaming producers ---
     streaming_producers_namespace: str = Field(default="data-services")
 

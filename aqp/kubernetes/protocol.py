@@ -18,7 +18,8 @@ from __future__ import annotations
 import logging
 import threading
 from abc import ABCMeta, abstractmethod
-from typing import Any, ClassVar
+from dataclasses import dataclass, field
+from typing import Any, ClassVar, Iterator
 
 from aqp.core.registry import register
 
@@ -39,6 +40,63 @@ class KubernetesAdapterUnavailable(KubernetesAdapterError):
     feature-incomplete adapters raise it for unsupported methods.
     Routes catch it and return 503.
     """
+
+
+@dataclass(slots=True)
+class PodExecResult:
+    """Result of an in-pod or in-container command execution.
+
+    ``returncode`` may be ``None`` when the underlying transport does
+    not surface an explicit exit code (best-effort for the Docker SDK
+    streaming path). Routes / MCP tools should treat ``None`` as
+    "completed without a numeric code" and inspect ``stderr`` for
+    failure signal.
+    """
+
+    namespace: str
+    name: str
+    container: str | None
+    command: list[str]
+    stdout: str
+    stderr: str
+    returncode: int | None
+    elapsed_ms: float | None = None
+
+
+@dataclass(slots=True)
+class PodInfo:
+    """Compact pod descriptor returned by :meth:`KubernetesAdapter.list_pods`.
+
+    Adapters that cannot fully resolve a field set it to ``None`` /
+    ``""``; routes pass the dict through to the frontend without
+    inventing missing values.
+    """
+
+    namespace: str
+    name: str
+    phase: str = ""
+    node: str = ""
+    pod_ip: str = ""
+    started_at: str = ""
+    containers: list[str] = field(default_factory=list)
+    labels: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class PodLogEvent:
+    """Single frame emitted by :meth:`KubernetesAdapter.stream_pod_logs`.
+
+    Frames are produced by the adapter; the WebSocket route adapts
+    them to the canonical ``{task_id, stage, message, timestamp,
+    **extras}`` payload shape required by AGENTS rule 4.
+    """
+
+    namespace: str
+    name: str
+    container: str | None
+    line: str
+    timestamp: str = ""
+    source: str = "stdout"  # "stdout" | "stderr"
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +176,94 @@ class KubernetesAdapter(metaclass=KubernetesAdapterMeta):
     ) -> dict[str, Any]:
         raise KubernetesAdapterUnavailable(
             f"{self.__class__.__name__} does not support apply_manifest"
+        )
+
+    # ------------------------------------------------------------------
+    # Pod-level ops (Phase 1 — K8s/Docker SDK extension)
+    #
+    # The default impls raise :class:`KubernetesAdapterUnavailable` so
+    # adapters can opt out cleanly. The matching FastAPI routes /
+    # ``data.kubernetes.*`` MCP tools translate that to ``HTTP 503``.
+    # ------------------------------------------------------------------
+
+    def list_pods(
+        self,
+        *,
+        namespace: str,
+        label_selector: str | None = None,
+    ) -> list[PodInfo]:
+        raise KubernetesAdapterUnavailable(
+            f"{self.__class__.__name__} does not support list_pods"
+        )
+
+    def exec_in_pod(
+        self,
+        *,
+        namespace: str,
+        name: str,
+        command: list[str],
+        container: str | None = None,
+        timeout_seconds: int = 60,
+        stdin: bytes | None = None,
+    ) -> PodExecResult:
+        raise KubernetesAdapterUnavailable(
+            f"{self.__class__.__name__} does not support exec_in_pod"
+        )
+
+    def stream_pod_logs(
+        self,
+        *,
+        namespace: str,
+        name: str,
+        container: str | None = None,
+        since_seconds: int | None = None,
+        tail_lines: int | None = None,
+        follow: bool = True,
+        max_lines: int | None = None,
+    ) -> Iterator[PodLogEvent]:
+        """Yield :class:`PodLogEvent` frames; never blocks the caller.
+
+        Critical: implementations MUST use ``_preload_content=False``
+        on ``read_namespaced_pod_log`` and consume via
+        ``kubernetes.watch.Watch().stream(...)`` — the synchronous
+        ``follow=True`` path hangs on sparse log emission (the
+        documented client bug).
+        """
+        raise KubernetesAdapterUnavailable(
+            f"{self.__class__.__name__} does not support stream_pod_logs"
+        )
+
+    def get_pod_archive(
+        self,
+        *,
+        namespace: str,
+        name: str,
+        path: str,
+        container: str | None = None,
+    ) -> bytes:
+        """Return the raw tar bytes for ``path`` inside the pod.
+
+        Callers wrap the result in ``io.BytesIO`` + ``tarfile.open``;
+        the adapter does not unpack. Docker SDK adapters MUST disable
+        ``Accept-Encoding: gzip,deflate`` on the underlying requests
+        session (the documented gigabyte-tarball latency bug).
+        """
+        raise KubernetesAdapterUnavailable(
+            f"{self.__class__.__name__} does not support get_pod_archive"
+        )
+
+    def put_pod_archive(
+        self,
+        *,
+        namespace: str,
+        name: str,
+        path: str,
+        data: bytes,
+        container: str | None = None,
+    ) -> dict[str, Any]:
+        """Inject ``data`` (a tar byte stream) into ``path`` inside the pod."""
+        raise KubernetesAdapterUnavailable(
+            f"{self.__class__.__name__} does not support put_pod_archive"
         )
 
     # ------------------------------------------------------------------
@@ -326,6 +472,9 @@ __all__ = [
     "KubernetesAdapterError",
     "KubernetesAdapterMeta",
     "KubernetesAdapterUnavailable",
+    "PodExecResult",
+    "PodInfo",
+    "PodLogEvent",
     "get_kubernetes_adapter",
     "list_adapter_classes",
     "register_adapter",

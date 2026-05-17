@@ -81,6 +81,11 @@ flowchart LR
 | [airbyte-builder.md](airbyte-builder.md) | Schema-driven Airbyte connector builder + AQP Fetcher codegen (data fabric phase 2) |
 | [dagster-sandbox.md](dagster-sandbox.md) | Ephemeral interactive Dagster + Airbyte sandbox console (data fabric phase 3) |
 | [visualization-layer.md](visualization-layer.md) | Trino-backed Superset and Bokeh exploration layer |
+| [pgvector-control-plane.md](pgvector-control-plane.md) | pgvector control plane — `data.vector.*` MCP tools + PgVector dataset kind + alembic 0045 (Phase 3 refactor) |
+| [codebase-mcp.md](codebase-mcp.md) | Codebase MCP server — agent view of the AQP source tree via `codebase.*` tools (Phase 2 refactor) |
+| [sera.md](sera.md) | SERA (Ai2 Open Coding Agents) as an opt-in LLM provider for the codebase MCP elaborator (Phase 2.5 refactor) |
+| [analytics-frontend.md](analytics-frontend.md) | Interactive analytics in the Vite frontend — QuantStats tearsheets / rolling / underwater / drawdown / ML overlays (Phase 4 refactor) |
+| [agent-watchdog.md](agent-watchdog.md) | Agent stall watchdog Celery beat task + `GET /agents/health` + `data.agents.health` MCP tool (Phase 5 refactor) |
 | [alpha-vantage.md](alpha-vantage.md) | AV provider quota + cache |
 | [streaming.md](streaming.md) | Kafka topic taxonomy + ingester layout |
 | [live-market.md](live-market.md) | Live subscription + WebSocket relay |
@@ -114,7 +119,9 @@ flowchart LR
 | Doc | Purpose |
 | --- | --- |
 | [agentic-development.md](agentic-development.md) | AQP's spec-pattern as the agentic-coder skill-artifact equivalent + consolidated ADLC security manifesto |
-| [multi-agent-patterns.md](multi-agent-patterns.md) | Sequential / Parallel / Debate / Coordinator / ReAct topologies mapped to [aqp/agents/graph/](../aqp/agents/graph/) |
+| [multi-agent-patterns.md](multi-agent-patterns.md) | Sequential / Parallel / Debate / Coordinator / ReAct topologies mapped to [aqp/agents/graph/](../aqp/agents/graph/) + the seven orchestration adapter topologies |
+| [workflow-studio.md](workflow-studio.md) | Additive orchestration control plane — `WorkflowSpec` + `WorkflowRuntime` + 5 adapters + replayable runs |
+| [orchestration-refactor-rollout.md](orchestration-refactor-rollout.md) | Operator rollout / rollback runbook for every `AQP_ORCHESTRATION_*` flag |
 | [agentic-pipeline.md](agentic-pipeline.md) | Crew control plane |
 | [providers.md](providers.md) | LLM provider registry + tier routing |
 

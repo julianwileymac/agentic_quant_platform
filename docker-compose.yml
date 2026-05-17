@@ -18,7 +18,11 @@ services:
       retries: 5
 
   postgres:
-    image: postgres:16-alpine
+    # pgvector image is a drop-in superset of postgres:16 with the
+    # ``vector`` extension preinstalled (Phase 3 — pgvector control
+    # plane). Existing volumes keep working; alembic 0045 issues
+    # ``CREATE EXTENSION IF NOT EXISTS vector`` on first migrate.
+    image: pgvector/pgvector:pg16
     container_name: aqp-postgres
     environment:
       POSTGRES_USER: aqp

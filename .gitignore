@@ -181,3 +181,18 @@ cython_debug/
 .cursorindexingignore
 inspiration/
 data/
+
+# Data Fabric refactor (Phase 0-6) — these are *code* paths nested under
+# directories called "data/", which the broad rule above would otherwise swallow.
+# Keep them tracked, but re-exclude pycache and other cache files.
+!aqp/data/
+!aqp/data/**
+!tests/data/
+!tests/data/**
+!alembic/versions/0047_data_fabric_foundation.py
+
+# Re-apply standard ignores inside the un-ignored data/ paths.
+aqp/data/**/__pycache__/
+tests/data/**/__pycache__/
+aqp/data/**/*.py[cod]
+tests/data/**/*.py[cod]

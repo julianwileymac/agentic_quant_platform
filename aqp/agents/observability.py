@@ -60,6 +60,42 @@ def trace_step(name: str, **attributes: Any) -> Iterator[dict[str, Any]]:
                 pass
 
 
+@contextlib.contextmanager
+def node_span(
+    adapter_alias: str,
+    node_name: str,
+    *,
+    workflow_run_id: str | None = None,
+    workflow_spec_name: str | None = None,
+    **attributes: Any,
+) -> Iterator[dict[str, Any]]:
+    """Per-node OTEL span used by :class:`aqp.agents.orchestration.runtime.WorkflowRuntime`.
+
+    Thin wrapper over :func:`trace_step` that pre-fills the
+    ``adapter`` / ``node`` / ``workflow.*`` attributes the Phase 2
+    runtime needs. Every adapter transition opens one of these so the
+    final ``WorkflowRunResult`` carries a complete latency /
+    branch-decision trace without each adapter having to import OTEL
+    directly.
+
+    Yields the same span data dict :func:`trace_step` yields; callers
+    can stash ``status`` / ``cost_usd`` / ``decision`` etc. and they
+    end up on the OTEL span when configured.
+    """
+    span_attrs: dict[str, Any] = {
+        "adapter": adapter_alias,
+        "node": node_name,
+    }
+    if workflow_run_id:
+        span_attrs["workflow.run_id"] = workflow_run_id
+    if workflow_spec_name:
+        span_attrs["workflow.spec_name"] = workflow_spec_name
+    span_attrs.update(attributes)
+    span_name = f"workflow.{adapter_alias}.{node_name}"
+    with trace_step(span_name, **span_attrs) as data:
+        yield data
+
+
 def emit_progress(task_id: str | None, stage: str, message: str, **extras: Any) -> None:
     """Forward to the shared task progress bus."""
     if not task_id:
@@ -85,4 +121,4 @@ def cost_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
     return {"by_kind": by_kind, "total_cost_usd": round(total_cost, 6)}
 
 
-__all__ = ["cost_summary", "emit_progress", "trace_step"]
+__all__ = ["cost_summary", "emit_progress", "node_span", "trace_step"]

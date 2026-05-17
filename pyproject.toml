@@ -282,6 +282,30 @@ hft = [
     "polars>=1.0",
 ]
 
+# ---------------------------------------------------------------------------
+# Cluster / pod-level ops (Phase 1 — K8s + Docker SDK extension).
+#
+# ``kubernetes`` powers :class:`InClusterAdapter` (kube exec, watch.Watch
+# log streaming, archive ops). ``docker`` powers :class:`LocalComposeAdapter`
+# (compose-style exec / logs / get_archive / put_archive). Both are optional
+# so AQP can still boot with ``kubernetes_adapter=none``.
+# ---------------------------------------------------------------------------
+cluster = [
+    "kubernetes>=29.0",
+    "docker>=7.1",
+]
+
+# ---------------------------------------------------------------------------
+# Codebase MCP (Phase 2). Pure Python by default — uses ``ast`` +
+# ``shutil.which("rg")``. Add ``tree-sitter`` here when we adopt a
+# multi-language AST backend (the current fallback handles Python /
+# TS / SQL / Markdown well enough for repo-level navigation).
+# ---------------------------------------------------------------------------
+codebase = [
+    # No required dependencies today; the package is pure-Python. Slot
+    # left for future tree-sitter / language-pack additions.
+]
+
 data-plane = [
     "agentic-quant-platform[fred,sec,gdelt,iceberg,regulatory]",
 ]
@@ -297,7 +321,7 @@ visualization = [
     "acryl-datahub[datahub-rest,superset]>=0.13",
 ]
 full = [
-    "agentic-quant-platform[auth,alpaca,ibkr,tradier,otel,cli,paper,streaming,vectorbt,backtesting,ml,ml-torch,ml-forecast,ml-anomaly,ml-keras,ml-tensorflow,ml-transformers,portfolio,ml-structural,serving,llm-finance,fred,sec,gdelt,iceberg,regulatory,agents-rag,compute,sources,datahub-sync,dagster-aqp,dbt,entity-graph,visualization,optimal-control,hft]",
+    "agentic-quant-platform[auth,alpaca,ibkr,tradier,otel,cli,paper,streaming,vectorbt,backtesting,ml,ml-torch,ml-forecast,ml-anomaly,ml-keras,ml-tensorflow,ml-transformers,portfolio,ml-structural,serving,llm-finance,fred,sec,gdelt,iceberg,regulatory,agents-rag,compute,sources,datahub-sync,dagster-aqp,dbt,entity-graph,visualization,optimal-control,hft,cluster]",
 ]
 dev = [
     "pytest>=7.4",
@@ -319,6 +343,7 @@ aqp-train = "scripts.train_agent:main"
 aqp-backtest = "scripts.run_backtest:main"
 aqp-stream-ingest = "aqp.streaming.cli:main"
 aqp-data-mcp = "aqp.data.mcp.server:run_stdio"
+aqp-codebase-mcp = "aqp.codebase.mcp.server:run_stdio"
 
 [tool.setuptools.packages.find]
 include = ["aqp*"]

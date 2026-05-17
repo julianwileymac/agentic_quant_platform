@@ -6,6 +6,7 @@ from aqp.dagster.assets.airbyte import AIRBYTE_ASSETS
 from aqp.dagster.assets.catalog import CATALOG_ASSETS
 from aqp.dagster.assets.compaction import COMPACTION_ASSETS
 from aqp.dagster.assets.entities import ENTITY_ASSETS
+from aqp.dagster.assets.feature_materializer import materialize_features
 from aqp.dagster.assets.profiling import PROFILING_ASSETS
 from aqp.dagster.assets.sources import SOURCE_ASSETS
 
@@ -20,6 +21,7 @@ ASSET_GROUPS = (
 )
 
 ALL_ASSETS = [asset for _group_name, group_assets in ASSET_GROUPS for asset in group_assets]
+ALL_JOBS = [materialize_features]
 
 
 def all_assets() -> list:
@@ -27,4 +29,10 @@ def all_assets() -> list:
     return list(ALL_ASSETS)
 
 
-__all__ = ["ALL_ASSETS", "ASSET_GROUPS", "all_assets"]
+__all__ = [
+    "ALL_ASSETS",
+    "ALL_JOBS",
+    "ASSET_GROUPS",
+    "all_assets",
+    "materialize_features",
+]

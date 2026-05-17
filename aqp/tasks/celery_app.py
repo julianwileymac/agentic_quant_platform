@@ -31,6 +31,9 @@ celery_app = Celery(
         "aqp.tasks.agentic_backtest_tasks",
         "aqp.tasks.finetune_tasks",
         "aqp.tasks.ingestion_tasks",
+        # Phase 3 (data fabric refactor) — feed/catalog sync tasks.
+        "aqp.tasks.instrument_catalog_tasks",
+        "aqp.tasks.data_sync_tasks",
         "aqp.tasks.paper_tasks",
         "aqp.tasks.factor_tasks",
         "aqp.tasks.ml_tasks",
@@ -82,6 +85,17 @@ celery_app = Celery(
         # bus into Neo4j (or no-ops in postgres mode) and periodic
         # full Postgres -> Neo4j resync for drift recovery.
         "aqp.tasks.ownership_tasks",
+        # Phase 4 (analytics rewrite) — heavy QuantStats tearsheet
+        # renders + async portfolio metrics.
+        "aqp.tasks.analytics_tasks",
+        # Phase 5 (agent stall watchdog) — Celery beat task that
+        # revokes stalled agent_runs_v2 rows + emits a halt frame.
+        "aqp.tasks.agent_watchdog_tasks",
+        # Phase 3 (orchestration refactor) — WorkflowRuntime dispatch
+        # task + replay helper. Stays harmless when the orchestration
+        # flags are off: the task body refuses to enqueue without a
+        # resolvable spec.
+        "aqp.tasks.orchestration_tasks",
     ],
 )
 
@@ -99,6 +113,8 @@ celery_app.conf.update(
         "aqp.tasks.agentic_backtest_tasks.*": {"queue": "agents"},
         "aqp.tasks.finetune_tasks.*": {"queue": "training"},
         "aqp.tasks.ingestion_tasks.*": {"queue": "ingestion"},
+        "aqp.tasks.sync_finance_database": {"queue": "ingest"},
+        "aqp.tasks.sync_feed": {"queue": "ingest"},
         "aqp.tasks.regulatory_tasks.*": {"queue": "ingestion"},
         "aqp.tasks.rag_tasks.*": {"queue": "rag"},
         "aqp.tasks.research_tasks.*": {"queue": "agents"},
@@ -122,6 +138,10 @@ celery_app.conf.update(
         "aqp.tasks.data_metadata_tasks.*": {"queue": "ingestion"},
         "aqp.tasks.finops_tasks.*": {"queue": "default"},
         "aqp.tasks.dataset_preset_tasks.*": {"queue": "ingestion"},
+        # Phase 4 — analytics tearsheet renders + async metrics.
+        "aqp.tasks.analytics_tasks.*": {"queue": "default"},
+        # Phase 5 — agent stall watchdog scans on the default queue.
+        "aqp.tasks.agent_watchdog_tasks.*": {"queue": "default"},
         # Bot lifecycle: route to the matching execution queues so backtest /
         # paper / chat workloads inherit the existing per-queue capacity caps.
         "aqp.tasks.bot_tasks.run_bot_backtest": {"queue": "backtest"},
@@ -149,6 +169,11 @@ celery_app.conf.update(
         "aqp.tasks.cache_tasks.*": {"queue": "default"},
         # Ownership graph drains are bursty but light; default queue is fine.
         "aqp.tasks.ownership_tasks.*": {"queue": "default"},
+        # Orchestration control plane (Phase 3 refactor) — share the
+        # agents queue with the legacy ``aqp.tasks.agent_tasks.*``
+        # since each workflow run typically wraps an AgentRuntime
+        # invocation through one of the registered adapters.
+        "aqp.tasks.orchestration_tasks.*": {"queue": "agents"},
     },
     beat_schedule={
         "drift-check": {
@@ -192,9 +217,79 @@ celery_app.conf.update(
                 getattr(settings, "ownership_resync_interval_s", 1800) or 1800
             ),
         },
+        # Phase 5 — Agent stall watchdog. Scans ``agent_runs_v2`` for
+        # rows that ``AgentRuntime`` will never close (Celery dispatch
+        # dropped or runtime hung mid-tool-loop) and halts them
+        # cleanly. Interval comes from
+        # ``settings.agent_watchdog_period_seconds`` (default 60).
+        "agent-stall-watchdog": {
+            "task": "aqp.tasks.agent_watchdog_tasks.scan_for_stalled_agent_runs",
+            "schedule": float(
+                getattr(settings, "agent_watchdog_period_seconds", 60) or 60
+            ),
+        },
+        # Phase 6 (orchestration refactor) — workflow-run watchdog.
+        # Mirrors ``agent-stall-watchdog`` for ``workflow_runs`` rows
+        # dispatched via ``WorkflowRuntime``. The scan itself stays
+        # no-op when ``orchestration_kill_propagation_enabled`` is
+        # False so this beat entry being present is harmless on cold
+        # installs / pre-rollout deployments.
+        "workflow-stall-watchdog": {
+            "task": "aqp.tasks.agent_watchdog_tasks.scan_for_stalled_workflow_runs",
+            "schedule": float(
+                getattr(settings, "agent_watchdog_period_seconds", 60) or 60
+            ),
+        },
     },
     timezone="UTC",
 )
+
+
+# ---------------------------------------------------------------- Orchestration schedules (Phase 3)
+def _register_orchestration_schedules() -> None:
+    """Mount workflow YAMLs under ``configs/workflows/`` on the beat schedule.
+
+    Strictly additive — only activates when
+    ``settings.orchestration_schedule_enabled`` is ``True`` AND a
+    workflow YAML declares ``schedule.enabled: true``. Failures are
+    swallowed at DEBUG level so a malformed YAML never blocks Celery
+    boot.
+    """
+    if not getattr(settings, "orchestration_schedule_enabled", False):
+        return
+    try:
+        from pathlib import Path
+
+        from aqp.agents.orchestration.adapters.schedule_adapter import (
+            register_schedule_with_celery_beat,
+        )
+        from aqp.agents.orchestration.spec import load_workflow_specs_from_dir
+    except Exception:  # noqa: BLE001 - orchestration package may be unloaded
+        logger.debug("orchestration schedule registration skipped", exc_info=True)
+        return
+    for candidate in (Path("configs/workflows"), Path("aqp/configs/workflows")):
+        if not candidate.exists():
+            continue
+        for spec in load_workflow_specs_from_dir(str(candidate)):
+            schedule = getattr(spec, "schedule", None)
+            if not schedule or not getattr(schedule, "enabled", False):
+                continue
+            try:
+                register_schedule_with_celery_beat(
+                    spec,
+                    interval_seconds=float(schedule.interval_seconds or 0) or None,
+                    cron=schedule.cron or None,
+                )
+            except Exception:  # noqa: BLE001
+                logger.debug(
+                    "failed to register beat schedule for %s",
+                    getattr(spec, "name", spec),
+                    exc_info=True,
+                )
+        break
+
+
+_register_orchestration_schedules()
 
 
 # ---------------------------------------------------------------- FinOps signals

@@ -11,7 +11,13 @@
 > FREEMODE).
 > [.cursor/rules/](.cursor/rules) — glob-scoped Cursor rules
 > derived from this file (a slim always-on `aqp.mdc` plus seven
-> domain-scoped rules). The 32 hard rules below remain canonical.
+> domain-scoped rules). The 41 hard rules below remain canonical
+> (rules 40 + 41 cover the additive `WorkflowRuntime` +
+> `workflow_spec_versions` shipped by the orchestration refactor —
+> see [docs/workflow-studio.md](docs/workflow-studio.md) for the
+> operator-facing walkthrough and
+> [docs/orchestration-refactor-rollout.md](docs/orchestration-refactor-rollout.md)
+> for the rollback runbook).
 > [docs/agentic-development.md](docs/agentic-development.md) — how
 > AQP's spec-pattern (`AgentSpec` / `BotSpec` / `RLExperimentSpec` /
 > `AnalysisSpec`) maps to the broader agentic-coder vocabulary
@@ -34,6 +40,7 @@ Use this as your first lookup when answering "where does X live?".
 | [aqp/agents/](aqp/agents/) | CrewAI crews + spec-driven runtime + Research/Selection/Trader/Analysis teams | [docs/agents.md](docs/agents.md), [docs/agentic-pipeline.md](docs/agentic-pipeline.md) |
 | [aqp/analysis/](aqp/analysis/) | Hash-locked `AnalysisSpec` + `AnalysisRuntime` + 55-flow catalog (distribution / outlier / imputation / regression / time_series / derivatives / portfolio / factors / microstructure / profiling) | [docs/analysis-framework.md](docs/analysis-framework.md), [docs/analysis-lab.md](docs/analysis-lab.md), [docs/analysis-flows.md](docs/analysis-flows.md) |
 | [aqp/agents/graph/](aqp/agents/graph/) | LangGraph orchestration (state, builder, conditions, Redis checkpointer, decision log) | [docs/agents.md](docs/agents.md) |
+| [aqp/agents/orchestration/](aqp/agents/orchestration/) | Additive orchestration control plane — hash-locked `WorkflowSpec` + `WorkflowRuntime` + metaclass-registered `OrchestrationAdapter` registry + seven concrete adapters (graph / crew / debate / fusion / execution / schedule / studio). Composes the existing `AgentRuntime`, graph builders, DataMCP catalog, and halt safety. | [docs/workflow-studio.md](docs/workflow-studio.md) |
 | [aqp/api/](aqp/api/) | FastAPI app + 30+ route modules under `routes/` | [docs/architecture.md](docs/architecture.md) |
 | [aqp/backtest/](aqp/backtest/) | Backtest engines (vbt-pro primary, event-driven, OSS vectorbt, backtesting.py, ZVT, AAT, fallback cascade); shared `BaseBacktestEngine` ABC + `EngineCapabilities` | [docs/backtest-engines.md](docs/backtest-engines.md) |
 | [aqp/bots/](aqp/bots/) | **Bot entity** — smallest deployable unit (TradingBot / ResearchBot). Aggregates universe + strategy + engine + ML + agents + RAG + metrics; drives backtest / paper / chat / k8s deploy via `BotRuntime` | [docs/bots.md](docs/bots.md) |
@@ -58,7 +65,8 @@ Use this as your first lookup when answering "where does X live?".
 | [aqp/backtest/hft.py](aqp/backtest/hft.py) | hftbacktest LOB backtest engine driving the 5 strategies under `aqp/strategies/hft/` | [docs/hft-backtest.md](docs/hft-backtest.md) |
 | [aqp/persistence/](aqp/persistence/) | SQLAlchemy ORM (15+ model files) + `LedgerWriter` | [docs/erd.md](docs/erd.md), [docs/data-dictionary.md](docs/data-dictionary.md) |
 | [aqp/providers/](aqp/providers/) | Data-feed adapters (yfinance, AV, IBKR, …) | [docs/data-plane.md](docs/data-plane.md) |
-| [aqp/rag/](aqp/rag/) | Hierarchical Redis RAG (Alpha-GPT levels × first/second/third-order corpora) | [docs/rag.md](docs/rag.md) |
+| [aqp/rag/](aqp/rag/) | Hierarchical Redis RAG (Alpha-GPT levels × first/second/third-order corpora) plus pgvector backend (Phase 3 refactor) | [docs/rag.md](docs/rag.md), [docs/pgvector-control-plane.md](docs/pgvector-control-plane.md) |
+| [aqp/codebase/](aqp/codebase/) | Codebase MCP — agent-readable view of the AQP source tree (`codebase.*` tools, `/mcp/codebase/*` router, `aqp-codebase-mcp` stdio binary) | [docs/codebase-mcp.md](docs/codebase-mcp.md) |
 | [aqp/risk/](aqp/risk/) | Position-, daily-, drawdown-loss limits | [docs/paper-trading.md](docs/paper-trading.md) |
 | [aqp/rl/](aqp/rl/) | Metaclass-driven RL stack: core abstractions + envs (FinRL ports) + composable rewards / observations / actions / terminations + multi-framework agents (SB3 / ElegantRL / RLlib / CleanRL / LLM-hybrid) + data pipelines + ensemblers + experiments + Iceberg-backed trajectory store | [docs/rl-framework.md](docs/rl-framework.md), [docs/rl-lab.md](docs/rl-lab.md), [docs/rl-components.md](docs/rl-components.md), [docs/rl-iceberg.md](docs/rl-iceberg.md) |
 | [aqp/rl/core/](aqp/rl/core/) | `RLComponent` metaclass + abstract bases (env, observation, action, reward, termination, policy, agent, data, ensembler, experiment, trajectory store) + JSON schema introspection | [docs/rl-framework.md](docs/rl-framework.md) |
@@ -403,6 +411,31 @@ These hold across the codebase. Any PR that violates one will be sent back.
  Don't `exec` / `eval` raw LLM output anywhere in the pipeline —
  mirror the LEAN translator pattern (AST NodeTransformer, no raw
  evaluation).
+40. **All workflow lifecycle actions go through
+ [`aqp/agents/orchestration/runtime.py::WorkflowRuntime`](aqp/agents/orchestration/runtime.py).**
+ The Phase 5 ``workflow_runs`` ledger, the seven adapter kinds in
+ [`aqp/agents/orchestration/adapters/`](aqp/agents/orchestration/adapters/),
+ the canonical halt-check (`should_halt`), and the
+ ``/workflows/halt`` fan-out all depend on it. Don't construct an
+ :class:`OrchestrationAdapter` and call ``invoke`` yourself from a
+ route, task, or service — go through `WorkflowRuntime` so
+ telemetry, breadcrumbs, kill-switch gating, and the immutable
+ ``workflow_spec_versions`` snapshot all happen in one place. The
+ Celery task wrapper is [`aqp/tasks/orchestration_tasks.py::run_workflow`](aqp/tasks/orchestration_tasks.py);
+ the REST route is [`aqp/api/routes/workflows.py`](aqp/api/routes/workflows.py).
+41. **`workflow_spec_versions` rows are immutable, hash-locked
+ snapshots.** Re-snapshotting via
+ [`aqp/agents/orchestration/registry_specs.py::persist_spec`](aqp/agents/orchestration/registry_specs.py)
+ inserts a new version row automatically when the SHA-256 hash
+ changes — old versions stay for replay. The matching ORM tables
+ are [`WorkflowSpecRow`](aqp/persistence/models_workflows.py) /
+ [`WorkflowSpecVersion`](aqp/persistence/models_workflows.py); the
+ migration is
+ [`alembic/versions/0046_workflow_versioning.py`](alembic/versions/0046_workflow_versioning.py).
+ `WorkflowRun` carries ``experiment_id`` + ``test_id`` FKs (rule
+ 34). New ``OrchestrationAdapter`` subclasses register through the
+ [`OrchestrationAdapterMeta`](aqp/agents/orchestration/base.py)
+ metaclass — never decorate them by hand.
 
 ## Common workflows
 
@@ -515,6 +548,32 @@ docker exec aqp-api alembic upgrade head
 | Add a Lucic-Tse hedging term | Extend [aqp/options/portfolio_mm.py](aqp/options/portfolio_mm.py); use ``jnp.einsum``-only matrix ops, no Python loops. Add a flow under [aqp/analysis/flows/optimal_control.py](aqp/analysis/flows/optimal_control.py). See [docs/portfolio-options-mm.md](docs/portfolio-options-mm.md) |
 | Run an HFT LOB backtest | `POST /backtest/lob` (returns task_id) — body: `{strategy, dataset_preset, latency_profile, queue_model, max_events}`. UI at `/backtest/lob`. Direct: `LobBacktestEngine().run(strategy, dataset_preset=...)`. See [docs/hft-backtest.md](docs/hft-backtest.md) |
 | Trigger a toxicity-aware regime update | Run the [optimal_control.toxicity_regime](aqp/analysis/flows/optimal_control.py) flow on a microstructure slice → the [research.toxicity_regime_adapter](configs/agents/research_toxicity_regime_adapter.yaml) agent reads the result via `data.optimal_control.list_regimes` and writes back to `configs/paper/*.yaml` via `data.strategy_config.update`. See [docs/microstructure-toxicity.md](docs/microstructure-toxicity.md) |
+| Exec a command in a pod / container | `POST /cluster/pods/{ns}/{name}/exec` or `data.kubernetes.exec_in_pod` MCP tool. Goes through `KubernetesAdapter.exec_in_pod` (rule 28) — `InClusterAdapter` uses `kubernetes.stream.stream`, `LocalComposeAdapter` uses the Docker SDK with `Accept-Encoding: identity`. See [aqp/kubernetes/protocol.py](aqp/kubernetes/protocol.py) |
+| Stream pod logs to the frontend | WebSocket `GET /cluster/pods/{ns}/{name}/logs/stream` (canonical `{task_id, stage, message, timestamp, **extras}` frame shape — rule 4). The adapter MUST use `_preload_content=False` + `kubernetes.watch.Watch().stream()` (the documented sparse-log hang). Slice snapshots via `data.kubernetes.stream_pod_logs` MCP tool |
+| Pull a tar archive out of a pod | `GET /cluster/pods/{ns}/{name}/archive?path=…` or `data.kubernetes.get_pod_archive` MCP tool. Docker SDK adapters must disable response compression (the gigabyte-tarball latency bug) |
+| Search the AQP codebase from an agent | `codebase.search` MCP tool (hybrid AST + ripgrep). `codebase.elaborate_finding` routes through `router_complete` (rule 2). See [docs/codebase-mcp.md](docs/codebase-mcp.md) |
+| Add a new CodebaseMCPTool | Subclass [`CodebaseMCPTool`](aqp/codebase/mcp/base.py) under [aqp/codebase/mcp/tools/](aqp/codebase/mcp/tools/); decorate with `@register_codebase_mcp_tool`. The bridge in [aqp/agents/tools/codebase_mcp_bridge.py](aqp/agents/tools/codebase_mcp_bridge.py) auto-installs it into `TOOL_REGISTRY` |
+| Run a portfolio tearsheet | Fast metrics: `POST /analytics/portfolio/metrics`. Rolling Sharpe / vol / underwater: `POST /analytics/portfolio/rolling`. Full QuantStats HTML report (async): `POST /analytics/portfolio/tearsheet` → returns `task_id` → attach via `useLiveStream`. Render flows through `aqp/tasks/analytics_tasks.py` (rule 4). See [docs/analytics-frontend.md](docs/analytics-frontend.md) |
+| Add a pgvector-backed table to the MCP allow-list | Extend `_ALLOWED_TABLES` in [aqp/data/mcp/tools/vector.py](aqp/data/mcp/tools/vector.py). Migration goes under [alembic/versions/](alembic/versions/) using the `Vector(N)` helper from [aqp/persistence/types/vector.py](aqp/persistence/types/vector.py). See [docs/pgvector-control-plane.md](docs/pgvector-control-plane.md) |
+| Check / halt stalled agent runs | Read-only: `GET /agents/health` or `data.agents.health` MCP tool. Mutating: the existing `POST /agents/halt` (topbar kill-switch). The Celery beat task in [aqp/tasks/agent_watchdog_tasks.py](aqp/tasks/agent_watchdog_tasks.py) auto-halts stale rows. See [docs/agent-watchdog.md](docs/agent-watchdog.md) |
+| Use SERA-32B as a code model | Set `AQP_SERA_ENABLED=true` + `AQP_SERA_ENDPOINT=…` (Modal proxy or self-hosted vLLM), then point an `AgentSpec.model.provider = "sera"` or pass `model_alias="sera"` to `codebase.elaborate_finding`. Provider entry at [aqp/llm/providers/catalog.py](aqp/llm/providers/catalog.py). See [docs/sera.md](docs/sera.md) |
+| Exec a command in a pod / container (Phase 1) | `POST /cluster/pods/{ns}/{name}/exec` or `data.kubernetes.exec_in_pod` MCP tool — both route through `KubernetesAdapter.exec_in_pod`. `InClusterAdapter` uses `kubernetes.stream.stream(connect_get_namespaced_pod_exec)`; `LocalComposeAdapter` uses the Docker SDK `container.exec_run` with `Accept-Encoding: identity`. See [docs/kubernetes-adapter.md](docs/kubernetes-adapter.md) |
+| Stream pod logs in real time (Phase 1) | WebSocket `GET /cluster/pods/{ns}/{name}/logs/stream` — frontend hooks through `useLiveStream`. Adapter side uses `kubernetes.watch.Watch().stream(...)` with `_preload_content=False` (fixes the documented sparse-log hang) |
+| Pull / push a tar archive from / to a pod (Phase 1) | `GET /cluster/pods/{ns}/{name}/archive?path=…` returns the raw tar bytes; `POST /cluster/pods/{ns}/{name}/archive` accepts base64-encoded tar. Agents use `data.kubernetes.get_pod_archive` / `data.kubernetes.put_pod_archive` MCP tools |
+| Search the AQP codebase from an agent (Phase 2) | `codebase.search(query, mode='hybrid', k=20)` via the in-process bridge OR `POST /mcp/codebase/tools/codebase.search/invoke` via streamable HTTP. Indexing is AST-aware via `aqp/codebase/mcp/index/ast_index.py`. See [docs/codebase-mcp.md](docs/codebase-mcp.md) |
+| Walk the codebase dependency graph (Phase 2) | `codebase.get_repo_graph(file=…, depth=2)` returns an adjacency slice; backed by `aqp/codebase/mcp/index/graph.py` |
+| Use SERA-32B for code-focused agents (Phase 2.5) | Set `AQP_SERA_ENABLED=true` + `AQP_SERA_ENDPOINT` (Modal or self-hosted vLLM); spec `model.provider = "sera"`. See [docs/sera.md](docs/sera.md) |
+| Run a vector similarity search via pgvector (Phase 3) | `data.vector.search` MCP tool against the three allow-listed tables (`rag_chunks`, `codebase_symbol_embeddings`, `ml_feature_vectors`). Frontend dropdowns use `<EntityPicker kind="vector_indexes" />`. See [docs/pgvector-control-plane.md](docs/pgvector-control-plane.md) |
+| Render a QuantStats portfolio tearsheet (Phase 4) | `POST /analytics/portfolio/tearsheet` enqueues the Celery task; metrics fast path is `POST /analytics/portfolio/metrics`. Frontend route `/analytics/portfolio/:runId`. NOT Streamlit — the Vite app renders interactive views with `recharts` / `lightweight-charts`. See [docs/analytics-frontend.md](docs/analytics-frontend.md) |
+| Check the agent-run watchdog snapshot (Phase 5) | `GET /agents/health` REST route OR `data.agents.health` MCP tool. Stalled rows are auto-halted by `aqp.tasks.agent_watchdog_tasks.scan_for_stalled_agent_runs` on a 60s Celery beat. See [docs/agent-watchdog.md](docs/agent-watchdog.md) |
+| Exec a command inside a pod / container | `POST /cluster/pods/{ns}/{name}/exec` (mutates) or `data.kubernetes.exec_in_pod` MCP tool. Routes through `KubernetesAdapter.exec_in_pod` — `InClusterAdapter` uses `kubernetes.stream.stream`, `LocalComposeAdapter` uses `docker.from_env().containers.get(...).exec_run`. Settings: `AQP_K8S_EXEC_DEFAULT_TIMEOUT`. (Phase 1 refactor) |
+| Stream pod logs to the operator UI | WebSocket `/cluster/pods/{ns}/{name}/logs/stream` or `data.kubernetes.stream_pod_logs` MCP tool. Routes through `KubernetesAdapter.stream_pod_logs` — `InClusterAdapter` enforces `_preload_content=False` + `watch.Watch().stream(...)` (the documented hang fix). Settings: `AQP_K8S_POD_LOG_MAX_SECONDS`, `AQP_K8S_POD_LOG_MAX_LINES`. (Phase 1 refactor) |
+| Pull / push a tarball to a pod | `GET /cluster/pods/{ns}/{name}/archive?path=…` / `POST /cluster/pods/{ns}/{name}/archive` or `data.kubernetes.{get,put}_pod_archive` MCP tools. Docker SDK adapter disables `Accept-Encoding: gzip` (the gigabyte-tarball latency fix). Caller wraps the result in `io.BytesIO` + `tarfile.open`. (Phase 1 refactor) |
+| Search / navigate the AQP source tree from an agent | `codebase.search` / `codebase.get_repo_graph` / `codebase.find_definition` / `codebase.find_references` / `codebase.elaborate_finding` MCP tools from [aqp/codebase/mcp/tools/](aqp/codebase/mcp/tools/), or the same surface over HTTP at `/mcp/codebase/*` and via the `aqp-codebase-mcp` stdio binary. See [docs/codebase-mcp.md](docs/codebase-mcp.md) (Phase 2 refactor) |
+| Use SERA-32B for code-related agent runs | Opt-in. Set `AQP_SERA_ENABLED=true` + `AQP_SERA_ENDPOINT` to point at a Modal-hosted or self-hosted vLLM endpoint, then reference `model.provider = sera` in any `AgentSpec`. See [docs/sera.md](docs/sera.md). |
+| Search a pgvector-backed table | `data.vector.search` MCP tool (free-text or pre-computed embedding). For programmatic access, use the `PgVectorDataset` kind in [aqp/data/datasets/kinds/pgvector.py](aqp/data/datasets/kinds/pgvector.py) or `aqp.rag.pgvector_store.PgVectorStore` directly. (Phase 3 refactor) |
+| Render a portfolio tearsheet | `POST /analytics/portfolio/tearsheet` (enqueues the heavy quantstats render through Celery and returns a `task_id`). For the synchronous metrics fast path, use `POST /analytics/portfolio/metrics`. UI: `/analytics/portfolio/:runId`. See [docs/analytics-frontend.md](docs/analytics-frontend.md) (Phase 4 refactor) |
+| Inspect agent run health / stalled candidates | `GET /agents/health` REST route or `data.agents.health` MCP tool. Watchdog cleanup runs as the `aqp.tasks.agent_watchdog_tasks.scan_for_stalled_agent_runs` Celery beat task (interval = `AQP_AGENT_WATCHDOG_PERIOD_SECONDS`). See [docs/agent-watchdog.md](docs/agent-watchdog.md) (Phase 5 refactor) |
 
 ## Don't list
 
@@ -702,6 +761,10 @@ Things that look like they should work but actively break the system.
 | `AgentSpec` + `AgentRuntime` | Spec-driven agent contract + executor | [aqp/agents/spec.py](aqp/agents/spec.py), [aqp/agents/runtime.py](aqp/agents/runtime.py) |
 | `RedisHybridMemory` | Working / episodic / reflection memory layer | [aqp/llm/memory.py](aqp/llm/memory.py) |
 | `build_full_pipeline_graph` | Alpha-GPT three-stage agentic loop | [aqp/agents/graph/builder.py](aqp/agents/graph/builder.py) |
+| Author / run a workflow | Author a [`WorkflowSpec`](aqp/agents/orchestration/spec.py) (or drop YAML under [configs/workflows/](configs/workflows/)); call [`WorkflowRuntime(spec).run(...)`](aqp/agents/orchestration/runtime.py) or POST `/workflows/{name}/run`. Replay via `/workflows/runs/{run_id}/replay`. UI at `/workflows`. See [docs/workflow-studio.md](docs/workflow-studio.md). |
+| Add an OrchestrationAdapter | Subclass [`OrchestrationAdapter`](aqp/agents/orchestration/base.py) under [aqp/agents/orchestration/adapters/](aqp/agents/orchestration/adapters/); set `adapter_kind` (one of the seven in [`ADAPTER_KINDS`](aqp/agents/orchestration/registry.py)) + `adapter_alias`. The [`OrchestrationAdapterMeta`](aqp/agents/orchestration/base.py) metaclass auto-registers via `@register("alias", kind="orchestration_adapter")`. |
+| Halt every running workflow | `POST /workflows/halt` (mirrors `/agents/halt`, `/paper/stop-all`, `/bots/halt-all`, `/rl/halt-all`, `/quant-agents/halt`). The topbar [`KillSwitch`](frontend/src/components/common/KillSwitch.tsx) component fans out to all six in parallel. |
+| Inspect workflow stall candidates | `data.orchestration.health` MCP tool, or `GET /workflows/runs?status=running`. The [`scan_for_stalled_workflow_runs`](aqp/tasks/agent_watchdog_tasks.py) Celery beat task halts rows past `AQP_AGENT_STALL_THRESHOLD_SECONDS`. |
 | `BotSpec` + `BotRuntime` | Bot blueprint + executor (backtest / paper / chat / deploy) | [aqp/bots/spec.py](aqp/bots/spec.py), [aqp/bots/runtime.py](aqp/bots/runtime.py) |
 | `AlphaBacktestExperiment` | Train + register + deploy + backtest in one experiment, combined ML + trading metrics | [aqp/ml/alpha_backtest_experiment.py](aqp/ml/alpha_backtest_experiment.py), [aqp/ml/alpha_metrics.py](aqp/ml/alpha_metrics.py) |
 | `aqp.ml.flows.run_flow` | Sync workbench flow dispatch (linear / decomposition / forecast / GARCH / ACF / ...) | [aqp/ml/flows.py](aqp/ml/flows.py) |
