@@ -46,6 +46,7 @@ from aqp.api.routes import (
     gdelt,
     health,
     identifiers,
+    ingest_wizard as ingest_wizard_routes,
     lob_backtest as lob_backtest_routes,
     market_data_live,
     memory,
@@ -318,6 +319,7 @@ app.include_router(entity_registry_routes.router)
 app.include_router(dagster_routes.router)
 app.include_router(datahub_routes.router)
 app.include_router(compute_routes.router)
+app.include_router(ingest_wizard_routes.router)
 app.include_router(airbyte.router)
 app.include_router(airbyte_builder_routes.router)
 app.include_router(service_manager_routes.router)
