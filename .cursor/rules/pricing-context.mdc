@@ -1,0 +1,76 @@
+---
+description: PricingContext + RiskMeasure + polymorphic calc dispatch (Phase 4)
+globs: aqp/risk/pricing/**/*.py,aqp/risk/var/**/*.py,aqp/math/arbitrage.py,aqp/analysis/flows/arbitrage.py,aqp/tasks/pricing_tasks.py,tests/risk/pricing/**/*.py,tests/math/**/*.py
+alwaysApply: false
+---
+
+# PricingContext + RiskMeasure dispatch
+
+Scoped rule for Phase 4: the gs-quant-inspired
+:class:`aqp.risk.pricing.PricingContext` async context manager, the
+:class:`RiskMeasure` enum, the polymorphic ``calc`` dispatch, and the
+statistical-arbitrage math primitives in :mod:`aqp.math.arbitrage`.
+
+Narrative walkthroughs:
+[docs/pricing-context.md](mdc:docs/pricing-context.md),
+[docs/risk-measures.md](mdc:docs/risk-measures.md),
+[docs/statistical-arbitrage.md](mdc:docs/statistical-arbitrage.md).
+
+## Hard rules
+
+1. **Pricing flows through a :class:`PricingContext`.** New code that
+   computes any :class:`RiskMeasure` MUST do it inside a
+   ``with PricingContext(...)`` or ``async with PricingContext(...)``
+   block. The dispatch reads the active context from the
+   ContextVar and uses its ``dispatch`` mode (sync / async / celery)
+   to route the work. Don't call vendor SDKs or open Iceberg curves
+   from arbitrary code paths.
+
+2. **``RiskMeasure`` is the single enumeration.** Every measurable
+   quantity uses an entry from :class:`RiskMeasure`. Don't ship
+   ad-hoc string measure names -- add the enum value and a registered
+   handler.
+
+3. **Handlers register via the decorator, never globally mutated.**
+   :func:`register_measure(InstrumentClassName, RiskMeasure)` is the
+   only sanctioned registration path. The dispatch walks ``__mro__``
+   so subclass instruments inherit handlers from their bases.
+
+4. **Async / celery dispatch returns a :class:`PricingFuture`.**
+   Callers MUST not assume sync return; they ``.result()`` (blocking)
+   or ``await .aresult()`` (cooperative). The
+   :class:`CompositeResultFuture` aggregates many futures for
+   portfolio-level fan-outs.
+
+5. **Statistical-arbitrage primitives live in
+   :mod:`aqp.math.arbitrage`.** The platform's Johansen test,
+   rolling z-score, half-life, A/H share basis, and ADR basis all
+   live in that single module. Strategy code imports from there;
+   don't reimplement the math inline.
+
+6. **A-share / ADR basis flows MUST use the
+   :class:`aqp.core.domain.instrument.AmericanDepositaryReceipt`
+   ``conversion_ratio`` field.** Hardcoding the ratio means the
+   strategy breaks the moment the depository bank announces a
+   ratio change. Phase 1 made this field a typed column on the
+   ADR row precisely so basis flows can read it directly.
+
+7. **Iceberg writes from pricing flows go to
+   ``aqp_gold_pricing.*``** (per-measure tables; e.g.
+   ``aqp_gold_pricing.greeks``, ``aqp_gold_pricing.var_history``).
+   Bronze / silver layers are for raw market data only.
+
+8. **Celery pricing tasks must use
+   :func:`aqp.tasks._progress.emit`** (AGENTS rule 4) and write
+   their result rows through
+   :func:`aqp.data.iceberg_catalog.append_arrow` with the right
+   ``medallion_layer`` + :class:`BusinessMetadata` (AGENTS rules 3, 21).
+
+## Cross-references
+
+- AGENTS rule 2 -- LLM calls (used in some pricing handlers for
+  scenario interpretation) STILL go through ``router_complete``.
+- AGENTS rule 4 -- Celery progress events.
+- AGENTS rule 21 -- medallion-aware Iceberg writes.
+- AGENTS rule 22 -- agents read pricing context state via Phase 5
+  DataMCP tools, never directly.

@@ -1,0 +1,87 @@
+---
+description: Unified DomainOrder canonical surface + contingency graphs + WebSocket amendment (Phase 2 / migration 0041)
+globs: aqp/core/domain/orders.py,aqp/trading/execution/**/*.py,aqp/persistence/models_orders.py,aqp/trading/brokerages/**/*.py,tests/trading/execution/**/*.py,alembic/versions/0041_*.py
+alwaysApply: false
+---
+
+# Unified DomainOrder + advanced execution
+
+Scoped rule for the Phase 2 (migration 0041) unification of the legacy
+``OrderRequest`` / ``OrderData`` stack with the rich
+:class:`aqp.core.domain.orders.DomainOrder` hierarchy.
+
+Narrative walkthrough lives in
+[docs/order-types.md](mdc:docs/order-types.md),
+[docs/contingency-graphs.md](mdc:docs/contingency-graphs.md), and
+[docs/execution-paths.md](mdc:docs/execution-paths.md).
+
+## Hard rules
+
+1. **``DomainOrder`` is the canonical wire shape.** New consumers
+   (Phase 2+) MUST accept :class:`DomainOrder` and emit
+   :class:`ExecutionReport`. Legacy ``OrderRequest`` is still
+   accepted but routed through
+   :class:`aqp.trading.execution.legacy_adapter.LegacyDomainOrderAdapter`.
+
+2. **Order subclass selection is by ``order_type``.** Don't reach
+   into the dataclass and override ``order_type`` after construction --
+   pick the right subclass (``MarketOrder``, ``LimitOrder``,
+   ``StopMarketOrder``, ``StopLimitOrder``, ``MarketIfTouchedOrder``,
+   ``LimitIfTouchedOrder``, ``TrailingStopMarketOrder``,
+   ``TrailingStopLimitOrder``) and let it set the type.
+
+3. **Every order MUST pass ``validate_flags()`` before submission.**
+   Brokers + the contingency manager call this at submit time and
+   reject the order if any violation is reported. The exclusive flag
+   pairs are ``reduce_only`` + ``close_position`` and
+   ``post_only`` + ``OrderType.MARKET`` (post_only requires a limit
+   order; market post_only is a contradiction).
+
+4. **WebSocket execution paths are the primary route on supported
+   venues.** :attr:`IDomainBrokerage.supports_websocket_amend` declares
+   the capability. The :class:`AmendmentManager` falls back to cancel
+   + resubmit when the WS amend fails OR when policy disallows the
+   field. Don't bypass the manager -- it owns the atomic request id
+   counter that keeps amendments deduplicated.
+
+5. **Contingency graphs (OCO / OUO / OTO) route through
+   :class:`ContingencyManager`.** When the venue supports atomic OCO
+   submission, the broker still registers the ``OrderList`` with the
+   manager (it's idempotent) so the manager has the audit trail. The
+   manager is the only path that emits cross-order cancel / amend /
+   submit commands; don't hand-roll an "if filled, cancel peer" loop
+   in a strategy module.
+
+6. **Execution reports key on ``(venue, venue_execution_id)``.** This
+   is the deterministic claim mapping algorithm's natural key (Nautilus
+   issues #4012 / #3176). Don't mint client UUIDs for venue-emitted
+   events; the unique index on ``execution_reports`` will reject the
+   row.
+
+7. **The ``orders`` and ``fills`` legacy tables are NOT removed.**
+   Phase 2 runs both stacks side by side. The
+   :class:`LegacyDomainOrderAdapter` keeps them in sync. Phase 3 / 4 /
+   5 don't introduce new readers against ``orders`` / ``fills``; all
+   new code uses ``domain_orders`` / ``execution_reports``.
+
+8. **Brokers MUST set ``venue`` on every emitted
+   :class:`ExecutionReport`.** Without it the reconciliation engine in
+   Phase 3 can't index by ``(venue, venue_execution_id)``. The legacy
+   adapter sets ``venue`` from the broker's ``self.venue`` attribute.
+
+9. **Persistence writes from the execution-report dispatcher are
+   idempotent via the unique index.** Duplicate
+   ``(venue, venue_execution_id)`` rows are silently swallowed
+   (logged at DEBUG). This closes the WS-vs-REST race documented in
+   the report.
+
+## Cross-references
+
+- AGENTS rule 4 -- progress events through ``_progress.emit``;
+  execution reports go through the dispatcher, not Redis directly.
+- AGENTS rule 5 -- order state lives in Postgres; the contingency
+  manager is in-memory but its commands are persisted.
+- AGENTS rule 34 -- every new ``domain_orders`` and
+  ``execution_reports`` row carries ``experiment_id``.
+- Migration 0041 added the three core tables; Phase 3 migration 0042
+  adds the accounts surface that closes the loop.

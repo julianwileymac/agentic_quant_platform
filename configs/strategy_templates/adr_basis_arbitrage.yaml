@@ -1,0 +1,61 @@
+# ADR / underlying basis arbitrage template
+#
+# Trades the basis between a US-listed ADR and its foreign underlying.
+# The Phase 1 InstrumentADR.conversion_ratio is read automatically;
+# the Phase 4 aqp.math.arbitrage.adr_basis primitive computes the
+# implied price.
+
+apiVersion: aqp/v1
+kind: StrategyTemplate
+metadata:
+  name: adr_basis_arbitrage
+  slug: adr-basis-arbitrage
+  resource_type: strategy_template
+  visibility: shared
+  tags:
+    - arbitrage
+    - cross_market
+    - adr
+    - phase_1
+    - phase_4
+  description: |
+    Cross-market arbitrage between US-listed ADRs and their foreign
+    underlyings. The Phase 1 InstrumentADR row provides the
+    conversion_ratio + depository bank metadata. The Phase 4 adr_basis
+    primitive computes the FX-adjusted implied price; trades fire when
+    the basis exceeds the cost-adjusted threshold.
+
+spec:
+  universe:
+    kind: depositary_receipts
+    receipt_kind: adr
+    # Discovery query: every ADR row with an underlying_instrument_id
+    # set. Operators can scope down via the sponsorship_level filter.
+    sponsorship_levels: ["I", "II", "III", "144A"]
+    refresh_frequency: daily
+  alpha:
+    class: ADRBasisAlpha
+    module_path: aqp.strategies.arbitrage.adr_basis
+    kwargs:
+      threshold_bps: 80
+      transaction_cost_bps: 30
+      depository_fee_bps: 5
+      entry_zscore: 2.0
+      exit_zscore: 0.5
+      # Use the conversion_ratio from the InstrumentADR row
+      use_persistence_conversion_ratio: true
+  portfolio:
+    class: DollarNeutralPortfolio
+    module_path: aqp.strategies.portfolio_construction
+  execution:
+    class: MultiVenueExecution
+    module_path: aqp.strategies.execution
+    kwargs:
+      adr_venue: NYSE
+      underlying_venue: AUTO  # read from InstrumentADR.underlying_venue
+      time_in_force: day
+  risk:
+    max_position_pct: 0.03
+    max_gross_exposure: 1.2
+    max_drawdown_pct: 0.08
+    fx_hedge_required: true

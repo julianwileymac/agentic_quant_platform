@@ -1,0 +1,80 @@
+---
+description: Persistent accounts + cash/margin segregation + reconciliation engine (Phase 3 / migrations 0042+0043)
+globs: aqp/persistence/models_accounts.py,aqp/trading/reconciliation/**/*.py,aqp/risk/manager.py,aqp/risk/limits.py,tests/trading/reconciliation/**/*.py,tests/risk/test_pretrade_v2.py,alembic/versions/0042_*.py,alembic/versions/0043_*.py
+alwaysApply: false
+---
+
+# Persistent accounts + reconciliation
+
+Scoped rule for the Phase 3 (migrations 0042 + 0043) promotion of
+in-memory ``AccountData`` to persistent rows, the
+:class:`ReconciliationEngine`, and the upgraded pre-trade risk surface.
+
+Narrative walkthroughs:
+[docs/accounts-balances.md](mdc:docs/accounts-balances.md),
+[docs/reconciliation.md](mdc:docs/reconciliation.md).
+
+## Hard rules
+
+1. **Account state lives in Postgres.** The legacy
+   ``aqp.core.types.AccountData`` snapshot is a *view*; the source of
+   truth is :class:`aqp.persistence.models_accounts.AccountRow` plus
+   :class:`AccountBalanceRow` plus :class:`AccountPositionRow`. New
+   code MUST read from these tables.
+
+2. **Balance kinds are typed.** Adding a new balance kind requires
+   a migration adding the string to ``balance_kind``'s comment + a
+   matching constant in the cache loader. The legacy "single cash
+   float" pattern is forbidden.
+
+3. **Positions key on the composite tuple
+   ``(account_pk, venue, vt_symbol, position_side)``.** The unique
+   constraint on ``account_positions`` enforces this. Don't hand-roll
+   a query that joins by ``vt_symbol`` alone -- it'll silently
+   misroute hedge-mode rows (closes Nautilus #4012).
+
+4. **External claims use the venue's natural key.** When the
+   reconciliation engine bridges a position that lives at the venue
+   but not in the cache, it sets ``meta.venue_position_id`` and
+   ``source='reconciliation'``. Never mint a fresh client UUID for a
+   venue-claimed position (closes Nautilus #3176).
+
+5. **Anomalies are persisted, not silenced.** Every "venue/cache
+   disagree" event writes one
+   :class:`ReconciliationAnomalyRow`. Even when
+   ``allow_overfills=True`` and the engine swallows the error, the
+   row is still written with ``severity='info'`` so an operator can
+   review.
+
+6. **Pre-trade risk checks call ``check_pretrade_v2``.** New code
+   uses :meth:`RiskManager.check_pretrade_v2` and the
+   :class:`PreTradeContext`. The legacy ``check_pretrade`` only does
+   kill-switch + position-pct and is kept for back-compat with the
+   current :class:`PaperTradingSession` only.
+
+7. **Reconciliation runs PER account.** Don't reconcile two accounts
+   in a single pass -- a slow venue would block the rest. The Celery
+   wrapper schedules one task per account.
+
+8. **OmsType (netting vs hedging) is set ONCE per account.** Don't
+   switch mid-session; the venue won't accept the transition. New
+   accounts default to ``netting`` because that matches every
+   equity-style venue (Alpaca, IBKR, Tradier) and most crypto spot.
+
+9. **``allow_cash_positions`` is opt-in (default True).** When
+   False, fiat cash + spot crypto are tracked as margin collateral
+   only, NOT as positions. Strategies that want to net all cash
+   exposure against the underlying go-to-market value of risk
+   should set this to False.
+
+## Cross-references
+
+- AGENTS rule 5 -- cross-task state in Postgres; reconciliation
+  engine never holds state across pass boundaries.
+- AGENTS rule 22 -- agents read accounts via
+  ``data.accounts.*`` MCP tools (added in Phase 5), never ORM.
+- AGENTS rule 26 -- broker credentials still go through
+  :class:`CredentialResolver`.
+- Phase 2 / migration 0041 -- ``execution_reports`` is the input
+  audit trail the engine reads. Don't try to reconcile against the
+  legacy ``orders`` / ``fills`` tables.

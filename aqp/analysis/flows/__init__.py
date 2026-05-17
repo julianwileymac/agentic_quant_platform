@@ -35,6 +35,8 @@ for _name in (
     "portfolio",
     "factors",
     "microstructure",
+    "futures_curves",  # Phase 1: continuous futures-curve stitching
+    "arbitrage",       # Phase 4: Johansen / pair signal / A-H share / ADR basis
 ):
     _safe_import(_name)
 

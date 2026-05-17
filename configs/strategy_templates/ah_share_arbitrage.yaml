@@ -1,0 +1,61 @@
+# A-share / H-share cross-market arbitrage template
+#
+# Uses the Phase 4 ah_share_basis primitive to monitor the basis
+# between mainland A-shares and Hong Kong H-shares for dual-listed
+# Chinese issuers.
+
+apiVersion: aqp/v1
+kind: StrategyTemplate
+metadata:
+  name: ah_share_arbitrage
+  slug: ah-share-arbitrage
+  resource_type: strategy_template
+  visibility: shared
+  tags:
+    - arbitrage
+    - cross_market
+    - china
+    - ah_share
+    - phase_4
+  description: |
+    Cross-market arbitrage between mainland A-shares (CNY) and Hong
+    Kong H-shares (HKD) of the same Chinese issuer. Reads the basis
+    via aqp.math.arbitrage.ah_share_basis with FX-adjusted implied
+    pricing. Entry when the basis exceeds the configurable threshold;
+    exit at mean-reversion or a fixed-time stop.
+
+spec:
+  universe:
+    kind: ah_share_pairs
+    issuers:
+      # Common A/H share dual-listings
+      - { a_symbol: "601398.SS", h_symbol: "1398.HK", name: "ICBC" }
+      - { a_symbol: "601628.SS", h_symbol: "2628.HK", name: "China Life" }
+      - { a_symbol: "601318.SS", h_symbol: "2318.HK", name: "Ping An" }
+      - { a_symbol: "601857.SS", h_symbol: "857.HK", name: "PetroChina" }
+      - { a_symbol: "601988.SS", h_symbol: "3988.HK", name: "Bank of China" }
+  alpha:
+    class: AHShareBasisAlpha
+    module_path: aqp.strategies.arbitrage.ah_share
+    kwargs:
+      threshold_bps: 100
+      transaction_cost_bps: 25
+      fx_source: bloomberg
+      entry_zscore: 2.0
+      exit_zscore: 0.5
+  portfolio:
+    class: DollarNeutralPortfolio
+    module_path: aqp.strategies.portfolio_construction
+  execution:
+    class: MultiVenueExecution
+    module_path: aqp.strategies.execution
+    kwargs:
+      venue_a: SSE
+      venue_b: HKEX
+      time_in_force: day
+  risk:
+    max_position_pct: 0.04
+    max_gross_exposure: 1.5
+    max_drawdown_pct: 0.08
+    # FX risk overlay
+    fx_hedge_required: true

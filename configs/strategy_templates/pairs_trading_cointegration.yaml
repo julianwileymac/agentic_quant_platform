@@ -1,0 +1,55 @@
+# Pairs-trading cointegration template
+#
+# Ships as a polymorphic Resource row (AGENTS rule 35); the LEAN ingester
+# imports it on first boot. Strategies cloned from this template carry
+# a resource_relations row with relation='translated_from' pointing back
+# here so the ownership graph can audit provenance.
+
+apiVersion: aqp/v1
+kind: StrategyTemplate
+metadata:
+  name: pairs_trading_cointegration
+  slug: pairs-trading-cointegration
+  resource_type: strategy_template
+  visibility: shared
+  tags:
+    - pair_trading
+    - cointegration
+    - mean_reversion
+    - phase_4
+  description: |
+    Engle-Granger pair-trading template. Selects two cointegrated assets
+    from the configured universe, computes the rolling z-score of their
+    OLS-hedged spread, and trades the spread mean-reverting toward zero
+    with explicit entry / exit thresholds and a half-life filter.
+
+spec:
+  universe:
+    kind: pair_screen
+    universe_columns: ["close"]
+    cointegration_test: engle_granger
+    significance_level: 0.05
+    refresh_frequency: weekly
+  alpha:
+    class: PairsTradingAlphaModel
+    module_path: aqp.strategies.pairs_alpha
+    kwargs:
+      hedge_window: 60
+      zscore_window: 60
+      entry_threshold: 2.0
+      exit_threshold: 0.5
+      half_life_min: 5.0
+      half_life_max: 60.0
+  portfolio:
+    class: EqualWeightPortfolio
+    module_path: aqp.strategies.portfolio_construction
+  execution:
+    class: LimitOrderExecution
+    module_path: aqp.strategies.execution
+    kwargs:
+      post_only: true
+      time_in_force: day
+  risk:
+    max_position_pct: 0.05
+    max_drawdown_pct: 0.08
+    max_concentration_pct: 0.40

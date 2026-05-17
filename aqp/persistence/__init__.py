@@ -105,6 +105,7 @@ from aqp.persistence.models_fundamentals import (
     RevenueBreakdown,
 )
 from aqp.persistence.models_instruments import (
+    InstrumentADR,
     InstrumentBetting,
     InstrumentBond,
     InstrumentCfd,
@@ -114,8 +115,13 @@ from aqp.persistence.models_instruments import (
     InstrumentEquity,
     InstrumentFuture,
     InstrumentFxPair,
+    InstrumentGDR,
     InstrumentIndex,
+    InstrumentMeasure,
+    InstrumentMutualFund,
     InstrumentOption,
+    InstrumentOTCDerivative,
+    InstrumentREIT,
     InstrumentSynthetic,
     InstrumentTokenizedAsset,
 )
@@ -138,6 +144,11 @@ from aqp.persistence.models_memory import (
     MemoryReflection,
 )
 from aqp.persistence.models_news import NewsItemEntity, NewsItemRow, NewsSentiment
+from aqp.persistence.models_orders import (
+    DomainOrderRow,
+    ExecutionReportRow,
+    OrderListRow,
+)
 from aqp.persistence.models_ownership import (
     Form13FHoldingRow,
     FundHolding,
@@ -270,6 +281,7 @@ __all__ = [
     "SplitPlan",
     "Strategy",
     # Polymorphic instruments
+    "InstrumentADR",
     "InstrumentBetting",
     "InstrumentBond",
     "InstrumentCfd",
@@ -279,10 +291,19 @@ __all__ = [
     "InstrumentEquity",
     "InstrumentFuture",
     "InstrumentFxPair",
+    "InstrumentGDR",
     "InstrumentIndex",
+    "InstrumentMeasure",
+    "InstrumentMutualFund",
     "InstrumentOption",
+    "InstrumentOTCDerivative",
+    "InstrumentREIT",
     "InstrumentSynthetic",
     "InstrumentTokenizedAsset",
+    # Phase 2: unified domain orders + contingency graphs + execution reports
+    "DomainOrderRow",
+    "ExecutionReportRow",
+    "OrderListRow",
     # Entity graph
     "EntityRelationship",
     "ExecutiveCompensation",

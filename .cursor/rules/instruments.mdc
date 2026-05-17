@@ -1,0 +1,89 @@
+---
+description: Extended instrument taxonomy + temporal identifier resolver (Phase 1 / migration 0039+0040)
+globs: aqp/persistence/models_instruments.py,aqp/core/domain/instrument.py,aqp/core/domain/enums.py,aqp/core/domain/options.py,aqp/data/identity/**/*.py,aqp/data/futures/**/*.py,aqp/data/mcp/tools/identity.py,aqp/data/mcp/tools/futures.py,aqp/data/mcp/tools/instruments.py,tests/persistence/test_extended_instruments.py,tests/data/identity/**/*.py,tests/data/futures/**/*.py,tests/core/test_option_chain_payload.py,alembic/versions/0039_*.py,alembic/versions/0040_*.py
+alwaysApply: false
+---
+
+# Extended instrument taxonomy & temporal identifiers
+
+Scoped rule for the Phase 1 (migrations 0039 + 0040) expansion of the
+instrument polymorphic root, the temporal identifier resolver, and the
+continuous futures-curve constructor.
+
+Narrative walkthrough lives in
+[docs/instrument-taxonomy.md](mdc:docs/instrument-taxonomy.md),
+[docs/temporal-identifiers.md](mdc:docs/temporal-identifiers.md), and
+[docs/futures-curves.md](mdc:docs/futures-curves.md).
+
+## Hard rules
+
+1. **Every new instrument subclass MUST set a unique
+   ``polymorphic_identity``.** The string MUST match an
+   :class:`aqp.core.domain.enums.InstrumentClass` value. Add the enum
+   value first, then the SQL table, then the in-memory domain class.
+   Existing identities: ``spot``, ``etf``, ``index``, ``bond``,
+   ``future``, ``option``, ``fx_pair``, ``crypto_token``, ``cfd``,
+   ``spot_commodity``, ``synthetic``, ``betting``, ``nft``, ``reit``,
+   ``mutual_fund``, ``otc_derivative``, ``adr``, ``gdr``.
+
+2. **In-memory domain classes self-register via
+   ``@register_instrument_class(asset_class, instrument_class)``.**
+   Decorate the dataclass; don't call the registry manually. The
+   ``(asset_class, instrument_class)`` pair MUST be unique;
+   double-registration raises at import time.
+
+3. **ADR / GDR rows carry a FK back to the underlying.** Both
+   :class:`aqp.persistence.models_instruments.InstrumentADR` and
+   :class:`InstrumentGDR` have ``underlying_instrument_id`` pointing at
+   ``instruments.id``. Never re-purpose ``InstrumentEquity.is_adr`` as
+   the primary discriminator -- use the dedicated subclass row. The
+   ``is_adr`` flag on InstrumentEquity is back-compat only.
+
+4. **Identifier resolution flows through
+   :class:`aqp.data.identity.IdentifierResolver`.** Direct queries
+   against ``identifier_links`` are forbidden in agent / pipeline /
+   strategy code. New entity kinds extend the resolver, not the
+   callers. The legacy ``Instrument.identifiers`` JSON blob is kept
+   for backward compatibility but is no longer authoritative; migration
+   0040 backfills it into ``identifier_links``.
+
+5. **Agent reads of measure / depositary-receipt / REIT metadata go
+   through the DataMCP tools.** Specifically
+   ``data.instruments.measures``,
+   ``data.instruments.depositary_receipts``,
+   ``data.instruments.reit_portfolio``. Don't ``from aqp.persistence
+   import InstrumentREIT`` inside agent / tool code (AGENTS rule 22).
+
+6. **Option chain payloads transit via
+   :class:`aqp.core.domain.options.OptionChainPayload`.** Both columnar
+   and record forms are accepted on input; the serializer emits record
+   form. Don't ship raw columnar dicts across an MCP / REST boundary --
+   the OpenBB-flagged failure mode (mis-aligned column lengths silently
+   dropping rows) only triggers when the boundary skips this validator.
+
+7. **Continuous futures curves are stitched through
+   :mod:`aqp.data.futures.curve`.** Three roll strategies are provided
+   (volume, date, open_interest); three adjustment modes (none,
+   back_adjusted, ratio). New roll rules subclass
+   :class:`RollRule`; don't hand-roll a one-off stitching loop in the
+   strategy module.
+
+8. **New ``instrument_measures`` rows MUST carry a valid
+   ``source_dataset_id`` whenever the measure lives in a registered
+   dataset.** NULL is reserved for synthetic / computed measures
+   (e.g. an MA-crossover signal). The composite unique key is
+   ``(instrument_id, measure_type, frequency, dataset_field)`` -- two
+   measures cannot occupy the same address.
+
+## Cross-references
+
+- AGENTS rule 1 (``Symbol.parse``) -- the legacy
+  :class:`aqp.core.types.Symbol` still routes `vt_symbol` parsing.
+- AGENTS rule 3 -- futures-curve Iceberg writes go through
+  :func:`aqp.data.iceberg_catalog.append_arrow` with
+  ``medallion_layer="gold"``.
+- AGENTS rule 21 -- Gold-tier futures namespaces:
+  ``aqp_gold_futures.continuous_curves``.
+- AGENTS rule 22 -- Agent access via DataMCP tools, never ORM.
+- AGENTS rule 33 -- ADR-underlying linkage emits an ownership-graph
+  edge so multi-hop joins stay correct.

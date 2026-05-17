@@ -583,3 +583,206 @@ class Swap(Instrument):
 
 
 register_instrument_class(AssetClass.RATES, InstrumentClass.SWAP)(Swap)
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 (migration 0039): extended taxonomy — REITs, mutual funds,
+# OTC derivatives, ADRs, GDRs.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+@register_instrument_class(AssetClass.EQUITY, InstrumentClass.REIT)
+class REIT(Instrument):
+    """Real-estate investment trust.
+
+    Trades like an equity but carries REIT-specific fundamentals
+    (funds-from-operations, distribution yield, payout ratio, property
+    portfolio). The ``property_portfolio`` is intentionally a list of
+    dictionaries rather than a separate Property entity — agents need
+    "what's in this REIT?" not "tell me about each individual
+    property", so the lightweight list keeps the row narrow.
+    """
+
+    issuer_id: str | None = None
+    cik: str | None = None
+    isin: str | None = None
+    cusip: str | None = None
+    figi: str | None = None
+    lei: str | None = None
+    reit_class: str | None = None
+    # equity | mortgage | hybrid | public_non_listed | private
+    property_sector: str | None = None
+    # residential | commercial | industrial | healthcare | data_center |
+    # retail | hospitality | diversified | infrastructure | timber
+    property_portfolio: list[dict[str, Any]] = field(default_factory=list)
+    distribution_yield: Decimal | None = None
+    ffo_per_share: Decimal | None = None
+    nav_per_share: Decimal | None = None
+    payout_ratio: Decimal | None = None
+    debt_to_equity: Decimal | None = None
+    listing_date: dateType | None = None
+    country: str | None = None
+
+    @classmethod
+    def product(cls) -> Product | None:
+        return Product.REIT
+
+
+@dataclass
+@register_instrument_class(AssetClass.EQUITY, InstrumentClass.MUTUAL_FUND)
+class MutualFund(Instrument):
+    """Open-ended / closed-end mutual fund.
+
+    Distinct from :class:`ETF` because the trading mechanism differs
+    (end-of-day NAV pricing for open-end funds vs continuous
+    creation-redemption for ETFs) and the relevant fundamentals carry
+    investment-grade share class detail (``share_class`` A/B/C/I/R/Z,
+    minimum investment, distribution frequency).
+    """
+
+    issuer_fund_id: str | None = None
+    fund_family: str | None = None
+    share_class: str | None = None
+    inception_date: dateType | None = None
+    aum: Decimal | None = None
+    expense_ratio: Decimal | None = None
+    management_fee: Decimal | None = None
+    nav_currency: str | None = None
+    minimum_investment: Decimal | None = None
+    minimum_subsequent_investment: Decimal | None = None
+    fund_kind: str | None = None
+    # open_end | closed_end | money_market | target_date | ucits | sicav
+    investment_strategy: str | None = None
+    benchmark_index: str | None = None
+    is_index_fund: bool = False
+    is_actively_managed: bool = True
+    distribution_frequency: str | None = None
+    # daily | monthly | quarterly | semi_annual | annual
+    country: str | None = None
+
+    @classmethod
+    def product(cls) -> Product | None:
+        return Product.FUND
+
+
+@dataclass
+@register_instrument_class(AssetClass.MIXED, InstrumentClass.OTC_DERIVATIVE)
+class OTCDerivative(Instrument):
+    """Over-the-counter derivative.
+
+    Spans swaps, swaptions, caps/floors, exotic forwards, variance
+    swaps, CDS, total return swaps, basket swaps. The
+    ``instrument_kind`` discriminator carries the specific shape, with
+    ``legs`` containing the leg structure (pay/receive, leg_type,
+    currency, rate_index) so a single class supports the entire OTC
+    universe without a tree of sub-subclasses.
+
+    Risk routing reads ``counterparty_lei`` + ``isda_master_agreement_id``
+    so collateral posting and trade repository reconciliation work the
+    moment a row lands in the system.
+    """
+
+    instrument_kind: str = "swap"
+    # swap | swaption | cap_floor | forward | exotic | variance_swap |
+    # credit_default_swap | total_return_swap | basket_swap
+    counterparty_lei: str | None = None
+    counterparty_name: str | None = None
+    isda_master_agreement_id: str | None = None
+    isda_schedule_version: str | None = None
+    notional_currency: str | None = None
+    notional_amount: Decimal | None = None
+    settlement_currency: str | None = None
+    trade_date: dateType | None = None
+    effective_date: dateType | None = None
+    termination_date: dateType | None = None
+    payment_frequency: str | None = None
+    collateral_type: str | None = None
+    cleared: bool = False
+    ccp_name: str | None = None
+    legs: list[dict[str, Any]] = field(default_factory=list)
+    payoff_formula: str | None = None
+
+    @classmethod
+    def product(cls) -> Product | None:
+        return Product.OTC
+
+
+@dataclass
+@register_instrument_class(AssetClass.EQUITY, InstrumentClass.ADR)
+class AmericanDepositaryReceipt(Instrument):
+    """American Depositary Receipt.
+
+    Distinct from a regular :class:`Equity` with ``is_adr=True`` because
+    the ADR carries an explicit FK back to the foreign equity row and a
+    ``conversion_ratio`` that the cross-market basis algorithm reads
+    directly. Sponsorship-level governance (I/II/III/144A/Reg_S) lives
+    here so the risk engine can flag unsponsored ADRs (weaker holder
+    protections) without re-reading entity metadata.
+
+    Cross-market arbitrage: an agent computing the basis between the
+    NYSE-listed BABA ADR and its HKEX-listed common reads
+    ``adr.conversion_ratio`` and walks ``adr.underlying_instrument_id``
+    to fetch the local price. The basis algorithm in Phase 4 uses this
+    directly.
+    """
+
+    underlying_instrument_id: str | None = None
+    underlying_ticker: str | None = None
+    underlying_venue: str | None = None
+    underlying_isin: str | None = None
+    conversion_ratio: Decimal = field(default_factory=lambda: Decimal("1"))
+    depository_bank_name: str | None = None
+    depository_bank_lei: str | None = None
+    sponsorship_level: str | None = None
+    # I | II | III | 144A | Reg_S | unsponsored
+    listing_venue: str | None = None
+    custodian_country: str | None = None
+    home_country: str | None = None
+    annual_dr_fee: Decimal | None = None
+    created_date: dateType | None = None
+    issuer_cik: str | None = None
+    isin: str | None = None
+    cusip: str | None = None
+    figi: str | None = None
+
+    @classmethod
+    def product(cls) -> Product | None:
+        return Product.ADR
+
+
+@dataclass
+@register_instrument_class(AssetClass.EQUITY, InstrumentClass.GDR)
+class GlobalDepositaryReceipt(Instrument):
+    """Global Depositary Receipt.
+
+    Structurally identical to :class:`AmericanDepositaryReceipt` but
+    listed offshore (LSE, LuxSE, Frankfurt, SIX, Singapore, Dubai) and
+    operating under a different regulatory regime (Reg_S / Rule_144A /
+    Reg_S_144A / full_listing). Kept as a separate class so
+    cross-market arbitrage strategies can discriminate between
+    SEC-registered ADRs and offshore GDRs at the type level.
+    """
+
+    underlying_instrument_id: str | None = None
+    underlying_ticker: str | None = None
+    underlying_venue: str | None = None
+    underlying_isin: str | None = None
+    conversion_ratio: Decimal = field(default_factory=lambda: Decimal("1"))
+    depository_bank_name: str | None = None
+    depository_bank_lei: str | None = None
+    listing_venue: str | None = None
+    regulatory_regime: str | None = None
+    # Reg_S | Rule_144A | Reg_S_144A | full_listing
+    custodian_country: str | None = None
+    home_country: str | None = None
+    annual_dr_fee: Decimal | None = None
+    created_date: dateType | None = None
+    issuer_cik: str | None = None
+    isin: str | None = None
+    cusip: str | None = None
+    figi: str | None = None
+
+    @classmethod
+    def product(cls) -> Product | None:
+        return Product.GDR

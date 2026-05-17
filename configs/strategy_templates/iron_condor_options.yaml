@@ -1,0 +1,67 @@
+# Iron-condor options template
+#
+# Four-leg options strategy: short call spread + short put spread,
+# wrapped in an OCO contingency that exits the whole structure when
+# either wing fills or breaches.
+
+apiVersion: aqp/v1
+kind: StrategyTemplate
+metadata:
+  name: iron_condor_options
+  slug: iron-condor-options
+  resource_type: strategy_template
+  visibility: shared
+  tags:
+    - options
+    - iron_condor
+    - vol_selling
+    - oco
+    - phase_2
+    - phase_5
+  description: |
+    Classic four-leg iron condor (short OTM call, long farther-OTM call,
+    short OTM put, long farther-OTM put) submitted as a single
+    contingency-graph (OCO) so the whole structure exits when either
+    wing breaches. Uses the Phase 2 OrderList primitives.
+
+spec:
+  universe:
+    kind: options_chain
+    underlyings: ["SPY", "QQQ", "IWM"]
+    refresh_frequency: daily
+  alpha:
+    class: VRPStraddleAlpha
+    module_path: aqp.strategies.options.vrp_straddle
+    kwargs:
+      iv_rank_min: 50
+      target_short_delta: 0.16
+      target_long_delta: 0.05
+      dte_min: 30
+      dte_max: 60
+  legs:
+    - kind: short_call
+      strike_selection: delta_target
+      delta: 0.16
+    - kind: long_call
+      strike_selection: delta_target
+      delta: 0.05
+    - kind: short_put
+      strike_selection: delta_target
+      delta: -0.16
+    - kind: long_put
+      strike_selection: delta_target
+      delta: -0.05
+  contingency:
+    type: oco
+    exit_trigger:
+      max_loss_pct_of_credit: 200
+      profit_target_pct_of_credit: 50
+  execution:
+    class: LimitOrderExecution
+    module_path: aqp.strategies.execution
+    kwargs:
+      time_in_force: day
+      post_only: false
+  risk:
+    max_position_pct: 0.03
+    max_drawdown_pct: 0.10

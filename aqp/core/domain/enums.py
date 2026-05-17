@@ -75,6 +75,15 @@ class InstrumentClass(StrEnum):
     NFT = "nft"
     SYNTHETIC = "synthetic"
     SPREAD = "spread"
+    # Phase 1 (migration 0039) — first-class real-estate, fund, OTC
+    # derivative, and depositary-receipt shapes. ADR / GDR carry a FK
+    # back to the foreign underlying so cross-market arbitrage can
+    # read the conversion ratio directly without an extra join.
+    REIT = "reit"
+    MUTUAL_FUND = "mutual_fund"
+    OTC_DERIVATIVE = "otc_derivative"
+    ADR = "adr"
+    GDR = "gdr"
 
 
 class Product(StrEnum):
@@ -94,6 +103,11 @@ class Product(StrEnum):
     SWAP = "SWAP"
     CRYPTO = "CRYPTO"
     BETTING = "BETTING"
+    # Phase 1 — vnpy parity for new shapes
+    REIT = "REIT"
+    OTC = "OTC"
+    ADR = "ADR"
+    GDR = "GDR"
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,51 @@
+# Calendar spread futures template
+#
+# Trades the basis between front-month and back-month futures using
+# the Phase 1 continuous-curve constructor's RollEvent audit log.
+
+apiVersion: aqp/v1
+kind: StrategyTemplate
+metadata:
+  name: calendar_spread_futures
+  slug: calendar-spread-futures
+  resource_type: strategy_template
+  visibility: shared
+  tags:
+    - futures
+    - calendar_spread
+    - basis_trading
+    - phase_1
+  description: |
+    Calendar-spread futures strategy. Reads the FuturesCurve from the
+    Phase 1 continuous-curve constructor to compute the basis between
+    the front-month and back-month contracts of a single underlying.
+    Entry at >2-sigma divergence from rolling mean; exit at half-life-
+    bounded mean reversion.
+
+spec:
+  universe:
+    kind: futures_curve
+    root_symbols: ["ES", "NQ", "ZN", "CL", "GC"]
+    refresh_frequency: daily
+  alpha:
+    class: CalendarSpreadAlpha
+    module_path: aqp.strategies.calendar_spread
+    kwargs:
+      basis_window: 60
+      entry_zscore_threshold: 2.0
+      exit_zscore_threshold: 0.5
+      front_month_weight: 1.0
+      back_month_weight: -1.0
+  portfolio:
+    class: NotionalEqualizedPortfolio
+    module_path: aqp.strategies.portfolio_construction
+  execution:
+    class: MultiLegOrderExecution
+    module_path: aqp.strategies.execution
+    kwargs:
+      time_in_force: day
+      atomic_submission: true
+  risk:
+    max_position_pct: 0.05
+    max_gross_exposure: 1.5
+    max_drawdown_pct: 0.10
