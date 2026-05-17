@@ -36,6 +36,17 @@ RL_KIND_DATA = "rl_data"
 RL_KIND_ENSEMBLER = "rl_ensembler"
 RL_KIND_EXPERIMENT = "rl_experiment"
 RL_KIND_TRAJECTORY_STORE = "rl_trajectory_store"
+# Phase 2 (hybrid agentic-RL rollout): the advantage estimator is a
+# first-class RL component now. AQP's native ``ReinforcePlusPlusAdvantage``
+# (NeMo-RL port) + ``GRPOAdvantage`` (group-relative) register via this
+# kind. Surfaces in the RL Lab UI palette + ``GET /rl/components/{kind}``
+# alongside envs / rewards / policies.
+RL_KIND_ADVANTAGE = "rl_advantage_estimator"
+# Phase 3 (hybrid agentic-RL rollout): policy backbones (Transformer,
+# RNN, Autoencoder, PatchTST) register via this kind so the spec's
+# ``agent.policy_backbone`` field can pick one by alias and the
+# SB3/CleanRL adapters can inject it as a custom features-extractor.
+RL_KIND_POLICY_BACKBONE = "rl_policy_backbone"
 
 RL_KINDS: tuple[str, ...] = (
     RL_KIND_ENV,
@@ -49,6 +60,8 @@ RL_KINDS: tuple[str, ...] = (
     RL_KIND_ENSEMBLER,
     RL_KIND_EXPERIMENT,
     RL_KIND_TRAJECTORY_STORE,
+    RL_KIND_ADVANTAGE,
+    RL_KIND_POLICY_BACKBONE,
 )
 
 
@@ -165,6 +178,7 @@ def list_rl_components(kind: str | None = None) -> dict[str, type]:
 __all__ = [
     "RL_KINDS",
     "RL_KIND_ACTION",
+    "RL_KIND_ADVANTAGE",
     "RL_KIND_AGENT",
     "RL_KIND_DATA",
     "RL_KIND_ENSEMBLER",
@@ -172,6 +186,7 @@ __all__ = [
     "RL_KIND_EXPERIMENT",
     "RL_KIND_OBSERVATION",
     "RL_KIND_POLICY",
+    "RL_KIND_POLICY_BACKBONE",
     "RL_KIND_REWARD",
     "RL_KIND_TERMINATION",
     "RL_KIND_TRAJECTORY_STORE",

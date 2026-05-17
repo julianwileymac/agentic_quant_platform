@@ -1,0 +1,99 @@
+---
+description: Hybrid agentic-RL + backtest contract (WeightCentricPipeline, RLBacktestEnv, ReinforcePlusPlus, StopProperly)
+globs:
+  - aqp/rl/portfolio/**/*.py
+  - aqp/rl/envs/rl_backtest_env.py
+  - aqp/rl/bridges/**/*.py
+  - aqp/rl/advantage/**/*.py
+  - aqp/rl/rewards/stop_properly.py
+  - aqp/rl/execution/**/*.py
+  - tests/rl/portfolio/**/*.py
+  - tests/rl/envs/test_rl_backtest_env.py
+  - tests/rl/advantage/**/*.py
+alwaysApply: false
+---
+
+# Hybrid agentic-RL + backtest
+
+Phase 1-2 + Phase 5 of the agentic-RL rollout. Hard rules **36 + 38**
+in [AGENTS.md](mdc:AGENTS.md) are the source of truth. The
+companion docs are [docs/agentic-rl.md](mdc:docs/agentic-rl.md) and
+[docs/weight-centric-pipeline.md](mdc:docs/weight-centric-pipeline.md).
+
+## What this scope covers
+
+- The FinRL-X **weight-centric pipeline**
+  (`f_S -> f_A -> f_T -> f_R`) under
+  [`aqp/rl/portfolio/`](mdc:aqp/rl/portfolio).
+- The **RL ↔ backtest bridge**:
+  [`RLBacktestEnv`](mdc:aqp/rl/envs/rl_backtest_env.py) +
+  [`RLAgentBridge`](mdc:aqp/rl/bridges/agent_bridge.py) +
+  [`context['rl_agent']`](mdc:aqp/backtest/engine.py) injected by
+  every engine flipping
+  [`EngineCapabilities.supports_rl_injection=True`](mdc:aqp/backtest/capabilities.py).
+- The native **advantage estimators**
+  ([`ReinforcePlusPlusAdvantage`](mdc:aqp/rl/advantage/reinforce_plus_plus.py),
+  [`GRPOAdvantage`](mdc:aqp/rl/advantage/grpo.py),
+  [`GAEAdvantage`](mdc:aqp/rl/advantage/gae.py)) — ported from
+  NVIDIA-NeMo/RL without the heavy dep.
+- The **stop-properly reward wrapper**
+  ([`StopProperlyWrapper`](mdc:aqp/rl/rewards/stop_properly.py)) +
+  the truncation-flagging termination conditions
+  ([`DrawdownTermination`](mdc:aqp/rl/terminations/drawdown.py),
+  [`MarginCallTermination`](mdc:aqp/rl/terminations/margin_call.py),
+  [`RiskBreachTermination`](mdc:aqp/rl/terminations/risk_breach.py)).
+- The **live-broker bridge**
+  ([`WeightToOrders`](mdc:aqp/rl/execution/weight_to_orders.py))
+  with kill-switch gating.
+
+## Hard rules (consolidated)
+
+1. **One canonical weight vector.** The output of `f_R` is
+   immutable target weights. The same vector flows to the offline
+   backtest (via `context['rl_agent']`) AND to the live broker
+   (via [`apply_target_weights`](mdc:aqp/rl/execution/weight_to_orders.py)).
+2. **`f_R` re-uses production constraints.** The risk overlay
+   ([`PositionCapRiskOverlay`](mdc:aqp/rl/portfolio/risk_overlay.py),
+   [`GrossExposureRiskOverlay`](mdc:aqp/rl/portfolio/risk_overlay.py))
+   borrows from [`RiskLimits`](mdc:aqp/risk/limits.py) — the same
+   class the paper-trading session enforces — so offline + live
+   constraints stay in lock-step.
+3. **Truncation = "stop properly" trigger.** Termination conditions
+   with `truncates_episode=True` set `info['truncated']`, which
+   [`StopProperlyWrapper`](mdc:aqp/rl/rewards/stop_properly.py)
+   scales by `coef ∈ [0, 1]`. `coef=0` = draconian zeroing;
+   `coef=1` = no penalty (wrapper still emits telemetry).
+4. **Advantage estimators are first-class components.**
+   `rl_kind='rl_advantage_estimator'` registers them via the
+   [`RLComponent`](mdc:aqp/rl/core/base.py) metaclass; the
+   [`RLExperimentSpec.training.advantage`](mdc:aqp/rl/spec.py) field
+   picks one by alias.
+5. **Live execution respects the kill switch.**
+   [`WeightToOrders`](mdc:aqp/rl/execution/weight_to_orders.py)
+   gates on
+   [`aqp.risk.kill_switch.is_engaged()`](mdc:aqp/risk/kill_switch.py)
+   before every submit batch. Engagement aborts the entire
+   weight-application call.
+
+## Adding a new engine to the bridge
+
+1. Set `EngineCapabilities.supports_rl_injection=True` on the engine
+   class.
+2. Inject `context['rl_agent'] = self._get_rl_agent()` into the
+   per-bar context dict.
+3. Implement `attach_rl_agent(self, rl_agent)` so
+   [`RLBacktestEnv`](mdc:aqp/rl/envs/rl_backtest_env.py) can bind a
+   bridge before invoking `run()`.
+
+## Don't
+
+- Don't compute advantages inside an env body — that breaks the
+  abstraction. Compute the reward; let the registered
+  `rl_advantage_estimator` handle baselining + normalisation.
+- Don't bypass `f_R` to "save time". The overlay is the single
+  line of defence between an RL policy and a broker.
+- Don't write a weight directly into a broker submit call without
+  going through `WeightToOrders` — kill-switch gating + position
+  delta math live there.
+
+Consider these rules if they affect your changes.

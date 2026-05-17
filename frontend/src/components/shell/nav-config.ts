@@ -390,6 +390,8 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "agents-selection", label: "Selection Agent", href: "/agents/selection", icon: AppWindow, group: "Agents" },
   { key: "agents-trader", label: "Trader Agent", href: "/agents/trader", icon: Zap, group: "Agents" },
   { key: "agents-analysis", label: "Analysis Agents", href: "/agents/analysis", icon: BarChart3, group: "Agents" },
+  // Hybrid agentic-RL Phase 4 — Alpha Researcher + Strategy Executor.
+  { key: "agents-quant", label: "Quant Agents", href: "/agents/quant", icon: FlaskConical, group: "Agents" },
 
   { key: "rag-explorer", label: "RAG Explorer", href: "/rag", icon: Network, group: "RAG" },
   { key: "rag-admin", label: "RAG Admin", href: "/rag/admin", icon: Settings, group: "RAG" },

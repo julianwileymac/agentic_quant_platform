@@ -132,6 +132,18 @@ class RLRun(Base, ProjectScopedMixin):
     error = Column(Text, nullable=True)
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     ended_at = Column(DateTime, nullable=True)
+    # AGENTS.md hard rule 34: every run-producing flow MUST stamp
+    # ``experiment_id``. Alembic migration ``0037_experiment_test_linkage``
+    # already added the column + FK to ``aqp_experiments`` (ondelete
+    # SET NULL); this ORM mirror lets :class:`RLRuntime._stamp_tenancy`
+    # copy ``RequestContext.experiment_id`` onto new rows without
+    # falling off the SQLAlchemy session.
+    experiment_id = Column(
+        String(36),
+        ForeignKey("aqp_experiments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
 
 Index("ix_rl_runs_status_started", RLRun.status, RLRun.started_at)

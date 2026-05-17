@@ -9,6 +9,10 @@ const TERM_ACCENT = "#ef4444";
 const AGENT_ACCENT = "#3b82f6";
 const ENSEMBLE_ACCENT = "#8b5cf6";
 const EXPERIMENT_ACCENT = "#ec4899";
+// Phase D — hybrid agentic-RL UI studios.
+const BACKBONE_ACCENT = "#14b8a6";    // teal — policy backbones
+const ADVANTAGE_ACCENT = "#f43f5e";   // rose — advantage estimators
+const PIPELINE_ACCENT = "#84cc16";    // lime — weight-centric pipeline (f_S/f_A/f_T/f_R)
 
 function tile(
   kind: string,
@@ -148,6 +152,87 @@ export const RL_PALETTE: PaletteSection[] = [
       tile("RLAlphaBacktestExperiment", "RL + alpha backtest", EXPERIMENT_ACCENT),
     ],
   },
+  // Phase D — Hybrid agentic-RL UI studios: policy backbones.
+  {
+    title: "Policy backbones",
+    items: [
+      tile("TransformerBackbone", "Transformer", BACKBONE_ACCENT, "Self-attention encoder", {
+        sequence_length: 30,
+        n_heads: 4,
+        n_layers: 2,
+      }),
+      tile("RecurrentBackbone", "Recurrent (LSTM/GRU/RNN)", BACKBONE_ACCENT, "Causal sequence encoder", {
+        sequence_length: 30,
+        cell: "lstm",
+        hidden_size: 128,
+        num_layers: 2,
+      }),
+      tile("AutoencoderBackbone", "Autoencoder", BACKBONE_ACCENT, "MLP bottleneck", {
+        sequence_length: 1,
+        hidden_dims: [256, 128],
+        bottleneck_dim: 64,
+      }),
+      tile("PatchTSTBackbone", "PatchTST", BACKBONE_ACCENT, "Patch-tokenised Transformer", {
+        sequence_length: 32,
+        patch_length: 4,
+        d_model: 64,
+        n_heads: 4,
+      }),
+    ],
+  },
+  // Phase D — Hybrid agentic-RL UI studios: advantage estimators.
+  {
+    title: "Advantage",
+    items: [
+      tile("ReinforcePlusPlusAdvantage", "REINFORCE++", ADVANTAGE_ACCENT, "NeMo-RL port", {
+        minus_baseline: true,
+        global_normalization: true,
+        leave_one_out: true,
+      }),
+      tile("GRPOAdvantage", "GRPO", ADVANTAGE_ACCENT, "Group-relative no-critic", {
+        normalise_by_cohort_std: true,
+      }),
+      tile("GAEAdvantage", "GAE", ADVANTAGE_ACCENT, "Critic-based classic", {
+        gamma: 0.99,
+        lam: 0.95,
+        normalise: true,
+      }),
+    ],
+  },
+  // Phase D — Hybrid agentic-RL UI studios: weight-centric pipeline
+  // (FinRL-X f_S -> f_A -> f_T -> f_R). Picked here for canvas-style
+  // composition; the WeightCentricPipelinePanel exposes the same
+  // shape inline for the meta panel.
+  {
+    title: "Portfolio pipeline",
+    items: [
+      tile("StaticUniverseSelector", "Static universe (f_S)", PIPELINE_ACCENT, "Passthrough", {}),
+      tile("LiquiditySelector", "Liquidity filter (f_S)", PIPELINE_ACCENT, "Min ADV", {
+        min_dollar_volume: 1_000_000,
+      }),
+      tile("IdentityAllocator", "Identity allocator (f_A)", PIPELINE_ACCENT, "Raw RL action", {}),
+      tile("SoftmaxAllocator", "Softmax allocator (f_A)", PIPELINE_ACCENT, "Long-only simplex", {
+        temperature: 1.0,
+      }),
+      tile("ConstantTimingAdjuster", "Constant timing (f_T)", PIPELINE_ACCENT, "No scaling", {}),
+      tile("TurbulenceTimingAdjuster", "Turbulence (f_T)", PIPELINE_ACCENT, "Regime gating", {
+        threshold: 140.0,
+        cooldown_scale: 0.0,
+      }),
+      tile("VolatilityTargetingTimingAdjuster", "Vol target (f_T)", PIPELINE_ACCENT, "Annualised", {
+        target_vol: 0.1,
+        max_scale: 2.0,
+      }),
+      tile("PositionCapRiskOverlay", "Position cap (f_R)", PIPELINE_ACCENT, "Per-position clamp", {
+        max_position_pct: 0.3,
+        mark_truncated: true,
+      }),
+      tile("GrossExposureRiskOverlay", "Gross cap (f_R)", PIPELINE_ACCENT, "Sum-abs scale", {
+        max_gross: 1.0,
+      }),
+      tile("StackedRiskOverlay", "Stacked overlay (f_R)", PIPELINE_ACCENT, "Cap + gross", {}),
+    ],
+  },
 ];
 
 /** Map every kind in the palette to its canonical Python module path. */
@@ -214,7 +299,56 @@ export const RL_MODULE_PATHS: Record<string, string> = {
   WalkForwardRLExperiment: "aqp.rl.experiments.walk_forward",
   RewardAblationExperiment: "aqp.rl.experiments.ablation",
   RLAlphaBacktestExperiment: "aqp.rl.experiments.alpha_backtest",
+  // Phase D — policy backbones.
+  TransformerBackbone: "aqp.rl.policies.backbones.transformer",
+  RecurrentBackbone: "aqp.rl.policies.backbones.recurrent",
+  AutoencoderBackbone: "aqp.rl.policies.backbones.autoencoder",
+  PatchTSTBackbone: "aqp.rl.policies.backbones.patchtst",
+  // Phase D — advantage estimators.
+  ReinforcePlusPlusAdvantage: "aqp.rl.advantage.reinforce_plus_plus",
+  GRPOAdvantage: "aqp.rl.advantage.grpo",
+  GAEAdvantage: "aqp.rl.advantage.gae",
+  // Phase D — weight-centric portfolio pipeline (f_S/f_A/f_T/f_R).
+  StaticUniverseSelector: "aqp.rl.portfolio.selector",
+  LiquiditySelector: "aqp.rl.portfolio.selector",
+  IdentityAllocator: "aqp.rl.portfolio.allocator",
+  SoftmaxAllocator: "aqp.rl.portfolio.allocator",
+  ConstantTimingAdjuster: "aqp.rl.portfolio.timing",
+  TurbulenceTimingAdjuster: "aqp.rl.portfolio.timing",
+  VolatilityTargetingTimingAdjuster: "aqp.rl.portfolio.timing",
+  PositionCapRiskOverlay: "aqp.rl.portfolio.risk_overlay",
+  GrossExposureRiskOverlay: "aqp.rl.portfolio.risk_overlay",
+  StackedRiskOverlay: "aqp.rl.portfolio.risk_overlay",
 };
+
+/** Phase D — kinds that belong to the FinRL-X weight-centric pipeline (`f_S/f_A/f_T/f_R`). */
+export const WEIGHT_CENTRIC_KINDS: Record<string, "selector" | "allocator" | "timing" | "risk_overlay"> = {
+  StaticUniverseSelector: "selector",
+  LiquiditySelector: "selector",
+  IdentityAllocator: "allocator",
+  SoftmaxAllocator: "allocator",
+  ConstantTimingAdjuster: "timing",
+  TurbulenceTimingAdjuster: "timing",
+  VolatilityTargetingTimingAdjuster: "timing",
+  PositionCapRiskOverlay: "risk_overlay",
+  GrossExposureRiskOverlay: "risk_overlay",
+  StackedRiskOverlay: "risk_overlay",
+};
+
+/** Phase D — backbone kinds (`rl_policy_backbone`). */
+export const BACKBONE_KINDS: ReadonlySet<string> = new Set([
+  "TransformerBackbone",
+  "RecurrentBackbone",
+  "AutoencoderBackbone",
+  "PatchTSTBackbone",
+]);
+
+/** Phase D — advantage estimator kinds (`rl_advantage_estimator`). */
+export const ADVANTAGE_KINDS: ReadonlySet<string> = new Set([
+  "ReinforcePlusPlusAdvantage",
+  "GRPOAdvantage",
+  "GAEAdvantage",
+]);
 
 /**
  * Per-kind accent table consumed by AqpNodeCard via WorkflowEditor's

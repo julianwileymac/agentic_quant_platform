@@ -10,12 +10,26 @@ import { apiFetch } from "@/lib/api/client";
  * Halt endpoints fanned out in parallel. The backend treats each as
  * idempotent (404 means "nothing to stop") so a single failure on one
  * subsystem doesn't block the others.
+ *
+ * ``/quant-agents/halt`` is a narrow companion to ``/agents/halt`` —
+ * it halts only the LLM-driven quant agents (alpha_researcher +
+ * strategy_executor) introduced by the hybrid agentic-RL rollout.
+ * It runs in addition to ``/agents/halt`` (which already covers it)
+ * because the spec-narrow endpoint surfaces explicit telemetry in
+ * the aggregate toast — operators want to confirm the quant cohort
+ * actually got terminated rather than infer it from a count.
+ *
+ * ``rl_trading`` bots (Phase 8) inherit halt semantics from
+ * ``/bots/halt-all`` (bot deployment halt) AND ``/rl/halt-all``
+ * (the underlying RL training loop); both are in the list already
+ * so no per-kind entry is required.
  */
 const HALT_ENDPOINTS: ReadonlyArray<{ path: string; label: string }> = [
-  { path: "/agents/halt", label: "spec-driven agent runs" },
+  { path: "/agents/halt", label: "spec-driven agent runs (all cohorts)" },
+  { path: "/quant-agents/halt", label: "quant agents (alpha_researcher + strategy_executor)" },
   { path: "/paper/stop-all", label: "paper trading sessions" },
-  { path: "/bots/halt-all", label: "live bot deployments" },
-  { path: "/rl/halt-all", label: "RL train / paper runs" },
+  { path: "/bots/halt-all", label: "live bot deployments (incl. rl_trading)" },
+  { path: "/rl/halt-all", label: "RL train / paper / replay runs" },
 ];
 
 /**
@@ -73,7 +87,7 @@ export function KillSwitch() {
         open={open}
         onOpenChange={setOpen}
         title="Halt every running subsystem"
-        consequence="This stops every running agent, paper session, RL run, and live-bot deployment immediately. In-flight orders may still settle. This cannot be reversed without a manual restart."
+        consequence="This stops every running agent (including alpha_researcher + strategy_executor), paper session, RL run, and live-bot deployment (including rl_trading bots) immediately. In-flight orders may still settle. This cannot be reversed without a manual restart."
         details={HALT_ENDPOINTS.map((e) => ({
           label: e.label,
           value: e.path,

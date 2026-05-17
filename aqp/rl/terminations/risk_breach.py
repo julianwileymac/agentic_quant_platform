@@ -14,11 +14,20 @@ from aqp.rl.core.termination import BaseTerminationCondition
 
 
 class RiskBreachTermination(BaseTerminationCondition):
-    """End the episode when inventory or vega exposure breach caps."""
+    """End the episode when inventory or vega exposure breach caps.
+
+    Phase 2 of the agentic-RL rollout: marked as a hard risk breach
+    (``truncates_episode=True``). The env driver pipes
+    ``info['truncated']=True`` so :class:`StopProperlyShaping` can
+    scale the reward.
+    """
 
     rl_alias: ClassVar[str] = "RiskBreachTermination"
     rl_source: ClassVar[str] = "aqp"
     rl_category: ClassVar[str] = "risk"
+
+    truncates_episode: ClassVar[bool] = True
+    truncation_reason: ClassVar[str] = "risk_cap_exceeded"
 
     def __init__(
         self,

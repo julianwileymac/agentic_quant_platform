@@ -206,6 +206,50 @@ OrderCatalog: tuple[OrderCorpus, ...] = (
             "marker / nougat / mathpix selector chain in aqp.rag.parsers."
         ),
     ),
+    # --- first order: hybrid agentic-RL "alpha base" (Phase 7) --------
+    # The Alpha Researcher agent reads these three corpora before
+    # proposing new factor candidates. The FinRL-X loop closes when
+    # an evolved factor's backtest summary + RL trajectory summary
+    # land in their respective corpora and feed the next iteration.
+    OrderCorpus(
+        name="alpha_factors",
+        order="first",
+        l1="alpha_base",
+        l2="symbolic_factors",
+        iceberg=None,
+        description=(
+            "Symbolic alpha factor formulas authored by the Alpha "
+            "Researcher agent (registered in the AQP DSL). Each entry "
+            "carries the formula, rationale, compile status, and the "
+            "most recent measured Sharpe / IR / max-drawdown."
+        ),
+    ),
+    OrderCorpus(
+        name="backtest_summaries",
+        order="first",
+        l1="alpha_base",
+        l2="backtest_performance",
+        iceberg=None,
+        description=(
+            "Compact backtest result summaries (Sharpe / IR / MDD / "
+            "turnover + window dates) used by the Alpha Researcher "
+            "agent to characterise which factor families have already "
+            "been explored."
+        ),
+    ),
+    OrderCorpus(
+        name="rl_trajectory_summaries",
+        order="first",
+        l1="alpha_base",
+        l2="rl_run_summary",
+        iceberg=None,
+        description=(
+            "Compact RL-run summaries (final equity, max-drawdown, "
+            "truncation rate, advantage estimator) used by the "
+            "Strategy Executor agent to compare across RL experiment "
+            "iterations and pick the best deployment candidate."
+        ),
+    ),
 )
 # fmt: on
 

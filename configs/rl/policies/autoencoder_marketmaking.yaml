@@ -1,0 +1,70 @@
+name: ppo-autoencoder-marketmaking
+slug: ppo-autoencoder-marketmaking
+kind: training
+description: |
+  PPO agent with AutoencoderBackbone bottleneck over the MarketMakingEnv.
+  The encoder compresses the env's 6-dim observation through a
+  256->128->bottleneck stack — useful as a regularisation scaffold
+  when the observation is high-dimensional (microstructure features,
+  per-asset order book imbalance, etc.).
+
+  Demonstrates the autoencoder variant of the four Phase 3 backbones.
+
+universe:
+  symbols: [SPY.NASDAQ]
+
+env:
+  class: MarketMakingEnv
+  module_path: aqp.rl.envs.market_making_env
+  kwargs:
+    inventory_cap: 50.0
+    base_spread: 0.0005
+
+agent:
+  class: SB3Adapter
+  module_path: aqp.rl.agents.sb3_adapter
+  kwargs:
+    algorithm: PPO
+    policy: MlpPolicy
+    learning_rate: 3.0e-4
+    n_steps: 1024
+    policy_kwargs:
+      features_extractor_class: aqp.rl.policies.feature_extractors.BackboneFeaturesExtractor
+      features_extractor_kwargs:
+        backbone_alias: AutoencoderBackbone
+        sequence_length: 1
+        input_features: 6
+        features_dim: 64
+        backbone_kwargs:
+          hidden_dims: [256, 128]
+          bottleneck_dim: 64
+          activation: gelu
+          dropout: 0.1
+
+training:
+  total_timesteps: 200000
+  log_interval: 10
+  seed: 42
+  advantage:
+    class: GRPOAdvantage
+    module_path: aqp.rl.advantage.grpo
+  stop_properly_penalty_coef: 0.0
+
+evaluation:
+  episodes: 3
+
+terminations:
+  specs:
+    - class: HorizonTermination
+      module_path: aqp.rl.terminations.horizon
+    - class: RiskBreachTermination
+      module_path: aqp.rl.terminations.risk_breach
+      kwargs:
+        inventory_cap: 100.0
+
+trajectory_store:
+  enabled: true
+
+mlflow:
+  experiment: aqp-rl-phase3
+  register_model_as: rl-ppo-autoencoder-marketmaking

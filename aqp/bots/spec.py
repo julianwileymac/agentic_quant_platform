@@ -86,7 +86,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # ``rag:`` clauses with the exact same shape used by ``AgentSpec``.
 from aqp.agents.spec import RAGRef
 
-BotKind = Literal["trading", "research"]
+BotKind = Literal["trading", "research", "rl_trading"]
 """Subclass discriminator for :class:`aqp.bots.base.BaseBot`."""
 
 
@@ -231,11 +231,39 @@ class DeploymentTargetSpec(BaseModel):
     extras: dict[str, Any] = Field(default_factory=dict)
 
 
+class RLExperimentRef(BaseModel):
+    """Reference to a registered :class:`RLExperimentSpec` (Phase 8).
+
+    Lets a bot declare that its strategy is *driven by* a trained RL
+    policy rather than a hand-coded ``Strategy`` subclass. When set
+    on :attr:`BotSpec.rl_experiment_ref`, the bot's lifecycle methods
+    route through :class:`aqp.rl.runtime.RLRuntime` for train /
+    evaluate / paper / replay (instead of through
+    ``run_backtest_from_config`` / ``build_session_from_config``).
+
+    Carrying just the slug + (optional) checkpoint keeps the bot
+    spec hash-stable across RL training runs — the bot version
+    snapshot doesn't churn every time a new RL run completes.
+    """
+
+    slug: str = Field(description="Slug of the registered RLExperimentSpec.")
+    checkpoint: str | None = Field(
+        default=None,
+        description="Specific checkpoint path. Omit to use the latest from MLflow.",
+    )
+    deterministic: bool = Field(
+        default=True,
+        description="Pass to RLRuntime.evaluate / paper for deterministic rollout.",
+    )
+    extras: dict[str, Any] = Field(default_factory=dict)
+
+
 class BotSpec(BaseModel):
     """Declarative blueprint for one bot.
 
-    ``kind`` selects the subclass (``TradingBot`` vs ``ResearchBot``) at
-    instantiation time via :func:`aqp.bots.base.build_bot`.
+    ``kind`` selects the subclass (``TradingBot`` / ``ResearchBot`` /
+    ``RLTradingBot``) at instantiation time via
+    :func:`aqp.bots.base.build_bot`.
     """
 
     name: str
@@ -248,6 +276,11 @@ class BotSpec(BaseModel):
 
     strategy: dict[str, Any] | None = None
     backtest: dict[str, Any] | None = None
+    # Phase 8 of the agentic-RL rollout: declare that the bot is
+    # driven by a trained RL policy instead of a hand-coded
+    # ``Strategy``. The runtime routes through
+    # :class:`aqp.rl.runtime.RLRuntime` whenever this is set.
+    rl_experiment_ref: RLExperimentRef | None = None
 
     ml_models: list[MLDeploymentRef] = Field(default_factory=list)
     agents: list[BotAgentRef] = Field(default_factory=list)

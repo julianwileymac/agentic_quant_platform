@@ -1,0 +1,74 @@
+---
+description: LLM-emitted alpha factor formulas — AST sandbox + FactorNode contract
+globs:
+  - aqp/data/expressions_dsl.py
+  - aqp/agents/quant/**/*.py
+  - configs/agents/alpha_researcher.yaml
+  - configs/agents/strategy_executor.yaml
+  - tests/data/test_expressions_dsl.py
+alwaysApply: false
+---
+
+# Symbolic alpha factors (AST sandbox + FactorNode)
+
+Phase 4 of the agentic-RL rollout. Hard rule **39** in
+[AGENTS.md](mdc:AGENTS.md) is the source of truth. Companion doc:
+[docs/alpha-researcher-agent.md](mdc:docs/alpha-researcher-agent.md).
+
+## What this scope covers
+
+- The strict AST sandbox at
+  [`aqp/data/expressions_dsl.py`](mdc:aqp/data/expressions_dsl.py)
+  (the LLM-facing extension of
+  [`aqp/data/expressions.py`](mdc:aqp/data/expressions.py)).
+- The engine-agnostic
+  [`FactorNode`](mdc:aqp/data/expressions_dsl.py) emitted by the
+  sandbox.
+- The
+  [`AlphaResearcher`](mdc:aqp/agents/quant/alpha_researcher.py) +
+  [`StrategyExecutor`](mdc:aqp/agents/quant/strategy_executor.py)
+  driver classes.
+- The two AgentSpecs at
+  [`configs/agents/alpha_researcher.yaml`](mdc:configs/agents/alpha_researcher.yaml)
+  +
+  [`configs/agents/strategy_executor.yaml`](mdc:configs/agents/strategy_executor.yaml).
+
+## Hard rules
+
+1. **No `exec` / `eval` of LLM output.** All raw LLM-emitted strings
+   go through
+   [`compile_to_factor_node`](mdc:aqp/data/expressions_dsl.py)
+   which parses + validates via the
+   [`_SymbolicFactorValidator`](mdc:aqp/data/expressions_dsl.py)
+   NodeVisitor.
+2. **Whitelist only.** Operators must be in
+   [`SYMBOLIC_OPERATORS`](mdc:aqp/data/expressions_dsl.py); fields
+   must be in [`SYMBOLIC_FIELDS`](mdc:aqp/data/expressions_dsl.py).
+   Anything else (imports, attribute access, subscripts, lambdas,
+   comprehensions) raises
+   [`SymbolicAlphaError`](mdc:aqp/data/expressions_dsl.py).
+3. **`FactorNode` is engine-agnostic.** Same compiled object feeds
+   vbt-pro / event-driven via `compute(bars)` and the optional
+   Backtrader engine via
+   [`as_backtrader_indicator()`](mdc:aqp/data/expressions_dsl.py).
+4. **Compile failures = scalar penalty.** The Alpha Researcher
+   driver treats `SymbolicAlphaError` as a `compile_penalty` reward
+   so the agent learns to author DSL-compliant formulas through
+   RL feedback.
+5. **Pattern matches LEAN translator.** The sandbox uses the same
+   `ast.NodeVisitor` approach as
+   [`aqp/strategies/lean/translator.py`](mdc:aqp/strategies/lean/translator.py)
+   (rule 35) — keep the two patterns in sync when extending.
+
+## Don't
+
+- Don't add a new field name to `SYMBOLIC_FIELDS` without
+  updating the LLM system-prompt vocabulary in
+  [`configs/agents/alpha_researcher.yaml`](mdc:configs/agents/alpha_researcher.yaml).
+- Don't add an operator that performs I/O or holds mutable state
+  — the sandbox assumes operators are pure.
+- Don't bypass the sandbox by accepting a pre-built Python
+  callable from the LLM. Even "trusted" wrapper paths are a
+  liability.
+
+Consider these rules if they affect your changes.

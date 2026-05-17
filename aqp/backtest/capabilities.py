@@ -63,6 +63,15 @@ class EngineCapabilities:
     supports_monte_carlo: bool = False
     supports_interrupts: bool = False
 
+    # Hybrid agentic-RL bridge: when ``True`` the engine surfaces
+    # :class:`aqp.rl.bridges.RLAgentBridge` via ``context['rl_agent']``
+    # on every bar so a registered :class:`RLBacktestEnv` can inject
+    # the current target-weight vector without monkey-patching the
+    # strategy. The event-driven engine flips this ``True`` by
+    # default; vbt-pro:orders mode + LobBacktestEngine flip it when
+    # an ``rl_agent`` is bound at runtime.
+    supports_rl_injection: bool = False
+
     # Data sources / venues
     us_market_data: bool = True
     cn_market_data: bool = False

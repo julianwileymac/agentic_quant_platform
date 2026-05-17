@@ -13,6 +13,12 @@ import { CallbackRoute } from "@/routes/auth/callback/page";
 import { LoginRoute } from "@/routes/auth/login/page";
 import { ProfileRoute } from "@/routes/auth/profile/page";
 import { StrategyTemplatesPage } from "@/routes/strategy-development/templates/page";
+// Hybrid agentic-RL UI studios — Phase C: Alpha Factor Studio.
+import { AlphaFactorStudioRoute } from "@/routes/strategy-development/alpha-factors/page";
+// Hybrid agentic-RL UI studios — Phase F: Examples Gallery.
+import { GalleryRoute } from "@/routes/strategy-development/gallery/page";
+// Hybrid agentic-RL UI studios — OOS: Library admin surface.
+import { LibraryAdminRoute } from "@/routes/strategy-development/library-admin/page";
 import { AirbyteRoute } from "@/routes/airbyte/page";
 import { AlphaVantageRoute } from "@/routes/alpha-vantage/page";
 import { AlphaVantageAdminRoute } from "@/routes/alpha-vantage/admin/page";
@@ -54,6 +60,8 @@ import { AnalysisRunAgentRoute } from "@/routes/agents/analysis/run/page";
 import { AnalysisPortfolioAgentRoute } from "@/routes/agents/analysis/portfolio/page";
 import { SelectionAgentRoute } from "@/routes/agents/selection/page";
 import { TraderAgentRoute } from "@/routes/agents/trader/page";
+// Hybrid agentic-RL Phase 4: AlphaResearcher + StrategyExecutor surface.
+import { QuantAgentsRoute } from "@/routes/agents/quant/page";
 import { BacktestRoute } from "@/routes/backtest/page";
 import { BacktestDetailRoute } from "@/routes/backtest/[id]/page";
 import { BacktestIterateRoute } from "@/routes/backtest/iterate/page";
@@ -132,6 +140,9 @@ import { RlAgentBuilderRoute } from "@/routes/rl/builder/agent/page";
 import { RlExperimentBuilderRoute } from "@/routes/rl/builder/experiment/page";
 import { RlObservationBuilderRoute } from "@/routes/rl/builder/observation/page";
 import { RlRewardBuilderRoute } from "@/routes/rl/builder/reward/page";
+// Hybrid agentic-RL UI studios — Phase D: backbone + advantage builders.
+import { RlBackboneBuilderRoute } from "@/routes/rl/builder/backbone/page";
+import { RlAdvantageBuilderRoute } from "@/routes/rl/builder/advantage/page";
 import { MlZooRoute } from "@/routes/ml/zoo/page";
 import { MlModelsRoute } from "@/routes/ml/models/page";
 import { MlDatasetsRoute } from "@/routes/ml/datasets/page";
@@ -190,6 +201,8 @@ const REAL_ROUTES: Record<string, () => ReactElement> = {
   "/agents/analysis": AnalysisAgentsHubRoute,
   "/agents/selection": SelectionAgentRoute,
   "/agents/trader": TraderAgentRoute,
+  // Hybrid agentic-RL Phase 4 — symbolic-DSL alpha researcher + RL dispatcher.
+  "/agents/quant": QuantAgentsRoute,
   // B2 — Airbyte
   "/airbyte": AirbyteRoute,
   "/airbyte/builder": AirbyteBuilderRoute,
@@ -343,6 +356,9 @@ const DYNAMIC_ROUTES: RouteObject[] = [
   { path: "rl/builder/experiment", element: <RlExperimentBuilderRoute /> },
   { path: "rl/builder/observation", element: <RlObservationBuilderRoute /> },
   { path: "rl/builder/reward", element: <RlRewardBuilderRoute /> },
+  // Hybrid agentic-RL UI studios — Phase D.
+  { path: "rl/builder/backbone", element: <RlBackboneBuilderRoute /> },
+  { path: "rl/builder/advantage", element: <RlAdvantageBuilderRoute /> },
   // Analysis umbrella — composer + runs deep links.
   { path: "analysis/lab/composer", element: <AnalysisComposerRoute /> },
   { path: "analysis/runs", element: <AnalysisRunsRoute /> },
@@ -372,6 +388,12 @@ const DYNAMIC_ROUTES: RouteObject[] = [
       { path: "library", element: <StrategyLibraryRoute /> },
       // Phase 7 — LEAN strategy template browser + clone-to-workspace
       { path: "templates", element: <StrategyTemplatesPage /> },
+      // Hybrid agentic-RL UI studios — Alpha Factor Studio.
+      { path: "alpha-factors", element: <AlphaFactorStudioRoute /> },
+      // Hybrid agentic-RL UI studios — Examples Gallery (Phase F).
+      { path: "gallery", element: <GalleryRoute /> },
+      // Hybrid agentic-RL UI studios — Library admin (OOS extension).
+      { path: "library-admin", element: <LibraryAdminRoute /> },
     ],
   },
 ];

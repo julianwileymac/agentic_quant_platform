@@ -1,0 +1,76 @@
+---
+description: Transformer / RNN / Autoencoder / PatchTST RL policy backbones
+globs:
+  - aqp/rl/policies/**/*.py
+  - tests/rl/policies/**/*.py
+  - configs/rl/policies/*.yaml
+alwaysApply: false
+---
+
+# RL policy backbones
+
+Phase 3 of the agentic-RL rollout. Hard rule **37** in
+[AGENTS.md](mdc:AGENTS.md) is the source of truth. Companion doc:
+[docs/rl-policy-backbones.md](mdc:docs/rl-policy-backbones.md).
+
+## What this scope covers
+
+- [`TimeSeriesEncoder`](mdc:aqp/rl/policies/backbones/base.py) ABC
+  (`rl_kind='rl_policy_backbone'`).
+- The four shipped backbones —
+  [`TransformerBackbone`](mdc:aqp/rl/policies/backbones/transformer.py),
+  [`RecurrentBackbone`](mdc:aqp/rl/policies/backbones/recurrent.py),
+  [`AutoencoderBackbone`](mdc:aqp/rl/policies/backbones/autoencoder.py),
+  [`PatchTSTBackbone`](mdc:aqp/rl/policies/backbones/patchtst.py).
+- The SB3 / CleanRL bridge
+  ([`BackboneFeaturesExtractor`](mdc:aqp/rl/policies/feature_extractors.py)).
+- Example specs under
+  [`configs/rl/policies/`](mdc:configs/rl/policies).
+
+## Hard rules
+
+1. **Subclass `TimeSeriesEncoder`.** Set `rl_kind` to
+   `"rl_policy_backbone"` and `rl_alias` to the registry name. The
+   metaclass auto-registers — no manual `@register`.
+2. **Wrap existing `aqp/ml/models/` modules where applicable.** Don't
+   re-implement a Transformer / LSTM / Autoencoder from scratch
+   when an offline ML model already exists. The
+   [`TransformerBackbone`](mdc:aqp/rl/policies/backbones/transformer.py)
+   keeps its own self-attention encoder because the offline
+   forecaster carries a forecasting head that's wasteful at policy
+   time; document why if you take the same path.
+3. **Input shape contract.** `forward(x)` receives a 3D tensor of
+   shape `(batch, sequence_length, input_features)` or a 2D
+   tensor that the
+   [`reshape_obs_to_sequence`](mdc:aqp/rl/policies/backbones/base.py)
+   helper can unflatten. Output is always
+   `(batch, output_dim)`.
+4. **SB3 bridge picks by alias.** Pass `backbone_alias` +
+   `backbone_kwargs` through
+   `features_extractor_kwargs` rather than constructing the
+   backbone manually.
+
+## Adding a new backbone
+
+1. New module under
+   [`aqp/rl/policies/backbones/`](mdc:aqp/rl/policies/backbones).
+2. Set `rl_alias`, `rl_source`, `rl_category`, `rl_tags`.
+3. Implement `__init__(*, input_features, sequence_length, output_dim, ...)`.
+4. Implement `forward(x)` returning `(batch, output_dim)`.
+5. Re-export from
+   [`aqp/rl/policies/backbones/__init__.py`](mdc:aqp/rl/policies/backbones/__init__.py)
+   so the metaclass auto-registration fires on package import.
+6. Add a smoke test under
+   [`tests/rl/policies/`](mdc:tests/rl/policies).
+7. Ship a sample spec under
+   [`configs/rl/policies/`](mdc:configs/rl/policies).
+
+## Don't
+
+- Don't accept ad-hoc tensor shapes — stick to the canonical
+  `(batch, seq, features)` contract.
+- Don't ship a backbone without a sample spec + smoke test; the
+  RL Lab UI palette enumerates registered backbones and silent
+  registration failures are hard to diagnose.
+
+Consider these rules if they affect your changes.

@@ -113,6 +113,17 @@ class BotDeployment(Base, ProjectScopedMixin):
     error = Column(Text, nullable=True)
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     ended_at = Column(DateTime, nullable=True)
+    # AGENTS.md hard rule 34: every run-producing flow MUST stamp
+    # ``experiment_id``. Migration 0037 already added the column +
+    # FK + index; this ORM mirror lets ``BotRuntime`` deployments
+    # carry the umbrella experiment id without falling off the
+    # SQLAlchemy session.
+    experiment_id = Column(
+        String(36),
+        ForeignKey("aqp_experiments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
 
 Index("ix_bot_deployments_status_started", BotDeployment.status, BotDeployment.started_at)

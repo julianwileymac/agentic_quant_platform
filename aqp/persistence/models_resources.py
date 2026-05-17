@@ -70,6 +70,11 @@ RESOURCE_TYPES: tuple[str, ...] = (
     "report",                # equity report / governance audit
     "sink_template",         # SinkRow reference
     "rl_curriculum",         # RLExperimentSpec template
+    # Phase 8 of hybrid agentic-RL: symbolic alpha factor formula
+    # authored via the Alpha Factor Studio (rule 39 AST-sandboxed).
+    # `meta` carries {formula, rationale, metrics, used_operators,
+    # used_fields, expected_horizon_bars, expected_direction}.
+    "alpha_factor",
 )
 
 

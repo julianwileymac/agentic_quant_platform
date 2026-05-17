@@ -129,11 +129,15 @@ class BaseRLEnv(gym.Env, RLComponent):
         )
 
     def _check_terminations(self, idx: int, env_state: Mapping[str, Any]) -> bool:
+        self._last_truncation: tuple[bool, str] = (False, "")
         for cond in self.terminations:
             try:
                 if cond.check(idx, self.horizon, env_state):
+                    if getattr(cond, "truncates_episode", False):
+                        reason = getattr(cond, "truncation_reason", "") or cond.name
+                        self._last_truncation = (True, str(reason))
                     return True
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.debug("termination predicate failed: %s", cond, exc_info=True)
         return idx >= self.horizon - 1
 
@@ -171,7 +175,15 @@ class BaseRLEnv(gym.Env, RLComponent):
             reward = float(next_state.get("portfolio_value", 0.0)) - float(prev_state.get("portfolio_value", 0.0))
 
         terminated = bool(self._check_terminations(self.step_idx, next_state))
-        truncated = False
+        # Lift truncation metadata recorded by _check_terminations onto
+        # the canonical gymnasium (terminated, truncated) split so
+        # StopProperlyShaping can find it under ``info['truncated']``
+        # and consumers can branch on the truncation reason.
+        truncated_flag, truncation_reason = getattr(self, "_last_truncation", (False, ""))
+        truncated = bool(truncated_flag)
+        if truncated:
+            info["truncated"] = True
+            info["truncation_reason"] = truncation_reason
         return self._build_obs(self.step_idx), reward, terminated, truncated, info
 
     def render(self):  # pragma: no cover

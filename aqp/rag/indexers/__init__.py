@@ -14,6 +14,14 @@ the surrounding Celery task chain doesn't crash on cold installs.
 """
 from __future__ import annotations
 
+from aqp.rag.indexers.alpha_factors_indexer import (
+    index_alpha_factors,
+    render_alpha_factor_text,
+)
+from aqp.rag.indexers.backtest_summaries_indexer import (
+    index_backtest_summaries,
+    render_backtest_summary_text,
+)
 from aqp.rag.indexers.bars_indexer import index_bars_summary
 from aqp.rag.indexers.cfpb_indexer import index_cfpb_complaints
 from aqp.rag.indexers.decisions_indexer import index_decisions, render_decision_text
@@ -29,6 +37,10 @@ from aqp.rag.indexers.fundamentals_indexer import (
 from aqp.rag.indexers.news_indexer import index_news_sentiment
 from aqp.rag.indexers.performance_indexer import index_performance
 from aqp.rag.indexers.research_papers_indexer import index_research_papers
+from aqp.rag.indexers.rl_trajectory_summaries_indexer import (
+    index_rl_trajectory_summaries,
+    render_rl_run_summary_text,
+)
 from aqp.rag.indexers.sec_indexer import index_sec_filings
 from aqp.rag.indexers.uspto_indexer import (
     index_uspto_assignments,
@@ -37,6 +49,8 @@ from aqp.rag.indexers.uspto_indexer import (
 )
 
 __all__ = [
+    "index_alpha_factors",
+    "index_backtest_summaries",
     "index_bars_summary",
     "index_cfpb_complaints",
     "index_decisions",
@@ -47,12 +61,16 @@ __all__ = [
     "index_news_sentiment",
     "index_performance",
     "index_research_papers",
+    "index_rl_trajectory_summaries",
     "index_sec_filings",
     "index_sec_xbrl",
     "index_uspto_assignments",
     "index_uspto_patents",
     "index_uspto_trademarks",
+    "render_alpha_factor_text",
+    "render_backtest_summary_text",
     "render_decision_text",
+    "render_rl_run_summary_text",
 ]
 
 
@@ -72,6 +90,10 @@ INDEXER_REGISTRY = {
     "uspto_trademarks": index_uspto_trademarks,
     "uspto_assignments": index_uspto_assignments,
     "research_papers": index_research_papers,
+    # Phase 7 of agentic-RL rollout — the FinRL-X "alpha base" corpora.
+    "alpha_factors": index_alpha_factors,
+    "backtest_summaries": index_backtest_summaries,
+    "rl_trajectory_summaries": index_rl_trajectory_summaries,
 }
 
 

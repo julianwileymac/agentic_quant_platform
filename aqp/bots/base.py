@@ -230,12 +230,15 @@ def build_bot(
 ) -> BaseBot:
     """Construct the right :class:`BaseBot` subclass for ``spec.kind``."""
     from aqp.bots.research_bot import ResearchBot
+    from aqp.bots.rl_trading_bot import RLTradingBot
     from aqp.bots.trading_bot import TradingBot
 
     if spec.kind == "trading":
         return TradingBot(spec=spec, bot_id=bot_id, project_id=project_id)
     if spec.kind == "research":
         return ResearchBot(spec=spec, bot_id=bot_id, project_id=project_id)
+    if spec.kind == "rl_trading":
+        return RLTradingBot(spec=spec, bot_id=bot_id, project_id=project_id)
     raise ValueError(f"Unknown BotSpec.kind={spec.kind!r}")
 
 

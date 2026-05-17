@@ -1,0 +1,86 @@
+name: ppo-transformer-stock-trading
+slug: ppo-transformer-stock-trading
+kind: training
+description: |
+  PPO agent with TransformerBackbone (4 heads, 2 layers) over the
+  StockTradingEnv. Demonstrates Phase 3 of the agentic-RL rollout —
+  a multi-head self-attention encoder feeds a fixed-dim feature
+  vector into SB3 PPO's policy network.
+
+  Pairs naturally with the Phase 2 ReinforcePlusPlusAdvantage +
+  stop_properly_penalty_coef wiring for the deployment-consistent
+  loop described in the FinRL-X blueprint.
+
+universe:
+  symbols: [AAPL.NASDAQ, MSFT.NASDAQ, GOOGL.NASDAQ, AMZN.NASDAQ, META.NASDAQ]
+
+data_pipeline:
+  spec:
+    class: IcebergRLDataPipeline
+    module_path: aqp.rl.data_pipelines.iceberg
+    kwargs:
+      indicators: [macd, rsi_30, sma_20, sma_50, turbulence]
+      use_turbulence: true
+
+env:
+  class: StockTradingEnv
+  module_path: aqp.rl.envs.stock_trading_env
+  kwargs:
+    start: "2018-01-01"
+    end: "2023-06-30"
+    initial_balance: 100000.0
+    transaction_cost_pct: 0.001
+
+agent:
+  class: SB3Adapter
+  module_path: aqp.rl.agents.sb3_adapter
+  kwargs:
+    algorithm: PPO
+    policy: MlpPolicy
+    learning_rate: 3.0e-4
+    n_steps: 2048
+    policy_kwargs:
+      features_extractor_class: aqp.rl.policies.feature_extractors.BackboneFeaturesExtractor
+      features_extractor_kwargs:
+        backbone_alias: TransformerBackbone
+        sequence_length: 30
+        features_dim: 128
+        backbone_kwargs:
+          n_heads: 4
+          n_layers: 2
+          d_ff: 256
+          dropout: 0.1
+
+training:
+  total_timesteps: 200000
+  log_interval: 10
+  seed: 42
+  advantage:
+    class: ReinforcePlusPlusAdvantage
+    module_path: aqp.rl.advantage.reinforce_plus_plus
+    kwargs:
+      minus_baseline: true
+      global_normalization: true
+      leave_one_out: true
+  stop_properly_penalty_coef: 0.0
+
+evaluation:
+  start: "2023-07-01"
+  end: "2024-01-01"
+  episodes: 1
+
+terminations:
+  specs:
+    - class: HorizonTermination
+      module_path: aqp.rl.terminations.horizon
+    - class: DrawdownTermination
+      module_path: aqp.rl.terminations.drawdown
+      kwargs:
+        max_drawdown_pct: 0.20
+
+trajectory_store:
+  enabled: true
+
+mlflow:
+  experiment: aqp-rl-phase3
+  register_model_as: rl-ppo-transformer-stock

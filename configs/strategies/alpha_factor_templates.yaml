@@ -1,0 +1,133 @@
+# Curated symbolic alpha factor templates.
+#
+# Phase A of the agentic-rl-ui-studios rollout. Each template uses
+# the AQP symbolic DSL (see aqp/data/expressions_dsl.py for the
+# operator + field whitelist) so the AST sandbox accepts them as-is.
+# The Alpha Factor Studio's "Templates" sidebar reads this file via
+# GET /quant-agents/alpha-formula-templates and the gallery's
+# "Bundled" tab includes them under "Alpha formulas".
+#
+# Each entry mirrors the AlphaResearcher proposal shape:
+#   {name, formula, rationale, expected_horizon_bars, expected_direction, tags}
+# so a "Use as template" click maps 1:1 to the prefilled editor.
+
+templates:
+  - name: macd_cross
+    formula: "Sign(EMA($close, 12) - EMA($close, 26))"
+    rationale: |
+      Classic MACD crossover sign. +1 when the fast EMA is above
+      the slow EMA (uptrend), -1 below (downtrend). Smooths
+      whipsaw better than a raw close-price cross.
+    expected_horizon_bars: 5
+    expected_direction: either
+    tags: [macd, trend, momentum, classic]
+
+  - name: rsi_mean_reversion
+    formula: "Sign(50 - Mean($close - Ref($close, 14), 14))"
+    rationale: |
+      RSI-style mean-reversion proxy. Negative when the trailing
+      14-bar change is positive (overbought, expect pullback);
+      positive when negative (oversold, expect bounce).
+    expected_horizon_bars: 3
+    expected_direction: either
+    tags: [rsi, mean_reversion, classic]
+
+  - name: bollinger_zscore
+    formula: "($close - Mean($close, 20)) / Std($close, 20)"
+    rationale: |
+      Z-score of close vs trailing 20-bar mean+std. Used as a
+      stationary mean-reversion signal (sell extremes, buy
+      reversion). Same shape as the Bollinger Band %b metric.
+    expected_horizon_bars: 5
+    expected_direction: either
+    tags: [bollinger, zscore, mean_reversion]
+
+  - name: momentum_12_1
+    formula: "(Ref($close, 21) - Ref($close, 252)) / Ref($close, 252)"
+    rationale: |
+      Classic 12-1 momentum (Jegadeesh-Titman): 12-month return
+      excluding the most recent month. Long the top quintile,
+      short the bottom. Robust across equity factor zoos.
+    expected_horizon_bars: 21
+    expected_direction: long
+    tags: [momentum, cross_sectional, factor_zoo]
+
+  - name: vol_targeting
+    formula: "0.10 / (Std($returns, 60) + 0.0001)"
+    rationale: |
+      Inverse-vol position scaling. Targets 10% annualised
+      volatility per name. Multiply by a direction signal to
+      build a vol-targeted long-short portfolio.
+    expected_horizon_bars: 21
+    expected_direction: long
+    tags: [risk_parity, vol_targeting, sizing]
+
+  - name: vol_of_vol_breakout
+    formula: "Sign(Std($returns, 20) - Mean(Std($returns, 20), 60))"
+    rationale: |
+      Volatility breakout: +1 when realised 20-bar vol is above
+      its trailing 60-bar mean (regime change), -1 below. Gates
+      strategy turn-on around expansions / contractions.
+    expected_horizon_bars: 5
+    expected_direction: either
+    tags: [volatility, regime, gating]
+
+  - name: ema_crossover_vol_rank
+    formula: "Sign(EMA($close, 12) - EMA($close, 26)) * Rank(Std($returns, 20))"
+    rationale: |
+      MACD-style direction scaled by the cross-sectional rank of
+      realised vol. Favours high-vol trends where momentum tends
+      to deliver better risk-adjusted excess returns.
+    expected_horizon_bars: 5
+    expected_direction: either
+    tags: [macd, vol_rank, hybrid]
+
+  - name: log_volume_surprise
+    formula: "(Log($volume) - Mean(Log($volume), 20)) / (Std(Log($volume), 20) + 0.0001)"
+    rationale: |
+      Log-volume z-score. Captures unusual participation that
+      tends to precede news / event-driven moves. Pair with a
+      direction signal or use as a regime-detection gate.
+    expected_horizon_bars: 2
+    expected_direction: either
+    tags: [volume, microstructure, surprise]
+
+  - name: vwap_pullback
+    formula: "Clip(($vwap - $close) / $close, -0.05, 0.05)"
+    rationale: |
+      Distance from VWAP, clipped to +/-5%. Positive when close
+      trades below VWAP (potential mean-reversion buy zone);
+      negative when above. Intraday-friendly anchor.
+    expected_horizon_bars: 1
+    expected_direction: either
+    tags: [vwap, intraday, mean_reversion]
+
+  - name: pos_neg_skew
+    formula: "Skew($returns, 60) * -1"
+    rationale: |
+      Inverse 60-bar return skew. Avellaneda-style: names with
+      large negative skew (fat left tail) get a positive
+      defensive signal; names with positive skew get negative.
+    expected_horizon_bars: 21
+    expected_direction: either
+    tags: [skew, defensive, tail_risk]
+
+  - name: rolling_sharpe
+    formula: "Mean($returns, 60) / (Std($returns, 60) + 0.0001)"
+    rationale: |
+      Rolling 60-bar Sharpe ratio of returns. Quality / trend
+      composite: top-decile names are persistent winners with
+      controlled volatility. Use cross-sectionally with Rank.
+    expected_horizon_bars: 21
+    expected_direction: long
+    tags: [sharpe, quality, momentum]
+
+  - name: corr_spy_momentum
+    formula: "Corr($returns, Ref($returns, 5), 30) * Sign(Mean($returns, 5))"
+    rationale: |
+      Autocorrelation of 5-bar returns scaled by the sign of
+      recent returns. Captures positive serial correlation in
+      trending regimes, dampens the signal in noise regimes.
+    expected_horizon_bars: 5
+    expected_direction: either
+    tags: [autocorrelation, momentum, regime]

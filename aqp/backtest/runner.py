@@ -65,6 +65,11 @@ _ENGINE_SHORTCUTS: dict[str, tuple[str, str]] = {
     # Permissive-licence fallback adapters (lazy imports).
     "zvt": ("ZvtBacktestEngine", "aqp.backtest.zvt_engine"),
     "aat": ("AatBacktestEngine", "aqp.backtest.aat_engine"),
+    # Phase 9 of the agentic-RL rollout — optional Backtrader bridge.
+    # Mostly-unmaintained but kept for parity with the FinRL-X
+    # blueprint's Cerebro references. Prefer the event-driven engine.
+    "backtrader": ("BacktraderEngine", "aqp.backtest.backtrader_engine"),
+    "bt-engine": ("BacktraderEngine", "aqp.backtest.backtrader_engine"),
 }
 
 

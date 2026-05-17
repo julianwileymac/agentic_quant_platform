@@ -1,9 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, Bot, NotebookPen, Save, Workflow } from "lucide-react";
+import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { z } from "zod";
 
+import { EntityPicker } from "@/components/common/EntityPicker";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +19,10 @@ import { cn } from "@/lib/utils";
 
 const botFormSchema = z.object({
   name: z.string().min(2, "Name is required").max(80),
-  kind: z.enum(["trading", "research"]),
+  // Hybrid agentic-RL Phase 8: RLTradingBot expands the kind enum
+  // so the form can wire `BotSpec.rl_experiment_ref` for bots driven
+  // by a trained RL policy.
+  kind: z.enum(["trading", "research", "rl_trading"]),
   description: z.string().max(280).optional(),
   strategyClass: z.string().min(1, "Strategy class required").max(120),
   strategyModule: z.string().min(1, "Module path required").max(160),
@@ -26,6 +31,9 @@ const botFormSchema = z.object({
   initialCash: z.coerce.number().positive("Must be positive"),
   maxPositionPct: z.coerce.number().min(0).max(1, "Must be <= 1.0"),
   maxDrawdownPct: z.coerce.number().min(0).max(1, "Must be <= 1.0"),
+  // Optional RL experiment reference — only populated when kind=rl_trading.
+  rlExperimentSlug: z.string().max(120).optional(),
+  rlCheckpoint: z.string().max(500).optional(),
 });
 
 type BotFormValues = z.infer<typeof botFormSchema>;
@@ -45,22 +53,41 @@ const DEFAULT_VALUES: BotFormValues = {
 
 export function BotNewRoute() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     register,
     handleSubmit,
     control,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<BotFormValues>({
     resolver: zodResolver(botFormSchema),
     defaultValues: DEFAULT_VALUES,
   });
 
+  // Phase E deep-link: ``?rl_experiment=<slug>&checkpoint=<path>``
+  // (used by gallery "Use as template" cards for ``rl_spec`` examples
+  // that want to bootstrap a bot directly).
+  useEffect(() => {
+    const slug = searchParams.get("rl_experiment");
+    const checkpoint = searchParams.get("checkpoint");
+    if (!slug && !checkpoint) return;
+    setValue("kind", "rl_trading");
+    if (slug) setValue("rlExperimentSlug", slug);
+    if (checkpoint) setValue("rlCheckpoint", checkpoint);
+    const next = new URLSearchParams(searchParams);
+    next.delete("rl_experiment");
+    next.delete("checkpoint");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const onSubmit = async (values: BotFormValues) => {
     const symbols = values.universeSymbols
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    const spec = {
+    const spec: Record<string, unknown> = {
       name: values.name,
       kind: values.kind,
       description: values.description ?? undefined,
@@ -84,6 +111,16 @@ export function BotNewRoute() {
         max_drawdown_pct: values.maxDrawdownPct,
       },
     };
+    // Hybrid agentic-RL Phase 8: attach the rl_experiment_ref when
+    // the user picked rl_trading. The backend BotRuntime then routes
+    // the lifecycle through RLRuntime instead of the engine factory.
+    if (values.kind === "rl_trading" && values.rlExperimentSlug) {
+      spec.rl_experiment_ref = {
+        slug: values.rlExperimentSlug,
+        checkpoint: values.rlCheckpoint || undefined,
+        deterministic: true,
+      };
+    }
     try {
       const created = await BotsApi.create(spec);
       toast.success(`Bot ${created.name} created`);
@@ -120,8 +157,8 @@ export function BotNewRoute() {
                 control={control}
                 name="kind"
                 render={({ field }) => (
-                  <div className="grid grid-cols-2 gap-2">
-                    {(["trading", "research"] as const).map((opt) => (
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["trading", "research", "rl_trading"] as const).map((opt) => (
                       <Button
                         key={opt}
                         type="button"
@@ -129,13 +166,54 @@ export function BotNewRoute() {
                         onClick={() => field.onChange(opt)}
                         className="capitalize"
                       >
-                        {opt}
+                        {opt.replace("_", " ")}
                       </Button>
                     ))}
                   </div>
                 )}
               />
             </Field>
+            <Controller
+              control={control}
+              name="kind"
+              render={({ field }) =>
+                field.value === "rl_trading" ? (
+                  <div className="grid gap-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      RL trading bots route lifecycle (backtest / paper) through
+                      <code className="mx-1 rounded bg-muted px-1">RLRuntime</code>
+                      instead of the standard engine factory. Pin the trained
+                      RLExperimentSpec slug here.
+                    </p>
+                    <Field label="RL experiment slug" error={errors.rlExperimentSlug?.message}>
+                      <Controller
+                        control={control}
+                        name="rlExperimentSlug"
+                        render={({ field: pickField }) => (
+                          <EntityPicker
+                            kind="rl_experiments"
+                            value={pickField.value ?? null}
+                            onChange={(v) => pickField.onChange(v ?? "")}
+                            placeholder="Pick a registered RL experiment..."
+                            allowCustom
+                          />
+                        )}
+                      />
+                    </Field>
+                    <Field label="Checkpoint (optional)" error={errors.rlCheckpoint?.message}>
+                      <Input
+                        id="rl-checkpoint"
+                        className="font-mono"
+                        placeholder="data/models/rl/<run>/policy.zip"
+                        {...register("rlCheckpoint")}
+                      />
+                    </Field>
+                  </div>
+                ) : (
+                  <></>
+                )
+              }
+            />
             <Field label="Description (optional)" error={errors.description?.message}>
               <Input id="bot-description" {...register("description")} />
             </Field>

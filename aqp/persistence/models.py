@@ -125,6 +125,17 @@ class BacktestRun(Base, ProjectScopedMixin):
         nullable=True,
         index=True,
     )
+    # AGENTS.md hard rule 34: every run-producing flow MUST stamp
+    # ``experiment_id``. Alembic migration 0037 already added the
+    # column on ``backtest_runs``; this ORM mirror lets
+    # :class:`LedgerWriter._stamp` propagate the umbrella id onto
+    # new rows without raising on undefined attributes.
+    experiment_id = Column(
+        String(36),
+        ForeignKey("aqp_experiments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
 
 class BacktestRunArtifact(Base, ProjectScopedMixin):

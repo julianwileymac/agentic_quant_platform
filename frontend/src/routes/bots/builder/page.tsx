@@ -1,15 +1,17 @@
 import { ArrowLeft, FlaskConical, NotebookPen } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { BOT_NODE_ACCENTS, BOT_PALETTE } from "@/components/bots/botPalette";
 import { deserializeBotSpec, serializeBotSpec, slugify } from "@/components/bots/botSerializer";
 import { ConfirmFrictionDialog } from "@/components/common/ConfirmFrictionDialog";
+import { EntityPicker } from "@/components/common/EntityPicker";
 import { WorkflowEditor } from "@/components/flow/WorkflowEditor";
 import type { FlowGraph } from "@/components/flow/types";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/toast";
@@ -18,7 +20,7 @@ import { useApiQuery } from "@/lib/api/hooks";
 import { BotsApi, type BotDetail, type BotKind } from "@/lib/api/bots";
 import { useTenancyStore } from "@/store/tenancy";
 
-const KIND_OPTIONS: BotKind[] = ["trading", "research"];
+const KIND_OPTIONS: BotKind[] = ["trading", "research", "rl_trading"];
 
 interface PendingSave {
   graph: FlowGraph;
@@ -40,8 +42,26 @@ export function BotBuilderRoute() {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<BotKind>("trading");
   const [description, setDescription] = useState("");
+  // Phase E: rl_trading sub-kind state. The visual canvas surfaces a
+  // parallel branch with rl_experiment_ref selectors when this kind
+  // is active. Both pieces (slug + optional checkpoint) thread through
+  // serializeBotSpec via the meta payload.
+  const [rlExperimentSlug, setRlExperimentSlug] = useState<string | null>(null);
+  const [rlCheckpoint, setRlCheckpoint] = useState<string>("");
   const [pending, setPending] = useState<PendingSave | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Phase E deep-link: ``?rl_experiment=<slug>&checkpoint=<path>`` —
+  // used by gallery "Use as template" deep-links for ``rl_spec`` examples.
+  useEffect(() => {
+    const slug = searchParams.get("rl_experiment");
+    const checkpoint = searchParams.get("checkpoint");
+    if (!slug && !checkpoint) return;
+    setKind("rl_trading");
+    if (slug) setRlExperimentSlug(slug);
+    if (checkpoint) setRlCheckpoint(checkpoint);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Hydrate metadata + initial graph once the bot loads.
   const initialGraph = useMemo<FlowGraph | undefined>(() => {
@@ -60,6 +80,10 @@ export function BotBuilderRoute() {
       toast.error("Provide a bot name before saving");
       return;
     }
+    if (kind === "rl_trading" && !rlExperimentSlug) {
+      toast.error("Pick an RL experiment for an rl_trading bot");
+      return;
+    }
     setSaving(true);
     try {
       const spec = serializeBotSpec(pending.graph, {
@@ -67,7 +91,14 @@ export function BotBuilderRoute() {
         slug: slugify(name.trim()),
         kind,
         description: description.trim(),
-      });
+      }) as Record<string, unknown>;
+      if (kind === "rl_trading" && rlExperimentSlug) {
+        spec.rl_experiment_ref = {
+          slug: rlExperimentSlug,
+          checkpoint: rlCheckpoint.trim() || undefined,
+          deterministic: true,
+        };
+      }
       let saved: BotDetail;
       if (id) {
         saved = await BotsApi.update(id, { spec });
@@ -124,7 +155,7 @@ export function BotBuilderRoute() {
           </div>
           <div className="flex flex-col gap-1">
             <Label>Kind</Label>
-            <div className="grid grid-cols-2 gap-1">
+            <div className="grid grid-cols-3 gap-1">
               {KIND_OPTIONS.map((opt) => (
                 <Button
                   key={opt}
@@ -132,9 +163,9 @@ export function BotBuilderRoute() {
                   size="sm"
                   variant={kind === opt ? "default" : "outline"}
                   onClick={() => setKind(opt)}
-                  className="capitalize"
+                  className="whitespace-nowrap"
                 >
-                  {opt}
+                  {opt.replace("_", " ")}
                 </Button>
               ))}
             </div>
@@ -147,6 +178,36 @@ export function BotBuilderRoute() {
             <span className="self-end text-xs text-[var(--text-secondary)]">Loading bot…</span>
           ) : null}
         </div>
+
+        {kind === "rl_trading" ? (
+          <Card className="border-amber-500/30 bg-amber-500/5">
+            <CardHeader>
+              <CardTitle className="text-sm">RL experiment reference</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 lg:grid-cols-2">
+              <div className="flex flex-col gap-1">
+                <Label>RL experiment slug</Label>
+                <EntityPicker
+                  kind="rl_experiments"
+                  value={rlExperimentSlug}
+                  onChange={(v) => setRlExperimentSlug(v ?? null)}
+                  placeholder="Pick a registered RL experiment..."
+                  allowCustom
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="bb-checkpoint">Checkpoint (optional)</Label>
+                <Input
+                  id="bb-checkpoint"
+                  className="font-mono"
+                  placeholder="data/models/rl/<run>/policy.zip"
+                  value={rlCheckpoint}
+                  onChange={(e) => setRlCheckpoint(e.target.value)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <div className="min-h-0 flex-1">
           <WorkflowEditor

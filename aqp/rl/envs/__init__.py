@@ -18,6 +18,7 @@ from aqp.rl.envs.mbtgym_adapter import MbtGymAdapterEnv
 from aqp.rl.envs.optimal_execution_env import OptimalExecutionEnv
 from aqp.rl.envs.options_env import OptionsTradingEnv
 from aqp.rl.envs.portfolio_env import PortfolioAllocationEnv
+from aqp.rl.envs.rl_backtest_env import RLBacktestEnv
 from aqp.rl.envs.stock_trading_discrete import StockTradingDiscreteEnv
 from aqp.rl.envs.stock_trading_env import StockTradingEnv
 
@@ -34,6 +35,7 @@ __all__ = [
     "OptimalExecutionEnv",
     "OptionsTradingEnv",
     "PortfolioAllocationEnv",
+    "RLBacktestEnv",
     "StockTradingDiscreteEnv",
     "StockTradingEnv",
 ]

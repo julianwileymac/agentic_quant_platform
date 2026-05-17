@@ -30,6 +30,8 @@ with _contextlib.suppress(Exception):  # pragma: no cover
     from aqp.rl.agents.cleanrl_adapter import CleanRLAdapter  # noqa: F401
 with _contextlib.suppress(Exception):  # pragma: no cover
     from aqp.rl.agents.llm_hybrid import LLMHybridAgent  # noqa: F401
+with _contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.rl.agents.nemo_rl_adapter import NeMoRLAdapter  # noqa: F401
 
 with _contextlib.suppress(Exception):  # pragma: no cover
     from aqp.rl.agents.classical import (  # noqa: F401

@@ -1,0 +1,70 @@
+name: ppo-patchtst-optimal-execution
+slug: ppo-patchtst-optimal-execution
+kind: training
+description: |
+  PPO agent with PatchTSTBackbone over the OptimalExecutionEnv. Patches
+  of 4 bars are tokenised by the patch projection and fed through a
+  2-layer Transformer encoder — the canonical PatchTST architecture
+  (Nie 2023) adapted for RL.
+
+  Demonstrates the PatchTST variant of the four Phase 3 backbones,
+  particularly suited to long-horizon execution envs where naive
+  per-bar attention would explode token counts.
+
+universe:
+  symbols: [SPY.NASDAQ]
+
+env:
+  class: OptimalExecutionEnv
+  module_path: aqp.rl.envs.optimal_execution_env
+  kwargs: {}
+
+agent:
+  class: SB3Adapter
+  module_path: aqp.rl.agents.sb3_adapter
+  kwargs:
+    algorithm: PPO
+    policy: MlpPolicy
+    learning_rate: 3.0e-4
+    n_steps: 2048
+    policy_kwargs:
+      features_extractor_class: aqp.rl.policies.feature_extractors.BackboneFeaturesExtractor
+      features_extractor_kwargs:
+        backbone_alias: PatchTSTBackbone
+        sequence_length: 32
+        input_features: 5
+        features_dim: 64
+        backbone_kwargs:
+          patch_length: 4
+          d_model: 64
+          n_heads: 4
+          n_layers: 2
+          d_ff: 128
+          dropout: 0.1
+
+training:
+  total_timesteps: 200000
+  log_interval: 10
+  seed: 42
+  advantage:
+    class: GAEAdvantage
+    module_path: aqp.rl.advantage.gae
+    kwargs:
+      gamma: 0.99
+      lam: 0.95
+  stop_properly_penalty_coef: 0.5
+
+evaluation:
+  episodes: 3
+
+terminations:
+  specs:
+    - class: HorizonTermination
+      module_path: aqp.rl.terminations.horizon
+
+trajectory_store:
+  enabled: true
+
+mlflow:
+  experiment: aqp-rl-phase3
+  register_model_as: rl-ppo-patchtst-execution

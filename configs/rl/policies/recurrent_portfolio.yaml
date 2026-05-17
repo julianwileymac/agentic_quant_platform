@@ -1,0 +1,77 @@
+name: sac-recurrent-portfolio
+slug: sac-recurrent-portfolio
+kind: training
+description: |
+  SAC agent with RecurrentBackbone (LSTM, 2 layers, 128 hidden) over
+  the PortfolioAllocationEnv. The LSTM encoder summarises the last 30
+  bars of the lookback window into a 128-dim feature vector consumed
+  by SAC's actor + critic networks.
+
+  Demonstrates the recurrent variant of the four Phase 3 backbones.
+
+universe:
+  symbols: [SPY.NASDAQ, QQQ.NASDAQ, IWM.NASDAQ, TLT.NASDAQ, GLD.NASDAQ]
+
+data_pipeline:
+  spec:
+    class: IcebergRLDataPipeline
+    module_path: aqp.rl.data_pipelines.iceberg
+    kwargs:
+      indicators: [macd, rsi_30, sma_20, atr_14]
+      use_turbulence: true
+
+env:
+  class: PortfolioAllocationEnv
+  module_path: aqp.rl.envs.portfolio_env
+  kwargs:
+    start: "2018-01-01"
+    end: "2023-06-30"
+    initial_balance: 100000.0
+
+agent:
+  class: SB3Adapter
+  module_path: aqp.rl.agents.sb3_adapter
+  kwargs:
+    algorithm: SAC
+    policy: MlpPolicy
+    learning_rate: 3.0e-4
+    buffer_size: 100000
+    policy_kwargs:
+      features_extractor_class: aqp.rl.policies.feature_extractors.BackboneFeaturesExtractor
+      features_extractor_kwargs:
+        backbone_alias: RecurrentBackbone
+        sequence_length: 30
+        features_dim: 128
+        backbone_kwargs:
+          cell: lstm
+          hidden_size: 128
+          num_layers: 2
+          bidirectional: false
+          dropout: 0.1
+
+training:
+  total_timesteps: 200000
+  log_interval: 10
+  seed: 42
+  stop_properly_penalty_coef: 0.2
+
+evaluation:
+  start: "2023-07-01"
+  end: "2024-01-01"
+  episodes: 1
+
+terminations:
+  specs:
+    - class: HorizonTermination
+      module_path: aqp.rl.terminations.horizon
+    - class: MarginCallTermination
+      module_path: aqp.rl.terminations.margin_call
+      kwargs:
+        floor_value: 70000.0
+
+trajectory_store:
+  enabled: true
+
+mlflow:
+  experiment: aqp-rl-phase3
+  register_model_as: rl-sac-recurrent-portfolio

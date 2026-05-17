@@ -114,6 +114,10 @@ from aqp.api.routes import (  # noqa: E402
 from aqp.api.routes import (  # noqa: E402
     strategy_templates as strategy_templates_routes,
 )
+# Hybrid agentic-RL Phase 4 — Alpha Researcher + Strategy Executor REST.
+from aqp.api.routes import (  # noqa: E402
+    quant_agents as quant_agents_routes,
+)
 from aqp.config import settings
 from aqp.observability import (
     configure_tracing,
@@ -260,6 +264,7 @@ app.include_router(orders_routes.router)
 # BEFORE the catch-all ``/strategies/{strategy_id}`` so the LEAN
 # template catalog isn't shadowed by the existing strategy CRUD.
 app.include_router(strategy_templates_routes.router)
+app.include_router(quant_agents_routes.router)
 app.include_router(strategies.router)
 app.include_router(registry.router)
 app.include_router(feature_sets.router)

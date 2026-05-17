@@ -92,6 +92,7 @@ class RLRuntime:
         self._spec_id: str | None = None
         self._version_id: str | None = None
         self._db_run_id: str | None = None
+        self._data_pipeline: Any | None = None
 
     # ----------------------------------------------------------- public API
 
@@ -244,7 +245,21 @@ class RLRuntime:
             if self.spec.evaluation.end:
                 kwargs["end"] = self.spec.evaluation.end
             env_cfg = {**env_cfg, "kwargs": kwargs}
+
+        # Spec.data_pipeline is the FinRL ``DataProcessor`` analogue.
+        # Resolve it once here so the env can pull a fully-featurised
+        # ``DataPipelineResult`` instead of hand-rolling its own
+        # download/clean/indicators chain.
+        data_pipeline = self._build_data_pipeline(overrides.get("data_pipeline"))
+        self._data_pipeline = data_pipeline
+        if data_pipeline is not None:
+            env_kwargs = dict(env_cfg.get("kwargs", {}) or {})
+            env_kwargs.setdefault("data_pipeline", data_pipeline)
+            env_cfg = {**env_cfg, "kwargs": env_kwargs}
+
         env = build_from_config(env_cfg)
+
+        self._maybe_install_stop_properly_wrapper(env)
 
         agent_cfg = self._merge(self.spec.agent, overrides.get("agent"))
         if agent_cfg is None:
@@ -252,6 +267,56 @@ class RLRuntime:
         agent = build_from_config(agent_cfg)
         agent.build(env)
         return env, agent
+
+    def _maybe_install_stop_properly_wrapper(self, env: Any) -> None:
+        """Install :class:`StopProperlyWrapper` when the spec opts in.
+
+        Honours the canonical ``coef in [0, 1]`` semantics: ``0`` =
+        draconian zero-reward for truncated steps; ``1`` = no penalty
+        (wrapper still installed so telemetry hooks fire).
+        """
+        coef = getattr(self.spec.training, "stop_properly_penalty_coef", None)
+        if coef is None:
+            return
+        try:
+            from aqp.rl.rewards.stop_properly import StopProperlyWrapper
+        except Exception:
+            logger.debug("StopProperlyWrapper unavailable; skipping wrap", exc_info=True)
+            return
+        inner = getattr(env, "reward_model", None)
+        if inner is None:
+            logger.warning(
+                "stop_properly_penalty_coef=%s requested but env has no reward_model -- skipping wrap",
+                coef,
+            )
+            return
+        env.reward_model = StopProperlyWrapper(inner=inner, coef=float(coef))
+
+    def _build_data_pipeline(self, override: Any | None) -> Any | None:
+        """Resolve ``spec.data_pipeline`` into a :class:`BaseDataPipeline`.
+
+        Returns ``None`` when no pipeline is configured. Envs that
+        manage their own data (synthetic envs, replay envs that read
+        ``rl.trajectories`` directly) stay unaffected because the env
+        kwarg is only injected when a pipeline resolves.
+        """
+        pipeline_ref = override if override is not None else self.spec.data_pipeline
+        if pipeline_ref is None:
+            return None
+        spec_dict: dict[str, Any] | None = None
+        if hasattr(pipeline_ref, "spec") and getattr(pipeline_ref, "spec", None):
+            spec_dict = dict(getattr(pipeline_ref, "spec"))
+        elif isinstance(pipeline_ref, dict) and "spec" in pipeline_ref and pipeline_ref["spec"]:
+            spec_dict = dict(pipeline_ref["spec"])
+        elif isinstance(pipeline_ref, dict) and "class" in pipeline_ref:
+            spec_dict = dict(pipeline_ref)
+        if spec_dict is None:
+            return None
+        try:
+            return build_from_config(spec_dict)
+        except Exception:
+            logger.exception("data_pipeline construction failed; env will fall back to defaults")
+            return None
 
     @staticmethod
     def _merge(base: dict[str, Any] | None, over: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -465,10 +530,17 @@ class RLRuntime:
         ctx = self.context
         if ctx is None:
             return
+        # AGENTS.md hard rule 34: copy ``experiment_id`` / ``test_id``
+        # from the active :class:`RequestContext` onto every new
+        # ``rl_runs`` / ``RLEpisode`` row. Alembic migration 0037 added
+        # the columns; this stamper finally populates them so the
+        # ``/experiments/...`` UI can join cleanly.
         for attr_ctx, attr_row in (
             ("user_id", "owner_user_id"),
             ("workspace_id", "workspace_id"),
             ("project_id", "project_id"),
+            ("experiment_id", "experiment_id"),
+            ("test_id", "test_id"),
         ):
             value = getattr(ctx, attr_ctx, None)
             if value and hasattr(row, attr_row) and getattr(row, attr_row, None) in (None, ""):

@@ -30,6 +30,37 @@ export interface StrategyDevSelection {
   strategyId?: string | null;
   /** Free-form YAML being composed before save-to-library. */
   composerYaml?: string;
+  /**
+   * Phase B (agentic-RL UI studios): symbolic alpha factor being
+   * authored in the Alpha Factor Studio. Persisted so navigating
+   * to the Gallery and clicking "Use as template" -> back doesn't
+   * lose work.
+   */
+  alphaFormula?: string;
+  alphaFormulaName?: string;
+  alphaRationale?: string;
+  /**
+   * Recent alpha proposals (most-recent first). The studio's
+   * "Recent" library tab reads this so the user can quickly pull
+   * back a formula they were just iterating on.
+   */
+  recentAlphas?: Array<{
+    name: string;
+    formula: string;
+    rationale?: string;
+    savedAt: string;
+  }>;
+  /**
+   * Gallery selection deep-link state — when set, the gallery sets
+   * this before navigating to a studio, and the studio reads +
+   * clears it on mount. Avoids relying purely on URL query params
+   * when the payload is large.
+   */
+  gallerySelection?: {
+    kind: "alpha_factor" | "rl_spec" | "agent_spec";
+    slug: string;
+    payload?: Record<string, unknown>;
+  } | null;
 }
 
 export interface RunSummary {
@@ -65,6 +96,11 @@ const INITIAL: StrategyDevSelection = {
   lastRunSummary: null,
   strategyId: null,
   composerYaml: "",
+  alphaFormula: "",
+  alphaFormulaName: "",
+  alphaRationale: "",
+  recentAlphas: [],
+  gallerySelection: null,
 };
 
 const StrategyDevContext = createContext<StrategyDevContextValue | undefined>(undefined);

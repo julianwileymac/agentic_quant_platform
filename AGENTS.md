@@ -350,6 +350,59 @@ These hold across the codebase. Any PR that violates one will be sent back.
  `resource_relations.relation='translated_from'` edge back to the
  source template so the ownership graph can audit provenance. See
  [docs/strategy-templates.md](docs/strategy-templates.md).
+36. **All RL advantage estimation goes through
+ [`BaseAdvantageEstimator`](aqp/rl/advantage/base.py)
+ (`rl_kind='rl_advantage_estimator'`).** The native
+ :class:`ReinforcePlusPlusAdvantage`, :class:`GRPOAdvantage`, and
+ :class:`GAEAdvantage` register through the
+ [`RLComponent`](aqp/rl/core/base.py) metaclass alongside envs /
+ rewards / policies. The
+ [`RLExperimentSpec.training.advantage`](aqp/rl/spec.py) field
+ references one by `rl_alias`. NeMo-RL's optional adapter
+ ([aqp/rl/agents/nemo_rl_adapter.py](aqp/rl/agents/nemo_rl_adapter.py))
+ is the heavy-dep escape hatch, but new flows MUST prefer the
+ native estimators (no Megatron required, deterministic results
+ across replays).
+37. **All RL policy backbones go through
+ [`TimeSeriesEncoder`](aqp/rl/policies/backbones/base.py)
+ (`rl_kind='rl_policy_backbone'`).** The four shipped backbones —
+ :class:`TransformerBackbone`, :class:`RecurrentBackbone`
+ (LSTM/GRU/RNN), :class:`AutoencoderBackbone`,
+ :class:`PatchTSTBackbone` — wrap existing :mod:`aqp.ml.models`
+ modules so the policy network and the offline ML stack share one
+ source of truth. The SB3 bridge
+ ([`BackboneFeaturesExtractor`](aqp/rl/policies/feature_extractors.py))
+ takes `backbone_alias` from the spec and injects the backbone via
+ `policy_kwargs={'features_extractor_class': ...}`. Don't hand-roll
+ a custom feature extractor inside an adapter — register a new
+ backbone instead.
+38. **All weight-centric portfolio actions go through the FinRL-X
+ four-stage pipeline
+ [`WeightCentricPipeline`](aqp/rl/portfolio/pipeline.py)
+ (`f_S -> f_A -> f_T -> f_R`).** The risk overlay (`f_R`)
+ re-uses [`RiskLimits`](aqp/risk/limits.py) + the existing
+ [`TargetWeightsRebalancer`](aqp/strategies/portfolio_construction.py)
+ so the offline backtest and live paper-trading paths produce
+ identical target-weight vectors. The pipeline is plumbed onto
+ every backtest engine through
+ [`context['rl_agent']`](aqp/rl/bridges/agent_bridge.py); engines
+ opt in by flipping
+ [`EngineCapabilities.supports_rl_injection=True`](aqp/backtest/capabilities.py).
+ Don't bypass the pipeline by writing weights directly into broker
+ calls — that breaks the deployment-consistent contract.
+39. **LLM-emitted alpha factor formulas go through the AST sandbox in
+ [`aqp/data/expressions_dsl.py`](aqp/data/expressions_dsl.py)
+ before reaching any execution path.** The
+ :class:`_SymbolicFactorValidator` whitelist allows only the
+ documented operator vocabulary + numeric / string / bool / None
+ constants; everything else (imports, attribute access, subscripts,
+ lambdas, comprehensions) is rejected at compile time. The
+ resulting :class:`FactorNode` is engine-agnostic — it exposes a
+ :meth:`compute` for vbt-pro / event-driven and an
+ :meth:`as_backtrader_indicator` for the optional Phase 9 engine.
+ Don't `exec` / `eval` raw LLM output anywhere in the pipeline —
+ mirror the LEAN translator pattern (AST NodeTransformer, no raw
+ evaluation).
 
 ## Common workflows
 

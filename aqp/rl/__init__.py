@@ -46,6 +46,21 @@ with _contextlib.suppress(Exception):  # pragma: no cover
     from aqp.rl import ensemblers, experiments  # noqa: F401
 with _contextlib.suppress(Exception):  # pragma: no cover
     from aqp.rl import envs  # noqa: F401
+# Hybrid agentic-RL Phase 2 + Phase 3: eager-import the new
+# advantage estimators + policy backbones so the RLComponent
+# metaclass auto-registration fires and `/rl/components/{kind}`
+# enumerates them.
+with _contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.rl import advantage  # noqa: F401
+with _contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.rl import policies  # noqa: F401
+# Hybrid agentic-RL Phase 1: eager-import the weight-centric
+# portfolio pipeline + RL ↔ Backtest bridge so RLBacktestEnv and
+# the WeightCentricPipeline are reachable via build_from_config.
+with _contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.rl import portfolio  # noqa: F401
+with _contextlib.suppress(Exception):  # pragma: no cover
+    from aqp.rl import bridges  # noqa: F401
 with _contextlib.suppress(Exception):
     from aqp.rl.tagging import apply_tags as _apply_rl_tags
 

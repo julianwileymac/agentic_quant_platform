@@ -3,11 +3,14 @@ import {
   BookOpen,
   Boxes,
   FileSearch,
+  FlaskConical,
   Gauge,
+  Layers,
   LineChart,
   Library,
   PlayCircle,
   Radar,
+  Settings,
   Sparkles,
   Wand2,
   type LucideIcon,
@@ -45,6 +48,30 @@ export const STRATEGY_DEV_ROUTES: StrategyDevSubRoute[] = [
     description: "LLM-driven strategy ideation",
     icon: Sparkles,
     group: "Author",
+  },
+  // Hybrid agentic-RL UI studios — Alpha Factor Studio.
+  {
+    to: "/strategy-development/alpha-factors",
+    label: "Alpha Factors",
+    description: "Symbolic-DSL authoring + library",
+    icon: FlaskConical,
+    group: "Author",
+  },
+  // Hybrid agentic-RL UI studios — Examples Library (Phase F).
+  {
+    to: "/strategy-development/gallery",
+    label: "Examples Gallery",
+    description: "Bundled + RAG-driven templates",
+    icon: Layers,
+    group: "Knowledge",
+  },
+  // Hybrid agentic-RL UI studios — Library admin (OOS extension).
+  {
+    to: "/strategy-development/library-admin",
+    label: "Library Admin",
+    description: "Bundled + RAG corpus management",
+    icon: Settings,
+    group: "Knowledge",
   },
   {
     to: "/strategy-development/single-predict",

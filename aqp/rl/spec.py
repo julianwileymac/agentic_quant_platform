@@ -142,6 +142,20 @@ class TrainingConfig(BaseModel):
     n_envs: int = 1
     eval_during_training: bool = False
     eval_freq: int | None = None
+    # Phase 2 (hybrid agentic-RL rollout) — FinRL-X / NeMo-RL
+    # advantage-shaping knobs. Both default to ``None`` so existing
+    # specs hash-collapse to their current versions (rule 17 immutability
+    # preserved); new specs that opt in get a new spec hash.
+    advantage: dict[str, Any] | None = None
+    """Optional advantage-estimator build-spec
+    (``{class, module_path, kwargs}``). Selects the
+    ``rl_advantage_estimator`` to use during training — e.g.
+    ``ReinforcePlusPlus``, ``GRPO``, ``GAE``."""
+    stop_properly_penalty_coef: float | None = None
+    """NeMo-RL ``stop_properly_penalty_coef`` analogue. When set,
+    :class:`StopProperlyWrapper` scales the reward of any step where
+    ``info['truncated']=True`` by this coefficient (``0`` = draconian
+    zeroing of truncated rewards; ``1`` = no penalty)."""
     extras: dict[str, Any] = Field(default_factory=dict)
 
 

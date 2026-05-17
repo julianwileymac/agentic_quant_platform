@@ -28,6 +28,10 @@ from aqp.rl.rewards.risk import (
     VolatilityPenaltyTerm,
 )
 from aqp.rl.rewards.shaping import PotentialBasedShaping
+from aqp.rl.rewards.stop_properly import (
+    StopProperlyPenaltyTerm,
+    StopProperlyWrapper,
+)
 from aqp.rl.rewards.vol_arb_pnl import VolArbPnLTerm
 
 __all__ = [
@@ -43,6 +47,8 @@ __all__ = [
     "SharpeTerm",
     "SlippagePenaltyTerm",
     "SortinoTerm",
+    "StopProperlyPenaltyTerm",
+    "StopProperlyWrapper",
     "TransactionCostTerm",
     "TurbulenceGateTerm",
     "TurnoverPenaltyTerm",

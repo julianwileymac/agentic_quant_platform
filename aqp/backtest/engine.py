@@ -106,6 +106,7 @@ class EventDrivenBacktester(BaseBacktestEngine):
         supports_interrupts=True,
         supports_walk_forward=True,
         supports_monte_carlo=True,
+        supports_rl_injection=True,
         license="MIT",
         notes="Default engine. Use this when you need agents/ML running per-bar in pure Python.",
     )
@@ -120,6 +121,7 @@ class EventDrivenBacktester(BaseBacktestEngine):
         interrupt_rules: list[dict[str, Any]] | None = None,
         interrupt_handler: InterruptHandler | None = None,
         agent_dispatcher: Any | None = None,
+        rl_agent: Any | None = None,
     ) -> None:
         self.initial_cash = float(initial_cash)
         self.commission_pct = float(commission_pct)
@@ -134,6 +136,11 @@ class EventDrivenBacktester(BaseBacktestEngine):
         # consult an agent inside on_bar/on_data. Lazily initialised so the
         # AgentRuntime import is only paid for runs that actually use it.
         self._agent_dispatcher = agent_dispatcher
+        # The RL bridge exposed via ``context['rl_agent']``. Bound by
+        # :class:`RLBacktestEnv` via :meth:`attach_rl_agent`. Lazily
+        # initialised to :class:`NoopRLAgentBridge` so non-RL strategies
+        # never pay the import cost.
+        self._rl_agent: Any | None = rl_agent
 
     def _get_agent_dispatcher(self) -> Any:
         """Return the agent dispatcher exposed through ``context['agents']``.
@@ -150,6 +157,34 @@ class EventDrivenBacktester(BaseBacktestEngine):
         except Exception:
             self._agent_dispatcher = _NoopDispatcher()
         return self._agent_dispatcher
+
+    def _get_rl_agent(self) -> Any:
+        """Return the bridge exposed through ``context['rl_agent']``.
+
+        Generalised version of :meth:`_get_agent_dispatcher` so any
+        strategy that subclasses :class:`RLAwareStrategy` (or just
+        reads ``context['rl_agent']``) can pull the latest target
+        weight vector without the engine having to know what an RL
+        policy is.
+        """
+        if self._rl_agent is not None:
+            return self._rl_agent
+        try:
+            from aqp.rl.bridges import NoopRLAgentBridge
+
+            self._rl_agent = NoopRLAgentBridge()
+        except Exception:
+            self._rl_agent = None
+        return self._rl_agent
+
+    def attach_rl_agent(self, rl_agent: Any) -> None:
+        """Bind an :class:`RLAgentBridge` so ``context['rl_agent']`` resolves to it.
+
+        Called by :class:`aqp.rl.envs.rl_backtest_env.RLBacktestEnv`
+        right before invoking :meth:`run`. The strategy then sees the
+        bridge on every bar.
+        """
+        self._rl_agent = rl_agent
 
     def _request_to_dict(self, request: OrderRequest) -> dict[str, Any]:
         return {
@@ -417,6 +452,7 @@ class EventDrivenBacktester(BaseBacktestEngine):
                 "drawdown": _current_drawdown(equity_records),
                 "current_time": ts_pydt,
                 "agents": self._get_agent_dispatcher(),
+                "rl_agent": self._get_rl_agent(),
             }
 
             # The strategy is dispatched once per timestamp — the queue is

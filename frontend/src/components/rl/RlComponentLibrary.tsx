@@ -11,6 +11,12 @@ const KINDS = [
   { value: "rl_reward", label: "Rewards" },
   { value: "rl_termination", label: "Terminations" },
   { value: "rl_policy", label: "Policies" },
+  // Phase 3 of hybrid agentic-RL rollout: Transformer / RNN /
+  // Autoencoder / PatchTST backbones register under this kind.
+  { value: "rl_policy_backbone", label: "Policy backbones" },
+  // Phase 2 of hybrid agentic-RL rollout: ReinforcePlusPlus / GRPO /
+  // GAE advantage estimators register under this kind.
+  { value: "rl_advantage_estimator", label: "Advantage estimators" },
   { value: "rl_data", label: "Data pipelines" },
   { value: "rl_ensembler", label: "Ensemblers" },
   { value: "rl_experiment", label: "Experiments" },
