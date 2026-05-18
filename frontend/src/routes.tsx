@@ -127,6 +127,9 @@ import { MlTrainingRoute } from "@/routes/ml/training/page";
 import { ModelsProvidersRoute } from "@/routes/models/page";
 import { MonitorRoute } from "@/routes/monitor/page";
 import { MonteCarloRoute } from "@/routes/monte-carlo/page";
+import { MetadataAspectsListRoute } from "@/routes/metadata/aspects/page";
+import { MetadataAspectDetailRoute } from "@/routes/metadata/aspects/[urn]/page";
+import { MetadataAspectLineageRoute } from "@/routes/metadata/aspects/lineage/[urn]/page";
 import { NotFoundRoute } from "@/routes/not-found";
 import { OptimizerRoute } from "@/routes/optimizer/page";
 import { OptionsLabRoute } from "@/routes/options/lab/page";
@@ -192,6 +195,14 @@ import { WorkflowDetailRoute } from "@/routes/workflows/[name]/page";
 import { WorkflowRunRoute } from "@/routes/workflows/runs/[runId]/page";
 
 import { NAV_ITEMS } from "@/components/shell/nav-config";
+
+// Phase 7 — Infrastructure / Terraform IaC control plane + onboarding.
+import { InfraRoute } from "@/routes/infra/page";
+import { InfraTerraformRoute } from "@/routes/infra/terraform/page";
+import { TerraformWorkspaceDetailRoute } from "@/routes/infra/terraform/workspaces/[id]/page";
+import { TerraformRunDetailRoute } from "@/routes/infra/terraform/runs/[id]/page";
+import { TerraformStacksRoute } from "@/routes/infra/terraform/stacks/page";
+import { OnboardingRoute as AdminOnboardingRoute } from "@/routes/admin/onboarding/page";
 
 /**
  * Routes implemented with real components. Anything in NAV_ITEMS that
@@ -261,6 +272,8 @@ const REAL_ROUTES: Record<string, () => ReactElement> = {
   "/paper": PaperRoute,
   "/portfolio": PortfolioRoute,
   "/monitor": MonitorRoute,
+  "/metadata/aspects": MetadataAspectsListRoute,
+  "/metadata/aspects/lineage": MetadataAspectsListRoute,
   "/crew": CrewTraceRoute,
   "/ml/builder": MlBuilderRoute,
   "/ml/training": MlTrainingRoute,
@@ -289,6 +302,10 @@ const REAL_ROUTES: Record<string, () => ReactElement> = {
   "/streaming/kafka": KafkaRoute,
   "/streaming/flink": FlinkRoute,
   "/streaming/producers": ProducersRoute,
+  // Phase 7 — Infrastructure / Terraform IaC.
+  "/infra": InfraRoute,
+  "/infra/terraform": InfraTerraformRoute,
+  "/admin/onboarding": AdminOnboardingRoute,
   // Phase 5 — Admin / tenancy CRUD
   "/admin/orgs": OrgsAdminRoute,
   "/admin/teams": TeamsAdminRoute,
@@ -325,6 +342,8 @@ const DYNAMIC_ROUTES: RouteObject[] = [
   { path: "backtest/iterate", element: <BacktestIterateRoute /> },
   // HFT / LOB backtest wizard (math-layer expansion).
   { path: "backtest/lob", element: <LobBacktestRoute /> },
+  { path: "metadata/aspects/:urn", element: <MetadataAspectDetailRoute /> },
+  { path: "metadata/aspects/lineage/:urn", element: <MetadataAspectLineageRoute /> },
   { path: "rl/runs/:id", element: <RlRunDetailRoute /> },
   // Phase 3 dynamic routes.
   { path: "strategies/:id", element: <StrategyDetailRoute /> },
@@ -390,6 +409,10 @@ const DYNAMIC_ROUTES: RouteObject[] = [
   // shadow the existing /workflows/{agent,data,strategy} editor entries.
   { path: "workflows/specs/:name", element: <WorkflowDetailRoute /> },
   { path: "workflows/runs/:runId", element: <WorkflowRunRoute /> },
+  // Phase 7 — Terraform IaC dynamic routes (stack catalog + workspace + run detail).
+  { path: "infra/terraform/stacks", element: <TerraformStacksRoute /> },
+  { path: "infra/terraform/workspaces/:id", element: <TerraformWorkspaceDetailRoute /> },
+  { path: "infra/terraform/runs/:id", element: <TerraformRunDetailRoute /> },
   // Consolidated `/strategy-development/*` umbrella. The parent route
   // mounts `StrategyDevLayout` (sub-nav + KPI strip + Outlet); each
   // child is a normal page that reads / writes the shared
@@ -425,22 +448,37 @@ const DYNAMIC_ROUTES: RouteObject[] = [
   },
 ];
 
-const childRoutes: RouteObject[] = NAV_ITEMS
+function routePathFromHref(href: string): string {
+  const [withoutQuery] = href.split("?");
+  const [withoutHash] = (withoutQuery ?? href).split("#");
+  return withoutHash || "/";
+}
+
+const childRoutes: RouteObject[] = [];
+const seenNavPaths = new Set<string>();
+for (const item of NAV_ITEMS) {
   // Routes under the consolidated `/strategy-development/*` umbrella
   // are mounted via the nested layout route below; skip them in the
   // flat childRoutes generation so the layout actually wraps them.
-  .filter((item) => !item.href.startsWith("/strategy-development"))
-  .map((item) => {
-    const Component = REAL_ROUTES[item.href];
-    const element = Component ? <Component /> : stubRoute(item);
-    if (item.href === "/") {
-      return { index: true, element } satisfies RouteObject;
-    }
-    return {
-      path: item.href.replace(/^\//, ""),
-      element,
-    } satisfies RouteObject;
+  if (item.href.startsWith("/strategy-development")) {
+    continue;
+  }
+  const baseHref = routePathFromHref(item.href);
+  if (seenNavPaths.has(baseHref)) {
+    continue;
+  }
+  seenNavPaths.add(baseHref);
+  const Component = REAL_ROUTES[baseHref];
+  const element = Component ? <Component key={item.key} /> : stubRoute(item);
+  if (baseHref === "/") {
+    childRoutes.push({ index: true, element });
+    continue;
+  }
+  childRoutes.push({
+    path: baseHref.replace(/^\//, ""),
+    element,
   });
+}
 
 export const router = createBrowserRouter([
   // Auth routes live OUTSIDE the AppShell so the IdP redirect / loading

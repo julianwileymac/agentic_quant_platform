@@ -341,7 +341,14 @@ def claims_picture(claims: dict[str, Any]) -> str | None:
 
 
 def claims_subject(claims: dict[str, Any]) -> str:
-    """Required: the OIDC ``sub`` claim, the canonical user identifier."""
+    """Required: the OIDC ``sub`` claim, the canonical user identifier.
+
+    Entra ID tokens carry both ``sub`` and ``oid`` (object id). The
+    ``oid`` is the canonical, stable-across-rename identifier, but the
+    ``sub`` is per-app and is what every other AQP IdP uses. We
+    therefore keep ``sub`` as the primary key. :func:`claims_entra_oid`
+    exposes the Entra ``oid`` for code paths that need it.
+    """
     sub = claims.get("sub")
     if not isinstance(sub, str) or not sub.strip():
         raise InvalidTokenError("JWT is missing the required 'sub' claim")
@@ -349,14 +356,16 @@ def claims_subject(claims: dict[str, Any]) -> str:
 
 
 def claims_provider(claims: dict[str, Any]) -> str:
-    """Synthesise an ``auth_provider`` label from the ``sub`` claim.
+    """Synthesise an ``auth_provider`` label from the ``sub`` / ``iss`` claims.
 
     Auth0 prefixes connection providers in the sub: ``google-oauth2|...``,
-    ``github|...``, ``auth0|...``. Strip the right-hand identifier and
-    return the connection type, falling back to ``oidc`` for IdPs that
-    don't follow this convention.
+    ``github|...``, ``auth0|...``. Entra issues tokens from
+    ``https://login.microsoftonline.com/{tid}/v2.0`` and includes an
+    ``idp`` claim for federated sign-ins. We pick the most specific
+    label available, falling back to ``oidc`` for unfamiliar IdPs.
     """
     sub = str(claims.get("sub") or "")
+    iss = str(claims.get("iss") or "").lower()
     if "|" in sub:
         prefix = sub.split("|", 1)[0]
         if prefix in {"google-oauth2", "github", "windowslive", "facebook", "twitter"}:
@@ -364,12 +373,51 @@ def claims_provider(claims: dict[str, Any]) -> str:
         if prefix == "auth0":
             return "auth0"
         return f"oauth_{prefix}"
-    iss = str(claims.get("iss") or "").lower()
+    if "login.microsoftonline.com" in iss or "sts.windows.net" in iss:
+        return "msal_entra"
     if "google" in iss:
         return "oauth_google"
     if "auth0.com" in iss:
         return "auth0"
     return "oidc"
+
+
+def claims_entra_tenant(claims: dict[str, Any]) -> str | None:
+    """Return the Entra ``tid`` (tenant id) claim, if present.
+
+    Entra includes ``tid`` on every issued token; we use it to look up
+    the matching :class:`aqp.persistence.models_terraform.EntraTenantLink`
+    row so the user's :class:`Membership` chain lands in the right
+    AQP :class:`Organization`.
+    """
+    tid = claims.get("tid")
+    if isinstance(tid, str) and tid.strip():
+        return tid.strip()
+    return None
+
+
+def claims_entra_oid(claims: dict[str, Any]) -> str | None:
+    """Return the Entra ``oid`` (object id), the stable user identifier."""
+    oid = claims.get("oid")
+    if isinstance(oid, str) and oid.strip():
+        return oid.strip()
+    return None
+
+
+def claims_entra_app_roles(claims: dict[str, Any]) -> list[str]:
+    """Return the Entra ``roles`` claim (app-role assignments) as a list.
+
+    Entra delivers app roles in a top-level ``roles`` array (not
+    namespaced like Auth0's ``permissions``). AQP recognises the
+    ``aqp.<role>`` shape (e.g. ``aqp.admin``, ``aqp.editor``,
+    ``aqp.viewer``, ``aqp.terraform.operator``); the
+    :func:`aqp.auth.user._apply_custom_claims_memberships` consumer
+    maps these onto the AQP role lattice.
+    """
+    roles = claims.get("roles")
+    if not isinstance(roles, list):
+        return []
+    return [str(r).strip() for r in roles if isinstance(r, str) and r.strip()]
 
 
 # Re-export convenient names.
@@ -380,6 +428,9 @@ __all__ = [
     "OIDCError",
     "claims_display_name",
     "claims_email",
+    "claims_entra_app_roles",
+    "claims_entra_oid",
+    "claims_entra_tenant",
     "claims_picture",
     "claims_provider",
     "claims_subject",

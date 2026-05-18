@@ -1,0 +1,77 @@
+---
+description: "Terraform IaC control plane — TerraformRuntime / hash-locked specs / runner pod / OPA gate"
+globs:
+  - "aqp/terraform/**/*.py"
+  - "aqp/api/routes/terraform.py"
+  - "aqp/api/routes/infra.py"
+  - "aqp/tasks/terraform_tasks.py"
+  - "aqp/data/mcp/tools/terraform.py"
+  - "aqp/persistence/models_terraform.py"
+  - "terraform/**/*.tf"
+  - "terraform/**/*.tf.j2"
+  - "frontend/src/routes/infra/**/*.tsx"
+  - "frontend/src/lib/api/terraform.ts"
+  - "frontend/src/lib/api/infra.ts"
+alwaysApply: false
+---
+
+# Terraform IaC control plane
+
+Phase 7 of the multi-tenant rollout — see
+[docs/terraform-control-plane.md](mdc:docs/terraform-control-plane.md)
+for the narrative walkthrough. AGENTS rules 42 + 43 in
+[AGENTS.md](mdc:AGENTS.md) are the source of truth.
+
+## Hard rules
+
+1. **All Terraform lifecycle actions go through
+   [`TerraformRuntime`](mdc:aqp/terraform/runtime.py)** (rule 42).
+   Routes / Celery tasks / MCP tools wrap it; nothing calls
+   `subprocess.run(["terraform", ...])` directly outside
+   [`aqp/terraform/runner.py::TerraformExecutor`](mdc:aqp/terraform/runner.py).
+2. **`terraform_stack_spec_versions` rows are immutable hash-locked
+   snapshots** (rule 43). Re-snapshotting via
+   [`aqp/terraform/registry.py::persist_spec`](mdc:aqp/terraform/registry.py)
+   inserts a new row when the SHA-256 changes; existing rows are
+   append-only.
+3. **CDKTF was deprecated by HashiCorp on 2025-12-10. Python-side
+   HCL generation uses Jinja2 templates** under
+   [`aqp/terraform/codegen/templates/`](mdc:aqp/terraform/codegen/templates).
+   New module-kind support = new `.tf.j2` template + matching emit
+   path in [`aqp/terraform/codegen/base.py`](mdc:aqp/terraform/codegen/base.py).
+4. **`TerraformRun` carries `experiment_id` + `test_id`** (rule 34).
+   The runtime stamps from the constructor's `experiment_id` arg;
+   callers populate via :class:`RequestContext` and route through
+   :func:`aqp.terraform.runtime.TerraformRuntime` directly.
+5. **The runner pod has two SA flavors** — `aqp-terraform-readonly`
+   for `plan`, `aqp-terraform-writer` for `apply`. The kill-switch
+   secret is mounted as tmpfs (never persisted to disk).
+6. **Five state backends are supported**: `local | s3 | azurerm | gcs |
+   hcp`. The HCP path uses
+   [`aqp/terraform/hcp_client.py`](mdc:aqp/terraform/hcp_client.py)
+   (thin httpx wrapper around `app.terraform.io/api/v2`); no
+   `python-terrasnek` dep so cold installs without HCP credentials
+   still boot cleanly.
+7. **Frontend Terraform pages live under `/infra/terraform/*`**
+   (Vite, not legacy webui). Plan / apply / destroy actions are
+   friction-gated via
+   [`ConfirmFrictionDialog`](mdc:frontend/src/components/common/ConfirmFrictionDialog.tsx).
+
+## Don't
+
+- Don't import :mod:`aqp.persistence.models_terraform` from an agent
+  body. Agents go through `data.terraform.*` MCP tools (rule 22).
+- Don't run `terraform apply` against state files outside the
+  `AQP_TERRAFORM_WORKSPACES_DIR/<workspace_id>/` directory. The
+  runner is the only sanctioned executor.
+- Don't author module HCL in Python `f"..."` strings. Use Jinja2
+  templates so the rendered output is reviewable.
+- Don't bypass the `/terraform/halt` fan-out target in the topbar
+  `KillSwitch`. Every long-running runtime is in the halt list
+  (rule applies to new runtimes too).
+- Don't put secret values into the rendered HCL. Every secret lands
+  via `ExternalSecret` -> `ClusterSecretStore` -> Vault / cloud
+  secret manager.
+
+Canonical doc: [docs/terraform-control-plane.md](mdc:docs/terraform-control-plane.md).
+Module roster: [terraform/DISCOVERY.md](mdc:terraform/DISCOVERY.md).

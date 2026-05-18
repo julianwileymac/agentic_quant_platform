@@ -172,11 +172,19 @@ def upgrade() -> None:
             ["workflow_spec_versions.id"],
             ondelete="SET NULL",
         ),
+        # NOTE: the experiments / tests umbrella tables are named
+        # ``aqp_experiments`` and ``aqp_tests`` (migration 0036) to
+        # avoid colliding with MLflow's reserved ``experiments``
+        # table. This FK target was originally written as
+        # ``experiments.id`` / ``tests.id`` which silently bound to
+        # MLflow's table and broke the migration at apply time. Fixed
+        # here as a hot-patch to the never-successfully-applied
+        # migration.
         sa.ForeignKeyConstraint(
-            ["experiment_id"], ["experiments.id"], ondelete="SET NULL"
+            ["experiment_id"], ["aqp_experiments.id"], ondelete="SET NULL"
         ),
         sa.ForeignKeyConstraint(
-            ["test_id"], ["tests.id"], ondelete="SET NULL"
+            ["test_id"], ["aqp_tests.id"], ondelete="SET NULL"
         ),
         sa.ForeignKeyConstraint(
             ["owner_user_id"], ["users.id"], ondelete="SET NULL"

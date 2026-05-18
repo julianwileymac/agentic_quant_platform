@@ -26,7 +26,7 @@ import {
   Layers,
   LineChart,
   ListChecks,
-  Map,
+  Map as MapIcon,
   MessageSquare,
   Network,
   Notebook,
@@ -51,6 +51,7 @@ export type NavGroup =
   | "Agents"
   | "RAG"
   | "Research"
+  | "Metadata"
   | "Lab"
   | "Execution"
   | "Workflows"
@@ -351,6 +352,28 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "learn", label: "Learn / Taxonomy", href: "/learn", icon: Sparkles, group: "Research" },
   { key: "learn-sources", label: "Source Libraries", href: "/learn/sources", icon: Compass, group: "Research" },
 
+  {
+    key: "metadata-aspects-list",
+    label: "Aspect Browser",
+    href: "/metadata/aspects",
+    icon: Database,
+    group: "Metadata",
+  },
+  {
+    key: "metadata-aspects-stats",
+    label: "Aspect Stats",
+    href: "/metadata/aspects?tab=stats",
+    icon: History,
+    group: "Metadata",
+  },
+  {
+    key: "metadata-aspects-lineage",
+    label: "Lineage Explorer",
+    href: "/metadata/aspects/lineage",
+    icon: Network,
+    group: "Metadata",
+  },
+
   // Consolidated strategy authoring + testing umbrella. See
   // docs/strategy-development.md. Replaces the fragmented ml-test entry
   // (factor workbench / backtest list / monte carlo / optimizer remain
@@ -416,6 +439,10 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "admin-workspaces", label: "Workspaces", href: "/admin/workspaces", icon: Folder, group: "Admin" },
   { key: "admin-projects", label: "Projects", href: "/admin/projects", icon: AppWindow, group: "Admin" },
   { key: "admin-labs", label: "Labs", href: "/admin/labs", icon: FlaskConical, group: "Admin" },
+  { key: "admin-onboarding", label: "Onboarding", href: "/admin/onboarding", icon: Handshake, group: "Admin" },
+  // Phase 7 — Infrastructure / Terraform IaC control plane.
+  { key: "infra", label: "Infrastructure", href: "/infra", icon: CircuitBoard, group: "System" },
+  { key: "infra-terraform", label: "Terraform IaC", href: "/infra/terraform", icon: Hammer, group: "System" },
   { key: "admin-configs", label: "Layered Config", href: "/admin/configs", icon: Settings, group: "Admin" },
 
   { key: "models", label: "Models & Providers", href: "/models", icon: Bot, group: "System" },
@@ -431,6 +458,7 @@ export const GROUP_ORDER: NavGroup[] = [
   "Agents",
   "RAG",
   "Research",
+  "Metadata",
   "Lab",
   "Execution",
   "Workflows",
@@ -454,9 +482,20 @@ export function getSubmenuIcon(submenu: NavSubmenu): ComponentType<{ className?:
  * Helper used by the sidebar to compute the active item from a path.
  */
 export function findActiveNavItem(pathname: string): NavItem | undefined {
+  const pathOnly = (href: string): string => {
+    const [withoutQuery] = href.split("?");
+    const [withoutHash] = (withoutQuery ?? href).split("#");
+    return withoutHash || "/";
+  };
   return NAV_ITEMS.filter(
-    (n) => pathname === n.href || pathname.startsWith(`${n.href}/`),
-  ).sort((a, b) => b.href.length - a.href.length)[0];
+    (n) => {
+      const hrefPath = pathOnly(n.href);
+      if (hrefPath === "/") {
+        return pathname === "/";
+      }
+      return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
+    },
+  ).sort((a, b) => pathOnly(b.href).length - pathOnly(a.href).length)[0];
 }
 
 /** Map known icons used by the action center / kill switch / inline UI. */
@@ -466,5 +505,5 @@ export const SHELL_ICONS = {
   history: History,
   handshake: Handshake,
   wand: Wand2,
-  map: Map,
+  map: MapIcon,
 };

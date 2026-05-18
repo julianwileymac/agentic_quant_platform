@@ -51,7 +51,7 @@ flowchart LR
 | **Agentic** | [agentic-pipeline.md](agentic-pipeline.md), [providers.md](providers.md) |
 | **Bots** | [bots.md](bots.md) (smallest deployable unit; aggregates universe + strategy + engine + ML + agents + RAG + metrics) |
 | **Paper / Live** | [paper-trading.md](paper-trading.md), [live-market.md](live-market.md), [streaming.md](streaming.md), [streaming-admin.md](streaming-admin.md) |
-| **Cross-cutting** | [observability.md](observability.md), [webui.md](webui.md), [core-types.md](core-types.md), [domain-model.md](domain-model.md), [alpha-vantage.md](alpha-vantage.md), [credentials.md](credentials.md), [identity.md](identity.md), [kubernetes-adapter.md](kubernetes-adapter.md), [local-platform.md](local-platform.md) |
+| **Cross-cutting** | [observability.md](observability.md), [webui.md](webui.md), [core-types.md](core-types.md), [domain-model.md](domain-model.md), [alpha-vantage.md](alpha-vantage.md), [credentials.md](credentials.md), [cloud-credentials.md](cloud-credentials.md), [identity.md](identity.md), [msal-entra-setup.md](msal-entra-setup.md), [multi-tenancy.md](multi-tenancy.md), [kubernetes-adapter.md](kubernetes-adapter.md), [local-platform.md](local-platform.md), [terraform-control-plane.md](terraform-control-plane.md), [iac-runbook.md](iac-runbook.md) |
 
 ## By subsystem
 

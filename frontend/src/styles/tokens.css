@@ -184,6 +184,19 @@ a {
   border-bottom-color: var(--sandbox-border) !important;
 }
 
+/* Phase 7 — Infrastructure dashboard accent.
+ * Applied via `<html data-mode="infra">` while the operator is inside
+ * the /infra route tree (set by the AppShell route listener). Carries
+ * an amber primary so the industrial-terminal pane never blends into
+ * the trading-desk dark theme. */
+:root[data-mode="infra"] body {
+  outline: 2px solid var(--warn-border, #b45309);
+  outline-offset: -2px;
+}
+:root[data-mode="infra"] [data-topbar="true"] {
+  border-bottom-color: var(--warn-border, #b45309) !important;
+}
+
 /* Focus ring */
 *:focus-visible {
   outline: 2px solid var(--info-fg);

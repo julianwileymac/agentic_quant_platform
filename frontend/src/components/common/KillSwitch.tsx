@@ -38,6 +38,12 @@ const HALT_ENDPOINTS: ReadonlyArray<{ path: string; label: string }> = [
   { path: "/bots/halt-all", label: "live bot deployments (incl. rl_trading)" },
   { path: "/rl/halt-all", label: "RL train / paper / replay runs" },
   { path: "/workflows/halt", label: "workflow runs (WorkflowRuntime dispatches)" },
+  // Phase 7 (Terraform IaC control plane) — cancels every in-flight
+  // TerraformRun (plan / apply / destroy / refresh) and revokes the
+  // matching Celery task on the ``terraform`` queue. Returns
+  // ``halted_runs: [...]`` so the aggregate toast can summarise
+  // exactly which IaC operations got killed.
+  { path: "/terraform/halt", label: "terraform IaC runs (plan / apply / destroy / refresh)" },
 ];
 
 /**

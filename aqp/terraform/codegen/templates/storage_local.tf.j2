@@ -1,0 +1,94 @@
+{# Local storage stack — Postgres + MinIO + Redis Stack running on the
+   operator's machine via the kreuzwerker/docker provider. Mirrors the
+   docker-compose.yml shape so the AQP backend can run end-to-end on a
+   laptop without any cloud account. #}
+
+# --- Local storage (Docker) -------------------------------------------------
+
+resource "docker_image" "postgres" {
+  name         = "postgres:16-alpine"
+  keep_locally = true
+}
+
+resource "docker_image" "redis_stack" {
+  name         = "redis/redis-stack:7.4.0-v0"
+  keep_locally = true
+}
+
+resource "docker_image" "minio" {
+  name         = "minio/minio:latest"
+  keep_locally = true
+}
+
+resource "docker_volume" "{{ spec.slug | replace('-', '_') }}_pg_data" {
+  name = "{{ spec.slug }}-pg-data"
+}
+
+resource "docker_volume" "{{ spec.slug | replace('-', '_') }}_redis_data" {
+  name = "{{ spec.slug }}-redis-data"
+}
+
+resource "docker_volume" "{{ spec.slug | replace('-', '_') }}_minio_data" {
+  name = "{{ spec.slug }}-minio-data"
+}
+
+resource "docker_container" "{{ spec.slug | replace('-', '_') }}_pg" {
+  name  = "{{ spec.slug }}-pg"
+  image = docker_image.postgres.image_id
+  ports {
+    internal = 5432
+    external = 5432
+  }
+  env = [
+    "POSTGRES_USER=aqp",
+    "POSTGRES_DB=aqp",
+    "POSTGRES_PASSWORD_FILE=/run/secrets/aqp_pg_password",
+  ]
+  volumes {
+    volume_name    = docker_volume.{{ spec.slug | replace('-', '_') }}_pg_data.name
+    container_path = "/var/lib/postgresql/data"
+  }
+  restart = "unless-stopped"
+}
+
+resource "docker_container" "{{ spec.slug | replace('-', '_') }}_redis" {
+  name  = "{{ spec.slug }}-redis"
+  image = docker_image.redis_stack.image_id
+  ports {
+    internal = 6379
+    external = 6379
+  }
+  volumes {
+    volume_name    = docker_volume.{{ spec.slug | replace('-', '_') }}_redis_data.name
+    container_path = "/data"
+  }
+  command = [
+    "redis-server",
+    "--appendonly", "yes",
+    "--maxmemory-policy", "allkeys-lru",
+  ]
+  restart = "unless-stopped"
+}
+
+resource "docker_container" "{{ spec.slug | replace('-', '_') }}_minio" {
+  name  = "{{ spec.slug }}-minio"
+  image = docker_image.minio.image_id
+  ports {
+    internal = 9000
+    external = 9000
+  }
+  ports {
+    internal = 9001
+    external = 9001
+  }
+  env = [
+    "MINIO_ROOT_USER_FILE=/run/secrets/aqp_minio_root_user",
+    "MINIO_ROOT_PASSWORD_FILE=/run/secrets/aqp_minio_root_password",
+  ]
+  volumes {
+    volume_name    = docker_volume.{{ spec.slug | replace('-', '_') }}_minio_data.name
+    container_path = "/data"
+  }
+  command = ["server", "/data", "--console-address", ":9001"]
+  restart = "unless-stopped"
+}

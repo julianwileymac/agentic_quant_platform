@@ -17,12 +17,56 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Iterable
+import re
+from typing import Any
 
+from aqp.metadata import make_urn
 from aqp.rag.chunker import Chunk, semantic_chunks
+from aqp.rag.document_aspects import (
+    DocumentEmissionPayload,
+    emit_documents_batch,
+    extract_glossary_terms,
+)
 from aqp.rag.hierarchy import HierarchicalRAG, get_default_rag
 from aqp.rag.parsers import ParsedDoc, pick_parser
 
 logger = logging.getLogger(__name__)
+_INSTRUMENT_ID_SANITIZER = re.compile(r"[^A-Za-z0-9._:-]+")
+
+
+def _instrument_urn_from_metadata(meta: dict[str, Any]) -> str | None:
+    raw_value = str(meta.get("vt_symbol") or "").strip()
+    if not raw_value:
+        return None
+    urn_id = _INSTRUMENT_ID_SANITIZER.sub("-", raw_value).strip("-.:")
+    if not urn_id:
+        return None
+    return make_urn("instrument", "prod", urn_id)
+
+
+def _emit_document_aspects(items: list[tuple[Chunk, dict[str, object]]]) -> None:
+    if not items:
+        return
+    payloads: list[DocumentEmissionPayload] = []
+    for chunk, meta in items:
+        source_url = str(meta.get("source_url") or "").strip() or None
+        payloads.append(
+            {
+                "document_id": str(meta.get("source_id") or meta.get("doc_id") or ""),
+                "content_text": chunk.text,
+                "instrument_urn": _instrument_urn_from_metadata(meta),
+                "valid_from": meta.get("as_of"),
+                "glossary_terms": extract_glossary_terms(chunk.text),
+                "source_url": source_url,
+            }
+        )
+    try:
+        emitted = emit_documents_batch(payloads)
+        logger.info("Emitted %d research-paper Document aspects.", len(emitted))
+    except Exception:
+        logger.exception(
+            "Document-aspect emission failed for research_papers; continuing index run."
+        )
 
 
 def _equation_aware_chunks(doc: ParsedDoc, *, max_tokens: int = 512) -> list[Chunk]:
@@ -61,6 +105,7 @@ def _paper_meta(row: object, doc: ParsedDoc) -> dict[str, object]:
         "contains_mathematics": bool(doc.contains_mathematics),
         "equation_count": int(doc.equation_count),
         "parser_used": doc.parser_name,
+        "source_url": str(getattr(row, "source_url", "") or ""),
     }
 
 
@@ -125,6 +170,7 @@ def index_research_papers(
             row.contains_mathematics = doc.contains_mathematics
             session.add(row)
         session.commit()
+    _emit_document_aspects(items)
     if items:
         written = rag.index_chunks("research_papers", items, level="l2")
     return written

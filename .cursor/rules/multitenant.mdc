@@ -1,0 +1,84 @@
+---
+description: "Multi-tenant identity — MSAL Entra ID provider, EntraTenantLink, tenancy onboarding wizards"
+globs:
+  - "aqp/auth/providers/msal_entra.py"
+  - "aqp/auth/user.py"
+  - "aqp/api/routes/msal_sync.py"
+  - "aqp/api/routes/tenancy.py"
+  - "aqp/data/mcp/tools/tenancy.py"
+  - "configs/tenants/*.yaml"
+  - "frontend/src/components/onboarding/*.tsx"
+  - "frontend/src/routes/admin/onboarding/**/*.tsx"
+  - "frontend/src/lib/api/tenancy.ts"
+  - "frontend/src/lib/auth/config.ts"
+alwaysApply: false
+---
+
+# Multi-tenant identity + onboarding
+
+Phase 7 of the multi-tenant rollout. Hard rule 44 in
+[AGENTS.md](mdc:AGENTS.md) is the source of truth.
+
+## Hard rules
+
+1. **Organization provisioning from Microsoft Entra ID claims goes
+   through [`EntraTenantLink`](mdc:aqp/persistence/models_terraform.py)**
+   (rule 44). Don't auto-create `Organization` rows from raw `tid`
+   claims; the
+   [`data.tenancy.link_org_to_entra_tenant`](mdc:aqp/data/mcp/tools/tenancy.py)
+   admin tool (REST: `POST /tenancy/entra-links`) is the only
+   sanctioned ingress.
+2. **First-login provisioning lives in
+   [`aqp/auth/user.py::_apply_entra_tenant_link`](mdc:aqp/auth/user.py).**
+   Unknown `tid` + `auth_msal_b2b_enabled=True` creates a `pending`
+   link; an AQP super-admin promotes via the
+   [`EntraTenantLinkWizard`](mdc:frontend/src/components/onboarding/EntraTenantLinkWizard.tsx).
+3. **The MSAL provider is registered by
+   [`IdentityProviderMeta`](mdc:aqp/auth/providers/protocol.py).**
+   Set `provider_kind = "msal_entra"` and the metaclass auto-
+   registers. Auth0 + generic OIDC + Mock all stay registered for
+   fallback / migration / tests — flip
+   `AQP_AUTH_PROVIDER=msal_entra` to make MSAL the active provider.
+4. **The multi-tenant authority is
+   `https://login.microsoftonline.com/organizations`** by default
+   (accepts users from any Entra tenant). Pin to
+   `/{tenant_id}` for single-tenant; use `/common` to additionally
+   accept personal Microsoft accounts.
+5. **Frontend wiring:** SPA env vars are `VITE_MSAL_TENANT_ID` /
+   `VITE_MSAL_CLIENT_ID` / `VITE_MSAL_AUTHORITY` /
+   `VITE_MSAL_REDIRECT_URI` / `VITE_MSAL_SCOPES`. The
+   [`AuthProvider`](mdc:frontend/src/lib/auth/AuthProvider.tsx)
+   picks `@azure/msal-react` when MSAL is configured, else falls
+   back to `@auth0/auth0-react`. The
+   [`useAuth`](mdc:frontend/src/lib/auth/useAuth.ts) contract is
+   unchanged so consumers don't branch.
+6. **The Entra `oid` claim is the canonical user identifier**, not
+   `sub`. `provision_user_from_claims` writes `oid` into
+   `User.auth_subject` for `provider == "msal_entra"`.
+
+## Don't
+
+- Don't read `settings.<service>_client_*` for MSAL secrets. Resolve
+  through [`CredentialResolver`](mdc:aqp/credentials/resolver.py)
+  (Azure Key Vault store, AWS Secrets Manager, GCP Secret Manager,
+  HashiCorp Vault — see Phase C in the plan).
+- Don't bypass the M2M-secured
+  [`/_internal/msal/sync`](mdc:aqp/api/routes/msal_sync.py) endpoint
+  when an Entra Logic App / SCIM webhook needs to push user
+  lifecycle. The endpoint mirrors `/_internal/auth0/sync` (same
+  `require_m2m_token` dep).
+- Don't auto-promote a `pending` EntraTenantLink without a human
+  approver. The wizard / `link_org_to_entra_tenant` MCP tool is the
+  only sanctioned ingress.
+- Don't store secret values in the rendered onboarding wizard
+  payloads. Email + tenant id + role mapping are not secrets;
+  client secrets live in CredentialResolver.
+
+Canonical docs:
+
+- [docs/msal-entra-setup.md](mdc:docs/msal-entra-setup.md) — Entra
+  app-reg walkthrough (app roles, redirect URIs, B2B).
+- [docs/multi-tenancy.md](mdc:docs/multi-tenancy.md) —
+  Organization -> EntraTenantLink -> User -> Membership flow.
+- [configs/tenants/](mdc:configs/tenants) — default tenant /
+  roles / invite YAML templates.

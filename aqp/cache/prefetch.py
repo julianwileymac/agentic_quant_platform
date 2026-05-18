@@ -17,7 +17,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -73,6 +73,7 @@ class MetadataPrefetcher:
         results["airbyte_connectors"] = self._populate_airbyte_connectors(session)
         results["projects"] = self._populate_projects(session)
         results["credentials"] = self._populate_credentials(session)
+        results["namespace_policies"] = self._populate_namespace_policies(session)
         # Phase 5 — tenancy + spec + resource categories
         results["organizations"] = self._populate_simple(
             session, "organizations", "aqp.persistence.models_tenancy", "Organization"
@@ -399,6 +400,104 @@ class MetadataPrefetcher:
         self.cache.expire(zkey, settings.cache_instance_ttl_s)
         self.cache.set_string(category_stamp("credentials"), datetime.utcnow().isoformat())
         return len(names)
+
+    def _populate_namespace_policies(self, session: Session) -> int:
+        """Cache latest Iceberg namespace policies keyed by scope tuple."""
+        try:
+            from aqp.metadata.openmetadata import IcebergNamespacePolicy
+            from aqp.persistence.models_aspects import EntityAspect
+        except Exception:  # noqa: BLE001
+            return 0
+
+        zkey = names_zset("namespace_policies")
+        self.cache.delete(zkey)
+        try:
+            rows = session.execute(
+                select(EntityAspect)
+                .where(EntityAspect.aspect_name == IcebergNamespacePolicy.aspect_name)
+                .order_by(
+                    EntityAspect.urn.asc(),
+                    desc(EntityAspect.version),
+                    desc(EntityAspect.created_at),
+                )
+            ).scalars().all()
+        except SQLAlchemyError:
+            return 0
+
+        latest_by_urn: dict[str, EntityAspect] = {}
+        for row in rows:
+            urn = str(row.urn)
+            if urn not in latest_by_urn:
+                latest_by_urn[urn] = row
+
+        best_by_scope: dict[tuple[str | None, str | None, str | None], dict[str, Any]] = {}
+        for row in latest_by_urn.values():
+            payload = row.payload if isinstance(row.payload, dict) else {}
+            try:
+                policy = IcebergNamespacePolicy.model_validate(payload)
+            except Exception:  # noqa: BLE001
+                logger.debug(
+                    "Skipping invalid icebergNamespacePolicy payload in prefetch id=%s",
+                    row.id,
+                    exc_info=True,
+                )
+                continue
+
+            scope = (
+                policy.applies_to_workspace_id,
+                policy.applies_to_project_id,
+                policy.applies_to_domain_pattern,
+            )
+            current = best_by_scope.get(scope)
+            policy_priority = int(policy.priority)
+            if current is not None and int(current["priority"]) > policy_priority:
+                continue
+
+            scope_key = "|".join(
+                (
+                    policy.applies_to_workspace_id or "*",
+                    policy.applies_to_project_id or "*",
+                    policy.applies_to_domain_pattern or "*",
+                )
+            )
+            best_by_scope[scope] = {
+                "id": scope_key,
+                "name": scope_key,
+                "policy_urn": policy.urn,
+                "policy_name": policy.policy_name,
+                "workspace_id": policy.applies_to_workspace_id or "",
+                "project_id": policy.applies_to_project_id or "",
+                "domain_pattern": policy.applies_to_domain_pattern or "",
+                "priority": policy_priority,
+                "bronze_prefix": policy.bronze_prefix,
+                "silver_prefix": policy.silver_prefix,
+                "gold_prefix": policy.gold_prefix,
+                "aspect_id": str(row.id),
+                "version": int(row.version),
+            }
+
+        if not best_by_scope:
+            self.cache.set_string(
+                category_stamp("namespace_policies"),
+                datetime.utcnow().isoformat(),
+            )
+            return 0
+
+        mapping: dict[str, float] = {}
+        for cached_policy in best_by_scope.values():
+            scope_key = str(cached_policy["id"])
+            mapping[scope_key] = float(int(cached_policy["priority"]))
+            id_key = by_id_hash("namespace_policies", scope_key)
+            self.cache.hset(id_key, cached_policy)
+            self.cache.expire(id_key, settings.cache_instance_ttl_s)
+
+        self.cache.zadd(zkey, mapping)
+        self.cache.expire(zkey, settings.cache_instance_ttl_s)
+        self.cache.set_string(
+            category_stamp("namespace_policies"),
+            datetime.utcnow().isoformat(),
+        )
+        return len(best_by_scope)
 
     # ------------------------------------------------------------------
     # Phase 5 populators (generic + per-category overrides)

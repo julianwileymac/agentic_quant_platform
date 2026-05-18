@@ -52,13 +52,35 @@ class Settings(BaseSettings):
     default_workspace_id: str = Field(default=DEFAULT_WORKSPACE_ID)
     default_project_id: str = Field(default=DEFAULT_PROJECT_ID)
     default_lab_id: str = Field(default=DEFAULT_LAB_ID)
-    auth_provider: str = Field(default="local")  # local | auth0 | oidc | mock | jwt
+    auth_provider: str = Field(default="local")  # local | auth0 | oidc | mock | jwt | msal_entra
     auth_oidc_issuer: str = Field(default="")
     auth_oidc_client_id: str = Field(default="")
     auth_oidc_client_secret: str = Field(default="")
     auth_oidc_audience: str = Field(default="")
     auth_oidc_jwks_ttl_seconds: int = Field(default=3600)
     auth_oidc_leeway_seconds: int = Field(default=60)
+    # --- MSAL / Microsoft Entra ID (multi-tenant identity provider) ---
+    # Set ``auth_provider=msal_entra`` to make MsalEntraProvider the active
+    # IdentityProvider. The multi-tenant default authority
+    # ``/organizations`` accepts users from any Entra tenant (B2B / external
+    # enterprise clients); pin to ``/{tenant_id}`` for single-tenant.
+    # See docs/msal-entra-setup.md for the full app-reg walkthrough.
+    auth_msal_tenant_id: str = Field(default="")
+    auth_msal_client_id: str = Field(default="")
+    auth_msal_client_secret: str = Field(default="")
+    auth_msal_authority: str = Field(
+        default="https://login.microsoftonline.com/organizations"
+    )
+    auth_msal_redirect_uri: str = Field(default="")
+    auth_msal_scopes: str = Field(
+        default="openid profile email offline_access User.Read"
+    )
+    auth_msal_multi_tenant: bool = Field(default=True)
+    # Allow external (B2B / non-home) tenants to provision new
+    # EntraTenantLink rows on first login. The link starts in
+    # ``pending`` state; an AQP super-admin promotes to ``active``.
+    auth_msal_b2b_enabled: bool = Field(default=True)
+    auth_msal_known_tenants: str = Field(default="")  # CSV of tenant_ids
     # --- Federated identity (M3) ---
     # ``auth_login_callback`` / ``auth_logout_callback`` are the
     # backend-rendered redirect URIs for the SPA login flow. Empty in
@@ -85,8 +107,19 @@ class Settings(BaseSettings):
     # automatically when ``cluster_mgmt_url`` is set. ``in_cluster`` uses
     # the Kubernetes Python SDK with the active kubeconfig / pod SA.
     # ``local_compose`` shells out to ``docker compose`` and powers the
-    # platform overlay.
-    kubernetes_adapter: str = Field(default="")  # none | rpi_cluster | in_cluster | local_compose
+    # platform overlay. Cloud adapters (``aws_eks`` / ``gcp_gke`` /
+    # ``azure_aks``) auto-promote when ``default_cloud_provider`` is set.
+    kubernetes_adapter: str = Field(default="")  # none | rpi_cluster | in_cluster | local_compose | aws_eks | gcp_gke | azure_aks
+    # --- Default cloud provider (multi-cloud + tenant onboarding) ---
+    # Empty means "local" — every Terraform / KubernetesAdapter /
+    # CredentialResolver default short-circuits to local execution.
+    # Set to one of ``aws|gcp|azure`` to make the matching cloud
+    # adapter + secret store + Terraform module the active default.
+    default_cloud_provider: str = Field(default="")
+    default_organization_name: str = Field(default="Wiley Tech")
+    default_organization_slug: str = Field(default="wiley-tech")
+    default_admin_email: str = Field(default="julian@wiley.tech")
+    default_admin_display_name: str = Field(default="Julian")
     auth_session_cookie: str = Field(default="aqp_session")
     auth_workspace_header: str = Field(default="X-AQP-Workspace")
     auth_project_header: str = Field(default="X-AQP-Project")
@@ -435,6 +468,19 @@ class Settings(BaseSettings):
     # --- Paper trading ---
     paper_default_heartbeat_seconds: int = Field(default=30)
     paper_state_flush_every_bars: int = Field(default=10)
+    # Env var name is AQP_PAPER_STRICT_METADATA (env_prefix="AQP_" is applied
+    # automatically by pydantic-settings to the lowercase field name).
+    paper_strict_metadata: bool = Field(
+        default=True,
+        description=(
+            "When True (default since the OOS-4 rollout), paper-trading sessions "
+            "abort startup if model_urn or pipeline_urn cannot be resolved to a "
+            "Staging/Production aspect. Set False ONLY for emergency rollback "
+            "during incidents — the gate is the safety net that prevents "
+            "undocumented or rogue models from interacting with paper or live "
+            "capital."
+        ),
+    )
 
     # --- Alpaca ---
     alpaca_api_key: str = Field(default="")
@@ -480,6 +526,21 @@ class Settings(BaseSettings):
     datahub_gms_url: str = Field(default="")
     datahub_token: str = Field(default="")
     datahub_env: str = Field(default="PROD")
+    # Env var names AQP_DATAHUB_ASPECT_PUSH_ENABLED / AQP_DATAHUB_ASPECT_PULL_ENABLED
+    # (env_prefix="AQP_" is applied automatically by pydantic-settings to the
+    # lowercase field names).
+    datahub_aspect_push_enabled: bool = Field(
+        default=False,
+        description=(
+            "Soft-rollout flag for emitting EntityAspect writes to DataHub via MCP."
+        ),
+    )
+    datahub_aspect_pull_enabled: bool = Field(
+        default=False,
+        description=(
+            "Soft-rollout flag for polling external DataHub aspects into entity_aspects."
+        ),
+    )
 
     # --- OpenTelemetry ---
     otel_endpoint: str = Field(default="")
@@ -522,6 +583,61 @@ class Settings(BaseSettings):
     # --- Cluster management proxy (rpi_kubernetes) ---
     cluster_mgmt_url: str = Field(default="")
     cluster_mgmt_token: str = Field(default="")
+
+    # --- Terraform IaC control plane ----------------------------------------
+    # Centralized Terraform IaC for multi-cloud + local + baremetal. Five
+    # state backends (``local | s3 | azurerm | gcs | hcp``) are routed by
+    # :class:`aqp.terraform.runtime.TerraformRuntime`. CDKTF was
+    # deprecated 2025-12-10 by HashiCorp, so Python-side codegen uses the
+    # Jinja2 emitters under :mod:`aqp.terraform.codegen` (matches the
+    # existing pattern in :mod:`aqp.streaming.templates`).
+    terraform_binary: str = Field(default="terraform")
+    terraform_workspaces_dir: Path = Field(default=Path("./data/terraform/workspaces"))
+    terraform_state_backend: str = Field(default="local")  # local | s3 | azurerm | gcs | hcp
+    terraform_plugin_cache_dir: Path = Field(default=Path("./data/terraform/plugin-cache"))
+    terraform_parallelism: int = Field(default=10)
+    terraform_runner_image: str = Field(default="aqp-terraform-runner:latest")
+    terraform_runner_namespace: str = Field(default="aqp-system")
+    terraform_codegen_dir: Path = Field(default=Path("./data/terraform/codegen"))
+    terraform_module_registry_dir: Path = Field(default=Path("./terraform/modules"))
+    terraform_drift_scan_period_seconds: int = Field(default=3600)
+    terraform_artifact_bucket: str = Field(default="aqp-terraform")
+
+    # --- HCP Terraform (remote workspaces) ---
+    # When ``terraform_state_backend == "hcp"`` runs go through the HCP
+    # HTTP API (workspaces / runs / plans / state-versions). Uses the
+    # ``hcp_client.HcpClient`` thin httpx wrapper — no python-terrasnek
+    # dep so cold installs without HCP credentials still boot cleanly.
+    hcp_token: str = Field(default="")
+    hcp_organization: str = Field(default="")
+    hcp_api_url: str = Field(default="https://app.terraform.io/api/v2")
+
+    # --- HashiCorp Vault (alt. secret store) ---
+    vault_addr: str = Field(default="")
+    vault_namespace: str = Field(default="")
+    vault_mount: str = Field(default="secret")
+    vault_role_id: str = Field(default="")
+    vault_secret_id: str = Field(default="")
+
+    # --- Azure cloud anchors (Key Vault + AKS + storage) ---
+    azure_tenant_id: str = Field(default="")
+    azure_subscription_id: str = Field(default="")
+    azure_keyvault_url: str = Field(default="")
+    azure_aks_cluster_name: str = Field(default="")
+    azure_resource_group: str = Field(default="")
+    azure_location: str = Field(default="eastus")
+
+    # --- AWS cloud anchors (Secrets Manager + EKS + S3) ---
+    aws_region: str = Field(default="")
+    aws_account_id: str = Field(default="")
+    aws_secretsmanager_prefix: str = Field(default="aqp/")
+    aws_eks_cluster_name: str = Field(default="")
+
+    # --- GCP cloud anchors (Secret Manager + GKE + GCS) ---
+    gcp_project_id: str = Field(default="")
+    gcp_region: str = Field(default="")
+    gcp_secret_prefix: str = Field(default="aqp-")
+    gcp_gke_cluster_name: str = Field(default="")
 
     # --- Pod-level ops (Phase 1 — K8s/Docker SDK extension) ---
     # Docker SDK base URL override (defaults to ``docker.from_env()``).
@@ -807,6 +923,10 @@ class Settings(BaseSettings):
         "visualization_cache_dir",
         "visualization_bundle_dir",
         "bootstrap_state_dir",
+        "terraform_workspaces_dir",
+        "terraform_plugin_cache_dir",
+        "terraform_codegen_dir",
+        "terraform_module_registry_dir",
     )
     @classmethod
     def _coerce_path(cls, v: Path | str) -> Path:

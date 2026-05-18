@@ -256,6 +256,23 @@ from aqp.persistence.models_dagster_sandbox import DagsterSandboxSessionRow
 from aqp.persistence.models_producers import MarketDataProducerRow
 from aqp.persistence.models_streaming_links import StreamingDatasetLink
 from aqp.persistence.models_lineage import DataLineageEvent
+from aqp.persistence.models_terraform import (
+    ENTRA_TENANT_STATUSES,
+    EntraTenantLink,
+    TERRAFORM_ENVIRONMENTS,
+    TERRAFORM_MODULE_KINDS,
+    TERRAFORM_PROVIDER_KINDS,
+    TERRAFORM_RUN_KINDS,
+    TERRAFORM_RUN_STATUSES,
+    TERRAFORM_STATE_BACKENDS,
+    TerraformPolicyAttachment,
+    TerraformProvider,
+    TerraformRun,
+    TerraformStackSpecRow,
+    TerraformStackSpecVersion,
+    TerraformStateVersion,
+    TerraformWorkspace,
+)
 
 __all__ = [
     # Original core
@@ -477,6 +494,22 @@ __all__ = [
     "DagsterSandboxSessionRow",
     # Data lineage (Phase 2 - data layer unification)
     "DataLineageEvent",
+    # Terraform IaC control plane + Entra ID tenant link
+    "ENTRA_TENANT_STATUSES",
+    "EntraTenantLink",
+    "TERRAFORM_ENVIRONMENTS",
+    "TERRAFORM_MODULE_KINDS",
+    "TERRAFORM_PROVIDER_KINDS",
+    "TERRAFORM_RUN_KINDS",
+    "TERRAFORM_RUN_STATUSES",
+    "TERRAFORM_STATE_BACKENDS",
+    "TerraformPolicyAttachment",
+    "TerraformProvider",
+    "TerraformRun",
+    "TerraformStackSpecRow",
+    "TerraformStackSpecVersion",
+    "TerraformStateVersion",
+    "TerraformWorkspace",
     # Data fabric foundation (Phase 1)
     "CatalogFeedEdge",
     "FabricVersionSnapshot",

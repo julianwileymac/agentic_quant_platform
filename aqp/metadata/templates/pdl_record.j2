@@ -1,0 +1,25 @@
+namespace {{ namespace }}
+
+{% if aspect_name %}@Aspect = {
+  "name": "{{ aspect_name }}"
+}{% endif %}
+{% for nested in nested_records %}
+record {{ nested.name }} {
+  {% for f in nested.fields %}
+  {% if f.description %}/** {{ f.description }} */{% endif %}
+  {% if f.avro_annotation %}@AvroSchema = {{ f.avro_annotation }}{% endif %}
+  {{ f.name }}: {% if f.optional %}optional {% endif %}{{ f.pdl_type }}{% if f.default_repr %} = {{ f.default_repr }}{% endif %}
+  {% endfor %}
+}
+{% endfor %}
+
+{% if record_doc %}/**
+{% for line in record_doc.split('\n') %} * {{ line }}
+{% endfor %} */{% endif %}
+record {{ model_name }} {
+  {% for f in fields %}
+  {% if f.description %}/** {{ f.description }} */{% endif %}
+  {% if f.avro_annotation %}@AvroSchema = {{ f.avro_annotation }}{% endif %}
+  {{ f.name }}: {% if f.optional %}optional {% endif %}{{ f.pdl_type }}{% if f.default_repr %} = {{ f.default_repr }}{% endif %}
+  {% endfor %}
+}

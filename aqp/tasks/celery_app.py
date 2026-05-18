@@ -78,6 +78,8 @@ celery_app = Celery(
         "aqp.tasks.dagster_sandbox_tasks",
         # HFT / LOB backtest engine (hftbacktest wrapper).
         "aqp.tasks.hft_tasks",
+        # Terraform IaC control plane (5th sibling runtime).
+        "aqp.tasks.terraform_tasks",
         # Metadata cache refresh (Phase 0): periodic safety-net rebuild
         # so missed write-throughs self-heal.
         "aqp.tasks.cache_tasks",
@@ -165,6 +167,11 @@ celery_app.conf.update(
         # HFT / LOB backtests get their own queue so the slow tick-replay
         # workload doesn't compete for the bar-frequency backtest queue.
         "aqp.tasks.hft_tasks.*": {"queue": "hft"},
+        # Terraform IaC lifecycle (5th sibling runtime). Dedicated queue
+        # so concurrent plan/apply runs don't compete with backtest /
+        # paper workloads, and KEDA can scale ``aqp-celery-terraform-worker``
+        # independently of the trading queues.
+        "aqp.tasks.terraform_tasks.*": {"queue": "terraform"},
         # Cache refresh is light + frequent; default queue is fine.
         "aqp.tasks.cache_tasks.*": {"queue": "default"},
         # Ownership graph drains are bursty but light; default queue is fine.
@@ -174,6 +181,11 @@ celery_app.conf.update(
         # since each workflow run typically wraps an AgentRuntime
         # invocation through one of the registered adapters.
         "aqp.tasks.orchestration_tasks.*": {"queue": "agents"},
+        # Terraform IaC control plane — dedicated queue so the slow
+        # ``terraform apply`` (multi-minute) doesn't block bar-cadence
+        # work on the default queue. KEDA scales the worker pool from
+        # 0 -> AQP_TERRAFORM_MAX_REPLICAS based on queue depth.
+        "aqp.tasks.terraform_tasks.*": {"queue": "terraform"},
     },
     beat_schedule={
         "drift-check": {
@@ -238,6 +250,16 @@ celery_app.conf.update(
             "task": "aqp.tasks.agent_watchdog_tasks.scan_for_stalled_workflow_runs",
             "schedule": float(
                 getattr(settings, "agent_watchdog_period_seconds", 60) or 60
+            ),
+        },
+        # Phase 7 (terraform refactor) — drift scan. Opens a ``refresh``
+        # run against every active TerraformWorkspace so the /api/infra
+        # pane can surface state drift before the next operator-driven
+        # apply.
+        "terraform-drift-scan": {
+            "task": "aqp.tasks.terraform_tasks.terraform_drift_scan",
+            "schedule": float(
+                getattr(settings, "terraform_drift_scan_period_seconds", 3600) or 3600
             ),
         },
     },

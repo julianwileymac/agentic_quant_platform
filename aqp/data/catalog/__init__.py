@@ -31,6 +31,7 @@ from aqp.data.catalog.active_metadata import (
     namespace_for_layer,
     register_dataset,
     validate_layer_for_namespace,
+    validate_namespace_with_policy,
 )
 from aqp.data.catalog.lineage import (
     BaseLineageObserver,
@@ -87,4 +88,5 @@ __all__ = [
     "register_iceberg_dataset",
     "upsert_instruments_for_vt_symbols",
     "validate_layer_for_namespace",
+    "validate_namespace_with_policy",
 ]

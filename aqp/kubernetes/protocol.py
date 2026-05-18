@@ -429,11 +429,19 @@ def _build_active_adapter() -> KubernetesAdapter:
         from aqp.config import settings
 
         kind = (str(getattr(settings, "kubernetes_adapter", "") or "").strip().lower() or "")
-        # Auto-promote: if rpi mgmt URL is set, use the rpi adapter
-        # without requiring the operator to also set kubernetes_adapter.
+        # Auto-promote: rpi mgmt URL -> rpi_cluster; default_cloud_provider
+        # -> matching cloud adapter; otherwise -> none. Operator can
+        # always override via AQP_KUBERNETES_ADAPTER.
         if not kind:
+            cloud = (str(getattr(settings, "default_cloud_provider", "") or "")).strip().lower()
             if (str(getattr(settings, "cluster_mgmt_url", "") or "")).strip():
                 kind = "rpi_cluster"
+            elif cloud == "aws":
+                kind = "aws_eks"
+            elif cloud == "gcp":
+                kind = "gcp_gke"
+            elif cloud == "azure":
+                kind = "azure_aks"
             else:
                 kind = "none"
     except Exception:

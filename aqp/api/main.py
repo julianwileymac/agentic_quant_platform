@@ -54,6 +54,7 @@ from aqp.api.routes import (
     market_data_live,
     memory,
     metadata_catalog,
+    metadata_aspects as metadata_aspects_routes,
     ml,
     monitoring,
     orders as orders_routes,
@@ -117,6 +118,21 @@ from aqp.api.routes import (  # noqa: E402
 # Phase 4 — Auth0 Action sync endpoint for custom-claim injection.
 from aqp.api.routes import (  # noqa: E402
     auth0_sync as auth0_sync_routes,
+)
+# Phase 7 — MSAL / Entra ID sync endpoint + tenancy onboarding routes.
+from aqp.api.routes import (  # noqa: E402
+    msal_sync as msal_sync_routes,
+    tenancy as tenancy_routes,
+)
+# Phase 7 — Terraform IaC control plane + /infra dashboard routes.
+from aqp.api.routes import (  # noqa: E402
+    infra as infra_routes,
+    terraform as terraform_routes,
+)
+# Phase 7 — Terraform IaC control plane (REST + WS) + /infra dashboard.
+from aqp.api.routes import (  # noqa: E402
+    infra as infra_routes,
+    terraform as terraform_routes,
 )
 # Phase 7 — LEAN strategy template catalog + clone-to-workspace REST.
 from aqp.api.routes import (  # noqa: E402
@@ -290,6 +306,11 @@ app.include_router(market_data_live.router)
 app.include_router(factors.router)
 app.include_router(ml.router)
 app.include_router(metadata_catalog.router)
+app.include_router(
+    metadata_aspects_routes.router,
+    prefix="/metadata/aspects",
+    tags=["metadata"],
+)
 app.include_router(cache_routes.router)
 app.include_router(discovery_routes.router)
 app.include_router(dagster_sandbox_routes.router)
@@ -376,6 +397,18 @@ app.include_router(resources_routes.router)
 
 # --- Phase 4 — Auth0 Action sync endpoint ----------------------------
 app.include_router(auth0_sync_routes.router)
+# --- Phase 7 — MSAL / Entra ID sync endpoint + tenancy onboarding ----
+app.include_router(msal_sync_routes.router)
+app.include_router(tenancy_routes.router)
+# --- Phase 7 — Terraform IaC control plane + /infra dashboard --------
+app.include_router(terraform_routes.router)
+app.include_router(terraform_routes.ws_router)
+app.include_router(infra_routes.router)
+app.include_router(infra_routes.ws_router)
+# --- Phase 7 — Terraform IaC control plane + /infra dashboard --------
+app.include_router(terraform_routes.router)
+app.include_router(infra_routes.router)
+app.include_router(infra_routes.ws_router)
 # (Phase 7 strategy_templates router is registered earlier, BEFORE
 # ``strategies.router``, so the ``/strategies/templates`` prefix isn't
 # shadowed by ``/strategies/{strategy_id}``.)

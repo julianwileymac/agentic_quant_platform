@@ -1,0 +1,38 @@
+# Default org / team / workspace / project / lab structure created when
+# `data.tenancy.create_organization` is invoked with
+# ``seed_default_structure=True`` (the default). The frontend
+# OrgCreateWizard step "Default workspace/project/lab structure" reads
+# this file to populate the preview pane.
+#
+# Operators can edit this file to change the on-create shape. The
+# slugs below MUST match a valid ORM ``slug`` regex
+# (``^[a-z0-9][a-z0-9-]*$``).
+team:
+  slug: core
+  name: Core
+  description: Default team for the new organization.
+
+workspace:
+  slug: main
+  name: Main Workspace
+  description: Default workspace. Visibility is org-wide.
+  visibility: org
+
+project:
+  slug: main
+  name: Main Project
+  description: Default project for strategies, backtests, and bots.
+
+lab:
+  slug: main
+  name: Main Lab
+  description: Default research lab for notebooks and RAG corpora.
+
+# Owner memberships granted to the creating actor on every seeded scope.
+# `live_control=true` because the creator owns the org.
+creator_memberships:
+  - { scope_kind: org,       role: owner, live_control: true }
+  - { scope_kind: team,      role: owner, live_control: true }
+  - { scope_kind: workspace, role: owner, live_control: true }
+  - { scope_kind: project,   role: owner, live_control: true }
+  - { scope_kind: lab,       role: owner, live_control: true }

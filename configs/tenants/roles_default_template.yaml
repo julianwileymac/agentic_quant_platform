@@ -1,0 +1,37 @@
+# Default app-role -> AQP role lattice mapping.
+#
+# Consumed by:
+#   - `aqp.auth.user._apply_entra_tenant_link` when no per-link
+#     ``role_mapping`` override is configured.
+#   - The frontend EntraTenantLinkWizard's "App-role mapping" step
+#     pre-populates the form from this file.
+#
+# The AQP role lattice is `viewer < editor < admin < owner`. Multi-word
+# Entra app roles (e.g. `aqp.terraform.operator`) fall through to the
+# tail token (`operator` -> editor).
+mapping:
+  # Generic AQP roles
+  aqp.viewer: viewer
+  aqp.editor: editor
+  aqp.admin:  admin
+  aqp.owner:  owner
+
+  # Terraform IaC sub-roles
+  aqp.terraform.viewer:   viewer
+  aqp.terraform.operator: editor
+  aqp.terraform.approver: admin
+
+  # Bot / agent operators
+  aqp.bots.viewer:    viewer
+  aqp.bots.operator:  editor
+  aqp.bots.approver:  admin
+
+  # Research / analysis
+  aqp.research.viewer:   viewer
+  aqp.research.editor:   editor
+
+# Whether the seeded org-level Membership should carry `live_control=true`.
+# True for admin / owner only — viewer + editor never trigger live trades.
+live_control_for_roles:
+  - admin
+  - owner

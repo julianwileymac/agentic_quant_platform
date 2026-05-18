@@ -36,10 +36,12 @@ dependencies = [
     "alembic>=1.13",
     # Config
     "pydantic>=2.5",
+    "pydantic-avro>=0.10.0",
     "email-validator",
     "pydantic-settings>=2.1",
     "python-dotenv>=1.0",
     "PyYAML>=6.0",
+    "jinja2>=3.1",
     # Data tier
     "duckdb>=0.10",
     "pandas>=2.1",
@@ -85,6 +87,51 @@ dependencies = [
 auth = [
     "python-jose[cryptography]>=3.3",
     "jwcrypto>=1.5.7",
+]
+# MSAL / Microsoft Entra ID identity provider (multi-tenant). Pure-Python;
+# enables MsalEntraProvider auto-registration. The SPA-side counterpart is
+# ``@azure/msal-react`` in frontend/package.json. See docs/msal-entra-setup.md.
+auth-msal = [
+    "msal>=1.36",
+    "python-jose[cryptography]>=3.3",
+]
+# Terraform IaC control plane — Jinja2 codegen (already in core deps),
+# native HCL modules, HCP HTTP client via httpx (in core), and the
+# Kubernetes / cloud SDKs needed to drive plan/apply from the runner pod.
+# CDKTF was deprecated by HashiCorp on 2025-12-10 so it's intentionally
+# absent here; aqp.terraform.codegen uses Jinja2 templates instead.
+terraform = [
+    "kubernetes>=29.0",
+    "PyYAML>=6.0",
+    "python-hcl2>=4.3",  # parser only, used for state-output introspection
+]
+# Cloud provider SDKs — used by the new KubernetesAdapter siblings
+# (aws_eks / gcp_gke / azure_aks) and the cloud SecretStore siblings
+# (azure_keyvault / aws_secretsmanager / gcp_secretmanager). Each store /
+# adapter degrades to "unavailable" cleanly when its SDK isn't installed.
+cloud-aws = [
+    "boto3>=1.34",
+    "botocore>=1.34",
+    "kubernetes>=29.0",
+]
+cloud-gcp = [
+    "google-cloud-secret-manager>=2.20",
+    "google-cloud-container>=2.45",
+    "google-auth>=2.30",
+    "kubernetes>=29.0",
+]
+cloud-azure = [
+    "azure-identity>=1.16",
+    "azure-keyvault-secrets>=4.8",
+    "azure-mgmt-containerservice>=29.0",
+    "kubernetes>=29.0",
+]
+cloud = [
+    "agentic-quant-platform[cloud-aws,cloud-gcp,cloud-azure]",
+]
+# HashiCorp Vault SecretStore — hvac client for AppRole / KV v2.
+vault = [
+    "hvac>=2.3",
 ]
 arcticdb = ["arcticdb>=4.4"]
 dagster = ["dagster==1.12.21"]
@@ -344,6 +391,7 @@ aqp-backtest = "scripts.run_backtest:main"
 aqp-stream-ingest = "aqp.streaming.cli:main"
 aqp-data-mcp = "aqp.data.mcp.server:run_stdio"
 aqp-codebase-mcp = "aqp.codebase.mcp.server:run_stdio"
+aqp-export-schemas = "aqp.metadata.schema_export:cli"
 
 [tool.setuptools.packages.find]
 include = ["aqp*"]

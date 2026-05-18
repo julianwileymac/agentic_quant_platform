@@ -60,6 +60,8 @@ CACHE_CATEGORIES: Final[tuple[str, ...]] = (
     # indexes the frontend EntityPicker can offer; corresponds 1:1 to
     # the pgvector tables created by alembic 0045.
     "vector_indexes",
+    # Aspect-driven Iceberg namespace prefix policies.
+    "namespace_policies",
 )
 
 

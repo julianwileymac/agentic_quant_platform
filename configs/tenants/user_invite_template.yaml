@@ -1,0 +1,31 @@
+# Template for the user-invite email + custom-claim payload sent when
+# `data.tenancy.invite_user` mints a B2B invitation. The Entra B2B
+# invitation API consumes `inviteRedirectUrl` + `sendInvitationMessage`;
+# `aqp_custom_claims` is forwarded into AQP's MSAL sync payload so the
+# new user lands with the right `Membership` chain.
+invite_subject: "{display_name}, you're invited to {organization_name} on AQP"
+invite_message: |
+  Hi {display_name},
+
+  You've been invited to the {organization_name} workspace on the
+  Agentic Quant Platform. Click the link below to sign in with your
+  Microsoft work / school / personal account.
+
+  Once you sign in, you will land on the {workspace_slug} workspace
+  with the {role} role assigned to you by {invited_by_display_name}.
+
+  Need help? Reach out to your AQP administrator.
+
+# Redirect URI the B2B redemption flow returns to after sign-in. Uses
+# the canonical /auth/callback path so MSAL.js picks the token up.
+invite_redirect_uri: "{frontend_base_url}/auth/callback"
+send_invitation_message: true
+
+# Default AQP-namespaced custom claims to bake into the new user's
+# JWT once they accept. The `msal_sync` endpoint promotes these
+# to `Membership` rows on the user's first request.
+aqp_custom_claims:
+  org_id: "{organization_id}"
+  workspace_id: "{workspace_id}"
+  roles:
+    - "aqp.{role}"

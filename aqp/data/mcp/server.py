@@ -151,20 +151,28 @@ def _refresh_feed_tool_catalog(tool_registry: dict[str, type[DataMCPTool]]) -> i
     from aqp.persistence.models import DataSource
 
     generated: dict[str, type[DataMCPTool]] = {}
+    # Materialise the (feed_id, name, enabled) tuples *inside* the session
+    # so we don't trigger DetachedInstanceError when reading attributes
+    # after the session closes (the session is expire-on-commit by default).
+    rows: list[tuple[str, str, bool]] = []
     try:
         with get_session() as session:
-            rows = session.query(DataSource).order_by(DataSource.name.asc()).all()
+            for row in session.query(DataSource).order_by(DataSource.name.asc()).all():
+                rows.append((
+                    str(getattr(row, "id", "") or ""),
+                    str(getattr(row, "name", "") or ""),
+                    bool(getattr(row, "enabled", True)),
+                ))
     except Exception:  # noqa: BLE001
         logger.exception("Failed to enumerate DataSource rows for MCP feed catalog refresh")
         return 0
 
-    for row in rows:
-        if not bool(getattr(row, "enabled", True)):
+    for feed_id, raw_name, enabled in rows:
+        if not enabled:
             continue
-        feed_id = str(getattr(row, "id", "") or "")
         if not feed_id:
             continue
-        feed_name = str(getattr(row, "name", "") or feed_id)
+        feed_name = raw_name or feed_id
         tool_cls = _build_feed_sync_tool(feed_id=feed_id, feed_name=feed_name)
         generated[tool_cls.name] = tool_cls
 

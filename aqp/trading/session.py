@@ -42,6 +42,7 @@ from aqp.risk.kill_switch import is_engaged
 from aqp.risk.manager import RiskManager
 from aqp.tasks._progress import emit, emit_done, emit_error
 from aqp.trading.clock import RealTimeClock
+from aqp.trading.metadata_gate import GateOutcome, gate_session_config
 from aqp.trading.state import PaperSessionState
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,8 @@ class PaperSessionConfig:
     initial_cash: float = 100000.0
     stop_on_kill_switch: bool = True
     dry_run: bool = False  # True → use SimulatedBrokerage regardless of cfg
+    model_urn: str | None = None
+    pipeline_urn: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -70,6 +73,8 @@ class PaperSessionConfig:
             "initial_cash": self.initial_cash,
             "stop_on_kill_switch": self.stop_on_kill_switch,
             "dry_run": self.dry_run,
+            "model_urn": self.model_urn,
+            "pipeline_urn": self.pipeline_urn,
         }
 
 
@@ -135,6 +140,7 @@ class PaperTradingSession:
     @traced("paper.session.run")
     async def run(self) -> PaperSessionResult:
         """Main event loop — returns when the feed ends or shutdown is signalled."""
+        self._run_startup_metadata_gate()
         status = "running"
         self._persist_run_row(status=status)
         self._progress("starting", f"Starting paper session {self.run_id}")
@@ -191,6 +197,42 @@ class PaperTradingSession:
         return result
 
     # ----------------------------------------------------- internals
+
+    def _run_startup_metadata_gate(self) -> GateOutcome:
+        session_cfg = {
+            "run_name": self.config.run_name,
+            "model_urn": self.config.model_urn,
+            "pipeline_urn": self.config.pipeline_urn,
+        }
+        gate = gate_session_config(session_cfg, task_id=self.task_id)
+        logger.info(
+            "metadata gate outcome run_id=%s run_name=%s ok=%s model_urn=%s "
+            "pipeline_urn=%s model_status=%s warnings=%d errors=%d enforced=%s",
+            self.run_id,
+            self.config.run_name,
+            gate.ok,
+            gate.model_urn,
+            gate.pipeline_urn,
+            gate.model_status,
+            len(gate.warnings),
+            len(gate.errors),
+            gate.enforced,
+        )
+        for warning in gate.warnings:
+            logger.warning(
+                "metadata gate warning run_id=%s run_name=%s warning=%s",
+                self.run_id,
+                self.config.run_name,
+                warning,
+            )
+        for error in gate.errors:
+            logger.warning(
+                "metadata gate issue run_id=%s run_name=%s error=%s",
+                self.run_id,
+                self.config.run_name,
+                error,
+            )
+        return gate
 
     async def _connect(self) -> None:
         if isinstance(self.brokerage, IAsyncBrokerage):

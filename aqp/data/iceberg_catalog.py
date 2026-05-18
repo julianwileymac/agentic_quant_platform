@@ -97,6 +97,18 @@ def _stamp_tenancy_columns(table: pa.Table, context: Any) -> pa.Table:
     return table
 
 
+def _domain_for_namespace_validation(business_metadata: Any) -> str | None:
+    """Extract a domain hint from ``business_metadata`` for prefix validation."""
+    if business_metadata is None:
+        return None
+    if isinstance(business_metadata, dict):
+        domain = business_metadata.get("domain")
+    else:
+        domain = getattr(business_metadata, "domain", None)
+    domain_clean = str(domain or "").strip()
+    return domain_clean or None
+
+
 _TABLE_NOT_FOUND_MARKERS = (
     "no such table",
     "nosuchtable",
@@ -621,7 +633,21 @@ def append_arrow(
         )
 
         layer_value = str(medallion_layer).strip().lower()
-        _validate_layer(layer_value, namespace)
+        _validate_layer(
+            layer_value,
+            namespace,
+            workspace_id=(
+                str(getattr(context, "workspace_id", "") or "").strip() or None
+                if context is not None
+                else None
+            ),
+            project_id=(
+                str(getattr(context, "project_id", "") or "").strip() or None
+                if context is not None
+                else None
+            ),
+            domain=_domain_for_namespace_validation(business_metadata),
+        )
     with _tracer.start_as_current_span("iceberg.append_arrow") as span:
         try:
             span.set_attribute("iceberg.table", table_id)

@@ -43,6 +43,13 @@ def _coerce_list(value: Any) -> list[str]:
     return []
 
 
+def _optional_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 def _universe_from_cfg(cfg: dict[str, Any]) -> list[Symbol]:
     session_cfg = cfg.get("session", {}) or {}
     explicit = _coerce_list(session_cfg.get("universe"))
@@ -83,6 +90,8 @@ def _session_config(cfg: dict[str, Any]) -> PaperSessionConfig:
         initial_cash=float(s.get("initial_cash", 100000.0)),
         stop_on_kill_switch=bool(s.get("stop_on_kill_switch", True)),
         dry_run=bool(s.get("dry_run", False)),
+        model_urn=_optional_text(s.get("model_urn")),
+        pipeline_urn=_optional_text(s.get("pipeline_urn")),
     )
 
 

@@ -214,14 +214,33 @@ def provision_user_from_claims(claims: dict[str, Any]) -> CurrentUser:
     call with the same claims returns the existing row instead of
     raising on the unique constraint.
 
-    The default Membership grants ``editor`` on the deployment's
-    ``DEFAULT_WORKSPACE_ID`` (the org's "Personal" workspace seeded by
-    migration 0017). Admins can promote / move the user via
-    ``/users/{id}/memberships`` once they're in.
+    For Entra ID logins (``provider == "msal_entra"``) the function
+    additionally:
+
+    - Reads the ``tid`` claim (Entra tenant id) and looks up the
+      matching :class:`aqp.persistence.models_terraform.EntraTenantLink`.
+      When found (``status='active'``) the new :class:`Membership`
+      chain points at that org's seeded workspace. When the tenant is
+      unknown AND ``settings.auth_msal_b2b_enabled`` is True we create
+      a ``pending`` link so an AQP super-admin can approve via the
+      onboarding wizard.
+    - Prefers the Entra ``oid`` (object id) as ``auth_subject``: it
+      is stable across renames where ``sub`` is per-app.
+    - Recognises the top-level Entra ``roles`` claim (app-role
+      assignments) in addition to the AQP-namespaced
+      ``https://aqp/roles`` claim Auth0 emits.
+
+    The default Membership grants ``editor`` on the resolved workspace
+    (the org's "Personal" workspace seeded by migration 0017 / 0051
+    for the legacy / Wiley Tech orgs). Admins can promote / move the
+    user via ``/users/{id}/memberships`` once they're in.
     """
     from aqp.auth.oidc import (
         claims_display_name,
         claims_email,
+        claims_entra_app_roles,
+        claims_entra_oid,
+        claims_entra_tenant,
         claims_picture,
         claims_provider,
         claims_subject,
@@ -237,6 +256,11 @@ def provision_user_from_claims(claims: dict[str, Any]) -> CurrentUser:
     display_name = claims_display_name(claims)
     avatar = claims_picture(claims)
     provider = claims_provider(claims)
+    # Prefer ``oid`` as the auth_subject for Entra logins (stable
+    # across rename / B2B transformations). Fall back to ``sub``.
+    entra_oid = claims_entra_oid(claims)
+    if provider == "msal_entra" and entra_oid:
+        sub = entra_oid
 
     with get_session() as session:
         existing = (
@@ -303,6 +327,10 @@ def provision_user_from_claims(claims: dict[str, Any]) -> CurrentUser:
         # membership. Cross-org cleanup is intentionally NOT done here
         # — admins remove memberships explicitly.
         _apply_custom_claims_memberships(session, user_row.id, claims)
+        # Phase 7 — for Entra logins, also resolve tid -> Organization
+        # via EntraTenantLink + map Entra app roles to the AQP role
+        # lattice. The function is a no-op for non-Entra providers.
+        _apply_entra_tenant_link(session, user_row.id, claims, provider)
         session.flush()
 
     refreshed = _load_user(auth_subject=sub) or _load_user(email=email)
@@ -401,7 +429,20 @@ def _safe_claims_subset(claims: dict[str, Any]) -> dict[str, Any]:
     Avoids persisting OAuth access tokens or PII beyond what's already
     in standard fields. Drops every non-JSON-primitive value.
     """
-    keep = {"sub", "iss", "aud", "iat", "exp", "name", "nickname", "email"}
+    keep = {
+        "sub",
+        "iss",
+        "aud",
+        "iat",
+        "exp",
+        "name",
+        "nickname",
+        "email",
+        "tid",
+        "oid",
+        "upn",
+        "preferred_username",
+    }
     out: dict[str, Any] = {}
     for key, value in claims.items():
         if key not in keep:
@@ -409,6 +450,198 @@ def _safe_claims_subset(claims: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, (str, int, float, bool)) or value is None:
             out[key] = value
     return out
+
+
+def _apply_entra_tenant_link(
+    session: Any,
+    user_id: str,
+    claims: dict[str, Any],
+    provider: str,
+) -> None:
+    """Resolve Entra ``tid`` -> :class:`EntraTenantLink` -> Memberships.
+
+    No-op for non-Entra providers. For Entra logins:
+
+    - When the matching :class:`EntraTenantLink` is ``active``: create
+      / upgrade :class:`Membership` rows for the user on the linked
+      org (and its seeded workspace + project + lab where they
+      exist) at the role derived from the Entra ``roles`` claim.
+    - When the link is ``pending`` / ``revoked`` / ``suspended``: do
+      not create memberships (the user can sign in but lands on the
+      "waiting for org admin" surface).
+    - When no link exists AND ``settings.auth_msal_b2b_enabled`` is
+      True: create a ``pending`` link so an AQP super-admin can
+      promote it via the onboarding wizard.
+    """
+    if provider != "msal_entra":
+        return
+
+    from aqp.auth.oidc import claims_entra_app_roles, claims_entra_tenant
+    from aqp.config.defaults import (
+        ROLE_ADMIN,
+        ROLE_EDITOR,
+        ROLE_OWNER,
+        ROLE_VIEWER,
+        SCOPE_ORG,
+        SCOPE_WORKSPACE,
+    )
+    from aqp.persistence.models_tenancy import (
+        Lab,
+        Membership,
+        Organization,
+        Project,
+        Workspace,
+    )
+    from aqp.persistence.models_terraform import EntraTenantLink
+
+    tid = claims_entra_tenant(claims)
+    if not tid:
+        return
+
+    link = (
+        session.query(EntraTenantLink)
+        .filter(EntraTenantLink.entra_tenant_id == tid)
+        .one_or_none()
+    )
+    if link is None:
+        try:
+            from aqp.config import settings
+
+            b2b = bool(getattr(settings, "auth_msal_b2b_enabled", True))
+        except Exception:
+            b2b = True
+        if not b2b:
+            logger.info(
+                "Entra tid=%r unknown and B2B disabled; skipping link creation", tid
+            )
+            return
+        link = EntraTenantLink(
+            id=str(uuid.uuid4()),
+            organization_id=None,  # admin must pick during promotion
+            entra_tenant_id=tid,
+            primary_domain=(claims.get("upn") or claims.get("email") or "").split("@")[-1] or None,
+            display_name=None,
+            status="pending",
+            requested_by_email=claims.get("email"),
+            meta={"first_seen_via": "msal_login"},
+        )
+        session.add(link)
+        session.flush()
+        logger.info(
+            "Provisioned pending EntraTenantLink id=%s tid=%s; admin must promote",
+            link.id,
+            tid,
+        )
+        return
+
+    if link.status != "active" or not link.organization_id:
+        return
+
+    org_id = link.organization_id
+    role_priority: dict[str, int] = {
+        ROLE_VIEWER: 0,
+        ROLE_EDITOR: 1,
+        ROLE_ADMIN: 2,
+        ROLE_OWNER: 3,
+    }
+    aqp_roles = [r for r in claims_entra_app_roles(claims) if r.startswith("aqp.")]
+    best_role = ROLE_VIEWER
+    for role in aqp_roles:
+        # Map "aqp.admin" -> "admin", "aqp.viewer" -> "viewer", etc.
+        # Multi-word roles (e.g. "aqp.terraform.operator") get folded
+        # down to the closest lattice role (operator -> editor).
+        tail = role.split(".", 1)[-1].split(".")[-1].lower()
+        if tail in {"owner"}:
+            mapped = ROLE_OWNER
+        elif tail in {"admin", "approver"}:
+            mapped = ROLE_ADMIN
+        elif tail in {"editor", "operator", "developer"}:
+            mapped = ROLE_EDITOR
+        else:
+            mapped = ROLE_VIEWER
+        if role_priority[mapped] > role_priority[best_role]:
+            best_role = mapped
+
+    # Optional per-link role override (admin-configured during link
+    # promotion). Matches against the raw Entra role string.
+    role_mapping = dict(link.role_mapping or {})
+    for raw_role in aqp_roles:
+        override = role_mapping.get(raw_role)
+        if not override or override not in role_priority:
+            continue
+        if role_priority[override] > role_priority[best_role]:
+            best_role = override
+
+    # Upsert org membership.
+    _ensure_membership(
+        session,
+        user_id=user_id,
+        scope_kind=SCOPE_ORG,
+        scope_id=org_id,
+        role=best_role,
+        live_control=best_role in {ROLE_ADMIN, ROLE_OWNER},
+    )
+
+    # Cascade onto every workspace the org owns so the user lands
+    # on a usable surface immediately.
+    workspaces = (
+        session.query(Workspace).filter(Workspace.org_id == org_id).all()
+    )
+    for ws in workspaces:
+        _ensure_membership(
+            session,
+            user_id=user_id,
+            scope_kind=SCOPE_WORKSPACE,
+            scope_id=ws.id,
+            role=best_role,
+            live_control=best_role in {ROLE_ADMIN, ROLE_OWNER},
+        )
+
+
+def _ensure_membership(
+    session: Any,
+    *,
+    user_id: str,
+    scope_kind: str,
+    scope_id: str,
+    role: str,
+    live_control: bool,
+) -> None:
+    """Idempotently upsert a Membership row (insert or upgrade-role)."""
+    from aqp.config.defaults import ROLE_ADMIN, ROLE_EDITOR, ROLE_OWNER, ROLE_VIEWER
+    from aqp.persistence.models_tenancy import Membership
+
+    role_priority = {
+        ROLE_VIEWER: 0,
+        ROLE_EDITOR: 1,
+        ROLE_ADMIN: 2,
+        ROLE_OWNER: 3,
+    }
+    existing = (
+        session.query(Membership)
+        .filter(
+            Membership.user_id == user_id,
+            Membership.scope_kind == scope_kind,
+            Membership.scope_id == scope_id,
+        )
+        .one_or_none()
+    )
+    if existing is None:
+        session.add(
+            Membership(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                scope_kind=scope_kind,
+                scope_id=scope_id,
+                role=role,
+                live_control=live_control,
+            )
+        )
+        return
+    # Upgrade-only — never silently downgrade.
+    if role_priority.get(existing.role, 0) < role_priority.get(role, 0):
+        existing.role = role
+        existing.live_control = live_control
 
 
 def _settings_safe():

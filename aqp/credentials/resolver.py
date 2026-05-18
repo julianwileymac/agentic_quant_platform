@@ -129,13 +129,77 @@ _RESOLVER_LOCK = threading.Lock()
 
 
 def _build_default_resolver() -> CredentialResolver:
-    """Build the default chain: env + file."""
+    """Build the default chain.
+
+    Baseline: ``env`` + ``file`` (always present, no external deps).
+
+    Additive: when ``AQP_DEFAULT_CLOUD_PROVIDER`` is set and the
+    matching cloud SDK is installed, the matching cloud SecretStore is
+    inserted at priority 30 (between m2m=10 and file=50). When
+    ``AQP_VAULT_ADDR`` is set and ``hvac`` is installed, the Vault
+    store is inserted at priority 15 (above all cloud stores).
+    """
     from aqp.credentials.stores.env_store import EnvSecretStore
     from aqp.credentials.stores.file_store import FileSecretStore
 
     resolver = CredentialResolver()
     resolver.add_store(EnvSecretStore())
     resolver.add_store(FileSecretStore())
+
+    # Optional Vault layer (priority 20 — above all cloud stores).
+    try:
+        from aqp.config import settings
+
+        if (str(getattr(settings, "vault_addr", "") or "")).strip():
+            from aqp.credentials.stores import HashicorpVaultSecretStore
+
+            if HashicorpVaultSecretStore is not None:
+                resolver.add_store(HashicorpVaultSecretStore())
+    except Exception:  # noqa: BLE001
+        logger.debug("HashicorpVaultSecretStore auto-registration failed", exc_info=True)
+
+    # Optional cloud layer (selected by AQP_DEFAULT_CLOUD_PROVIDER).
+    try:
+        from aqp.config import settings
+
+        cloud = (
+            str(getattr(settings, "default_cloud_provider", "") or "")
+            .strip()
+            .lower()
+        )
+    except Exception:
+        cloud = ""
+
+    if cloud == "azure":
+        try:
+            from aqp.credentials.stores import AzureKeyVaultSecretStore
+
+            if AzureKeyVaultSecretStore is not None:
+                resolver.add_store(AzureKeyVaultSecretStore())
+        except Exception:  # noqa: BLE001
+            logger.debug(
+                "AzureKeyVaultSecretStore auto-registration failed", exc_info=True
+            )
+    elif cloud == "aws":
+        try:
+            from aqp.credentials.stores import AwsSecretsManagerStore
+
+            if AwsSecretsManagerStore is not None:
+                resolver.add_store(AwsSecretsManagerStore())
+        except Exception:  # noqa: BLE001
+            logger.debug(
+                "AwsSecretsManagerStore auto-registration failed", exc_info=True
+            )
+    elif cloud == "gcp":
+        try:
+            from aqp.credentials.stores import GcpSecretManagerStore
+
+            if GcpSecretManagerStore is not None:
+                resolver.add_store(GcpSecretManagerStore())
+        except Exception:  # noqa: BLE001
+            logger.debug(
+                "GcpSecretManagerStore auto-registration failed", exc_info=True
+            )
     return resolver
 
 

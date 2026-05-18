@@ -436,6 +436,48 @@ These hold across the codebase. Any PR that violates one will be sent back.
  34). New ``OrchestrationAdapter`` subclasses register through the
  [`OrchestrationAdapterMeta`](aqp/agents/orchestration/base.py)
  metaclass — never decorate them by hand.
+42. **All Terraform IaC lifecycle actions go through
+ [`aqp/terraform/runtime.py::TerraformRuntime`](aqp/terraform/runtime.py).**
+ The `terraform_runs` ledger, the `terraform_stack_spec_versions`
+ hash-lock, the kill-switch hook (`/terraform/halt`), policy
+ enforcement (OPA via [`aqp/terraform/policy.py`](aqp/terraform/policy.py)),
+ and `experiment_id` / `test_id` stamping all depend on it. REST
+ routes ([`aqp/api/routes/terraform.py`](aqp/api/routes/terraform.py)),
+ Celery tasks ([`aqp/tasks/terraform_tasks.py`](aqp/tasks/terraform_tasks.py)),
+ and DataMCP tools ([`aqp/data/mcp/tools/terraform.py`](aqp/data/mcp/tools/terraform.py))
+ wrap it — nothing calls `subprocess.run(["terraform", ...])`
+ directly outside
+ [`aqp/terraform/runner.py::TerraformExecutor`](aqp/terraform/runner.py).
+ CDKTF was deprecated by HashiCorp on 2025-12-10 — Python-side HCL
+ codegen uses Jinja2 templates under
+ [`aqp/terraform/codegen/templates/`](aqp/terraform/codegen/templates).
+43. **`terraform_stack_spec_versions` rows are immutable,
+ hash-locked snapshots.** Re-snapshotting via
+ [`aqp/terraform/registry.py::persist_spec`](aqp/terraform/registry.py)
+ inserts a new version row when the SHA-256 hash changes — old
+ versions stay for replay / audit. The matching ORM tables are
+ [`TerraformStackSpecRow`](aqp/persistence/models_terraform.py) /
+ [`TerraformStackSpecVersion`](aqp/persistence/models_terraform.py);
+ the migration is
+ [`alembic/versions/0050_terraform_iac_plus_entra.py`](alembic/versions/0050_terraform_iac_plus_entra.py).
+ `TerraformRun` carries ``experiment_id`` + ``test_id`` FKs (rule
+ 34).
+44. **`Organization` provisioning from Microsoft Entra ID claims
+ goes through
+ [`EntraTenantLink`](aqp/persistence/models_terraform.py).** Don't
+ auto-create `Organization` rows from raw `tid` claims; the
+ `data.tenancy.link_org_to_entra_tenant` admin step (and its
+ REST counterpart `POST /tenancy/entra-links`) is the only
+ sanctioned ingress. First-login provisioning in
+ [`aqp/auth/user.py::_apply_entra_tenant_link`](aqp/auth/user.py)
+ creates a ``pending`` link when an unknown tid arrives and
+ ``settings.auth_msal_b2b_enabled`` is True; an AQP super-admin
+ promotes via the
+ [`EntraTenantLinkWizard`](frontend/src/components/onboarding/EntraTenantLinkWizard.tsx).
+ New identity providers (Auth0 / generic OIDC / mock / MSAL Entra)
+ register through the
+ [`IdentityProviderMeta`](aqp/auth/providers/protocol.py) metaclass —
+ never decorate them by hand.
 
 ## Common workflows
 

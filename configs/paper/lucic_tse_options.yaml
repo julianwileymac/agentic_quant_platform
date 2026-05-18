@@ -8,6 +8,11 @@ description: >
 
 session:
   run_name: lucic-tse-paper
+  # Production metadata URNs. The paper session validates these against
+  # entity_aspects on startup; missing or non-Production aspects abort
+  # startup unless AQP_PAPER_STRICT_METADATA=false.
+  model_urn: urn:aqp:mlmodel:prod:lucic_tse_options_quoter_v1
+  pipeline_urn: urn:aqp:pipeline:prod:lucic_tse_paper_options
   heartbeat_seconds: 30
   state_flush_every_bars: 10
   initial_cash: 1000000.0

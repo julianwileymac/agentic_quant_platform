@@ -15,6 +15,10 @@ downloads/
 eggs/
 .eggs/
 lib/
+# Keep the Vite frontend's source-tree `src/lib` files trackable.
+!frontend/src/lib/
+!frontend/src/lib/api/
+!frontend/src/lib/api/metadata-aspects.ts
 lib64/
 parts/
 sdist/
@@ -196,3 +200,9 @@ aqp/data/**/__pycache__/
 tests/data/**/__pycache__/
 aqp/data/**/*.py[cod]
 tests/data/**/*.py[cod]
+
+# Generated metadata schema exports.
+schemas/json/
+schemas/avro/
+schemas/pdl/
+!schemas/.gitkeep

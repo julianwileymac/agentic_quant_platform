@@ -1,0 +1,38 @@
+{# Fallback generic emitter: a `module` block pointing at module_source
+   when set, otherwise an empty stub with the variables block. Used
+   when no template matches `<module_kind>_<cloud_provider>.tf.j2` or
+   `<module_kind>_local.tf.j2`. -#}
+
+# Stack: {{ spec.name }} ({{ spec.module_kind }} / {{ spec.cloud_provider }})
+# Slug:  {{ spec.slug }}
+# Environment: {{ spec.environment }}
+
+locals {
+  common_tags = {{ tags | tfmap }}
+  variables   = {{ variables | tfmap }}
+}
+
+{% if spec.module_source %}
+module "{{ spec.slug | replace('-', '_') }}" {
+  source = {{ spec.module_source | hcl }}
+  {% for k, v in variables.items() %}
+  {{ k }} = {{ v | hcl }}
+  {% endfor %}
+}
+
+output "module_outputs" {
+  value       = module.{{ spec.slug | replace('-', '_') }}
+  description = "All outputs exported by the wrapped module."
+}
+{% else %}
+output "stack_metadata" {
+  value = {
+    name        = {{ spec.name | hcl }}
+    slug        = {{ spec.slug | hcl }}
+    module_kind = {{ spec.module_kind | hcl }}
+    environment = {{ spec.environment | hcl }}
+    tags        = local.common_tags
+  }
+  description = "Generic stub: no module_source was set; module body is empty."
+}
+{% endif %}

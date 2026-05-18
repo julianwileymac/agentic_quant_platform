@@ -6,6 +6,11 @@ description: >
 
 session:
   run_name: ibkr-mr-paper
+  # Production metadata URNs. The paper session validates these against
+  # entity_aspects on startup; missing or non-Production aspects abort
+  # startup unless AQP_PAPER_STRICT_METADATA=false.
+  model_urn: urn:aqp:mlmodel:prod:ibkr_mean_reversion_baseline_v1
+  pipeline_urn: urn:aqp:pipeline:prod:ibkr_paper_mean_reversion
   heartbeat_seconds: 30
   initial_cash: 100000.0
   dry_run: false

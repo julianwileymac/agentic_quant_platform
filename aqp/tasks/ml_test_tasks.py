@@ -16,13 +16,20 @@ Four task families:
 """
 from __future__ import annotations
 
+import json
 import logging
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
+from aqp.backtest.metrics import max_drawdown, sharpe_ratio
+from aqp.metadata import parse_urn, write_aspect
+from aqp.metadata.aspect_lookup import load_ml_model
+from aqp.metadata.openmetadata import MlHyperParameter, MlTestResult
+from aqp.persistence.db import get_session
 from aqp.tasks._progress import emit, emit_done, emit_error
 from aqp.tasks.celery_app import celery_app
 
@@ -30,6 +37,305 @@ if TYPE_CHECKING:
     from aqp.core.types import Symbol
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_hyperparameter_value(parameter: MlHyperParameter) -> Any:
+    """Parse a typed hyperparameter value from its string payload."""
+    value_raw = parameter.value
+    value_type = parameter.value_type.strip().lower()
+    try:
+        if value_type in {"int", "integer"}:
+            return int(value_raw)
+        if value_type in {"float", "double"}:
+            return float(value_raw)
+        if value_type in {"bool", "boolean"}:
+            return value_raw.strip().lower() in {"1", "true", "yes", "y", "on"}
+        if value_type in {"json", "dict", "list"}:
+            return json.loads(value_raw)
+    except Exception:  # noqa: BLE001
+        logger.debug(
+            "Could not parse hyperparameter %s as %s; keeping raw string",
+            parameter.name,
+            parameter.value_type,
+            exc_info=True,
+        )
+    return value_raw
+
+
+def _hyperparameters_to_dict(hyperparameters: list[MlHyperParameter]) -> dict[str, Any]:
+    """Convert ``MlHyperParameter`` rows into a plain dict."""
+    return {
+        hp.name: _coerce_hyperparameter_value(hp)
+        for hp in hyperparameters
+    }
+
+
+def _resolve_model_urn(config: dict[str, Any], model_urn: str | None) -> str | None:
+    """Resolve a model URN from explicit input or inline config."""
+    model_cfg = config.get("model")
+    candidates: list[Any] = [
+        model_urn,
+        config.get("model_urn"),
+        config.get("urn"),
+    ]
+    if isinstance(model_cfg, dict):
+        candidates.extend((model_cfg.get("model_urn"), model_cfg.get("urn")))
+    for candidate in candidates:
+        if not isinstance(candidate, str):
+            continue
+        urn = candidate.strip()
+        if not urn:
+            continue
+        try:
+            parse_urn(urn)
+            return urn
+        except ValueError:
+            logger.info("Ignoring non-canonical model URN candidate: %s", urn)
+    return None
+
+
+def _extract_inline_model_config(
+    config: dict[str, Any],
+) -> tuple[str, dict[str, Any], str | None]:
+    """Read algorithm/hyperparameters/target from inline config."""
+    model_cfg = config.get("model")
+    model_cfg_dict = model_cfg if isinstance(model_cfg, dict) else {}
+    algorithm = str(
+        config.get("algorithm")
+        or model_cfg_dict.get("algorithm")
+        or model_cfg_dict.get("class")
+        or "unknown"
+    )
+    hyperparameters = config.get("hyperparameters")
+    if not isinstance(hyperparameters, dict):
+        kwargs = model_cfg_dict.get("kwargs")
+        hyperparameters = kwargs if isinstance(kwargs, dict) else {}
+    target_raw = config.get("target") or model_cfg_dict.get("target")
+    target = str(target_raw) if target_raw is not None else None
+    return algorithm, dict(hyperparameters), target
+
+
+def _coerce_float_list(values: Any) -> list[float]:
+    """Best-effort conversion of list-like inputs to floats."""
+    if values is None:
+        return []
+    if isinstance(values, np.ndarray):
+        values = values.tolist()
+    if not isinstance(values, (list, tuple)):
+        return []
+    out: list[float] = []
+    for value in values:
+        try:
+            out.append(float(value))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _read_metric(config: dict[str, Any], *keys: str) -> float | None:
+    """Return the first parseable metric value from config/metrics dict."""
+    metrics_block = config.get("metrics")
+    metrics = metrics_block if isinstance(metrics_block, dict) else {}
+    for key in keys:
+        for source in (config, metrics):
+            if key not in source:
+                continue
+            try:
+                return float(source[key])
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _compute_test_metrics(config: dict[str, Any]) -> dict[str, Any]:
+    """Compute sharpe/max drawdown/agreement/accuracy from test inputs."""
+    predictions = _coerce_float_list(
+        config.get("predictions") or config.get("scores") or config.get("signal_scores")
+    )
+    labels = _coerce_float_list(config.get("labels") or config.get("actual"))
+    returns = _coerce_float_list(
+        config.get("returns") or config.get("strategy_returns")
+    )
+    if not returns and predictions:
+        returns = list(predictions)
+
+    sharpe_value = _read_metric(config, "sharpe_ratio", "sharpe")
+    max_drawdown_value = _read_metric(config, "max_drawdown")
+    if returns and sharpe_value is None:
+        returns_series = pd.Series(returns, dtype=float)
+        sharpe_value = float(sharpe_ratio(returns_series))
+    if returns and max_drawdown_value is None:
+        equity_curve = (1.0 + pd.Series(returns, dtype=float)).cumprod()
+        max_drawdown_value = float(max_drawdown(equity_curve))
+
+    agreement_rate = _read_metric(config, "agreement_rate")
+    accuracy = _read_metric(config, "accuracy")
+    if predictions and labels and (agreement_rate is None or accuracy is None):
+        n = min(len(predictions), len(labels))
+        if n > 0:
+            pred_arr = np.asarray(predictions[:n], dtype=float)
+            label_arr = np.asarray(labels[:n], dtype=float)
+            if agreement_rate is None:
+                agreement_rate = float(np.mean(np.sign(pred_arr) == np.sign(label_arr)))
+            if accuracy is None:
+                if str(config.get("problem_type", "")).lower() == "classification":
+                    accuracy = float(
+                        np.mean((pred_arr >= 0).astype(int) == (label_arr >= 0).astype(int))
+                    )
+                else:
+                    accuracy = agreement_rate
+
+    return {
+        "sharpe_ratio": sharpe_value,
+        "max_drawdown": max_drawdown_value,
+        "agreement_rate": agreement_rate,
+        "accuracy": accuracy,
+        "n_predictions": len(predictions),
+        "n_labels": len(labels),
+        "n_returns": len(returns),
+    }
+
+
+def _write_ml_test_result(
+    *,
+    model_urn: str,
+    test_id: str,
+    started_at: datetime,
+    completed_at: datetime,
+    sharpe_value: float | None,
+    max_drawdown_value: float | None,
+    agreement_rate: float | None,
+    accuracy: float | None,
+    extra_metrics: dict[str, Any],
+) -> dict[str, Any]:
+    """Persist a ``mlTestResult`` aspect and return identifying metadata."""
+    payload = MlTestResult(
+        model_urn=model_urn,
+        test_id=test_id,
+        started_at=started_at,
+        completed_at=completed_at,
+        sharpe_ratio=sharpe_value,
+        max_drawdown=max_drawdown_value,
+        agreement_rate=agreement_rate,
+        accuracy=accuracy,
+        extra_metrics=extra_metrics,
+    )
+    with get_session() as session:
+        row = write_aspect(session, model_urn, "mlTestResult", payload)
+        aspect_id = str(row.id)
+        aspect_version = int(row.version)
+    logger.info(
+        "Persisted mlTestResult aspect for %s (id=%s version=%s)",
+        model_urn,
+        aspect_id,
+        aspect_version,
+    )
+    return {"aspect_id": aspect_id, "version": aspect_version}
+
+
+@celery_app.task(bind=True, name="aqp.tasks.ml_test_tasks.run_ml_test")
+def run_ml_test(
+    self,
+    *,
+    config: dict[str, Any] | None = None,
+    model_urn: str | None = None,
+) -> dict[str, Any]:
+    """Run a config-driven ML test and optionally persist ``mlTestResult``."""
+    task_id = self.request.id or f"local-{uuid.uuid4().hex[:8]}"
+    test_config = dict(config or {})
+    started_at = datetime.utcnow()
+    resolved_model_urn = _resolve_model_urn(test_config, model_urn)
+    algorithm, hyperparameters, target = _extract_inline_model_config(test_config)
+    emit(task_id, "start", "Running ML test workload")
+    try:
+        if model_urn:
+            model = load_ml_model(model_urn)
+            if model is None:
+                raise ValueError(f"MlModel aspect not found for {model_urn}")
+            algorithm = model.algorithm
+            hyperparameters = _hyperparameters_to_dict(model.ml_hyper_parameters)
+            target = model.target
+            resolved_model_urn = model_urn
+            logger.info(
+                "run_ml_test using metadata aspect model path for %s",
+                model_urn,
+            )
+        else:
+            logger.info("run_ml_test using inline config path")
+
+        emit(task_id, "running", f"Computing test metrics for {algorithm}")
+        metrics = _compute_test_metrics(test_config)
+        completed_at = datetime.utcnow()
+        extra_metrics: dict[str, Any] = {
+            "algorithm": algorithm,
+            "target": target,
+            "hyperparameters": hyperparameters,
+            "n_predictions": metrics["n_predictions"],
+            "n_labels": metrics["n_labels"],
+            "n_returns": metrics["n_returns"],
+        }
+        extra_from_config = test_config.get("extra_metrics")
+        if isinstance(extra_from_config, dict):
+            extra_metrics.update(extra_from_config)
+
+        aspect_meta: dict[str, Any] | None = None
+        if resolved_model_urn:
+            aspect_meta = _write_ml_test_result(
+                model_urn=resolved_model_urn,
+                test_id=task_id,
+                started_at=started_at,
+                completed_at=completed_at,
+                sharpe_value=metrics["sharpe_ratio"],
+                max_drawdown_value=metrics["max_drawdown"],
+                agreement_rate=metrics["agreement_rate"],
+                accuracy=metrics["accuracy"],
+                extra_metrics=extra_metrics,
+            )
+
+        result = {
+            "test_id": task_id,
+            "model_urn": resolved_model_urn,
+            "algorithm": algorithm,
+            "target": target,
+            "hyperparameters": hyperparameters,
+            "sharpe_ratio": metrics["sharpe_ratio"],
+            "max_drawdown": metrics["max_drawdown"],
+            "agreement_rate": metrics["agreement_rate"],
+            "accuracy": metrics["accuracy"],
+            "started_at": started_at.isoformat(),
+            "completed_at": completed_at.isoformat(),
+            "ml_test_result_aspect": aspect_meta,
+        }
+        emit_done(task_id, result)
+        return result
+    except Exception as exc:
+        completed_at = datetime.utcnow()
+        if resolved_model_urn:
+            try:
+                _write_ml_test_result(
+                    model_urn=resolved_model_urn,
+                    test_id=task_id,
+                    started_at=started_at,
+                    completed_at=completed_at,
+                    sharpe_value=None,
+                    max_drawdown_value=None,
+                    agreement_rate=None,
+                    accuracy=None,
+                    extra_metrics={
+                        "algorithm": algorithm,
+                        "target": target,
+                        "hyperparameters": hyperparameters,
+                        "error": str(exc),
+                    },
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "Failed to persist error mlTestResult aspect for %s",
+                    resolved_model_urn,
+                )
+        logger.exception("run_ml_test failed")
+        emit_error(task_id, str(exc))
+        raise
 
 
 def _load_alpha(deployment_id: str) -> Any:

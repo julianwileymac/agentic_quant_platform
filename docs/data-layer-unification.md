@@ -43,6 +43,34 @@ Three layers, each pinned to a namespace prefix:
 that the namespace prefix matches the layer. New tables must declare a
 layer; legacy tables stay nullable until a fresh write touches them.
 
+## Namespace policy overrides
+
+The medallion prefixes above are the floor (`aqp_bronze_`,
+`aqp_silver_`, `aqp_gold_`). Operators can add a scoped override by
+writing an `icebergNamespacePolicy` aspect to the target scope URN
+(workspace/project/lab/org). Resolution is additive:
+
+1. Try exact-match `icebergNamespacePolicy` on `scope_urn`
+2. If missing (or invalid), fall back to default medallion prefixes
+
+Reserved namespaces remain non-overridable:
+
+- `aqp_cfpb`
+- `aqp_uspto`
+- `aqp_fda`
+- `aqp_sec`
+- `aqp_smoke`
+
+### Operator runbook
+
+1. Set policy using DataMCP tool `iceberg.namespace_policy.set`
+   (`scope_urn`, optional `bronze_prefix`/`silver_prefix`/`gold_prefix`,
+   optional allow/forbid lists).
+2. Validate effective policy with `iceberg.namespace_policy.get`.
+3. Keep calling `register_dataset(...)` or
+   `iceberg_catalog.append_arrow(..., medallion_layer=...)` unchanged —
+   namespace validation now consults the scoped policy automatically.
+
 ## Active metadata contract
 
 Every Iceberg table that an agent touches MUST have a

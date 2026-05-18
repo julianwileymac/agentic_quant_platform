@@ -27,6 +27,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import select
 
+from aqp.metadata import parse_urn
+from aqp.metadata.namespace_policy import ResolvedPolicy, resolve_namespace_policy
 from aqp.persistence.db import get_session
 from aqp.persistence.models import DatasetCatalog
 
@@ -121,7 +123,15 @@ class RegisterDatasetResult:
     contract_violations: list[str] = field(default_factory=list)
 
 
-def namespace_for_layer(layer: MedallionLayer, suffix: str) -> str:
+def namespace_for_layer(
+    layer: MedallionLayer,
+    suffix: str,
+    *,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    domain: str | None = None,
+    policy: ResolvedPolicy | None = None,
+) -> str:
     """Return the canonical namespace for a layer/source pair.
 
     Example: ``namespace_for_layer("silver", "alpha_vantage")`` returns
@@ -136,19 +146,29 @@ def namespace_for_layer(layer: MedallionLayer, suffix: str) -> str:
     suffix_clean = suffix.strip().strip("_").lower()
     if not suffix_clean:
         raise ValueError("namespace suffix cannot be empty")
-    return f"{LAYER_PREFIXES[layer]}{suffix_clean}"
+    prefix = LAYER_PREFIXES[layer]
+    if policy is not None:
+        prefix = policy.prefix_for(layer)
+    elif workspace_id is not None or project_id is not None or domain is not None:
+        resolved = resolve_namespace_policy(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            domain=domain,
+        )
+        prefix = resolved.prefix_for(layer)
+    return f"{prefix}{suffix_clean}"
 
 
 def validate_layer_for_namespace(
-    layer: MedallionLayer | None, namespace: str
+    layer: MedallionLayer | None,
+    namespace: str,
+    *,
+    workspace_id: str | None = None,
+    project_id: str | None = None,
+    domain: str | None = None,
+    policy: ResolvedPolicy | None = None,
 ) -> None:
-    """Raise :class:`ValueError` if ``namespace`` doesn't match ``layer``.
-
-    Legacy namespaces that don't carry a layer prefix yet (eg. ``aqp``,
-    ``aqp_smoke``, ``aqp_<source>``) are accepted when ``layer`` is
-    ``None``. Once a layer is declared, the namespace MUST start with
-    the matching prefix from :data:`LAYER_PREFIXES`.
-    """
+    """Raise :class:`ValueError` if ``namespace`` doesn't match ``layer``."""
     if layer is None:
         return
     if layer not in LAYER_PREFIXES:
@@ -156,13 +176,39 @@ def validate_layer_for_namespace(
             f"unknown medallion_layer {layer!r}; expected one of "
             f"{sorted(LAYER_PREFIXES)}"
         )
-    expected = LAYER_PREFIXES[layer]
+
+    expected_prefix = LAYER_PREFIXES[layer]
     namespace_clean = namespace.split(".", 1)[0]
-    if not namespace_clean.startswith(expected):
-        raise ValueError(
-            f"medallion_layer={layer!r} requires namespace prefix "
-            f"{expected!r}, got {namespace_clean!r}"
+    if policy is None and namespace_clean.startswith(expected_prefix):
+        return
+
+    effective_prefix = expected_prefix
+    if policy is not None:
+        effective_prefix = policy.prefix_for(layer)
+    elif workspace_id is not None or project_id is not None or domain is not None:
+        resolved = resolve_namespace_policy(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            domain=domain,
         )
+        effective_prefix = resolved.prefix_for(layer)
+
+    if namespace_clean.startswith(effective_prefix):
+        return
+    raise ValueError(
+        f"medallion_layer={layer!r} requires namespace prefix {expected_prefix!r} "
+        f"(effective={effective_prefix!r}); got {namespace_clean!r}"
+    )
+
+
+def validate_namespace_with_policy(
+    layer: MedallionLayer | None,
+    namespace: str,
+    *,
+    policy: ResolvedPolicy | None = None,
+) -> None:
+    """Compatibility wrapper for callers that already resolved a policy."""
+    validate_layer_for_namespace(layer, namespace, policy=policy)
 
 
 def validate_contract_against_schema(
@@ -245,6 +291,7 @@ def register_dataset(
     tags: list[str] | None = None,
     extras: dict[str, Any] | None = None,
     context: Any | None = None,
+    policy_urn: str | None = None,
 ) -> RegisterDatasetResult:
     """Idempotent :class:`DatasetCatalog` upsert with active metadata.
 
@@ -260,7 +307,6 @@ def register_dataset(
     to NULL ownership for callers without a bound context preserves
     the legacy single-tenant behaviour.
     """
-    validate_layer_for_namespace(medallion_layer, iceberg_identifier)
     bm = (
         business_metadata
         if isinstance(business_metadata, BusinessMetadata)
@@ -298,6 +344,50 @@ def register_dataset(
     final_name = name or table_name
     final_provider = provider or _provider_from_namespace(namespace)
     final_domain = domain or bm.domain or "data.unknown"
+    resolved_policy: ResolvedPolicy | None = None
+    policy_urn_clean = str(policy_urn or "").strip() or None
+    if policy_urn_clean is not None:
+        from aqp.metadata.aspect_lookup import load_aspect
+        from aqp.metadata.openmetadata import IcebergNamespacePolicy
+
+        parse_urn(policy_urn_clean)
+        policy_payload = load_aspect(
+            policy_urn_clean,
+            IcebergNamespacePolicy.aspect_name,
+        )
+        if policy_payload is None:
+            raise ValueError(
+                f"policy_urn {policy_urn_clean!r} does not have an "
+                "'icebergNamespacePolicy' aspect"
+            )
+        policy_model = IcebergNamespacePolicy.model_validate(policy_payload)
+        resolved_policy = ResolvedPolicy(
+            bronze=policy_model.bronze_prefix,
+            silver=policy_model.silver_prefix,
+            gold=policy_model.gold_prefix,
+            policy_urn=policy_model.urn,
+            priority=int(policy_model.priority),
+            source="aspect",
+        )
+    else:
+        resolved_policy = resolve_namespace_policy(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            domain=final_domain,
+        )
+
+    merged_extras = dict(extras or {})
+    if policy_urn_clean is not None:
+        merged_extras["policy_urn"] = policy_urn_clean
+
+    validate_layer_for_namespace(
+        medallion_layer,
+        iceberg_identifier,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        domain=final_domain,
+        policy=resolved_policy,
+    )
 
     schema_json = _arrow_schema_to_json(arrow_schema) if arrow_schema is not None else {}
 
@@ -325,7 +415,7 @@ def register_dataset(
                 schema_json=schema_json,
                 description=description,
                 tags=list(tags) if tags else [],
-                meta=dict(extras) if extras else {},
+                meta=dict(merged_extras) if merged_extras else {},
                 created_at=now,
                 updated_at=now,
             )
@@ -351,9 +441,9 @@ def register_dataset(
                 existing.description = description
             if tags is not None:
                 existing.tags = list(tags)
-            if extras:
+            if merged_extras:
                 merged_meta = dict(existing.meta or {})
-                merged_meta.update(extras)
+                merged_meta.update(merged_extras)
                 existing.meta = merged_meta
             # Backfill ownership when the existing row was created
             # before the tenancy refactor and the active call has a
@@ -484,4 +574,5 @@ __all__ = [
     "register_dataset",
     "validate_contract_against_schema",
     "validate_layer_for_namespace",
+    "validate_namespace_with_policy",
 ]

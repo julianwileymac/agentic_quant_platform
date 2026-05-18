@@ -77,6 +77,14 @@ const PLACEHOLDER_LABEL: Record<CacheCategory, string> = {
   // Phase 5 + 7 polymorphic content
   resources: "Select resource...",
   strategy_templates: "Select strategy template...",
+  // Phase 7 IaC + multi-cloud
+  terraform_workspaces: "Select Terraform workspace...",
+  terraform_providers: "Select Terraform provider...",
+  terraform_stacks: "Select Terraform stack...",
+  cloud_providers: "Select cloud provider...",
+  k8s_clusters: "Select Kubernetes cluster...",
+  k8s_namespaces: "Select Kubernetes namespace...",
+  entra_tenants: "Select Entra tenant link...",
 };
 
 /**

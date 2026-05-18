@@ -36,6 +36,15 @@ from aqp.auth.providers.protocol import (
     reset_active_provider,
 )
 
+# Import MsalEntraProvider so the IdentityProviderMeta metaclass
+# auto-registers it. The import is wrapped in a try/except so the AQP
+# package keeps installable when ``msal`` isn't in the environment
+# (the [auth-msal] extra has the dep).
+try:  # pragma: no cover - dep guard
+    from aqp.auth.providers.msal_entra import MsalEntraProvider  # noqa: F401
+except Exception:  # noqa: BLE001
+    MsalEntraProvider = None  # type: ignore[assignment]
+
 __all__ = [
     "Auth0Provider",
     "GenericOidcProvider",
@@ -46,6 +55,7 @@ __all__ = [
     "IdentityProviderMeta",
     "M2MTokenResult",
     "MockProvider",
+    "MsalEntraProvider",
     "TokenResponse",
     "get_active_provider",
     "list_provider_classes",

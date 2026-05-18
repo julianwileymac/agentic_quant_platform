@@ -27,6 +27,8 @@ from aqp.api.schemas import TaskAccepted
 from aqp.config import settings
 from aqp.core.types import Symbol
 from aqp.data.duckdb_engine import DuckDBHistoryProvider
+from aqp.metadata import parse_urn
+from aqp.metadata.aspect_lookup import load_ml_model
 from aqp.ml.planning import build_split_plan
 from aqp.persistence.db import get_session
 from aqp.persistence.models import (
@@ -358,6 +360,24 @@ class TestCompareRequest(BaseModel):
     start: str | None = None
     end: str | None = None
     last_n: int = Field(default=200, ge=1, le=5000)
+
+
+class MlTestRunRequest(BaseModel):
+    config: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Inline ML test config. Existing callers can continue passing "
+            "algorithm/hyperparameter/target inputs here."
+        ),
+    )
+    model_urn: str | None = Field(
+        default=None,
+        description=(
+            "AQP URN of an MlModel to test. If provided, the MlModel + "
+            "hyperparameters are loaded from the entity_aspects store rather "
+            "than from the inline 'config' field."
+        ),
+    )
 
 
 class TestScenarioRequest(BaseModel):
@@ -1754,6 +1774,44 @@ class LiveTestStartRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Interactive ML test workbench (ML expansion)
 # ---------------------------------------------------------------------------
+
+
+@router.post("/test", response_model=TaskAccepted)
+def run_ml_test(req: MlTestRunRequest) -> TaskAccepted:
+    """Queue a config-driven ML test run with optional metadata lookup."""
+    if req.model_urn:
+        try:
+            parse_urn(req.model_urn)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "invalid_model_urn",
+                    "model_urn": req.model_urn,
+                    "message": str(exc),
+                },
+            ) from exc
+        if load_ml_model(req.model_urn) is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "model_urn_not_found",
+                    "aspect_name": "mlModelMetadata",
+                    "model_urn": req.model_urn,
+                    "message": f"No mlModelMetadata aspect found for {req.model_urn}.",
+                },
+            )
+
+    from aqp.tasks.ml_test_tasks import run_ml_test as run_ml_test_task
+
+    async_result = run_ml_test_task.delay(
+        config=req.config,
+        model_urn=req.model_urn,
+    )
+    return TaskAccepted(
+        task_id=async_result.id,
+        stream_url=f"/chat/stream/{async_result.id}",
+    )
 
 
 @router.post("/test/single")
