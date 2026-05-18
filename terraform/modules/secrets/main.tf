@@ -1,17 +1,45 @@
-variable "cloud_provider" { type = string }
-variable "namespace"      { type = string }
+variable "cloud_provider" {
+  type = string
+}
+variable "namespace" {
+  type = string
+}
 variable "vault_backend" {
   description = "vault | aws_secretsmanager | gcp_secretmanager | azure_keyvault"
   type        = string
 }
-variable "vault_addr"          { type = string, default = "" }
-variable "vault_mount"         { type = string, default = "secret" }
-variable "aws_region"          { type = string, default = "us-east-1" }
-variable "gcp_project_id"      { type = string, default = "" }
-variable "gcp_region"          { type = string, default = "us-central1" }
-variable "gcp_gke_cluster"     { type = string, default = "" }
-variable "azure_tenant_id"     { type = string, default = "" }
-variable "azure_keyvault_url"  { type = string, default = "" }
+variable "vault_addr" {
+  type    = string
+  default = ""
+}
+variable "vault_mount" {
+  type    = string
+  default = "secret"
+}
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
+}
+variable "gcp_project_id" {
+  type    = string
+  default = ""
+}
+variable "gcp_region" {
+  type    = string
+  default = "us-central1"
+}
+variable "gcp_gke_cluster" {
+  type    = string
+  default = ""
+}
+variable "azure_tenant_id" {
+  type    = string
+  default = ""
+}
+variable "azure_keyvault_url" {
+  type    = string
+  default = ""
+}
 variable "common_tags" {
   type    = map(string)
   default = {}

@@ -130,6 +130,7 @@ flowchart LR
 | Doc | Purpose |
 | --- | --- |
 | [paper-trading.md](paper-trading.md) | Session loop + risk model |
+| [paper-metadata-gate.md](paper-metadata-gate.md) | Strict startup metadata validation + operator runbook |
 | [bots.md](bots.md) | Bot entity (TradingBot / ResearchBot), graphical builder, deployment |
 | [observability.md](observability.md) | OTEL → Jaeger + structured logs |
 | [webui.md](webui.md) | Next.js page tree |

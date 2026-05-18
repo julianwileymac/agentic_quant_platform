@@ -640,7 +640,6 @@ class RegisterNamespacePolicyTool(DataMCPTool):
         priority: int = 0,
     ) -> MCPToolResult:
         """Write a new immutable ``icebergNamespacePolicy`` aspect."""
-        _ = ctx
         try:
             policy = IcebergNamespacePolicy(
                 urn=urn,
@@ -667,13 +666,26 @@ class RegisterNamespacePolicyTool(DataMCPTool):
 
         with get_session() as session:
             written_urn = register_namespace_policy(policy, session=session)
-            latest = session.execute(
+            # Tenancy filter (rule 33): restrict the read-back to the
+            # caller's workspace, or rows with NULL workspace (legacy /
+            # shared reference data). This guards against another tenant's
+            # parallel write of the same URN poisoning the response.
+            stmt = (
                 select(EntityAspect)
                 .where(EntityAspect.urn == written_urn)
                 .where(EntityAspect.aspect_name == IcebergNamespacePolicy.aspect_name)
-                .order_by(desc(EntityAspect.version))
-                .limit(1)
-            ).scalars().first()
+            )
+            if ctx.workspace_id:
+                stmt = stmt.where(
+                    or_(
+                        EntityAspect.workspace_id == ctx.workspace_id,
+                        EntityAspect.workspace_id.is_(None),
+                    )
+                )
+            else:
+                stmt = stmt.where(EntityAspect.workspace_id.is_(None))
+            stmt = stmt.order_by(desc(EntityAspect.version)).limit(1)
+            latest = session.execute(stmt).scalars().first()
             if latest is None:
                 return MCPToolResult(
                     ok=False,

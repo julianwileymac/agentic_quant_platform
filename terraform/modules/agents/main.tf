@@ -8,10 +8,19 @@
 
 variable "cloud_provider" { type = string }
 variable "environment"    { type = string }
-variable "common_tags"    { type = map(string) default = {} }
+variable "common_tags" {
+  type    = map(string)
+  default = {}
+}
 variable "namespaces"     { type = map(string) }
-variable "storage_outputs" { type = any default = {} }
-variable "app_version"    { type = string default = "latest" }
+variable "storage_outputs" {
+  type    = any
+  default = {}
+}
+variable "app_version" {
+  type    = string
+  default = "latest"
+}
 variable "bot_specs" {
   description = "List of bot specs to materialise as Deployments."
   type = list(object({
@@ -70,7 +79,12 @@ resource "kubernetes_deployment" "bot" {
   spec {
     replicas = 1
     selector { match_labels = { app = "aqp-bot", bot = each.value.name } }
-    strategy { type = "RollingUpdate" rolling_update { max_unavailable = "0" } }
+    strategy {
+      type = "RollingUpdate"
+      rolling_update {
+        max_unavailable = "0"
+      }
+    }
     template {
       metadata {
         labels = merge(var.common_tags, { app = "aqp-bot", bot = each.value.name })
@@ -91,8 +105,14 @@ resource "kubernetes_deployment" "bot" {
             value = "http://localhost:8765"
           }
           resources {
-            requests = { cpu = "200m" memory = "512Mi" }
-            limits   = { cpu = "1"    memory = "2Gi"   }
+            requests = {
+              cpu    = "200m"
+              memory = "512Mi"
+            }
+            limits = {
+              cpu    = "1"
+              memory = "2Gi"
+            }
           }
           volume_mount {
             name       = "kill-switch-secret"
@@ -112,8 +132,14 @@ resource "kubernetes_deployment" "bot" {
             secret_ref { name = "aqp-postgres-password" }
           }
           resources {
-            requests = { cpu = "100m" memory = "256Mi" }
-            limits   = { cpu = "500m" memory = "1Gi"   }
+            requests = {
+              cpu    = "100m"
+              memory = "256Mi"
+            }
+            limits = {
+              cpu    = "500m"
+              memory = "1Gi"
+            }
           }
         }
         volume {
@@ -146,7 +172,10 @@ resource "kubernetes_manifest" "agent_zero_egress" {
         # MUST come from the aqp-data-mcp sidecar via localhost.
         {
           to = [{ namespaceSelector = { matchLabels = { "kubernetes.io/metadata.name" = "kube-system" } } }]
-          ports = [{ protocol = "UDP" port = 53 }, { protocol = "TCP" port = 53 }]
+          ports = [
+            { protocol = "UDP", port = 53 },
+            { protocol = "TCP", port = 53 },
+          ]
         }
       ]
     }

@@ -4,10 +4,22 @@
 
 variable "cloud_provider" { type = string }
 variable "environment"    { type = string }
-variable "common_tags"    { type = map(string) default = {} }
-variable "storage_outputs"    { type = any default = {} }
-variable "kubernetes_outputs" { type = any default = {} }
-variable "app_version"        { type = string default = "latest" }
+variable "common_tags" {
+  type    = map(string)
+  default = {}
+}
+variable "storage_outputs" {
+  type    = any
+  default = {}
+}
+variable "kubernetes_outputs" {
+  type    = any
+  default = {}
+}
+variable "app_version" {
+  type    = string
+  default = "latest"
+}
 
 locals {
   namespace = "aqp-system"
@@ -49,7 +61,12 @@ resource "kubernetes_deployment" "pgbouncer" {
   spec {
     replicas = 2
     selector { match_labels = { app = "aqp-pgbouncer" } }
-    strategy { type = "RollingUpdate" rolling_update { max_unavailable = "0" } }
+    strategy {
+      type = "RollingUpdate"
+      rolling_update {
+        max_unavailable = "0"
+      }
+    }
     template {
       metadata { labels = merge(var.common_tags, { app = "aqp-pgbouncer" }) }
       spec {
@@ -59,11 +76,27 @@ resource "kubernetes_deployment" "pgbouncer" {
           image = local.pgbouncer_image
           port { container_port = 6432 }
           resources {
-            requests = { cpu = "100m" memory = "128Mi" }
-            limits   = { cpu = "500m" memory = "512Mi" }
+            requests = {
+              cpu    = "100m"
+              memory = "128Mi"
+            }
+            limits = {
+              cpu    = "500m"
+              memory = "512Mi"
+            }
           }
-          readiness_probe { tcp_socket { port = 6432 } initial_delay_seconds = 5 }
-          liveness_probe  { tcp_socket { port = 6432 } initial_delay_seconds = 15 }
+          readiness_probe {
+            tcp_socket {
+              port = 6432
+            }
+            initial_delay_seconds = 5
+          }
+          liveness_probe {
+            tcp_socket {
+              port = 6432
+            }
+            initial_delay_seconds = 15
+          }
           volume_mount {
             name       = "config"
             mount_path = "/etc/pgbouncer"

@@ -8,11 +8,28 @@ variable "image_names" {
   type    = list(string)
   default = ["aqp-api", "aqp-worker", "aqp-agent", "aqp-data-mcp", "aqp-frontend", "aqp-terraform-runner"]
 }
-variable "aws_region"     { type = string, default = "us-east-1" }
-variable "gcp_project_id" { type = string, default = "" }
-variable "gcp_region"     { type = string, default = "us-central1" }
-variable "azure_resource_group" { type = string, default = "" }
-variable "azure_location"       { type = string, default = "eastus" }
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
+}
+variable "gcp_project_id" {
+  type    = string
+  default = ""
+}
+
+variable "gcp_region" {
+  type    = string
+  default = "us-central1"
+}
+variable "azure_resource_group" {
+  type    = string
+  default = ""
+}
+
+variable "azure_location" {
+  type    = string
+  default = "eastus"
+}
 
 # Local Docker registry container (a single registry serves every image).
 resource "docker_image" "registry" {

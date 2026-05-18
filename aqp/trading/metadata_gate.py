@@ -1,11 +1,9 @@
-"""Paper-trading metadata gate.
+"""Paper-trading metadata gate (strict-only).
 
-Validates that a paper session's declared model_urn and pipeline_urn
-resolve to valid, in-lifecycle aspect rows BEFORE the trading loop
-starts. ``AQP_PAPER_STRICT_METADATA`` controls behavior:
-
-- STRICT (default): raise MetadataValidationError and refuse startup.
-- WARN override: log warnings and continue when strict is disabled.
+BREAKING CHANGE (OOS-4): paper sessions now always fail startup when
+``model_urn`` or ``pipeline_urn`` is missing, malformed, unresolved, or
+points at an ML model aspect whose status is not ``Production`` or
+``Staging``.
 """
 from __future__ import annotations
 
@@ -15,7 +13,6 @@ from typing import Any, Callable
 
 from sqlalchemy import desc, select
 
-from aqp.config import settings
 from aqp.metadata import MetadataValidationError, parse_urn
 from aqp.persistence.db import get_session
 from aqp.persistence.models_aspects import EntityAspect
@@ -120,7 +117,6 @@ def run_metadata_gate(
     task_id: str | None = None,
     run_name: str | None = None,
 ) -> GateOutcome:
-    strict_mode = bool(settings.paper_strict_metadata)
     clean_model_urn = _normalise_optional_text(model_urn)
     clean_pipeline_urn = _normalise_optional_text(pipeline_urn)
 
@@ -134,17 +130,11 @@ def run_metadata_gate(
         if field not in error_fields:
             error_fields.append(field)
 
-    if clean_model_urn is None and clean_pipeline_urn is None and not strict_mode:
-        warnings.append(
-            "no model_urn / pipeline_urn declared - paper session running without metadata lineage"
-        )
-
     if clean_model_urn is None:
-        if strict_mode:
-            _add_error(
-                "model_urn",
-                "model_urn is required when AQP_PAPER_STRICT_METADATA=true",
-            )
+        _add_error(
+            "model_urn",
+            "model_urn is required for paper sessions",
+        )
     else:
         try:
             parse_urn(clean_model_urn)
@@ -173,11 +163,10 @@ def run_metadata_gate(
                     )
 
     if clean_pipeline_urn is None:
-        if strict_mode:
-            _add_error(
-                "pipeline_urn",
-                "pipeline_urn is required when AQP_PAPER_STRICT_METADATA=true",
-            )
+        _add_error(
+            "pipeline_urn",
+            "pipeline_urn is required for paper sessions",
+        )
     else:
         try:
             parse_urn(clean_pipeline_urn)
@@ -194,15 +183,9 @@ def run_metadata_gate(
                     ),
                 )
 
-    if errors and not strict_mode:
-        warnings.append(
-            "metadata validation issues detected; continuing startup because "
-            "AQP_PAPER_STRICT_METADATA=false"
-        )
-
     status: str
     if errors:
-        status = "error" if strict_mode else "warning"
+        status = "error"
     elif warnings:
         status = "warning"
     else:
@@ -211,16 +194,10 @@ def run_metadata_gate(
     run_label = _normalise_optional_text(run_name)
     prefix = f"{run_label}: " if run_label else ""
     if errors:
-        if strict_mode:
-            summary = (
-                f"{prefix}metadata gate failed with {len(errors)} error(s); "
-                "strict mode blocked startup"
-            )
-        else:
-            summary = (
-                f"{prefix}metadata gate found {len(errors)} issue(s); "
-                "warn-only mode allows startup"
-            )
+        summary = (
+            f"{prefix}metadata gate failed with {len(errors)} error(s); "
+            "strict mode blocked startup"
+        )
     elif warnings:
         summary = f"{prefix}metadata gate warning: {warnings[0]}"
     else:
@@ -233,12 +210,13 @@ def run_metadata_gate(
             summary,
             status=status,
             run_name=run_label,
-            strict_mode=strict_mode,
+            strict_mode=True,
             model_urn=clean_model_urn,
             pipeline_urn=clean_pipeline_urn,
             model_status=model_status,
             warnings=list(warnings),
             errors=list(errors),
+            enforced=True,
         )
 
     outcome = GateOutcome(
@@ -248,15 +226,46 @@ def run_metadata_gate(
         model_status=model_status,
         warnings=tuple(warnings),
         errors=tuple(errors),
-        enforced=bool(strict_mode and errors),
+        enforced=True,
     )
-    if errors and strict_mode:
+    if errors:
+        logger.error(
+            "metadata gate blocked startup run_name=%s model_urn=%s pipeline_urn=%s errors=%s",
+            run_label,
+            clean_model_urn,
+            clean_pipeline_urn,
+            errors,
+        )
         raise MetadataValidationError(
             fields=error_fields,
             guidance=(
-                "Set valid model_urn/pipeline_urn values with model status in "
-                "{Production, Staging}, or disable strict mode by setting "
-                "AQP_PAPER_STRICT_METADATA=false for emergency rollback."
+                "Set valid model_urn/pipeline_urn values and ensure model status is "
+                "Production or Staging before starting paper sessions."
+            ),
+        )
+    return outcome
+
+
+def assert_metadata_gate(
+    *,
+    model_urn: str | None,
+    pipeline_urn: str | None,
+    task_id: str | None = None,
+    run_name: str | None = None,
+) -> GateOutcome:
+    """Run strict metadata validation and raise on any gate failure."""
+    outcome = run_metadata_gate(
+        model_urn=model_urn,
+        pipeline_urn=pipeline_urn,
+        task_id=task_id,
+        run_name=run_name,
+    )
+    if not outcome.ok:
+        raise MetadataValidationError(
+            fields=["model_urn", "pipeline_urn"],
+            guidance=(
+                "Set valid model_urn/pipeline_urn values and ensure model status is "
+                "Production or Staging before starting paper sessions."
             ),
         )
     return outcome
@@ -278,4 +287,9 @@ def gate_session_config(
     )
 
 
-__all__ = ["GateOutcome", "gate_session_config", "run_metadata_gate"]
+__all__ = [
+    "GateOutcome",
+    "assert_metadata_gate",
+    "gate_session_config",
+    "run_metadata_gate",
+]

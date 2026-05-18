@@ -5,10 +5,20 @@
 # `restartPolicy: Never`, configmap-mounted values, two SA flavors
 # (readonly for plan, writer for apply).
 
-variable "namespace"          { type = string, default = "aqp-system" }
-variable "runner_image"       { type = string, default = "aqp-terraform-runner:latest" }
+variable "namespace" {
+  type    = string
+  default = "aqp-system"
+}
+
+variable "runner_image" {
+  type    = string
+  default = "aqp-terraform-runner:latest"
+}
 variable "redis_address"      { type = string }
-variable "kill_switch_key"    { type = string, default = "aqp:kill_switch" }
+variable "kill_switch_key" {
+  type    = string
+  default = "aqp:kill_switch"
+}
 variable "common_tags" {
   type    = map(string)
   default = {}

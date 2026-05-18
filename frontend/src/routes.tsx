@@ -15,8 +15,12 @@ import { MlAnalyticsRoute } from "@/routes/analytics/ml/[runId]/page";
 // Phase 5 — agent stall watchdog dashboard.
 import { AgentHealthRoute } from "@/routes/agents/health/page";
 import { CallbackRoute } from "@/routes/auth/callback/page";
+import { ForgotPasswordRoute } from "@/routes/auth/forgot-password/page";
 import { LoginRoute } from "@/routes/auth/login/page";
+import { LogoutRoute } from "@/routes/auth/logout/page";
 import { ProfileRoute } from "@/routes/auth/profile/page";
+import { SignupRoute } from "@/routes/auth/signup/page";
+import { AccountRoute } from "@/routes/account/page";
 import { StrategyTemplatesPage } from "@/routes/strategy-development/templates/page";
 // Hybrid agentic-RL UI studios — Phase C: Alpha Factor Studio.
 import { AlphaFactorStudioRoute } from "@/routes/strategy-development/alpha-factors/page";
@@ -203,6 +207,7 @@ import { TerraformWorkspaceDetailRoute } from "@/routes/infra/terraform/workspac
 import { TerraformRunDetailRoute } from "@/routes/infra/terraform/runs/[id]/page";
 import { TerraformStacksRoute } from "@/routes/infra/terraform/stacks/page";
 import { OnboardingRoute as AdminOnboardingRoute } from "@/routes/admin/onboarding/page";
+import { InviteAcceptRoute } from "@/routes/onboarding/invite/[token]/page";
 
 /**
  * Routes implemented with real components. Anything in NAV_ITEMS that
@@ -331,6 +336,7 @@ const REAL_ROUTES: Record<string, () => ReactElement> = {
 const DYNAMIC_ROUTES: RouteObject[] = [
   // Phase 6 — Auth profile + scope inspector (lives inside the AppShell).
   { path: "auth/profile", element: <ProfileRoute /> },
+  { path: "account", element: <AccountRoute /> },
   { path: "bots/builder", element: <BotBuilderRoute /> },
   { path: "bots/:id", element: <BotDetailRoute /> },
   // Phase 5 — dialectical debate viewer
@@ -485,7 +491,11 @@ export const router = createBrowserRouter([
   // splash isn't framed by the navigation chrome (which would itself
   // attempt to render workspace data we don't have yet).
   { path: "/auth/login", element: <LoginRoute /> },
+  { path: "/auth/signup", element: <SignupRoute /> },
+  { path: "/auth/logout", element: <LogoutRoute /> },
+  { path: "/auth/forgot-password", element: <ForgotPasswordRoute /> },
   { path: "/auth/callback", element: <CallbackRoute /> },
+  { path: "/onboarding/invite/:token", element: <InviteAcceptRoute /> },
   {
     path: "/",
     element: (

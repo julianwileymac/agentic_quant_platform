@@ -300,20 +300,33 @@ function PipelinePane() {
         <h3 className="mb-2 text-xs uppercase tracking-wide text-[var(--text-secondary)]">
           Alembic head
         </h3>
-        <code className="font-mono text-sm">
-          {(data.alembic.heads || []).join(", ") || data.alembic.error || "—"}
-        </code>
+        <code className="font-mono text-sm">{data.alembic_revision ?? "—"}</code>
+      </section>
+      <section>
+        <h3 className="mb-2 text-xs uppercase tracking-wide text-[var(--text-secondary)]">
+          Parquet lake
+        </h3>
+        <p className="font-mono text-xs">
+          manifests: {data.parquet?.manifest_count ?? 0} · pipeline_runs:{" "}
+          {data.parquet?.pipeline_run_count ?? 0}
+        </p>
       </section>
       <section>
         <h3 className="mb-2 text-xs uppercase tracking-wide text-[var(--text-secondary)]">
           Ingestion adapters
         </h3>
         <DataTable
-          rows={data.adapters}
+          rows={(data.adapters ?? []).map((a) => ({
+            name: a.name,
+            last_run_at: a.last_run_at ?? "—",
+            runs_recent: a.runs_recent ?? 0,
+            status: a.status ?? "—",
+          }))}
           columns={[
             { key: "name", label: "Adapter" },
             { key: "last_run_at", label: "Last run" },
             { key: "runs_recent", label: "Recent runs" },
+            { key: "status", label: "Status" },
           ]}
         />
       </section>
@@ -332,14 +345,18 @@ function SecretsPane() {
   return (
     <div className="space-y-3">
       <p className="text-xs text-[var(--text-secondary)]">
-        Credential resolver chain. Values are NEVER shown — only metadata + sync state.
+        Credential resolver chain (in priority order). Values are NEVER shown — only metadata.
       </p>
       <DataTable
-        rows={data.items}
+        rows={(data.stores ?? []).map((s) => ({
+          alias: s.alias,
+          kind: s.kind,
+          priority: s.priority,
+        }))}
         columns={[
-          { key: "namespace", label: "Service" },
-          { key: "status", label: "Status" },
-          { key: "note", label: "Note" },
+          { key: "alias", label: "Store" },
+          { key: "kind", label: "Kind" },
+          { key: "priority", label: "Priority" },
         ]}
       />
     </div>
@@ -370,10 +387,21 @@ function K8sExplorerPane() {
             <option key={n} value={n}>{n}</option>
           ))}
         </select>
+        {data && !data.adapter_available ? (
+          <span className="text-[10px] text-[var(--warn-fg)]">
+            (no Kubernetes adapter active — running in local Docker mode)
+          </span>
+        ) : null}
       </div>
       {error ? <ErrorBanner message={error} /> : !data ? <Skeleton /> : (
         <DataTable
-          rows={data.pods}
+          rows={(data.pods ?? []).map((p) => ({
+            name: p.name,
+            phase: p.phase ?? "—",
+            node: p.node ?? "—",
+            pod_ip: p.pod_ip ?? "—",
+            started_at: p.started_at ?? "—",
+          }))}
           columns={[
             { key: "name", label: "Pod" },
             { key: "phase", label: "Phase" },

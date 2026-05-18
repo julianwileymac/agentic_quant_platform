@@ -11,6 +11,7 @@ import { CommandK } from "./CommandK";
 import { ContextBar } from "./ContextBar";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
+import { UserMenu } from "./UserMenu";
 
 /**
  * Outer app shell wired into React Router 7. Renders the sidebar /
@@ -32,7 +33,14 @@ export function AppShell() {
     <div className="flex h-screen">
       <Sidebar />
       <div className="flex flex-1 flex-col">
-        <TopBar />
+        <div className="relative">
+          <TopBar />
+          <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+            <div className="pointer-events-auto">
+              <UserMenu />
+            </div>
+          </div>
+        </div>
         <ContextBar />
         <SandboxBanner />
         <main className="min-h-0 flex-1 overflow-auto">

@@ -336,6 +336,24 @@ def provision_user_from_claims(claims: dict[str, Any]) -> CurrentUser:
     refreshed = _load_user(auth_subject=sub) or _load_user(email=email)
     if refreshed is None:
         raise RuntimeError(f"Provisioned user sub={sub!r} could not be re-loaded")
+    try:
+        from aqp.auth.audit import emit_audit_event
+
+        emit_audit_event(
+            "login",
+            user_id=refreshed.id,
+            event_category="authn",
+            source="api",
+            connection=str(claims.get("connection") or claims.get("idp_connection") or "") or None,
+            details={
+                "provider": provider,
+                "auth_subject": sub,
+                "email": email,
+                "is_new_user": existing is None,
+            },
+        )
+    except Exception:
+        pass  # never break login on audit
     return refreshed
 
 

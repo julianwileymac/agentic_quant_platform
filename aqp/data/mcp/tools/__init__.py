@@ -7,6 +7,7 @@ decorator. Importing this package transitively registers every tool.
 from __future__ import annotations
 
 from aqp.data.mcp.tools import (  # noqa: F401  (side-effect imports)
+    account,
     agents,
     alphas,
     arbitrage,

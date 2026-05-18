@@ -4,10 +4,23 @@
 
 variable "cloud_provider" { type = string }
 variable "environment"    { type = string }
-variable "common_tags"    { type = map(string) default = {} }
-variable "storage_outputs"    { type = any default = {} }
-variable "kubernetes_outputs" { type = any default = {} }
-variable "app_version"        { type = string default = "latest" }
+variable "common_tags" {
+  type    = map(string)
+  default = {}
+}
+
+variable "storage_outputs" {
+  type    = any
+  default = {}
+}
+variable "kubernetes_outputs" {
+  type    = any
+  default = {}
+}
+variable "app_version" {
+  type    = string
+  default = "latest"
+}
 
 locals {
   ns_system   = "aqp-system"
@@ -25,7 +38,12 @@ resource "kubernetes_deployment" "api" {
   spec {
     replicas = var.environment == "live" ? 3 : 1
     selector { match_labels = { app = "aqp-api" } }
-    strategy { type = "RollingUpdate" rolling_update { max_unavailable = "0" } }
+    strategy {
+      type = "RollingUpdate"
+      rolling_update {
+        max_unavailable = "0"
+      }
+    }
     template {
       metadata { labels = merge(var.common_tags, { app = "aqp-api" }) }
       spec {
@@ -45,11 +63,29 @@ resource "kubernetes_deployment" "api" {
             value = try(var.storage_outputs.redis_url, "redis://redis.aqp-system.svc.cluster.local:6379")
           }
           resources {
-            requests = { cpu = "500m" memory = "1Gi"   }
-            limits   = { cpu = "2"    memory = "4Gi"   }
+            requests = {
+              cpu    = "500m"
+              memory = "1Gi"
+            }
+            limits = {
+              cpu    = "2"
+              memory = "4Gi"
+            }
           }
-          readiness_probe { http_get { path = "/health" port = 8000 } initial_delay_seconds = 10 }
-          liveness_probe  { http_get { path = "/health" port = 8000 } initial_delay_seconds = 30 }
+          readiness_probe {
+            http_get {
+              path = "/health"
+              port = 8000
+            }
+            initial_delay_seconds = 10
+          }
+          liveness_probe {
+            http_get {
+              path = "/health"
+              port = 8000
+            }
+            initial_delay_seconds = 30
+          }
         }
       }
     }
@@ -92,8 +128,14 @@ resource "kubernetes_stateful_set" "duckdb" {
           image = "aqp-api:${var.app_version}"
           command = ["python", "-m", "aqp.data.duckdb_worker"]
           resources {
-            requests = { cpu = "1"    memory = "4Gi" }
-            limits   = { cpu = "4"    memory = "16Gi" }
+            requests = {
+              cpu    = "1"
+              memory = "4Gi"
+            }
+            limits = {
+              cpu    = "4"
+              memory = "16Gi"
+            }
           }
           volume_mount {
             name       = "scratch"
@@ -116,7 +158,10 @@ resource "kubernetes_stateful_set" "duckdb" {
         }
         volume {
           name = "scratch"
-          empty_dir { medium = "Memory" size_limit = "8Gi" }
+          empty_dir {
+            medium     = "Memory"
+            size_limit = "8Gi"
+          }
         }
       }
     }
@@ -141,12 +186,19 @@ resource "kubernetes_manifest" "pipeline_netpol" {
         # DNS
         {
           to    = [{ namespaceSelector = { matchLabels = { "kubernetes.io/metadata.name" = "kube-system" } } }]
-          ports = [{ protocol = "UDP" port = 53 }, { protocol = "TCP" port = 53 }]
+          ports = [
+            { protocol = "UDP", port = 53 },
+            { protocol = "TCP", port = 53 },
+          ]
         },
         # Postgres + Redis + storage (cluster-internal)
         {
           to    = [{ namespaceSelector = { matchLabels = { "kubernetes.io/metadata.name" = "aqp-system" } } }]
-          ports = [{ protocol = "TCP" port = 5432 }, { protocol = "TCP" port = 6379 }, { protocol = "TCP" port = 6432 }]
+          ports = [
+            { protocol = "TCP", port = 5432 },
+            { protocol = "TCP", port = 6379 },
+            { protocol = "TCP", port = 6432 },
+          ]
         },
       ]
     }

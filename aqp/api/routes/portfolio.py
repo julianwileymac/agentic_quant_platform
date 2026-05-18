@@ -4,9 +4,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import desc, select
 
+from aqp.auth import CurrentUser, RequestContext, current_context, current_user
+from aqp.auth.audit import emit_audit_event
 from aqp.api.schemas import KillSwitchRequest
 from aqp.persistence.db import get_session
 from aqp.persistence.models import Fill, LedgerEntry, OrderRecord
@@ -99,11 +101,28 @@ def kill_switch_status() -> dict:
 
 
 @router.post("/kill_switch")
-def kill_switch_toggle(req: KillSwitchRequest) -> dict:
+def kill_switch_toggle(
+    req: KillSwitchRequest,
+    request: Request,
+    user: CurrentUser = Depends(current_user),
+    ctx: RequestContext = Depends(current_context),
+) -> dict:
     if req.engage:
         engage(req.reason)
     else:
         release()
+    emit_audit_event(
+        "kill_switch",
+        user_id=user.id if user else None,
+        organization_id=getattr(ctx, "org_id", None) if ctx else None,
+        workspace_id=getattr(ctx, "workspace_id", None) if ctx else None,
+        actor_user_id=user.id if user else None,
+        event_category="safety",
+        severity="critical",
+        source="api",
+        request=request,
+        details={"action": "fire", "from_endpoint": "/portfolio/kill_switch"},
+    )
     return status()
 
 

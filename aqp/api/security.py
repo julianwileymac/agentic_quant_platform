@@ -64,6 +64,7 @@ PUBLIC_ROUTERS: frozenset[str] = frozenset(
         "health",          # cluster + k8s probes
         "auth",            # /auth/login + /auth/callback + /auth/config
         "monitoring",      # node exporter scrape
+        "invites_public",  # /tenancy/invites/{token}/accept public APIRouter marker
     }
 )
 

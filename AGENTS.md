@@ -85,6 +85,9 @@ Use this as your first lookup when answering "where does X live?".
 | [aqp/ui/](aqp/ui/) | **Legacy Solara UI** — under `legacy` profile only | – |
 | [aqp/utils/](aqp/utils/) | Cross-cutting helpers (key derivation, etc) | – |
 | [aqp/ws/](aqp/ws/) | Redis pub/sub bridge + WebSocket helpers | – |
+| `aqp/auth/management_api.py` | Auth0 Management API client (M2M-auth via CredentialResolver, rate-limit retries, dataclass-typed responses for sessions / factors / tickets / logs) | [docs/account-management.md](docs/account-management.md) |
+| `aqp/auth/audit.py` | Single emit helper for `security_audit_events`. Never raises. Called from login + every /me/* mutation + Auth0 Action sync + kill-switch | [docs/identity.md](docs/identity.md) |
+| `aqp/persistence/models_audit.py` | `SecurityAuditEvent` (append-only) + `TenancyInvite` (HMAC-hashed token, partial-unique on pending) | [docs/account-management.md](docs/account-management.md) |
 
 External code:
 
@@ -616,6 +619,9 @@ docker exec aqp-api alembic upgrade head
 | Search a pgvector-backed table | `data.vector.search` MCP tool (free-text or pre-computed embedding). For programmatic access, use the `PgVectorDataset` kind in [aqp/data/datasets/kinds/pgvector.py](aqp/data/datasets/kinds/pgvector.py) or `aqp.rag.pgvector_store.PgVectorStore` directly. (Phase 3 refactor) |
 | Render a portfolio tearsheet | `POST /analytics/portfolio/tearsheet` (enqueues the heavy quantstats render through Celery and returns a `task_id`). For the synchronous metrics fast path, use `POST /analytics/portfolio/metrics`. UI: `/analytics/portfolio/:runId`. See [docs/analytics-frontend.md](docs/analytics-frontend.md) (Phase 4 refactor) |
 | Inspect agent run health / stalled candidates | `GET /agents/health` REST route or `data.agents.health` MCP tool. Watchdog cleanup runs as the `aqp.tasks.agent_watchdog_tasks.scan_for_stalled_agent_runs` Celery beat task (interval = `AQP_AGENT_WATCHDOG_PERIOD_SECONDS`). See [docs/agent-watchdog.md](docs/agent-watchdog.md) (Phase 5 refactor) |
+| Wire account management for a new IdP feature | Extend `aqp/auth/management_api.py` + add a `/me/*` route in `aqp/api/routes/me.py` + a typed wrapper in `frontend/src/lib/api/me.ts` + a tab section in `frontend/src/components/account/` |
+| Audit a security event | Call `emit_audit_event(event_type, user_id=..., event_category=..., severity=..., source=..., request=request, details={...})` from `aqp.auth.audit`. Never raises |
+| Invite a user to an org / workspace | `POST /tenancy/invites` admin-only; user accepts via public `POST /tenancy/invites/{token}/accept`; tokens are HMAC-hashed in `tenancy_invites` |
 
 ## Don't list
 
@@ -758,6 +764,20 @@ Things that look like they should work but actively break the system.
  single sanctioned path and routes through
  [`iceberg_catalog.append_arrow`](aqp/data/iceberg_catalog.py)
  (AGENTS rule 3).
+- **Don't write directly to `security_audit_events`.** Use
+  `emit_audit_event` from `aqp.auth.audit` — it handles failure-safe +
+  IP / user-agent / OTEL trace id resolution.
+- **Don't construct `Auth0ManagementClient` directly.** Use
+  `get_management_client()` from `aqp.auth.management_api` so the
+  in-process M2M token cache + the secret-resolver chain stay shared.
+- **Don't store raw invite tokens** in `tenancy_invites`. The
+  `token_hash` column is the only persisted form; the raw token returns
+  once in the API response.
+- **Don't add new identity providers without registering them through
+  `IdentityProviderMeta`.** Subclass
+  `aqp.auth.providers.protocol.IdentityProvider` and set
+  `provider_kind`; the metaclass auto-registers via
+  `aqp.core.registry.register`.
 
 ## Quick reference
 

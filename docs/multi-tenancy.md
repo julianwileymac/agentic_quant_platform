@@ -70,6 +70,21 @@ goes through `EntraTenantLink`. Don't auto-create org rows from raw
 [`EntraTenantLinkWizard`](../frontend/src/components/onboarding/EntraTenantLinkWizard.tsx)
 drives this flow with a 5-step wizard.
 
+On the Auth0-federated path, the Microsoft button on the SPA login
+screen uses the Auth0 Enterprise Connection
+`connection=azure-ad-myorg`, which federates users to their home Entra
+tenant. The Entra `tid` claim returned through Auth0 is forwarded into
+the AQP access-token claim set by the Auth0 Action, and
+`provision_user_from_claims` runs `_apply_entra_tenant_link` exactly as
+it does in the direct-MSAL path.
+
+For regulated deployments that bypass Auth0 and hit Entra directly,
+`MsalEntraProvider` remains registered through `IdentityProviderMeta`
+and activates when `AQP_AUTH_PROVIDER=msal_entra`. Both authentication
+paths converge on the same backend `EntraTenantLink` lookup chain, and
+super-admin promotion remains managed in
+`frontend/src/components/onboarding/EntraTenantLinkWizard.tsx`.
+
 ## App role mapping
 
 Entra ships app roles in a top-level `roles` claim array (e.g.

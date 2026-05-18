@@ -139,42 +139,32 @@ shell can exit and the session keeps running. Use `aqp paper stop
 
 ## Metadata Gate — Strict Mode Rollout
 
-`AQP_PAPER_STRICT_METADATA` now defaults to `true` (OOS-4). Paper
-sessions abort startup when `session.model_urn` or `session.pipeline_urn`
-is missing, invalid, or cannot be resolved to a Staging/Production aspect.
-This blocks undocumented or rogue models from interacting with paper or
-live capital.
-
-- **What changed:** strict mode is now the default.
-- **Why:** metadata gate enforcement is the safety net for model lineage
-  and production controls.
-- **Impact:** paper sessions fail fast on missing/unresolvable URNs
-  instead of continuing with warnings.
-- **Emergency rollback only:** set `AQP_PAPER_STRICT_METADATA=false` in
-  `.env` to restore warn-only behavior temporarily.
+Paper sessions now run with strict metadata validation only. Startup aborts
+when `session.model_urn` or `session.pipeline_urn` is missing, invalid, or
+unresolvable, or when model status is not `Production`/`Staging`.
 
 When adding a new paper config:
 
 1. Declare both `model_urn` and `pipeline_urn` in the YAML.
 2. Seed matching aspects before startup checks run.
 3. Built-in baseline configs are seeded by Alembic revision
-   `0049_paper_baseline_aspects`; additional configs should ship a
+   `0049_paper_metadata_seed_aspects`; additional configs should ship a
    follow-up migration (either using
    `aqp.trading.baseline_aspects.seed_paper_baseline_aspects()` or direct
    `write_aspect(...)` calls in non-migration application code).
 
-Baseline URNs seeded by revision `0049_paper_baseline_aspects`:
+Baseline URNs seeded by revision `0049_paper_metadata_seed_aspects`:
 
-- `urn:aqp:mlmodel:prod:alpaca_mean_reversion_baseline_v1`
-- `urn:aqp:pipeline:prod:alpaca_paper_mean_reversion`
-- `urn:aqp:mlmodel:prod:ibkr_mean_reversion_baseline_v1`
-- `urn:aqp:pipeline:prod:ibkr_paper_mean_reversion`
-- `urn:aqp:mlmodel:prod:avellaneda_stoikov_quoter_v1`
-- `urn:aqp:pipeline:prod:avellaneda_stoikov_paper_quoter`
-- `urn:aqp:mlmodel:prod:lucic_tse_options_quoter_v1`
-- `urn:aqp:pipeline:prod:lucic_tse_paper_options`
+- `urn:aqp:mlmodel:prod:alpaca_mean_reversion_v1`
+- `urn:aqp:pipeline:prod:alpaca_mean_reversion_loop`
+- `urn:aqp:mlmodel:prod:ibkr_mean_reversion_v1`
+- `urn:aqp:pipeline:prod:ibkr_mean_reversion_loop`
+- `urn:aqp:mlmodel:prod:avellaneda_stoikov_v1`
+- `urn:aqp:pipeline:prod:avellaneda_stoikov_quotes_loop`
+- `urn:aqp:mlmodel:prod:lucic_tse_options_v1`
+- `urn:aqp:pipeline:prod:lucic_tse_options_loop`
 - `urn:aqp:mlmodel:prod:tradier_rest_baseline_v1`
-- `urn:aqp:pipeline:prod:tradier_paper_rest_router`
+- `urn:aqp:pipeline:prod:tradier_rest_loop`
 
 ## Observability hooks
 

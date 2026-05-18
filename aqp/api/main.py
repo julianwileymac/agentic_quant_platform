@@ -119,6 +119,14 @@ from aqp.api.routes import (  # noqa: E402
 from aqp.api.routes import (  # noqa: E402
     auth0_sync as auth0_sync_routes,
 )
+# Account management surface — /me/* routes
+from aqp.api.routes import (  # noqa: E402
+    me as me_routes,
+)
+# Tenancy invites — protected CRUD + public token-accept (Phase 7 account mgmt).
+from aqp.api.routes import (  # noqa: E402
+    invites as invites_routes,
+)
 # Phase 7 — MSAL / Entra ID sync endpoint + tenancy onboarding routes.
 from aqp.api.routes import (  # noqa: E402
     msal_sync as msal_sync_routes,
@@ -275,6 +283,9 @@ app.add_middleware(
 # --- Core platform routers -----------------------------------------------
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(me_routes.router)
+app.include_router(invites_routes.router)
+app.include_router(invites_routes.public_router)
 app.include_router(chat.router)
 app.include_router(agents.router)
 app.include_router(agentic.router)

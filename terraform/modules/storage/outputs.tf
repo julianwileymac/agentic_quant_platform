@@ -1,13 +1,8 @@
-output "postgres_endpoint" {
-  description = "Postgres connection endpoint (host:port)."
-  value = coalesce(
-    try("${docker_container.postgres[0].name}:5432", null),
-    try(aws_db_instance.aqp[0].endpoint, null),
-    try(google_sql_database_instance.aqp[0].connection_name, null),
-    try(azurerm_postgresql_flexible_server.aqp[0].fqdn, null),
-  )
-  sensitive = true
-}
+# NOTE: ``postgres_endpoint`` is declared in main.tf against the
+# canonical resource names (aws_db_instance.pg, google_sql_database_instance.pg,
+# azurerm_postgresql_flexible_server.pg). The earlier duplicate that
+# referenced .aqp[0] is removed to silence the "Duplicate output
+# definition" terraform-init error.
 
 output "bucket_name" {
   description = "Canonical object-store bucket / container name."
@@ -29,16 +24,9 @@ output "bucket_uri" {
   )
 }
 
-output "redis_url" {
-  description = "Redis URL for the Celery broker + RAG layer."
-  value = coalesce(
-    try("rediss://${aws_elasticache_replication_group.aqp[0].primary_endpoint_address}:6379/0", null),
-    try("redis://${google_redis_instance.aqp[0].host}:6379/0", null),
-    try("rediss://${azurerm_redis_cache.aqp[0].hostname}:6380/0", null),
-    "redis://localhost:6379/0",
-  )
-  sensitive = true
-}
+# NOTE: ``redis_url`` lives in main.tf against the canonical resource
+# names (.pg / .redis); the earlier duplicate referencing .aqp[0] is
+# removed for the same reason as ``postgres_endpoint`` above.
 
 output "tags" {
   value = local.base_tags

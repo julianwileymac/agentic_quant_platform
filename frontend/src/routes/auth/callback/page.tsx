@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { Navigate } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 
 /**
@@ -28,20 +30,16 @@ export function CallbackRoute() {
     return <Navigate to="/" replace />;
   }
   return (
-    <div
-      role="status"
-      aria-busy="true"
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontFamily:
-          "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-        color: "var(--text-secondary, #444)",
-      }}
-    >
-      <span>Finalising sign-in…</span>
+    <div className="flex min-h-screen items-center justify-center p-6">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle>Finalizing sign-in...</CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+          <Loader2 className="size-4 animate-spin" />
+          Completing callback flow
+        </CardContent>
+      </Card>
     </div>
   );
 }

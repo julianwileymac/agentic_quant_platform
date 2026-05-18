@@ -7,16 +7,7 @@ output "cluster_name" {
   )
 }
 
-output "cluster_endpoint" {
-  value = coalesce(
-    try(aws_eks_cluster.aqp[0].endpoint, null),
-    try("https://${google_container_cluster.aqp[0].endpoint}", null),
-    try(azurerm_kubernetes_cluster.aqp[0].fqdn, null),
-    "https://localhost:8443",
-  )
-  sensitive = true
-}
-
-output "namespaces" {
-  value = [for ns in kubernetes_namespace.aqp : ns.metadata[0].name]
-}
+# NOTE: ``cluster_endpoint`` and ``namespaces`` live in main.tf as the
+# canonical outputs. The earlier duplicates here are removed to silence
+# the "Duplicate output definition" terraform-init errors. ``cluster_name``
+# above stays here because it's only declared in this file.

@@ -139,3 +139,34 @@ AQP_AUTH_M2M_AUDIENCE=https://aqp.local/services
 - `test_m2m.py` — issuer caching, resolver integration.
 
 All tests run hermetic; nothing hits the network.
+
+## Account management surface (Phase 7)
+
+Phase 7 adds a dedicated account-management API surface under `/me/*`
+implemented in [`aqp/api/routes/me.py`](../aqp/api/routes/me.py).
+These routes expose profile updates, MFA and session operations, linked
+identity management, and self-service account actions while keeping the
+Auth0 Management API boundary centralized.
+
+The Auth0 Management API integration lives in
+[`aqp/auth/management_api.py`](../aqp/auth/management_api.py). Scope
+enforcement for protected endpoints is available through
+[`aqp/auth/auth0_fastapi.py`](../aqp/auth/auth0_fastapi.py) via
+`Auth0FastAPI` opt-in dependencies. Audit and invite persistence for
+this surface is recorded in
+[`aqp/persistence/models_audit.py`](../aqp/persistence/models_audit.py)
+(`security_audit_events` and `tenancy_invites`), and events are emitted
+through [`aqp/auth/audit.py`](../aqp/auth/audit.py).
+
+## Microsoft Entra ID secondary IdP (Phase 7)
+
+AQP's primary Microsoft pattern is federation through Auth0 Universal
+Login using an Auth0 Microsoft Enterprise Connection, documented in
+[`docs/auth0-microsoft-federation.md`](auth0-microsoft-federation.md).
+This keeps Auth0 as the default IdP while preserving one hosted login
+surface and one claims projection path.
+
+Direct Entra authentication remains supported as a fallback through
+[`aqp/auth/providers/msal_entra.py`](../aqp/auth/providers/msal_entra.py).
+When `AQP_AUTH_PROVIDER=msal_entra`, the legacy `MsalEntraProvider`
+path activates without changing the backend tenancy-link semantics.

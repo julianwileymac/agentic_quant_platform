@@ -61,6 +61,7 @@
     "lightweight-charts": "^4.2.1",
     "lucide-react": "^0.454.0",
     "openapi-fetch": "^0.13.0",
+    "qrcode.react": "^4.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.53.0",

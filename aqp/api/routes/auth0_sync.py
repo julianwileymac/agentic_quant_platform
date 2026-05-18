@@ -131,11 +131,22 @@ class Auth0SyncRequest(BaseModel):
         ),
     )
     organization_name: str | None = Field(default=None)
+    connection: str | None = Field(
+        default=None,
+        description=(
+            "Optional top-level Auth0 connection name for backward "
+            "compatibility. Prefer ``requested_claims.connection``."
+        ),
+    )
     requested_claims: dict | None = Field(
         default=None,
         description=(
-            "Optional hint from the SPA (e.g. ``{'workspace_id': 'ws-1'}``) "
-            "letting the operator pre-pin the active context."
+            "Optional hint from the SPA OR the Auth0 Action. Recognised keys: "
+            "``workspace_id`` (operator-pinned active workspace), "
+            "``connection`` (Auth0 connection name, e.g. 'azure-ad-myorg', "
+            "set by the post-login Action so the backend audit log records "
+            "which IdP drove this login), ``strategy`` (Auth0 connection "
+            "strategy, e.g. 'waad' for Azure AD)."
         ),
     )
 
@@ -156,6 +167,7 @@ class Auth0SyncResponse(BaseModel):
     project_id: str | None = None
     lab_id: str | None = None
     roles: list[str] = Field(default_factory=list)
+    connection: str | None = None
     internal_user_id: str | None = None
     is_new_user: bool = False
 
@@ -180,6 +192,15 @@ def auth0_sync(
     from aqp.config.defaults import DEFAULT_WORKSPACE_ID, ROLE_VIEWER
     from aqp.persistence.db import get_session
     from aqp.persistence.models_tenancy import Membership, User
+
+    requested_claims = body.requested_claims if isinstance(body.requested_claims, dict) else {}
+    # Convention: the Auth0 post-login Action sends connection metadata via
+    # ``requested_claims.connection`` so audit trails capture which IdP
+    # drove the login; keep ``body.connection`` as a backward-compatible
+    # fallback for older clients.
+    connection = requested_claims.get("connection") or body.connection
+    if connection is not None and not isinstance(connection, str):
+        connection = str(connection)
 
     is_new = False
     with get_session() as session:
@@ -234,10 +255,31 @@ def auth0_sync(
             )
             org_id = org_membership.scope_id if org_membership else body.organization_id
 
+    try:
+        from aqp.auth.audit import emit_audit_event
+
+        emit_audit_event(
+            "auth0_sync",
+            user_id=internal_user_id,
+            organization_id=body.organization_id,
+            event_category="authn",
+            source="auth0_action",
+            connection=connection,
+            details={
+                "auth0_user_id": body.user_id,
+                "email": body.email,
+                "organization_name": body.organization_name,
+                "is_new_user": is_new,
+            },
+        )
+    except Exception:
+        pass
+
     return Auth0SyncResponse(
         org_id=org_id,
         workspace_id=workspace_id,
         roles=roles,
+        connection=connection,
         internal_user_id=internal_user_id,
         is_new_user=is_new,
     )

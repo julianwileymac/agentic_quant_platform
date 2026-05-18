@@ -6,11 +6,10 @@ description: >
 
 session:
   run_name: tradier-mr-paper
-  # Production metadata URNs. The paper session validates these against
-  # entity_aspects on startup; missing or non-Production aspects abort
-  # startup unless AQP_PAPER_STRICT_METADATA=false.
+  # Seeded by alembic revision 0049_paper_metadata_seed_aspects.
+  # Strict startup metadata-gate validation requires both URNs to resolve.
   model_urn: urn:aqp:mlmodel:prod:tradier_rest_baseline_v1
-  pipeline_urn: urn:aqp:pipeline:prod:tradier_paper_rest_router
+  pipeline_urn: urn:aqp:pipeline:prod:tradier_rest_loop
   heartbeat_seconds: 15
   initial_cash: 50000.0
   dry_run: false

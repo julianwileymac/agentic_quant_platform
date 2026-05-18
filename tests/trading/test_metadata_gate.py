@@ -10,16 +10,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from aqp.config import settings
 from aqp.metadata import MetadataValidationError
 from aqp.persistence.models import Base
 from aqp.persistence.models_aspects import EntityAspect, MetadataEntity
-from aqp.trading.baseline_aspects import (
-    BASELINE_PAPER_CONFIGS,
-    seed_paper_baseline_aspects,
-)
 from aqp.trading import metadata_gate
-from aqp.trading.metadata_gate import run_metadata_gate
+from aqp.trading.metadata_gate import assert_metadata_gate, run_metadata_gate
 
 
 def _payload_hash(payload: dict[str, object]) -> str:
@@ -127,123 +122,71 @@ def metadata_store(monkeypatch: pytest.MonkeyPatch) -> sessionmaker:
     return SessionLocal
 
 
-def test_warn_mode_without_urns_returns_warning(monkeypatch: pytest.MonkeyPatch) -> None:
-    """No URNs should warn but still pass in WARN mode."""
-    monkeypatch.setattr(settings, "paper_strict_metadata", False)
-    outcome = run_metadata_gate(model_urn=None, pipeline_urn=None)
-    assert outcome.ok is True
-    assert outcome.errors == ()
-    assert outcome.warnings
-
-
-def test_warn_mode_invalid_urn_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Invalid URN should fail validation without raising in WARN mode."""
-    monkeypatch.setattr(settings, "paper_strict_metadata", False)
-    outcome = run_metadata_gate(model_urn="not-a-valid-urn", pipeline_urn=None)
-    assert outcome.ok is False
-    assert outcome.errors
-    assert outcome.warnings
-    assert outcome.enforced is False
-
-
-def test_warn_mode_missing_model_aspect(
-    metadata_store: sessionmaker,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Parsed model URN with no aspect row should report a missing-aspect error."""
-    _ = metadata_store
-    monkeypatch.setattr(settings, "paper_strict_metadata", False)
-    outcome = run_metadata_gate(
-        model_urn="urn:aqp:mlmodel:prod:missing_model_v1",
-        pipeline_urn=None,
-    )
-    assert outcome.ok is False
-    assert any("not found in entity_aspects" in err for err in outcome.errors)
-
-
-def test_warn_mode_rejects_development_model(
-    metadata_store: sessionmaker,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Development model status should fail the lifecycle gate."""
-    urn = "urn:aqp:mlmodel:prod:dev_model_v1"
-    _seed_model_aspect(metadata_store, urn=urn, status="Development")
-    monkeypatch.setattr(settings, "paper_strict_metadata", False)
-    outcome = run_metadata_gate(model_urn=urn, pipeline_urn=None)
-    assert outcome.ok is False
-    assert any("is not Production/Staging" in err for err in outcome.errors)
-
-
-def test_warn_mode_accepts_production_model(
-    metadata_store: sessionmaker,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Production model status should pass in WARN mode."""
-    urn = "urn:aqp:mlmodel:prod:prod_model_v1"
-    _seed_model_aspect(metadata_store, urn=urn, status="Production")
-    monkeypatch.setattr(settings, "paper_strict_metadata", False)
-    outcome = run_metadata_gate(model_urn=urn, pipeline_urn=None)
-    assert outcome.ok is True
-    assert outcome.errors == ()
-
-
-def test_strict_mode_invalid_urn_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    """STRICT mode should raise MetadataValidationError on invalid URNs."""
-    monkeypatch.setattr(settings, "paper_strict_metadata", True)
-    with pytest.raises(MetadataValidationError):
-        run_metadata_gate(model_urn="bad-urn", pipeline_urn=None)
-
-
-def test_strict_default_aborts_on_missing_urn() -> None:
-    """Strict default rejects startup when required URNs are omitted."""
-    assert settings.paper_strict_metadata is True
+def test_run_metadata_gate_raises_on_missing_urns() -> None:
+    """Strict gate must block startup when either URN is omitted."""
     with pytest.raises(MetadataValidationError):
         run_metadata_gate(model_urn=None, pipeline_urn=None)
 
 
-def test_strict_default_aborts_on_unresolvable_urn(
+def test_run_metadata_gate_raises_on_invalid_urn() -> None:
+    """Malformed URNs should fail strict validation immediately."""
+    with pytest.raises(MetadataValidationError):
+        run_metadata_gate(model_urn="not-a-valid-urn", pipeline_urn=None)
+
+
+def test_run_metadata_gate_raises_on_missing_model_aspect(
     metadata_store: sessionmaker,
 ) -> None:
-    """Strict default rejects model URNs that do not resolve to an aspect."""
-    baseline_cfg = BASELINE_PAPER_CONFIGS[0]
-    with metadata_store() as session:
-        seed_paper_baseline_aspects(session)
-        session.commit()
-    assert settings.paper_strict_metadata is True
+    """Parsed model URN with no aspect row should fail strict validation."""
+    pipeline_urn = "urn:aqp:pipeline:prod:seeded_pipeline_v1"
+    _seed_pipeline_aspect(metadata_store, urn=pipeline_urn)
     with pytest.raises(MetadataValidationError):
         run_metadata_gate(
-            model_urn="urn:aqp:mlmodel:prod:missing_model_v2",
-            pipeline_urn=baseline_cfg.pipeline_urn,
+            model_urn="urn:aqp:mlmodel:prod:missing_model_v1",
+            pipeline_urn=pipeline_urn,
         )
 
 
-def test_strict_default_passes_with_seeded_baseline(
+def test_run_metadata_gate_rejects_development_model(
     metadata_store: sessionmaker,
 ) -> None:
-    """Strict default accepts the built-in seeded baseline URNs."""
-    baseline_cfg = BASELINE_PAPER_CONFIGS[0]
-    with metadata_store() as session:
-        seed_paper_baseline_aspects(session)
-        session.commit()
-    assert settings.paper_strict_metadata is True
-    outcome = run_metadata_gate(
-        model_urn=baseline_cfg.model_urn,
-        pipeline_urn=baseline_cfg.pipeline_urn,
-    )
+    """Development model status should fail the strict lifecycle gate."""
+    urn = "urn:aqp:mlmodel:prod:dev_model_v1"
+    pipeline_urn = "urn:aqp:pipeline:prod:dev_model_pipeline_v1"
+    _seed_model_aspect(metadata_store, urn=urn, status="Development")
+    _seed_pipeline_aspect(metadata_store, urn=pipeline_urn)
+    with pytest.raises(MetadataValidationError):
+        run_metadata_gate(model_urn=urn, pipeline_urn=pipeline_urn)
+
+
+def test_run_metadata_gate_passes_with_seeded_production_urns(
+    metadata_store: sessionmaker,
+) -> None:
+    """Strict gate should pass for production model + resolvable pipeline."""
+    model_urn = "urn:aqp:mlmodel:prod:strict_prod_model_v1"
+    pipeline_urn = "urn:aqp:pipeline:prod:strict_prod_pipeline_v1"
+    _seed_model_aspect(metadata_store, urn=model_urn, status="Production")
+    _seed_pipeline_aspect(metadata_store, urn=pipeline_urn)
+    outcome = run_metadata_gate(model_urn=model_urn, pipeline_urn=pipeline_urn)
     assert outcome.ok is True
     assert outcome.errors == ()
+    assert outcome.enforced is True
 
 
-def test_strict_mode_valid_production_model_passes(
+def test_assert_metadata_gate_raises_on_missing_urns() -> None:
+    """assert_metadata_gate should enforce strict missing-URN failures."""
+    with pytest.raises(MetadataValidationError):
+        assert_metadata_gate(model_urn=None, pipeline_urn=None)
+
+
+def test_assert_metadata_gate_passes_with_seeded_production_urns(
     metadata_store: sessionmaker,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """STRICT mode should permit valid model and pipeline metadata."""
-    urn = "urn:aqp:mlmodel:prod:strict_prod_model_v1"
-    pipeline_urn = "urn:aqp:pipeline:prod:strict_prod_pipeline_v1"
-    _seed_model_aspect(metadata_store, urn=urn, status="Production")
+    """assert_metadata_gate should return ok=True for seeded production URNs."""
+    model_urn = "urn:aqp:mlmodel:prod:assert_prod_model_v1"
+    pipeline_urn = "urn:aqp:pipeline:prod:assert_prod_pipeline_v1"
+    _seed_model_aspect(metadata_store, urn=model_urn, status="Production")
     _seed_pipeline_aspect(metadata_store, urn=pipeline_urn)
-    monkeypatch.setattr(settings, "paper_strict_metadata", True)
-    outcome = run_metadata_gate(model_urn=urn, pipeline_urn=pipeline_urn)
+    outcome = assert_metadata_gate(model_urn=model_urn, pipeline_urn=pipeline_urn)
     assert outcome.ok is True
     assert outcome.errors == ()

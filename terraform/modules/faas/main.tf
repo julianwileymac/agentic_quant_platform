@@ -5,27 +5,130 @@
 # module only declares the ScaledObject + worker Deployment pairs.
 ###############################################################################
 
-variable "cloud_provider" { type = string }
-variable "environment"    { type = string }
-variable "common_tags"    { type = map(string) default = {} }
-variable "namespaces"     { type = map(string) }
-variable "storage_outputs" { type = any default = {} }
-variable "app_version"    { type = string default = "latest" }
+variable "cloud_provider" {
+  type = string
+}
+variable "environment" {
+  type = string
+}
+variable "common_tags" {
+  type    = map(string)
+  default = {}
+}
+variable "namespaces" {
+  type = map(string)
+}
+variable "storage_outputs" {
+  type    = any
+  default = {}
+}
+variable "app_version" {
+  type    = string
+  default = "latest"
+}
 
 locals {
   ns = var.namespaces["live"]  # workers run in the env's primary ns
   queue_config = {
-    "default"   = { min = 1 max = 20  list_length = 5  resources = { cpu = "200m" memory = "256Mi" } }
-    "backtest"  = { min = 0 max = 100 list_length = 1  resources = { cpu = "1"    memory = "4Gi"   } }
-    "agents"    = { min = 0 max = 20  list_length = 1  resources = { cpu = "500m" memory = "1Gi"   } }
-    "ml"        = { min = 0 max = 50  list_length = 1  resources = { cpu = "2"    memory = "8Gi"   } }
-    "ingestion" = { min = 0 max = 30  list_length = 5  resources = { cpu = "500m" memory = "1Gi"   } }
-    "training"  = { min = 0 max = 20  list_length = 1  resources = { cpu = "4"    memory = "16Gi"  } }
-    "paper"     = { min = 0 max = 10  list_length = 1  resources = { cpu = "500m" memory = "1Gi"   } }
-    "rag"       = { min = 0 max = 10  list_length = 1  resources = { cpu = "1"    memory = "2Gi"   } }
-    "factors"   = { min = 0 max = 20  list_length = 1  resources = { cpu = "1"    memory = "2Gi"   } }
-    "hft"       = { min = 0 max = 5   list_length = 1  resources = { cpu = "2"    memory = "4Gi"   } }
-    "terraform" = { min = 0 max = 10  list_length = 1  resources = { cpu = "500m" memory = "1Gi"   } }
+    "default" = {
+      min         = 1
+      max         = 20
+      list_length = 5
+      resources = {
+        cpu    = "200m"
+        memory = "256Mi"
+      }
+    }
+    "backtest" = {
+      min         = 0
+      max         = 100
+      list_length = 1
+      resources = {
+        cpu    = "1"
+        memory = "4Gi"
+      }
+    }
+    "agents" = {
+      min         = 0
+      max         = 20
+      list_length = 1
+      resources = {
+        cpu    = "500m"
+        memory = "1Gi"
+      }
+    }
+    "ml" = {
+      min         = 0
+      max         = 50
+      list_length = 1
+      resources = {
+        cpu    = "2"
+        memory = "8Gi"
+      }
+    }
+    "ingestion" = {
+      min         = 0
+      max         = 30
+      list_length = 5
+      resources = {
+        cpu    = "500m"
+        memory = "1Gi"
+      }
+    }
+    "training" = {
+      min         = 0
+      max         = 20
+      list_length = 1
+      resources = {
+        cpu    = "4"
+        memory = "16Gi"
+      }
+    }
+    "paper" = {
+      min         = 0
+      max         = 10
+      list_length = 1
+      resources = {
+        cpu    = "500m"
+        memory = "1Gi"
+      }
+    }
+    "rag" = {
+      min         = 0
+      max         = 10
+      list_length = 1
+      resources = {
+        cpu    = "1"
+        memory = "2Gi"
+      }
+    }
+    "factors" = {
+      min         = 0
+      max         = 20
+      list_length = 1
+      resources = {
+        cpu    = "1"
+        memory = "2Gi"
+      }
+    }
+    "hft" = {
+      min         = 0
+      max         = 5
+      list_length = 1
+      resources = {
+        cpu    = "2"
+        memory = "4Gi"
+      }
+    }
+    "terraform" = {
+      min         = 0
+      max         = 10
+      list_length = 1
+      resources = {
+        cpu    = "500m"
+        memory = "1Gi"
+      }
+    }
   }
   redis_address = try(replace(replace(var.storage_outputs.redis_url, "redis://", ""), "rediss://", ""), "redis.aqp-system.svc.cluster.local:6379")
 }
@@ -42,7 +145,12 @@ resource "kubernetes_deployment" "worker" {
   spec {
     replicas = each.value.min
     selector { match_labels = { app = "aqp-worker", queue = each.key } }
-    strategy { type = "RollingUpdate" rolling_update { max_unavailable = "0" } }
+    strategy {
+      type = "RollingUpdate"
+      rolling_update {
+        max_unavailable = "0"
+      }
+    }
     template {
       metadata { labels = merge(var.common_tags, { app = "aqp-worker", queue = each.key }) }
       spec {
@@ -55,8 +163,18 @@ resource "kubernetes_deployment" "worker" {
             requests = each.value.resources
             limits   = each.value.resources
           }
-          readiness_probe { exec { command = ["python", "-c", "from aqp.tasks.celery_app import celery_app; celery_app.control.ping(timeout=5)"] } initial_delay_seconds = 30 }
-          liveness_probe  { exec { command = ["python", "-c", "from aqp.tasks.celery_app import celery_app; celery_app.control.ping(timeout=5)"] } initial_delay_seconds = 60 }
+          readiness_probe {
+            exec {
+              command = ["python", "-c", "from aqp.tasks.celery_app import celery_app; celery_app.control.ping(timeout=5)"]
+            }
+            initial_delay_seconds = 30
+          }
+          liveness_probe {
+            exec {
+              command = ["python", "-c", "from aqp.tasks.celery_app import celery_app; celery_app.control.ping(timeout=5)"]
+            }
+            initial_delay_seconds = 60
+          }
         }
         # PodDisruptionBudget-style affinity: ML + backtest -> memory-opt;
         # agents/default -> burstable; terraform -> dedicated.

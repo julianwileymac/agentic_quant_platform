@@ -81,6 +81,39 @@ class Settings(BaseSettings):
     # ``pending`` state; an AQP super-admin promotes to ``active``.
     auth_msal_b2b_enabled: bool = Field(default=True)
     auth_msal_known_tenants: str = Field(default="")  # CSV of tenant_ids
+    # --- Auth0 Management API (account management, MFA, sessions) ---
+    # The Management API M2M Application in the Auth0 tenant is the
+    # ingress for /me/* mutations that have no user-facing auth code
+    # equivalent (MFA enrollment, session revocation, password tickets,
+    # user delete, connected-account link/unlink). The audience always
+    # has the shape ``https://<tenant>/api/v2/``. The client secret is
+    # resolved via :class:`aqp.credentials.CredentialResolver` per rule
+    # 26 — never read ``auth0_mgmt_api_client_secret`` directly from
+    # service code.
+    auth0_mgmt_api_audience: str = Field(default="")
+    auth0_mgmt_api_client_id: str = Field(default="")
+    auth0_mgmt_api_client_secret: str = Field(default="")
+    # Auth0 connection names. The defaults match a fresh Auth0 tenant
+    # (Username-Password-Authentication for email/password, social
+    # connections for Google, an Enterprise Connection named
+    # ``azure-ad-myorg`` for Microsoft Entra ID). Operators rename via
+    # the dashboard and override these env vars.
+    auth0_database_connection: str = Field(default="Username-Password-Authentication")
+    auth0_microsoft_connection: str = Field(default="azure-ad-myorg")
+    auth0_google_connection: str = Field(default="google-oauth2")
+    # Reject logins where Auth0 reports the email as unverified. Keeps
+    # the audit trail clean and prevents account-takeover via unverified
+    # secondary emails on social providers.
+    auth_require_email_verified: bool = Field(default=True)
+    # --- Tenancy invites (Phase 1.7) ---
+    auth_invite_ttl_hours: int = Field(default=72)
+    auth_invite_secret: str = Field(default="")  # HMAC secret for token hashing; >=32 bytes
+    # --- Security audit log (Phase 1.8) ---
+    # When false, `aqp.auth.audit.emit_audit_event` is a no-op. Keep
+    # enabled in production; tests opt out via the audit_disabled
+    # fixture so they don't need the Postgres table.
+    auth_audit_enabled: bool = Field(default=True)
+    auth_audit_retention_days: int = Field(default=365)
     # --- Federated identity (M3) ---
     # ``auth_login_callback`` / ``auth_logout_callback`` are the
     # backend-rendered redirect URIs for the SPA login flow. Empty in
@@ -468,19 +501,6 @@ class Settings(BaseSettings):
     # --- Paper trading ---
     paper_default_heartbeat_seconds: int = Field(default=30)
     paper_state_flush_every_bars: int = Field(default=10)
-    # Env var name is AQP_PAPER_STRICT_METADATA (env_prefix="AQP_" is applied
-    # automatically by pydantic-settings to the lowercase field name).
-    paper_strict_metadata: bool = Field(
-        default=True,
-        description=(
-            "When True (default since the OOS-4 rollout), paper-trading sessions "
-            "abort startup if model_urn or pipeline_urn cannot be resolved to a "
-            "Staging/Production aspect. Set False ONLY for emergency rollback "
-            "during incidents — the gate is the safety net that prevents "
-            "undocumented or rogue models from interacting with paper or live "
-            "capital."
-        ),
-    )
 
     # --- Alpaca ---
     alpaca_api_key: str = Field(default="")

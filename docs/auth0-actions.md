@@ -139,3 +139,108 @@ exports.onExecutePostLogin = async (event, api) => {
 - [`aqp/api/security.py`](../aqp/api/security.py) — the
   `require_scope` / `require_membership` deps that consume these
   claims.
+
+## Phase 7 post-login Action (Auth0 + Microsoft federation)
+
+This Action calls `/_internal/auth0/sync`, then injects returned custom
+claims into both the access token and ID token. The connection name
+mapping (`requested_claims.connection`) is forwarded so AQP can record
+which IdP drove each login.
+
+```javascript
+/**
+ * AQP post-login Action.
+ * Calls /_internal/auth0/sync on the AQP API and injects the
+ * returned custom claims into the access token. Also carries the
+ * Auth0 connection name (e.g. "azure-ad-myorg") so the AQP audit
+ * log records WHICH IdP drove this login.
+ *
+ * Secrets used:
+ *   AQP_API_URL                  e.g. https://api.aqp.example
+ *   AQP_M2M_CLIENT_ID            Auth0 Management API M2M client id (reused)
+ *   AQP_M2M_CLIENT_SECRET        Auth0 Management API M2M client secret
+ *   AQP_M2M_AUDIENCE             Same as AQP API resource identifier
+ *
+ * Set them at: Actions > Library > Custom > <your action> > Add Secret
+ */
+const NS = "https://aqp/";
+
+async function mintM2MToken(secrets) {
+  const url = `https://${event.tenant.id}.auth0.com/oauth/token`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "client_credentials",
+      client_id: secrets.AQP_M2M_CLIENT_ID,
+      client_secret: secrets.AQP_M2M_CLIENT_SECRET,
+      audience: secrets.AQP_M2M_AUDIENCE,
+    }),
+  });
+  if (!res.ok) return null;
+  const body = await res.json();
+  return body.access_token || null;
+}
+
+exports.onExecutePostLogin = async (event, api) => {
+  const aqpApi = event.secrets.AQP_API_URL;
+  if (!aqpApi) return; // Action mis-configured; fail open
+  let token = await api.cache.get("aqp_m2m_token");
+  if (!token || !token.value) {
+    const fresh = await mintM2MToken(event.secrets);
+    if (!fresh) return;
+    api.cache.set("aqp_m2m_token", fresh, { ttl: 50 * 60 * 1000 });
+    token = { value: fresh };
+  }
+  const payload = {
+    user_id: event.user.user_id,
+    email: event.user.email,
+    organization_id: event.organization?.id,
+    organization_name: event.organization?.name,
+    requested_claims: {
+      connection: event.connection?.name,
+      strategy: event.connection?.strategy,
+    },
+  };
+  try {
+    const res = await fetch(`${aqpApi}/_internal/auth0/sync`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token.value}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) return;
+    const claims = await res.json();
+    for (const [k, v] of Object.entries(claims)) {
+      if (v === null || v === undefined) continue;
+      api.accessToken.setCustomClaim(`${NS}${k}`, v);
+      api.idToken.setCustomClaim(`${NS}${k}`, v);
+    }
+  } catch (err) {
+    // Fail open — never block the user's login if AQP API is down.
+    console.log("aqp_sync_failed", err.message);
+  }
+};
+```
+
+### Custom claims it sets
+
+| Claim | Meaning |
+| --- | --- |
+| `https://aqp/org_id` | Active organization context resolved by AQP. |
+| `https://aqp/team_id` | Team context resolved by AQP. |
+| `https://aqp/workspace_id` | Active workspace context. |
+| `https://aqp/project_id` | Active project context. |
+| `https://aqp/lab_id` | Active lab context. |
+| `https://aqp/roles` | Role list used by scope/membership checks. |
+| `https://aqp/connection` | Auth0 connection name, mapped from `requested_claims.connection` (for example `azure-ad-myorg`). |
+| `https://aqp/internal_user_id` | AQP internal user row identifier. |
+
+### Why it fails open
+
+The post-login Action should never block authentication because of a
+transient outage in AQP. Missing one claim-sync cycle is recoverable on
+the next login, while hard-failing login creates a broader availability
+incident for all users.

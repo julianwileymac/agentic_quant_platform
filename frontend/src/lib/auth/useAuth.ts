@@ -36,6 +36,10 @@ export interface AuthSurface {
     roles: string[];
   };
   loginWithRedirect: (returnTo?: string, opts?: { organization?: string }) => Promise<void>;
+  loginWithMicrosoft: (returnTo?: string) => Promise<void>;
+  loginWithGoogle: (returnTo?: string) => Promise<void>;
+  signupWithRedirect: (returnTo?: string) => Promise<void>;
+  forgotPassword: (returnTo?: string) => Promise<void>;
   logout: () => Promise<void>;
   /**
    * Reads the cached id token claim set; useful for the identity chip
@@ -60,6 +64,15 @@ const LOCAL_CLAIMS: AuthSurface["claims"] = {
 };
 
 const CLAIMS_NS = "https://aqp/";
+const DEFAULT_MS_CONNECTION = "azure-ad-myorg";
+const DEFAULT_GOOGLE_CONNECTION = "google-oauth2";
+
+function readStringEnv(key: string, fallback: string): string {
+  const value = (import.meta.env as Record<string, string | undefined>)[key];
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : fallback;
+}
 
 export function useAuth(): AuthSurface {
   if (!isAuthEnabled()) {
@@ -70,6 +83,10 @@ export function useAuth(): AuthSurface {
       user: LOCAL_DEFAULT,
       claims: LOCAL_CLAIMS,
       loginWithRedirect: async () => {},
+      loginWithMicrosoft: async () => {},
+      loginWithGoogle: async () => {},
+      signupWithRedirect: async () => {},
+      forgotPassword: async () => {},
       logout: async () => {},
       getClaims: async () => null,
     };
@@ -112,6 +129,8 @@ function _claimsFromUser(
 
 function useAuthEnabled(): AuthSurface {
   const a0 = useAuth0();
+  const msConnection = readStringEnv("VITE_AUTH0_MS_CONNECTION", DEFAULT_MS_CONNECTION);
+  const googleConnection = readStringEnv("VITE_AUTH0_GOOGLE_CONNECTION", DEFAULT_GOOGLE_CONNECTION);
 
   const loginWithRedirect = useCallback(
     async (returnTo?: string, opts?: { organization?: string }) => {
@@ -122,6 +141,50 @@ function useAuthEnabled(): AuthSurface {
       await a0.loginWithRedirect({
         ...(appState ? { appState } : {}),
         ...(authorizationParams ? { authorizationParams } : {}),
+      });
+    },
+    [a0],
+  );
+
+  const loginWithMicrosoft = useCallback(
+    async (returnTo?: string) => {
+      const appState = returnTo ? { returnTo } : undefined;
+      await a0.loginWithRedirect({
+        ...(appState ? { appState } : {}),
+        authorizationParams: { connection: msConnection },
+      });
+    },
+    [a0, msConnection],
+  );
+
+  const loginWithGoogle = useCallback(
+    async (returnTo?: string) => {
+      const appState = returnTo ? { returnTo } : undefined;
+      await a0.loginWithRedirect({
+        ...(appState ? { appState } : {}),
+        authorizationParams: { connection: googleConnection },
+      });
+    },
+    [a0, googleConnection],
+  );
+
+  const signupWithRedirect = useCallback(
+    async (returnTo?: string) => {
+      const appState = returnTo ? { returnTo } : undefined;
+      await a0.loginWithRedirect({
+        ...(appState ? { appState } : {}),
+        authorizationParams: { screen_hint: "signup" },
+      });
+    },
+    [a0],
+  );
+
+  const forgotPassword = useCallback(
+    async (returnTo?: string) => {
+      const appState = returnTo ? { returnTo } : undefined;
+      await a0.loginWithRedirect({
+        ...(appState ? { appState } : {}),
+        authorizationParams: { screen_hint: "reset" },
       });
     },
     [a0],
@@ -156,9 +219,24 @@ function useAuthEnabled(): AuthSurface {
       },
       claims: _claimsFromUser(a0.user as Record<string, unknown> | undefined),
       loginWithRedirect,
+      loginWithMicrosoft,
+      loginWithGoogle,
+      signupWithRedirect,
+      forgotPassword,
       logout,
       getClaims,
     }),
-    [a0.isLoading, a0.isAuthenticated, a0.user, loginWithRedirect, logout, getClaims],
+    [
+      a0.isLoading,
+      a0.isAuthenticated,
+      a0.user,
+      loginWithRedirect,
+      loginWithMicrosoft,
+      loginWithGoogle,
+      signupWithRedirect,
+      forgotPassword,
+      logout,
+      getClaims,
+    ],
   );
 }

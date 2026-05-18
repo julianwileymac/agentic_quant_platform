@@ -87,6 +87,16 @@ dependencies = [
 auth = [
     "python-jose[cryptography]>=3.3",
     "jwcrypto>=1.5.7",
+    # Auth0-issued access-token validation (DPoP, scopes, JWKS cache).
+    # Wraps the existing aqp.auth.oidc.validate_jwt path with the same
+    # API shape the Auth0 quickstarts validate against; the multi-
+    # provider deps (MsalEntraProvider, mock) keep working alongside.
+    "auth0-fastapi-api>=1.0.0b5",
+    # Retry helpers for the Auth0 Management API client. The Management
+    # API rate-limits at 1000/min per tenant; honour Retry-After + back
+    # off cleanly so MFA enroll / session revoke / user delete don't
+    # surface flaky errors to the UI.
+    "httpx-retries>=0.4",
 ]
 # MSAL / Microsoft Entra ID identity provider (multi-tenant). Pure-Python;
 # enables MsalEntraProvider auto-registration. The SPA-side counterpart is

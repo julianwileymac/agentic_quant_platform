@@ -1,23 +1,8 @@
 ###############################################################################
 # storage — Postgres + Redis + object store + Iceberg catalog (per cloud).
+#
+# Inputs live in variables.tf; this file declares only the locals + resources.
 ###############################################################################
-
-variable "cloud_provider" {
-  type = string
-}
-
-variable "environment" {
-  type = string
-}
-
-variable "organization_slug" {
-  type = string
-}
-
-variable "common_tags" {
-  type    = map(string)
-  default = {}
-}
 
 variable "networking_outputs" {
   type    = any
@@ -93,7 +78,11 @@ resource "aws_s3_bucket_versioning" "lake" {
 resource "aws_s3_bucket_server_side_encryption_configuration" "lake" {
   count  = local.is_aws ? 1 : 0
   bucket = aws_s3_bucket.lake[0].id
-  rule { apply_server_side_encryption_by_default { sse_algorithm = "AES256" } }
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "lake" {
@@ -112,7 +101,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "lake" {
     id     = "archive-old"
     status = "Enabled"
     filter {}
-    transition { days = 90 storage_class = "GLACIER_IR" }
+    transition {
+      days          = 90
+      storage_class = "GLACIER_IR"
+    }
   }
 }
 
@@ -162,7 +154,10 @@ resource "google_storage_bucket" "lake" {
   versioning { enabled = true }
   lifecycle_rule {
     condition { age = 90 }
-    action    { type = "SetStorageClass" storage_class = "ARCHIVE" }
+    action {
+      type          = "SetStorageClass"
+      storage_class = "ARCHIVE"
+    }
   }
   labels = var.common_tags
 }

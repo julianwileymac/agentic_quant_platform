@@ -1,19 +1,13 @@
 ###############################################################################
 # kubernetes — cluster provisioning + namespace bootstrap + base operators.
 #
+# Inputs live in variables.tf; this file declares only the locals + resources.
+#
 # Cluster provisioning is cloud-conditional. The bootstrap Helm releases
 # (cert-manager, ESO, KEDA, ingress-nginx, kube-prometheus, OTel
 # operator, Istio base + istiod) are common across every cluster
 # target including local minikube/kind.
 ###############################################################################
-
-variable "cloud_provider" {
-  type = string
-}
-
-variable "environment" {
-  type = string
-}
 
 variable "organization_slug" {
   type = string
@@ -21,11 +15,6 @@ variable "organization_slug" {
 
 variable "workspace_slug" {
   type = string
-}
-
-variable "common_tags" {
-  type    = map(string)
-  default = {}
 }
 
 variable "namespaces" {

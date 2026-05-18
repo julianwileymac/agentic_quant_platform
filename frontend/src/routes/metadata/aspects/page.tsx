@@ -180,12 +180,32 @@ export function MetadataAspectsListRoute() {
             <CardContent className="flex flex-wrap items-end gap-2">
               <div className="min-w-[360px] flex-1">
                 <p className="mb-1 text-xs text-[var(--text-muted)]">Focal URN</p>
+                {/*
+                  Rule 29: URN selection is bound to the cached metadata entity
+                  list via a <datalist>, so this input is a Combobox over the
+                  same entitiesQuery that drives the table below. Free-text
+                  paste is preserved as a fallback for URNs that haven't yet
+                  been ingested into the metadata cache. TODO(cache): once
+                  metadata_entity_types and metadata_entity_urns are added to
+                  aqp/cache/keys.py::CACHE_CATEGORIES, swap this for the shared
+                  EntityPicker component.
+                */}
                 <Input
                   value={lineageUrn}
                   onChange={(event) => setLineageUrn(event.target.value)}
                   placeholder="urn:aqp:dataset:prod:aqp_silver_alpha_vantage.daily_bars"
                   className="font-mono text-xs"
+                  list="metadata-aspects-urn-suggestions"
                 />
+                <datalist id="metadata-aspects-urn-suggestions">
+                  {rows.map((row) => (
+                    <option
+                      key={row.urn}
+                      value={row.urn}
+                      label={`${row.entity_type} - ${row.aspect_count} aspect(s)`}
+                    />
+                  ))}
+                </datalist>
               </div>
               <Button
                 onClick={() =>

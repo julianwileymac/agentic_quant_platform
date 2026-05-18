@@ -222,10 +222,15 @@ def _resolve_aspect_client() -> tuple[Any | None, str | None]:
     if not gms_url:
         return None, _SDK_UNAVAILABLE_ERROR
 
+    # Token resolution mirrors the DataHubClient pattern (rule 26 grandfathered
+    # for the legacy aqp/data/datahub/ tree). Prefer the already-resolved client
+    # token over a fresh settings read so credential rotation only happens in
+    # one place inside this module.
     try:
+        token = str(getattr(client, "token", "") or settings.datahub_token or "")
         config = DatahubClientConfig(
             server=gms_url,
-            token=(settings.datahub_token or None),
+            token=(token or None),
         )
         return DataHubGraph(config), None
     except Exception:
