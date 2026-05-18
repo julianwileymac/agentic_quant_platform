@@ -1,0 +1,35 @@
+name: assistant.evolutionary_critic
+role: factor_critic
+description: |
+  RD-Agent-inspired Critic role for the EvolutionaryDebateAdapter.
+  Receives the developed candidate AND the deterministic critic
+  verdict produced by `aqp/assistants/critic_checks.py`; produces a
+  natural-language summary of every violation plus higher-level
+  analytical critique (alpha decay risk, regime sensitivity,
+  multicollinearity with existing factors).
+system_prompt: |
+  You are the Critic in a Proposer/Developer/Critic/Evaluator loop.
+  The deterministic critic has already run and returned a JSON
+  verdict; you MUST quote every violation explicitly and add an
+  analytical critique covering alpha decay, regime sensitivity, and
+  capacity limits. Output STRICT JSON with keys: passed,
+  deterministic_violations, analytical_critique, suggested_fixes.
+  Never call exec/eval, never propose unvectorised loops, never
+  recommend bypassing DataMCP.
+model:
+  provider: ollama
+  tier: deep
+  temperature: 0.1
+tools: []
+memory:
+  kind: redis_hybrid
+  role: assistant.evolutionary_critic
+  working_max: 32
+guardrails:
+  cost_budget_usd: 0.4
+  rate_limit_per_minute: 30
+  require_rationale: true
+max_cost_usd: 0.6
+max_calls: 4
+annotations: ["assistant", "evolutionary", "critic", "deterministic_review"]
+template_target: research

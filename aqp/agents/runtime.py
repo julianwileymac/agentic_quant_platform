@@ -184,7 +184,14 @@ class AgentRuntime:
         self._calls = 0
         self._tool_calls = 0
         self._rag_hits = 0
+        # Tool cache holds ONLY tool instances — never memory backends. Mixing
+        # the two (the pre-fix bug) caused ``_resolve_tools`` to return memory
+        # objects to ``_invoke_llm`` because the resolver short-circuits when
+        # ``_tool_cache`` is truthy. Memory lives in its own slot below.
         self._tool_cache: dict[str, Any] = {}
+        self._tools_resolved: bool = False
+        self._memory_instance: Any | None = None
+        self._memory_resolved: bool = False
 
     # ------------------------------------------------------------------ public API
     def run(self, inputs: Mapping[str, Any]) -> AgentRunResult:
@@ -406,9 +413,8 @@ class AgentRuntime:
     def _memory(self):
         if self.spec.memory.disabled():
             return None
-        cached = self._tool_cache.get("__memory__")
-        if cached is not None:
-            return cached
+        if self._memory_resolved:
+            return self._memory_instance
         try:
             if self.spec.memory.kind == "redis_hybrid":
                 from aqp.llm.memory import RedisHybridMemory
@@ -430,7 +436,8 @@ class AgentRuntime:
         except Exception:  # noqa: BLE001
             logger.debug("Memory binding failed", exc_info=True)
             mem = None
-        self._tool_cache["__memory__"] = mem
+        self._memory_instance = mem
+        self._memory_resolved = True
         return mem
 
     def _working_push(self, message: str) -> None:
@@ -516,15 +523,20 @@ class AgentRuntime:
         instantiates them lazily so a missing optional dep (crewai, pyiceberg,
         etc.) doesn't blow up at module import time. Cached on ``self._tool_cache``
         per-run so successive ``_invoke_llm`` turns reuse the same instances.
+        Only tool instances live in ``_tool_cache`` — memory is resolved
+        through :meth:`_memory` into the dedicated ``_memory_instance``
+        slot so it never appears in the LLM tool catalog.
         """
-        if self._tool_cache:
-            return list(self._tool_cache.values())
+        if self._tools_resolved:
+            return [self._tool_cache[ref.name] for ref in self.spec.tools if ref.name in self._tool_cache]
         if not self.spec.tools:
+            self._tools_resolved = True
             return []
         try:
             from aqp.agents.tools import TOOL_REGISTRY
         except Exception:
             logger.debug("tool registry unavailable; running tool-less", exc_info=True)
+            self._tools_resolved = True
             return []
         resolved: list[Any] = []
         for ref in self.spec.tools:
@@ -532,13 +544,28 @@ class AgentRuntime:
             if cls is None:
                 logger.warning("AgentRuntime: skipping unknown tool '%s'", ref.name)
                 continue
+            init_kwargs: dict[str, Any] = dict(ref.kwargs or {})
+            # Spec-time scope grants (defect 4 fix). DataMCP-bridge tool
+            # classes forward this to ``MCPToolContext.granted_scopes``;
+            # legacy CrewAI tools that don't accept ``scopes`` simply drop
+            # the kwarg so we fall back to the no-arg constructor.
+            if ref.scopes and "scopes" not in init_kwargs:
+                init_kwargs["scopes"] = list(ref.scopes)
             try:
-                inst = cls(**(ref.kwargs or {}))
+                inst = cls(**init_kwargs)
+            except TypeError:
+                init_kwargs.pop("scopes", None)
+                try:
+                    inst = cls(**init_kwargs)
+                except Exception:
+                    logger.exception("AgentRuntime: tool %s instantiation failed", ref.name)
+                    continue
             except Exception:
                 logger.exception("AgentRuntime: tool %s instantiation failed", ref.name)
                 continue
             self._tool_cache[ref.name] = inst
             resolved.append(inst)
+        self._tools_resolved = True
         return resolved
 
     @staticmethod

@@ -12,6 +12,7 @@ from aqp.data.mcp.tools import (  # noqa: F401  (side-effect imports)
     alphas,
     arbitrage,
     aspects,
+    assistants,
     automation,
     backtests,
     brokers,

@@ -1,0 +1,26 @@
+name: platform_assistant
+description: "Interactive AQP platform assistant backed by the codebase assistant AgentSpec."
+mode: agent
+agent_spec_name: codebase_assistant
+system_instructions: |
+  You are the interactive AQP platform assistant. Answer through the
+  existing AgentRuntime tool loop and keep responses concise, cited, and
+  grounded in retrieved code or catalog context.
+starter_prompts:
+  - "Where does AQP define AgentRuntime?"
+  - "How do DataMCP tools enforce tenancy?"
+tool_policy:
+  read_only: true
+  allowed_tools:
+    - codebase.search
+    - codebase.get_repo_graph
+    - codebase.find_definition
+    - codebase.find_references
+    - codebase.elaborate_finding
+memory_policy:
+  enabled: true
+  include_recent_messages: 12
+sandbox_policy:
+  enabled: false
+annotations: ["assistant", "codebase", "read_only"]
+template_target: utility

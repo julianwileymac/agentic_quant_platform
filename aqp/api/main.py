@@ -153,6 +153,13 @@ from aqp.api.routes import (  # noqa: E402
 from aqp.api.routes import (  # noqa: E402
     workflows as workflows_routes,
 )
+# Phase 3 (assistant engine) — interactive AssistantRuntime over
+# AgentRuntime / WorkflowRuntime. Mounts unconditionally; routes gate
+# on settings.assistant_engine_enabled and return 503 when off so the
+# legacy /chat surface is untouched.
+from aqp.api.routes import (  # noqa: E402
+    assistants as assistants_routes,
+)
 from aqp.config import settings
 from aqp.observability import (
     configure_tracing,
@@ -350,6 +357,9 @@ app.include_router(research_agents.router)
 # settings.orchestration_studio_enabled and returns 503 when off so
 # existing routes are completely unaffected.
 app.include_router(workflows_routes.router)
+# Assistant Engine (Phase 3) — dispatcher + WS stream. Each route gates
+# on settings.assistant_engine_enabled.
+app.include_router(assistants_routes.router)
 app.include_router(selection_agents.router)
 app.include_router(trader_agents.router)
 app.include_router(analysis_agents.router)

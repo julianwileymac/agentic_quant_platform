@@ -111,7 +111,17 @@ class AlphaResearcher:
         spec = get_agent_spec(self.agent_spec_name)
         runtime = AgentRuntime(spec)
         result = runtime.run(inputs=inputs)
-        raw = (result.get("output") if isinstance(result, dict) else None) or {}
+        # ``AgentRuntime.run`` returns an :class:`AgentRunResult` dataclass
+        # (defect 6 fix). Treat any other shape defensively so legacy
+        # mocked callers keep working.
+        if hasattr(result, "output"):
+            raw = dict(getattr(result, "output", None) or {}) if getattr(
+                result, "status", "completed"
+            ) == "completed" else {}
+        elif isinstance(result, dict):
+            raw = dict(result.get("output") or {})
+        else:
+            raw = {}
         parsed = self._coerce_proposal(raw)
         return parsed
 

@@ -60,13 +60,13 @@ def consult(
 ) -> ConsultResponse:
     """Run the dataset_loading_assistant agent with the user's prompt."""
     try:
-        from aqp.agents.registry import get_spec
+        from aqp.agents.registry import get_agent_spec
         from aqp.agents.runtime import AgentRuntime
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=500, detail=f"agent runtime unavailable: {exc}") from exc
 
     try:
-        spec = get_spec("dataset_loading_assistant")
+        spec = get_agent_spec("dataset_loading_assistant")
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=404,

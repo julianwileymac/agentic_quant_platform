@@ -325,6 +325,11 @@ def _halt_runs(*, run_id: str | None, reason: str) -> list[dict[str, Any]]:
     Degrades cleanly when ``workflow_runs`` isn't yet provisioned
     (the Phase 5 alembic migration hasn't applied) — returns an
     empty halted list rather than 500'ing the API.
+
+    Also pushes a per-run ``aqp:workflow:halt:<run_id>`` Redis flag
+    (TTL 1h) so an in-flight :class:`WorkflowRuntime` polling
+    ``ctx.is_halted()`` exits at the next tick even if the Celery
+    revoke signal raced with a long-running adapter inner step.
     """
     try:
         from datetime import datetime
@@ -369,6 +374,29 @@ def _halt_runs(*, run_id: str | None, reason: str) -> list[dict[str, Any]]:
                 )
         except Exception as exc:  # noqa: BLE001
             logger.debug("workflow halt revoke failed: %s", exc)
+    # Per-run Redis halt flag — keeps in-flight runtimes from racing
+    # past the Celery revoke (defect 3 fix). Best-effort: failures
+    # never block the API response.
+    if halted:
+        try:
+            from aqp.config import settings as _settings
+
+            redis_url = getattr(_settings, "redis_url", None)
+            if redis_url:
+                import redis  # type: ignore[import-not-found]
+
+                client = redis.Redis.from_url(redis_url, socket_timeout=0.25)
+                for entry in halted:
+                    try:
+                        client.set(
+                            f"aqp:workflow:halt:{entry['run_id']}",
+                            reason,
+                            ex=3600,
+                        )
+                    except Exception:  # noqa: BLE001
+                        continue
+        except Exception:  # noqa: BLE001
+            logger.debug("workflow halt redis flag set failed", exc_info=True)
     return halted
 
 

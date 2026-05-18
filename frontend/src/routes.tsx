@@ -82,6 +82,7 @@ import { BotNewRoute } from "@/routes/bots/new/page";
 import { BotBuilderRoute } from "@/routes/bots/builder/page";
 import { BotDebateRoute } from "@/routes/bots/[id]/debate/page";
 import { ChatRoute } from "@/routes/chat/page";
+import { AssistantsRoute } from "@/routes/assistants/page";
 import { CrewTraceRoute } from "@/routes/crew/page";
 import { DashboardRoute } from "@/routes/dashboard/page";
 import { DataCatalogRoute } from "@/routes/data/catalog/page";
@@ -219,6 +220,9 @@ const REAL_ROUTES: Record<string, () => ReactElement> = {
   "/live": LiveDeskRoute,
   "/action-center": ActionCenterRoute,
   "/chat": ChatRoute,
+  // Assistant Engine (Phase 6) — interactive AssistantRuntime over
+  // AgentRuntime / WorkflowRuntime, gated by AQP_ASSISTANT_ENGINE_ENABLED.
+  "/assistants": AssistantsRoute,
   "/bots": BotsRoute,
   "/bots/new": BotNewRoute,
   "/agents": AgentsHomeRoute,

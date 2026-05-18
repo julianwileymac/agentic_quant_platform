@@ -67,10 +67,18 @@ class ModelRef(BaseModel):
 
 
 class ToolRef(BaseModel):
-    """Reference to a tool in :data:`aqp.agents.tools.TOOL_REGISTRY`."""
+    """Reference to a tool in :data:`aqp.agents.tools.TOOL_REGISTRY`.
+
+    ``scopes`` declares additional MCP scopes that the agent is granting
+    to the tool at spec-time. The DataMCP bridge merges these onto the
+    default ``("data:read",)`` grant so mutating tools require an
+    explicit, auditable opt-in (e.g. ``scopes=["data:write"]``). An
+    empty list keeps the read-only default.
+    """
 
     name: str
     kwargs: dict[str, Any] = Field(default_factory=dict)
+    scopes: list[str] = Field(default_factory=list)
 
 
 class MemorySpec(BaseModel):

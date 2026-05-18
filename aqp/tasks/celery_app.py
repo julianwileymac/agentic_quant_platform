@@ -98,6 +98,11 @@ celery_app = Celery(
         # flags are off: the task body refuses to enqueue without a
         # resolvable spec.
         "aqp.tasks.orchestration_tasks",
+        # Assistant Engine — AssistantRuntime dispatcher. Guarded by
+        # ``settings.assistant_engine_enabled``; the body emits a
+        # clean ``emit_error`` instead of crashing when the flag is
+        # off and the spec lookup misses.
+        "aqp.tasks.assistant_tasks",
     ],
 )
 
@@ -181,6 +186,10 @@ celery_app.conf.update(
         # since each workflow run typically wraps an AgentRuntime
         # invocation through one of the registered adapters.
         "aqp.tasks.orchestration_tasks.*": {"queue": "agents"},
+        # Assistant Engine dispatcher — same queue as agents /
+        # orchestration since it ultimately delegates to one of those
+        # runtimes through the AssistantRuntime layer.
+        "aqp.tasks.assistant_tasks.*": {"queue": "agents"},
         # Terraform IaC control plane — dedicated queue so the slow
         # ``terraform apply`` (multi-minute) doesn't block bar-cadence
         # work on the default queue. KEDA scales the worker pool from

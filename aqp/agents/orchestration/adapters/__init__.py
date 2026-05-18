@@ -25,6 +25,9 @@ from __future__ import annotations
 
 from aqp.agents.orchestration.adapters.crew_adapter import CrewProcessAdapter
 from aqp.agents.orchestration.adapters.debate_adapter import DialecticalDebateAdapter
+from aqp.agents.orchestration.adapters.evolutionary_debate import (
+    EvolutionaryDebateAdapter,
+)
 from aqp.agents.orchestration.adapters.fusion_adapter import SignalFusionAdapter
 from aqp.agents.orchestration.adapters.langgraph_adapter import LangGraphAdapter
 from aqp.agents.orchestration.adapters.schedule_adapter import (
@@ -40,6 +43,7 @@ __all__ = [
     "AutomationScheduleAdapter",
     "CrewProcessAdapter",
     "DialecticalDebateAdapter",
+    "EvolutionaryDebateAdapter",
     "LangGraphAdapter",
     "SignalFusionAdapter",
     "WeightCentricExecutionAdapter",

@@ -1,0 +1,25 @@
+name: financial_research_team
+description: "Interactive entry point for the EvolutionaryDebateAdapter financial analyst team."
+mode: workflow
+workflow_spec_name: assistant.financial_analyst_team_evolutionary
+system_instructions: |
+  Coordinate the financial analyst team through WorkflowRuntime ->
+  EvolutionaryDebateAdapter. Bound debate rounds, surface every
+  Critic + Evaluator decision, and cite DataMCP / RAG evidence when
+  summarising conclusions.
+starter_prompts:
+  - "Run a multi-agent factor proposal for AAPL (vectorised, with risk constraints)."
+  - "Compare bull and bear cases for this portfolio rebalance."
+  - "Critique the candidate factor formula for vectorisation and AST-sandbox safety."
+tool_policy:
+  read_only: true
+  allowed_tools: []
+  explicit_scopes: []
+memory_policy:
+  enabled: true
+  include_recent_messages: 12
+sandbox_policy:
+  enabled: false
+  backend: blocked
+annotations: ["assistant", "workflow", "financial_team", "evolutionary_debate"]
+template_target: research

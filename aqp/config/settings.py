@@ -770,6 +770,31 @@ class Settings(BaseSettings):
     # observed inside the SLA from ``docs/orchestration-refactor-rollout.md``.
     orchestration_halt_check_timeout_seconds: float = Field(default=1.0)
 
+    # --- Assistant Engine (additive layer on top of the orchestration
+    # control plane). All knobs default to ``False`` / ``"blocked"`` so
+    # the new ``AssistantRuntime`` machinery stays dormant until an
+    # operator opts in. Existing routes/tasks keep their behaviour.
+    #
+    # ``assistant_engine_enabled`` gates the new ``/assistants`` REST
+    #   surface, the Vite ``/assistants`` route + drawer wiring, and
+    #   the ``persist_spec`` write-through into ``assistant_spec_versions``.
+    # ``assistant_engine_versioning_enabled`` enables the immutable
+    #   hash-locked snapshot persistence (parallel to
+    #   ``orchestration_workflow_versioning_enabled``).
+    # ``assistant_sandbox_backend`` selects the execution backend for
+    #   :class:`aqp.assistants.sandbox.AssistantSandbox`. Default
+    #   ``"blocked"`` refuses to execute generated commands; flipping
+    #   to ``"docker"`` / ``"microvm"`` (future) is the explicit
+    #   opt-in. Never let an LLM-routed flow flip this.
+    # ``assistant_max_rounds`` caps debate-style assistant workflows
+    #   the same way ``orchestration_max_debate_rounds`` caps the
+    #   workflow studio.
+    assistant_engine_enabled: bool = Field(default=False)
+    assistant_engine_versioning_enabled: bool = Field(default=False)
+    assistant_sandbox_backend: str = Field(default="blocked")
+    assistant_max_rounds: int = Field(default=4)
+    assistant_halt_check_timeout_seconds: float = Field(default=1.0)
+
     # --- Streaming producers ---
     streaming_producers_namespace: str = Field(default="data-services")
 

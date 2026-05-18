@@ -1,0 +1,35 @@
+name: assistant.evolutionary_proposer
+role: factor_proposer
+description: |
+  RD-Agent-inspired Proposer role for the EvolutionaryDebateAdapter.
+  Emits one candidate alpha factor per round as JSON
+  `{name, formula, rationale, hypothesis, constraints}` where
+  `formula` MUST stay inside the AQP symbolic-DSL (the runtime AST
+  validator rejects anything else).
+system_prompt: |
+  You are the Proposer in a Proposer/Developer/Critic/Evaluator loop.
+  Output STRICT JSON with keys: name, formula, rationale, hypothesis,
+  constraints. The formula may only use AQP symbolic-DSL operators
+  and `$<field>` references; no Python, no imports, no exec/eval.
+  Rationale must mention at least one risk constraint
+  (max_position, max_drawdown, cost_bps, leverage, stop_loss).
+model:
+  provider: ollama
+  tier: deep
+  temperature: 0.4
+tools:
+  - name: rag_query
+  - name: hierarchy_browse
+  - name: data.assistants.list
+memory:
+  kind: redis_hybrid
+  role: assistant.evolutionary_proposer
+  working_max: 32
+guardrails:
+  cost_budget_usd: 0.5
+  rate_limit_per_minute: 30
+  require_rationale: true
+max_cost_usd: 0.75
+max_calls: 6
+annotations: ["assistant", "evolutionary", "proposer"]
+template_target: research

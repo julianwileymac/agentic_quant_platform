@@ -22,7 +22,7 @@ export interface ChatStreamState {
  * for typed access. Used by the assistant drawer, agent run detail,
  * crew trace, backtest progress, and ML training pages.
  */
-export function useChatStream(taskId: string | null, channel: "chat" | "agents" = "chat"): ChatStreamState {
+export function useChatStream(taskId: string | null, channel: "chat" | "agents" | "assistants" = "chat"): ChatStreamState {
   const [status, setStatus] = useState<WsStatus>("idle");
   const [events, setEvents] = useState<ProgressEvent[]>([]);
   const [text, setText] = useState("");
@@ -42,7 +42,12 @@ export function useChatStream(taskId: string | null, channel: "chat" | "agents" 
   useEffect(() => {
     reset();
     if (!taskId) return;
-    const path = channel === "chat" ? `/chat/stream/${taskId}` : `/agents/runs/${taskId}/stream`;
+    const path =
+      channel === "chat"
+        ? `/chat/stream/${taskId}`
+        : channel === "assistants"
+          ? `/assistants/stream/${taskId}`
+          : `/agents/runs/${taskId}/stream`;
     const client = createWsClient<ProgressEvent, never>({
       path,
       reconnect: false,

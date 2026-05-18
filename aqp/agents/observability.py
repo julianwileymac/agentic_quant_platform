@@ -121,4 +121,240 @@ def cost_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
     return {"by_kind": by_kind, "total_cost_usd": round(total_cost, 6)}
 
 
-__all__ = ["cost_summary", "emit_progress", "node_span", "trace_step"]
+# ---------------------------------------------------------------------------
+# Assistant-engine span helpers (Phase 7)
+# ---------------------------------------------------------------------------
+#
+# These wrap :func:`trace_step` with the AQP-flavoured projection of the
+# OpenTelemetry GenAI semantic conventions where it makes sense:
+#
+# - ``gen_ai.agent.name`` — registered AssistantSpec / AgentSpec slug.
+# - ``gen_ai.agent.id`` — the runtime ``run_id`` (UUID).
+# - ``gen_ai.agent.version`` — hash-locked spec version id when known.
+# - ``gen_ai.conversation.id`` — the assistant session id.
+#
+# Plus AQP-native attributes the legacy timeline already understands:
+# ``assistant.run_id`` / ``workflow.run_id`` / ``tool.name`` /
+# ``cost_usd`` / ``duration_ms`` / ``finish_reason`` / ``status``. We
+# prefer the conventional OTEL keys when both are emitted, but the
+# AQP-native keys remain so existing dashboards keep rendering without
+# a backend change.
+
+
+def _assistant_attributes(
+    *,
+    assistant_spec_name: str | None,
+    run_id: str | None,
+    session_id: str | None,
+    spec_version_id: str | None,
+    extra: dict[str, Any] | None,
+) -> dict[str, Any]:
+    attrs: dict[str, Any] = {}
+    if assistant_spec_name:
+        attrs["gen_ai.agent.name"] = assistant_spec_name
+        attrs["assistant.spec_name"] = assistant_spec_name
+    if run_id:
+        attrs["gen_ai.agent.id"] = run_id
+        attrs["assistant.run_id"] = run_id
+    if session_id:
+        attrs["gen_ai.conversation.id"] = session_id
+        attrs["assistant.session_id"] = session_id
+    if spec_version_id:
+        attrs["gen_ai.agent.version"] = spec_version_id
+        attrs["assistant.spec_version_id"] = spec_version_id
+    if extra:
+        attrs.update(extra)
+    return attrs
+
+
+@contextlib.contextmanager
+def assistant_run_span(
+    *,
+    assistant_spec_name: str,
+    run_id: str,
+    session_id: str | None = None,
+    spec_version_id: str | None = None,
+    mode: str | None = None,
+    target_ref: str | None = None,
+    **extra: Any,
+) -> Iterator[dict[str, Any]]:
+    """Top-level span wrapping one ``AssistantRuntime.run`` call."""
+    attrs = _assistant_attributes(
+        assistant_spec_name=assistant_spec_name,
+        run_id=run_id,
+        session_id=session_id,
+        spec_version_id=spec_version_id,
+        extra={
+            "assistant.mode": mode,
+            "assistant.target_ref": target_ref,
+            **extra,
+        },
+    )
+    with trace_step("assistant.run", **attrs) as data:
+        yield data
+
+
+@contextlib.contextmanager
+def assistant_message_span(
+    *,
+    run_id: str,
+    role: str,
+    turn: int,
+    session_id: str | None = None,
+    **extra: Any,
+) -> Iterator[dict[str, Any]]:
+    """Span around persisting / streaming a single assistant message."""
+    attrs = _assistant_attributes(
+        assistant_spec_name=None,
+        run_id=run_id,
+        session_id=session_id,
+        spec_version_id=None,
+        extra={
+            "assistant.message.role": role,
+            "assistant.message.turn": int(turn),
+            **extra,
+        },
+    )
+    with trace_step("assistant.message", **attrs) as data:
+        yield data
+
+
+@contextlib.contextmanager
+def model_call_span(
+    *,
+    run_id: str | None = None,
+    provider: str,
+    model: str,
+    tier: str | None = None,
+    **extra: Any,
+) -> Iterator[dict[str, Any]]:
+    """Span around an LLM call dispatched through ``router_complete``.
+
+    Mirrors the GenAI convention attribute names where they apply:
+    ``gen_ai.system`` (= provider) and ``gen_ai.request.model``.
+    """
+    attrs = _assistant_attributes(
+        assistant_spec_name=None,
+        run_id=run_id,
+        session_id=None,
+        spec_version_id=None,
+        extra={
+            "gen_ai.system": provider,
+            "gen_ai.request.model": model,
+            "model.tier": tier,
+            **extra,
+        },
+    )
+    with trace_step("assistant.model_call", **attrs) as data:
+        yield data
+
+
+@contextlib.contextmanager
+def tool_call_span(
+    *,
+    run_id: str | None = None,
+    tool_name: str,
+    arguments: Any | None = None,
+    **extra: Any,
+) -> Iterator[dict[str, Any]]:
+    """Span around a tool invocation inside the assistant loop."""
+    attrs = _assistant_attributes(
+        assistant_spec_name=None,
+        run_id=run_id,
+        session_id=None,
+        spec_version_id=None,
+        extra={"tool.name": tool_name, **extra},
+    )
+    if arguments is not None:
+        attrs["tool.arguments"] = str(arguments)[:512]
+    with trace_step("assistant.tool_call", **attrs) as data:
+        yield data
+
+
+@contextlib.contextmanager
+def memory_retrieval_span(
+    *,
+    run_id: str | None = None,
+    memory_kind: str,
+    role: str | None = None,
+    top_k: int | None = None,
+    **extra: Any,
+) -> Iterator[dict[str, Any]]:
+    """Span around an episodic / hybrid memory recall."""
+    attrs = _assistant_attributes(
+        assistant_spec_name=None,
+        run_id=run_id,
+        session_id=None,
+        spec_version_id=None,
+        extra={
+            "memory.kind": memory_kind,
+            "memory.role": role,
+            "memory.top_k": top_k,
+            **extra,
+        },
+    )
+    with trace_step("assistant.memory_retrieval", **attrs) as data:
+        yield data
+
+
+@contextlib.contextmanager
+def sandbox_validate_span(
+    *,
+    run_id: str | None = None,
+    backend: str,
+    command_count: int,
+    **extra: Any,
+) -> Iterator[dict[str, Any]]:
+    """Span around :meth:`AssistantSandbox.validate_command_set`."""
+    attrs = _assistant_attributes(
+        assistant_spec_name=None,
+        run_id=run_id,
+        session_id=None,
+        spec_version_id=None,
+        extra={
+            "sandbox.backend": backend,
+            "sandbox.command_count": int(command_count),
+            **extra,
+        },
+    )
+    with trace_step("assistant.sandbox_validate", **attrs) as data:
+        yield data
+
+
+@contextlib.contextmanager
+def workflow_handoff_span(
+    *,
+    run_id: str | None = None,
+    target_kind: str,
+    target_ref: str,
+    **extra: Any,
+) -> Iterator[dict[str, Any]]:
+    """Span around the assistant->agent / assistant->workflow dispatch."""
+    attrs = _assistant_attributes(
+        assistant_spec_name=None,
+        run_id=run_id,
+        session_id=None,
+        spec_version_id=None,
+        extra={
+            "assistant.target_kind": target_kind,
+            "assistant.target_ref": target_ref,
+            **extra,
+        },
+    )
+    with trace_step("assistant.workflow_handoff", **attrs) as data:
+        yield data
+
+
+__all__ = [
+    "assistant_message_span",
+    "assistant_run_span",
+    "cost_summary",
+    "emit_progress",
+    "memory_retrieval_span",
+    "model_call_span",
+    "node_span",
+    "sandbox_validate_span",
+    "tool_call_span",
+    "trace_step",
+    "workflow_handoff_span",
+]

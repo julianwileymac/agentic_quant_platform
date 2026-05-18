@@ -74,7 +74,18 @@ class StrategyExecutor:
         spec = get_agent_spec(self.agent_spec_name)
         runtime = AgentRuntime(spec)
         result = runtime.run(inputs=inputs)
-        raw = (result.get("output") if isinstance(result, dict) else None) or {}
+        # Defect 6 fix: ``AgentRuntime.run`` returns an
+        # :class:`AgentRunResult` dataclass; ``isinstance(result, dict)``
+        # was always False so the wrapper used to return ``{}`` every
+        # call. Read ``result.output`` directly.
+        if hasattr(result, "output"):
+            raw = dict(getattr(result, "output", None) or {}) if getattr(
+                result, "status", "completed"
+            ) == "completed" else {}
+        elif isinstance(result, dict):
+            raw = dict(result.get("output") or {})
+        else:
+            raw = {}
         action = self._coerce_action(raw, fallback_intent=str(inputs.get("intent") or ""))
         intent = action.get("intent") or ""
         slug = action.get("experiment_slug") or ""

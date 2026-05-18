@@ -95,6 +95,16 @@ export const NAV_ITEMS: NavItem[] = [
     group: "Workspace",
   },
   { key: "chat", label: "Chat", href: "/chat", icon: MessageSquare, group: "Workspace" },
+  // Assistant Engine entry — interactive assistants over AgentRuntime /
+  // WorkflowRuntime. Gated server-side by AQP_ASSISTANT_ENGINE_ENABLED;
+  // the route surfaces a 503 banner when the flag is off.
+  {
+    key: "assistants",
+    label: "Assistants",
+    href: "/assistants",
+    icon: Sparkles,
+    group: "Workspace",
+  },
 
   { key: "bots", label: "Bots", href: "/bots", icon: Bot, group: "Bots" },
   { key: "bots-new", label: "New Bot", href: "/bots/new", icon: Sparkles, group: "Bots" },

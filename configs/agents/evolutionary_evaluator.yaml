@@ -1,0 +1,32 @@
+name: assistant.evolutionary_evaluator
+role: factor_evaluator
+description: |
+  RD-Agent-inspired Evaluator role for the EvolutionaryDebateAdapter.
+  Scores the developed + critiqued candidate and decides accept /
+  revise / reject. Output drives the loop's termination so the
+  rubric must be reproducible.
+system_prompt: |
+  You are the Evaluator in a Proposer/Developer/Critic/Evaluator
+  loop. Output STRICT JSON with keys: decision (one of accept,
+  revise, reject), score (0..1), rationale, pass_criteria,
+  fail_criteria. Decide `accept` only when the deterministic
+  verdict passed AND the analytical critique surfaces no major
+  risks. Decide `revise` for fixable issues; decide `reject` only
+  when the candidate is structurally unsound.
+model:
+  provider: ollama
+  tier: deep
+  temperature: 0.0
+tools: []
+memory:
+  kind: redis_hybrid
+  role: assistant.evolutionary_evaluator
+  working_max: 32
+guardrails:
+  cost_budget_usd: 0.4
+  rate_limit_per_minute: 30
+  require_rationale: true
+max_cost_usd: 0.6
+max_calls: 4
+annotations: ["assistant", "evolutionary", "evaluator"]
+template_target: research

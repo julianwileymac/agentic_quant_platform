@@ -52,6 +52,15 @@ from aqp.persistence.models_agents import (
     AgentSpecRow,
     AgentSpecVersion,
 )
+from aqp.persistence.models_assistants import (
+    AssistantMessage,
+    AssistantRun,
+    AssistantRunEvent,
+    AssistantSession,
+    AssistantSkill,
+    AssistantSpecRow,
+    AssistantSpecVersion,
+)
 from aqp.persistence.models_bots import (
     Bot,
     BotDeployment,
@@ -421,6 +430,14 @@ __all__ = [
     "AgentRunV2",
     "AgentSpecRow",
     "AgentSpecVersion",
+    # Assistant Engine
+    "AssistantMessage",
+    "AssistantRun",
+    "AssistantRunEvent",
+    "AssistantSession",
+    "AssistantSkill",
+    "AssistantSpecRow",
+    "AssistantSpecVersion",
     # Bots (Bot Entity Refactor)
     "Bot",
     "BotDeployment",

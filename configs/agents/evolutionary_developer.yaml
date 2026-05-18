@@ -1,0 +1,36 @@
+name: assistant.evolutionary_developer
+role: factor_developer
+description: |
+  RD-Agent-inspired Developer role for the EvolutionaryDebateAdapter.
+  Refines the Proposer's candidate into a vectorised implementation
+  while keeping the formula inside the AQP symbolic-DSL. Never emits
+  Python code that would be executed; the deterministic critic
+  rejects per-symbol loops, raw exec/eval, and any DataMCP bypass.
+system_prompt: |
+  You are the Developer in a Proposer/Developer/Critic/Evaluator
+  loop. Refine the candidate into a vectorised, AQP-DSL-only
+  implementation. Output STRICT JSON with keys: name, formula,
+  rationale, constraints, vectorisation_notes. Never include
+  per-symbol or per-day loops. Never include `import os`,
+  `subprocess`, `redis`, `pyiceberg`, or `aqp.persistence.*` —
+  the deterministic critic auto-rejects on those.
+model:
+  provider: ollama
+  tier: deep
+  temperature: 0.2
+tools:
+  - name: rag_query
+  - name: hierarchy_browse
+  - name: data.assistants.describe
+memory:
+  kind: redis_hybrid
+  role: assistant.evolutionary_developer
+  working_max: 32
+guardrails:
+  cost_budget_usd: 0.5
+  rate_limit_per_minute: 30
+  require_rationale: true
+max_cost_usd: 0.75
+max_calls: 6
+annotations: ["assistant", "evolutionary", "developer"]
+template_target: research

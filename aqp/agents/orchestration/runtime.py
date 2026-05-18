@@ -139,6 +139,11 @@ class WorkflowRuntime:
         """
         start = time.perf_counter()
         state = self._seed_state(inputs, state)
+        # ``_state_ref`` lets ``_is_halted`` read the live per-run
+        # ``halt_token`` slot adapters mutate during long inner steps
+        # (defect 3 fix). Cleared in the ``finally`` below so the
+        # runtime stays usable for nested calls.
+        self._state_ref = state
         adapter = self._resolve_adapter()
         ctx = self._build_context()
 
@@ -174,6 +179,7 @@ class WorkflowRuntime:
             return self._finalise(state, result, start)
         finally:
             reset_cooperative_cancel_check(cancel_token)
+            self._state_ref = None
 
     # ------------------------------------------------------------------ helpers
     def _seed_state(
@@ -215,6 +221,29 @@ class WorkflowRuntime:
         def _halt_check() -> bool:
             return self._is_halted()
 
+        # Defect 2 fix: forward ``WorkflowSpec.params`` / ``max_rounds``
+        # / ``guardrails`` (as a JSON projection) into the adapter
+        # context so debate / fusion / graph adapters can honour the
+        # spec-declared knobs without hand-reading the spec back.
+        extras: dict[str, Any] = {}
+        if self.spec_version_id:
+            extras["spec_version_id"] = self.spec_version_id
+        try:
+            params = dict(getattr(self.spec, "params", {}) or {})
+        except Exception:  # noqa: BLE001
+            params = {}
+        if params:
+            extras["params"] = params
+        max_rounds = int(getattr(self.spec, "max_rounds", 1) or 1)
+        extras["max_rounds"] = max_rounds
+        try:
+            guardrails = self.spec.guardrails.model_dump(mode="json")
+        except Exception:  # noqa: BLE001
+            guardrails = {}
+        if guardrails:
+            extras["guardrails"] = guardrails
+        extras["task_id"] = self.task_id or self.run_id
+
         return AdapterContext(
             workflow_run_id=self.run_id,
             workflow_spec_name=self.spec.name,
@@ -224,19 +253,100 @@ class WorkflowRuntime:
             actor=user_id or "workflow_runtime",
             actor_kind="workflow" if self.context else "system",
             halt_check=_halt_check,
-            extras={"spec_version_id": self.spec_version_id} if self.spec_version_id else {},
+            extras=extras,
         )
 
     def _is_halted(self) -> bool:
-        """Combined global-kill-switch + per-run halt-token gate."""
+        """Combined global-kill-switch + per-run halt-token gate.
+
+        Defect 3 fix: surface every halt path the prior implementation
+        ignored.  Three independent signals collapse onto a single
+        boolean:
+
+        1. The global ``aqp:halt`` Redis kill-switch via
+           :func:`aqp.agents.graph.conditions.should_halt`.
+        2. The per-run ``aqp:workflow:halt:<run_id>`` Redis flag set
+           by :func:`aqp.api.routes.workflows._halt_runs` and the
+           mirrored ``aqp:assistant:halt:<run_id>`` slot used by the
+           Phase 3 :class:`AssistantRuntime`.
+        3. The persisted ``WorkflowRun.halted`` column the watchdog
+           and operator API mutate.
+        """
+        # 1) Global kill-switch + per-run state token. ``should_halt``
+        #    reads ``aqp:halt`` plus the per-state ``halt_token`` slot
+        #    that adapters / the watchdog flip during long inner steps.
         try:
             from aqp.agents.graph.conditions import should_halt
+
+            if bool(should_halt({"halt_token": bool(self._state_halt_token)})):
+                return True
         except Exception:  # pragma: no cover - import always works
+            logger.debug("should_halt unavailable", exc_info=True)
+        # 2) Per-run Redis halt flag — best-effort, keeps the runtime
+        #    importable when Redis is offline.
+        if self._redis_halt_flag_set():
+            return True
+        # 3) DB-level halt — slow but authoritative when the operator
+        #    flipped ``WorkflowRun.halted`` directly through the route.
+        if self._db_halt_flag_set():
+            return True
+        return False
+
+    def _redis_halt_flag_set(self) -> bool:
+        try:
+            from aqp.config import settings as _settings
+
+            redis_url = getattr(_settings, "redis_url", None)
+            if not redis_url:
+                return False
+            import redis  # type: ignore[import-not-found]
+
+            client = redis.Redis.from_url(redis_url, socket_timeout=0.25)
+            for key in (
+                f"aqp:workflow:halt:{self.run_id}",
+                f"aqp:assistant:halt:{self.run_id}",
+            ):
+                try:
+                    if client.exists(key):
+                        return True
+                except Exception:  # noqa: BLE001
+                    continue
+        except Exception:  # noqa: BLE001
             return False
-        # ``should_halt`` accepts the AgentState ``Mapping``; pass a
-        # minimal mapping that exposes the per-run halt_token flag we
-        # might have flipped through the orchestration runtime API.
-        return bool(should_halt({"halt_token": False}))
+        return False
+
+    def _db_halt_flag_set(self) -> bool:
+        # Cheap exit when the table isn't provisioned in the test/dev
+        # database; the Phase 5 alembic migration creates it.
+        try:
+            from aqp.persistence.db import SessionLocal
+            from aqp.persistence.models_workflows import WorkflowRun
+        except Exception:  # noqa: BLE001
+            return False
+        try:
+            with SessionLocal() as session:
+                row = (
+                    session.query(WorkflowRun)
+                    .filter(WorkflowRun.id == self.run_id)
+                    .one_or_none()
+                )
+                if row is None:
+                    return False
+                return bool(getattr(row, "halted", False)) or row.status == "halted"
+        except Exception:  # noqa: BLE001
+            return False
+
+    @property
+    def _state_halt_token(self) -> bool:
+        # Adapters mutate ``state["halt_token"]`` to signal a polite
+        # shutdown without going through Redis. ``WorkflowRuntime.run``
+        # passes the seeded state into the adapter; the latest value
+        # lives on the runtime's ``_state_ref`` shadow we plumbed in
+        # ``run`` below.
+        state = getattr(self, "_state_ref", None)
+        if not isinstance(state, dict):
+            return False
+        return bool(state.get("halt_token"))
 
     def _emit_progress(self, stage: str, message: str, **extras: Any) -> None:
         if not self.task_id:

@@ -1,0 +1,33 @@
+name: assistant.financial_analyst_team_evolutionary
+description: |
+  RD-Agent-inspired four-role financial analyst team. Driven by the
+  EvolutionaryDebateAdapter so each round runs Proposer -> Developer
+  -> Critic -> Evaluator with bounded rounds and deterministic critic
+  checks layered on top of the LLM critic. Every role is its own
+  AgentSpec; no role bypasses AgentRuntime / DataMCP / router_complete.
+adapter: EvolutionaryDebateAdapter
+adapter_kind: debate
+params:
+  proposer_agent: assistant.evolutionary_proposer
+  developer_agent: assistant.evolutionary_developer
+  critic_agent: assistant.evolutionary_critic
+  evaluator_agent: assistant.evolutionary_evaluator
+  formula_field: formula
+  rationale_field: rationale
+max_rounds: 3
+guardrails:
+  cost_budget_usd: 5.0
+  max_calls: 80
+  max_duration_seconds: 1800
+annotations:
+  - assistant
+  - financial_analyst_team
+  - evolutionary_debate
+  - rd_agent
+template_target: research
+extras:
+  roles:
+    - proposer
+    - developer
+    - critic
+    - evaluator

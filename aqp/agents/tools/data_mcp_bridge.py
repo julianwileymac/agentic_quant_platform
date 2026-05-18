@@ -44,12 +44,18 @@ def _resolve_mcp_context(extra_scopes: tuple[str, ...] = ()) -> MCPToolContext:
     tenancy, which is the desired behaviour: an agent invoking a
     write-only tool outside a request lifecycle should not silently
     succeed.
+
+    ``extra_scopes`` carries the spec-declared scopes from
+    :class:`aqp.agents.spec.ToolRef.scopes` so mutating tools require
+    an explicit, auditable opt-in (defect 4 fix). The default grant
+    stays ``("data:read",)`` — a tool that needs ``data:write`` MUST
+    have ``scopes: ["data:write"]`` declared in the YAML spec.
     """
     ctx = current_request_context.get()
     workspace_id = getattr(ctx, "workspace_id", None) if ctx is not None else None
     project_id = getattr(ctx, "project_id", None) if ctx is not None else None
     user_id = getattr(ctx, "user_id", None) if ctx is not None else None
-    granted = ("data:read",) + tuple(extra_scopes)
+    granted = tuple({"data:read", *extra_scopes})
     return MCPToolContext(
         actor=user_id or "agent_runtime",
         actor_kind="agent",
@@ -59,7 +65,9 @@ def _resolve_mcp_context(extra_scopes: tuple[str, ...] = ()) -> MCPToolContext:
     )
 
 
-def make_bridge_tool_class(mcp_tool_name: str) -> type:
+def make_bridge_tool_class(
+    mcp_tool_name: str, *, default_scopes: tuple[str, ...] = ()
+) -> type:
     """Produce a ``BaseTool`` subclass that delegates to a DataMCPTool.
 
     The returned class has the same ``name``, ``description``, and
@@ -68,6 +76,13 @@ def make_bridge_tool_class(mcp_tool_name: str) -> type:
     the validated kwargs, and returns the JSON-serialised
     :class:`MCPToolResult`. AgentRuntime's tool dispatch loop already
     expects a string-shaped return so this fits cleanly.
+
+    ``default_scopes`` is forwarded to :func:`_resolve_mcp_context` so
+    the bridge factory can pre-bind spec-time scope grants from
+    :attr:`aqp.agents.spec.ToolRef.scopes`. Re-instantiated bridges
+    (``cls(scopes=[...])``) override via the kwarg path on the bridge
+    class. Read-only tools that don't pass ``scopes`` keep the
+    ``("data:read",)`` default and never touch ``data:write``.
 
     Note on local names: we use ``_tool_name`` / ``_tool_desc`` /
     ``_tool_schema`` instead of ``name`` / ``description`` /
@@ -82,6 +97,7 @@ def make_bridge_tool_class(mcp_tool_name: str) -> type:
     _tool_name = cls.name
     _tool_desc = (cls.description or "").strip()
     _tool_schema = cls.args_schema
+    _tool_default_scopes = tuple(default_scopes)
     bridge_class_name = f"DataMCP_{cls.__name__}_Bridge"
 
     class _BridgeTool(_CrewAIBaseTool):  # type: ignore[misc, valid-type]
@@ -89,9 +105,17 @@ def make_bridge_tool_class(mcp_tool_name: str) -> type:
         description: str = _tool_desc
         args_schema: type[BaseModel] | None = _tool_schema
 
+        def __init__(self, **init_kwargs: Any) -> None:
+            scopes = init_kwargs.pop("scopes", None)
+            super().__init__(**init_kwargs)
+            self._spec_scopes: tuple[str, ...] = (
+                tuple(scopes) if scopes is not None else _tool_default_scopes
+            )
+
         def _run(self, **kwargs: Any) -> str:  # type: ignore[override]
             tool = get_data_mcp_tool(mcp_tool_name)
-            ctx = _resolve_mcp_context()
+            extra = getattr(self, "_spec_scopes", _tool_default_scopes)
+            ctx = _resolve_mcp_context(tuple(extra))
             result = tool.invoke(ctx=ctx, **kwargs)
             try:
                 return json.dumps(result.to_json(), default=str)

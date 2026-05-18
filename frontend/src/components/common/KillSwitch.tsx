@@ -38,6 +38,16 @@ const HALT_ENDPOINTS: ReadonlyArray<{ path: string; label: string }> = [
   { path: "/bots/halt-all", label: "live bot deployments (incl. rl_trading)" },
   { path: "/rl/halt-all", label: "RL train / paper / replay runs" },
   { path: "/workflows/halt", label: "workflow runs (WorkflowRuntime dispatches)" },
+  // Assistant Engine (Phase 3) — fans out into every active
+  // ``assistant_runs`` row dispatched via :class:`AssistantRuntime`.
+  // The endpoint also pushes a per-run Redis halt flag at
+  // ``aqp:assistant:halt:<run_id>`` so any dispatched
+  // ``AgentRuntime`` / ``WorkflowRuntime`` underneath the assistant
+  // exits at its next halt-check tick. Refuses (503) when
+  // AQP_ASSISTANT_ENGINE_ENABLED is off; in that case the other
+  // halt endpoints still fire and the aggregate toast surfaces the
+  // assistant rejection as a partial failure.
+  { path: "/assistants/halt", label: "assistant runs (AssistantRuntime dispatches)" },
   // Phase 7 (Terraform IaC control plane) — cancels every in-flight
   // TerraformRun (plan / apply / destroy / refresh) and revokes the
   // matching Celery task on the ``terraform`` queue. Returns
