@@ -23,6 +23,7 @@ export type AuthProviderKind = "msal_entra" | "auth0" | "local";
 
 export interface AuthConfig {
   enabled: boolean;
+  required: boolean;
   provider: AuthProviderKind;
   // Common
   scope: string;
@@ -49,6 +50,8 @@ function defaultRedirectUri(): string {
 }
 
 export const authConfig: AuthConfig = (() => {
+  const requiredRaw = readEnv("VITE_AUTH_REQUIRED").toLowerCase();
+  const required = requiredRaw ? !["0", "false", "no", "off"].includes(requiredRaw) : true;
   // MSAL configuration — preferred when all required pieces are set.
   const msalTenantId = readEnv("VITE_MSAL_TENANT_ID");
   const msalClientId = readEnv("VITE_MSAL_CLIENT_ID");
@@ -73,6 +76,7 @@ export const authConfig: AuthConfig = (() => {
   if (msalClientId) {
     return {
       enabled: true,
+      required,
       provider: "msal_entra",
       scope: msalScopes,
       redirectUri: msalRedirectUri,
@@ -88,6 +92,7 @@ export const authConfig: AuthConfig = (() => {
   if (domain && clientId && audience) {
     return {
       enabled: true,
+      required,
       provider: "auth0",
       scope: auth0Scope,
       redirectUri: auth0RedirectUri,
@@ -102,6 +107,7 @@ export const authConfig: AuthConfig = (() => {
   }
   return {
     enabled: false,
+    required,
     provider: "local",
     scope: "",
     redirectUri: defaultRedirectUri(),
@@ -122,6 +128,10 @@ export const authConfig: AuthConfig = (() => {
  */
 export function isAuthEnabled(): boolean {
   return authConfig.enabled;
+}
+
+export function isAuthRequired(): boolean {
+  return authConfig.required;
 }
 
 /**

@@ -7,6 +7,7 @@
 | Task                                       | Recipe                                                  |
 | ------------------------------------------ | ------------------------------------------------------- |
 | Stand up local AQP on a laptop             | [Local environment](#local-environment)                 |
+| Stand up AQP on rpi_kubernetes             | [rpi Kubernetes environment](#rpi-kubernetes-environment) |
 | Stand up paper-trading on GCP              | [Paper environment](#paper-environment)                 |
 | Stand up production on AWS                 | [Live environment](#live-environment)                   |
 | Stand up the seeded Wiley Tech home on Azure | [Wiley Tech environment](#wiley-tech-environment)     |
@@ -39,6 +40,39 @@ What this provisions:
 - Local Docker registry on `:5000`.
 
 State is local (`terraform/environments/local/terraform.tfstate`).
+
+## rpi Kubernetes environment
+
+```bash
+aqp deploy publish-rpi --registry ghcr.io/<org> --tag <immutable-tag>
+terraform -chdir=terraform/environments/rpi init
+terraform -chdir=terraform/environments/rpi plan
+terraform -chdir=terraform/environments/rpi apply
+```
+
+Recommended bootstrap sequence for first-time bring-up:
+
+1. CLI-first Terraform apply until base services are healthy.
+2. Verify API + Celery + Redis + Postgres are reachable.
+3. Move to control-plane actions (`/control-plane/kubernetes/targets/rpi/*`).
+
+This avoids enqueue/stream confusion during cold start when broker/DB
+are still bootstrapping.
+
+### Provider mirror + init retries
+
+When provider downloads are unstable, define a Terraform CLI config file
+with `provider_installation` mirror rules and point AQP at it:
+
+```bash
+export AQP_TERRAFORM_CLI_CONFIG_FILE=/absolute/path/to/terraform.tfrc
+export AQP_TERRAFORM_INIT_RETRY_ATTEMPTS=5
+export AQP_TERRAFORM_INIT_RETRY_BACKOFF_SECONDS=2
+export AQP_TERRAFORM_INIT_RETRY_MAX_BACKOFF_SECONDS=30
+```
+
+`TerraformExecutor` applies bounded retries for transient `terraform init`
+failures and reuses `AQP_TERRAFORM_PLUGIN_CACHE_DIR` between runs.
 
 ## Paper environment
 

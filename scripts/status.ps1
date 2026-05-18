@@ -1,17 +1,23 @@
 <#
 .SYNOPSIS
-    Show AQP platform status: container health + port checks.
+    Show AQP local stack status: pod / service rollup + endpoint probes.
 
 .DESCRIPTION
-    Lists every docker compose service with its current state and probes
-    the main HTTP endpoints so you can see at a glance whether the
-    platform is healthy.
+    Delegates to ``aqp deploy status`` which calls ``kubectl get pods``
+    and ``kubectl get svc`` for the aqp-local namespace, then prints
+    the Terraform-published endpoint URLs.
+
+.PARAMETER Legacy
+    Show docker-compose status instead.
 
 .EXAMPLE
     ./scripts/status.ps1
+    ./scripts/status.ps1 -Legacy
 #>
 [CmdletBinding()]
-param()
+param(
+    [switch]$Legacy
+)
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -28,21 +34,31 @@ function Test-HttpEndpoint {
 
 Push-Location $repoRoot
 try {
-    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        Write-Error "docker is not installed or not on PATH."
+    if ($Legacy) {
+        if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+            Write-Error "docker is not installed or not on PATH."
+        }
+        Write-Host "Containers (legacy)" -ForegroundColor Cyan
+        & docker compose ps
+        Write-Host ""
+        Write-Host "Endpoints (legacy)" -ForegroundColor Cyan
+        Test-HttpEndpoint -Name "API"    -Url "http://localhost:8000/docs"
+        Test-HttpEndpoint -Name "Jaeger" -Url "http://localhost:16686"
+        Test-HttpEndpoint -Name "MLflow" -Url "http://localhost:5000"
+        return
     }
 
-    Write-Host "Containers" -ForegroundColor Cyan
-    & docker compose ps
+    if (-not (Get-Command aqp -ErrorAction SilentlyContinue)) {
+        Write-Error "'aqp' CLI not on PATH. Use -Legacy or install with 'pip install -e .'."
+    }
+
+    Write-Host "Pods + services" -ForegroundColor Cyan
+    & aqp deploy status
 
     Write-Host ""
-    Write-Host "Endpoints" -ForegroundColor Cyan
-    Test-HttpEndpoint -Name "UI"     -Url "http://localhost:8765"
-    Test-HttpEndpoint -Name "API"    -Url "http://localhost:8000/docs"
-    Test-HttpEndpoint -Name "Dash"   -Url "http://localhost:8000/dash/"
-    Test-HttpEndpoint -Name "Jaeger" -Url "http://localhost:16686"
-    Test-HttpEndpoint -Name "MLflow" -Url "http://localhost:5000"
-    Test-HttpEndpoint -Name "Chroma" -Url "http://localhost:8001/api/v1/heartbeat"
+    Write-Host "HTTP probes (Traefik on :8000)" -ForegroundColor Cyan
+    Test-HttpEndpoint -Name "Frontend" -Url "http://localhost:8000/"
+    Test-HttpEndpoint -Name "API"      -Url "http://localhost:8000/api/healthz"
 }
 finally {
     Pop-Location

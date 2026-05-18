@@ -7,12 +7,12 @@
 ###############################################################################
 
 variable "cloud_provider" { type = string }
-variable "environment"    { type = string }
+variable "environment" { type = string }
 variable "common_tags" {
   type    = map(string)
   default = {}
 }
-variable "namespaces"     { type = map(string) }
+variable "namespaces" { type = map(string) }
 variable "storage_outputs" {
   type    = any
   default = {}
@@ -60,10 +60,10 @@ resource "kubernetes_config_map" "agent_runtime" {
     labels    = var.common_tags
   }
   data = {
-    "session.dry_run"   = tostring(var.environment != "live")
-    "session.metrics"   = "true"
-    "mcp.server.port"   = "8765"
-    "parquet.lake.uri"  = try(var.storage_outputs.object_store_url, "")
+    "session.dry_run"  = tostring(var.environment != "live")
+    "session.metrics"  = "true"
+    "mcp.server.port"  = "8765"
+    "parquet.lake.uri" = try(var.storage_outputs.object_store_url, "")
   }
 }
 

@@ -14,7 +14,7 @@ variable "runner_image" {
   type    = string
   default = "aqp-terraform-runner:latest"
 }
-variable "redis_address"      { type = string }
+variable "redis_address" { type = string }
 variable "kill_switch_key" {
   type    = string
   default = "aqp:kill_switch"

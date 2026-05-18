@@ -137,8 +137,9 @@ class TerraformProviderRef(BaseModel):
         return value
 
 
-# Alias for backwards compat — older code paths may still import this name.
+# Aliases for backwards compat — older code paths import the older names.
 TerraformBackendSpec = TerraformBackendRef
+TerraformStateBackend = TerraformBackendRef
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +255,30 @@ class TerraformStackSpec(BaseModel):
         return cls.model_validate(data)
 
 
+def load_specs_from_dir(dir_path: str) -> list[TerraformStackSpec]:
+    """Load every ``*.yaml`` Terraform stack spec under ``dir_path``.
+
+    Skips files that don't decode to a mapping or fail validation.
+    Used by :mod:`aqp.terraform.registry` for the
+    ``configs/terraform/`` auto-load path. Mirrors
+    :func:`aqp.assistants.spec.load_specs_from_dir` and the matching
+    helpers in the agent / bot / workflow packages.
+    """
+    from pathlib import Path
+
+    out: list[TerraformStackSpec] = []
+    root = Path(dir_path)
+    if not root.exists():
+        return out
+    for path in sorted(root.glob("*.yaml")):
+        try:
+            spec = TerraformStackSpec.from_yaml_str(path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 - keep registry boot tolerant
+            continue
+        out.append(spec)
+    return out
+
+
 __all__ = [
     "TerraformBackendRef",
     "TerraformBackendSpec",
@@ -262,5 +287,7 @@ __all__ = [
     "TerraformProviderRef",
     "TerraformResourceRef",
     "TerraformStackSpec",
+    "TerraformStateBackend",
     "TerraformVariableRef",
+    "load_specs_from_dir",
 ]

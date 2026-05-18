@@ -1,0 +1,246 @@
+version: 1
+
+defaults:
+  organization_slug: wiley-tech
+  workspace_slug: main
+  app_version: latest
+  labels:
+    app.kubernetes.io/managed-by: terraform
+    app.kubernetes.io/part-of: aqp
+
+tooling:
+  terraform:
+    binary_setting: AQP_TERRAFORM_BINARY
+    min_version: "1.10"
+    provider_mirror_path: data/terraform/plugin-cache
+    plugin_cache_path: data/terraform/plugin-cache-runtime
+    cli_config_file: data/terraform/terraform.tfrc
+  local_shell:
+    command: bash
+    windows_path_prepend:
+      - C:/Program Files/Git/bin
+
+services:
+  - id: aqp-api
+    label: AQP API
+    role: api
+    workload: deployment
+    app_label: aqp-api
+    container: api
+    image_key: api
+    port: 8000
+    health_path: /healthz
+    restartable: true
+    logs_enabled: true
+  - id: aqp-worker
+    label: AQP Worker
+    role: worker
+    workload: deployment
+    app_label: aqp-worker
+    container: worker
+    image_key: worker
+    restartable: true
+    logs_enabled: true
+  - id: aqp-beat
+    label: AQP Beat
+    role: scheduler
+    workload: deployment
+    app_label: aqp-beat
+    container: beat
+    image_key: beat
+    restartable: true
+    logs_enabled: true
+  - id: aqp-frontend
+    label: AQP Frontend
+    role: frontend
+    workload: deployment
+    app_label: aqp-frontend
+    container: frontend
+    image_key: frontend
+    port: 80
+    health_path: /
+    restartable: true
+    logs_enabled: true
+  - id: postgres
+    label: PostgreSQL pgvector
+    role: database
+    workload: statefulset
+    app_label: postgres
+    container: postgres
+    port: 5432
+    storage: 5Gi
+    restartable: false
+    logs_enabled: true
+  - id: redis
+    label: Redis
+    role: cache
+    workload: statefulset
+    app_label: redis
+    container: redis
+    port: 6379
+    storage: 2Gi
+    restartable: false
+    logs_enabled: true
+  - id: neo4j
+    label: Neo4j
+    role: graph
+    workload: statefulset
+    app_label: neo4j
+    container: neo4j
+    port: 7474
+    storage: 5Gi
+    restartable: false
+    logs_enabled: true
+  - id: chromadb
+    label: ChromaDB
+    role: vector-store
+    workload: deployment
+    app_label: chromadb
+    container: chromadb
+    port: 8000
+    restartable: false
+    logs_enabled: true
+  - id: mlflow
+    label: MLflow
+    role: mlops
+    workload: deployment
+    app_label: mlflow
+    container: mlflow
+    port: 5000
+    restartable: false
+    logs_enabled: true
+  - id: otel-collector
+    label: OpenTelemetry Collector
+    role: observability
+    workload: deployment
+    app_label: otel-collector
+    container: otel-collector
+    port: 4317
+    restartable: false
+    logs_enabled: true
+  - id: jaeger
+    label: Jaeger
+    role: tracing
+    workload: deployment
+    app_label: jaeger
+    container: jaeger
+    port: 16686
+    restartable: false
+    logs_enabled: true
+
+targets:
+  local:
+    id: local
+    label: Local k3d
+    kind: local
+    environment: local
+    cloud_provider: local
+    namespace: aqp-local
+    adapter_preference:
+      - in_cluster
+      - local_compose
+    terraform:
+      stack_slug: aqp-local
+      spec_path: configs/terraform/local.yaml
+      environment_dir: terraform/environments/local
+      tfvars_path: terraform/environments/local/terraform.tfvars
+      backend_state_path: data/terraform/state/local.tfstate
+    cluster:
+      name: aqp-local
+      kubeconfig_path: ~/.kube/aqp-local.config
+      k3d_image: rancher/k3s:v1.30.4-k3s1
+      registry_name: aqp-registry
+      registry_port: 5001
+      registry_host: aqp-registry:5001
+      registry_localhost: localhost:5001
+      lb_http_port: 8000
+      lb_https_port: 3001
+      ingress_class: traefik
+    endpoints:
+      frontend: http://localhost:8000/
+      api: http://localhost:8000/api
+      registry: localhost:5001
+    images:
+      registry: aqp-registry:5001
+      app_version: latest
+      build_locally: true
+      services:
+        api: aqp-api
+        worker: aqp-worker
+        beat: aqp-beat
+        paper: aqp-paper
+        serving: aqp-serving
+        ingester: aqp-ingester
+        frontend: aqp-frontend
+    auth:
+      provider: local
+      required: false
+      scim_enabled: false
+    services:
+      - aqp-api
+      - aqp-worker
+      - aqp-beat
+      - aqp-frontend
+      - postgres
+      - redis
+      - neo4j
+      - chromadb
+      - mlflow
+      - otel-collector
+      - jaeger
+
+  rpi:
+    id: rpi
+    label: rpi_kubernetes
+    kind: rpi_cluster
+    environment: rpi
+    cloud_provider: rpi_cluster
+    namespace: aqp
+    adapter_preference:
+      - rpi_cluster
+    terraform:
+      stack_slug: aqp-rpi-kubernetes
+      spec_path: configs/terraform/rpi.yaml
+      environment_dir: terraform/environments/rpi
+      tfvars_path: terraform/environments/rpi/terraform.tfvars
+      backend_state_path: data/terraform/state/rpi.tfstate
+    cluster:
+      name: rpi_kubernetes
+      kubeconfig_path: ~/.kube/config
+      kube_context: ""
+      ingress_class: nginx
+      ingress_host: ""
+    endpoints:
+      frontend: ""
+      api: ""
+    images:
+      registry: ghcr.io/julianwiley
+      app_version: replace-with-immutable-tag
+      build_locally: false
+      services:
+        api: aqp-api
+        worker: aqp-worker
+        beat: aqp-beat
+        frontend: aqp-frontend
+    auth:
+      provider: auth0
+      required: true
+      oidc_issuer: ""
+      audience: https://aqp/api
+      client_id: ""
+      scim_enabled: true
+      secret_refs:
+        client_secret: auth0-client-secret
+        scim_bearer_token_hash: auth0-scim-bearer-token-hash
+    services:
+      - aqp-api
+      - aqp-worker
+      - aqp-beat
+      - aqp-frontend
+      - postgres
+      - redis
+      - neo4j
+      - chromadb
+      - mlflow
+      - otel-collector
+      - jaeger

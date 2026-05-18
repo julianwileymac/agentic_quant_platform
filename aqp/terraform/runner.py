@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -40,6 +41,21 @@ from aqp.terraform.codegen import render_spec
 from aqp.terraform.spec import TerraformStackSpec
 
 logger = logging.getLogger(__name__)
+
+_TRANSIENT_INIT_FAILURE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"failed to install provider", re.IGNORECASE),
+    re.compile(r"failed to query available provider packages", re.IGNORECASE),
+    re.compile(r"registry\.terraform\.io", re.IGNORECASE),
+    re.compile(r"releases\.hashicorp\.com", re.IGNORECASE),
+    re.compile(r"context deadline exceeded", re.IGNORECASE),
+    re.compile(r"tls handshake timeout", re.IGNORECASE),
+    re.compile(r"i/o timeout", re.IGNORECASE),
+    re.compile(r"connection reset", re.IGNORECASE),
+    re.compile(r"forcibly closed", re.IGNORECASE),
+    re.compile(r"wsarecv", re.IGNORECASE),
+    re.compile(r"temporary failure in name resolution", re.IGNORECASE),
+    re.compile(r"no such host", re.IGNORECASE),
+)
 
 
 @dataclass
@@ -93,6 +109,7 @@ class TerraformExecutor:
         parallelism: int | None = None,
         plugin_cache_dir: str | os.PathLike[str] | None = None,
         env_overrides: dict[str, str] | None = None,
+        prerendered_workspace_dir: str | os.PathLike[str] | None = None,
     ) -> None:
         self.workspace_slug = workspace_slug
         self.spec = spec
@@ -101,6 +118,14 @@ class TerraformExecutor:
         self._plugin_cache_dir = plugin_cache_dir
         self._workspaces_dir_override = (
             Path(workspaces_dir) if workspaces_dir else None
+        )
+        # When set, ``prepare()`` is a no-op and ``workspace_dir()``
+        # returns this path. Used for hand-authored compositions
+        # (terraform/environments/<env>/) that already ship a main.tf
+        # — the local AQP stack is the canonical example. Falsy
+        # values leave the codegen path intact.
+        self._prerendered_workspace_dir = (
+            Path(prerendered_workspace_dir) if prerendered_workspace_dir else None
         )
         self._env_overrides = dict(env_overrides or {})
         self._initialised = False
@@ -143,7 +168,42 @@ class TerraformExecutor:
         s = self._settings()
         return int(getattr(s, "terraform_parallelism", 10) or 10)
 
+    def _cli_config_file(self) -> Path | None:
+        s = self._settings()
+        raw = str(getattr(s, "terraform_cli_config_file", "") or "").strip()
+        if not raw:
+            return None
+        return Path(raw).expanduser()
+
+    def _init_retry_attempts(self) -> int:
+        s = self._settings()
+        try:
+            value = int(getattr(s, "terraform_init_retry_attempts", 3) or 3)
+        except Exception:
+            value = 3
+        return max(1, value)
+
+    def _init_retry_backoff_seconds(self) -> float:
+        s = self._settings()
+        try:
+            value = float(getattr(s, "terraform_init_retry_backoff_seconds", 2.0) or 2.0)
+        except Exception:
+            value = 2.0
+        return max(0.0, value)
+
+    def _init_retry_max_backoff_seconds(self) -> float:
+        s = self._settings()
+        try:
+            value = float(
+                getattr(s, "terraform_init_retry_max_backoff_seconds", 30.0) or 30.0
+            )
+        except Exception:
+            value = 30.0
+        return max(0.0, value)
+
     def workspace_dir(self) -> Path:
+        if self._prerendered_workspace_dir is not None:
+            return self._prerendered_workspace_dir
         return self._workspaces_dir() / self.workspace_slug
 
     # ------------------------------------------------------------------
@@ -156,7 +216,20 @@ class TerraformExecutor:
         Idempotent — repeated calls re-render the file so spec edits
         between plan / apply land cleanly. Returns the workspace
         :class:`pathlib.Path`.
+
+        When ``prerendered_workspace_dir`` was passed to the
+        constructor (the local AQP stack uses this) the method is a
+        no-op: the directory already ships a hand-authored composition
+        and the codegen template would clobber it.
         """
+        if self._prerendered_workspace_dir is not None:
+            wd = self._prerendered_workspace_dir
+            if not wd.exists():
+                raise TerraformExecutorError(
+                    f"prerendered_workspace_dir {wd} does not exist"
+                )
+            return wd
+
         wd = self.workspace_dir()
         wd.mkdir(parents=True, exist_ok=True)
         # Drop a tagging README so operators inspecting the cache dir
@@ -189,11 +262,39 @@ class TerraformExecutor:
         if cache is not None:
             cache.mkdir(parents=True, exist_ok=True)
             env["TF_PLUGIN_CACHE_DIR"] = str(cache)
+        cli_config = self._cli_config_file()
+        if cli_config is not None:
+            if cli_config.exists():
+                env["TF_CLI_CONFIG_FILE"] = str(cli_config)
+            else:
+                logger.warning(
+                    "terraform_cli_config_file %s does not exist; "
+                    "ignoring TF_CLI_CONFIG_FILE override",
+                    cli_config,
+                )
         env["TF_IN_AUTOMATION"] = "true"
         env["TF_INPUT"] = "false"
         env["CHECKPOINT_DISABLE"] = "1"
         env.update(self._env_overrides)
         return env
+
+    def _is_transient_init_failure(self, stderr_log_path: str) -> bool:
+        try:
+            text = Path(stderr_log_path).read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            return False
+        if not text.strip():
+            return False
+        return any(p.search(text) for p in _TRANSIENT_INIT_FAILURE_PATTERNS)
+
+    def _init_retry_sleep_seconds(self, attempt_number: int) -> float:
+        # attempt_number is 2-based (attempt 1 is the initial run).
+        base = self._init_retry_backoff_seconds()
+        cap = self._init_retry_max_backoff_seconds()
+        if base <= 0:
+            return 0.0
+        exponent = max(0, attempt_number - 2)
+        return min(cap, base * (2**exponent))
 
     def _run(
         self,
@@ -295,6 +396,35 @@ class TerraformExecutor:
             error=None,
         )
 
+    def outputs_json(self, *, timeout_seconds: int = 30) -> dict[str, Any]:
+        """Return ``terraform output -json`` values for this workspace.
+
+        This is intentionally read-only but still lives inside the executor so
+        API/route code never shells out to Terraform directly.
+        """
+        wd = self.prepare()
+        binary = self._binary_path()
+        if not binary:
+            raise TerraformExecutorError(
+                "terraform binary not found; install it or set AQP_TERRAFORM_BINARY"
+            )
+        completed = subprocess.run(  # noqa: S603 - args list, no shell
+            [binary, "output", "-json"],
+            cwd=str(wd),
+            env=self._env(),
+            check=False,
+            capture_output=True,
+            timeout=timeout_seconds,
+        )
+        if completed.returncode != 0 or not completed.stdout:
+            return {}
+        raw = json.loads(completed.stdout.decode("utf-8"))
+        return {
+            key: entry.get("value")
+            for key, entry in raw.items()
+            if isinstance(entry, dict)
+        }
+
     # ------------------------------------------------------------------
     # Public actions
     # ------------------------------------------------------------------
@@ -303,9 +433,40 @@ class TerraformExecutor:
         args = ["init", "-input=false"]
         if not upgrade:
             args.append("-upgrade=false")
+        attempts = self._init_retry_attempts()
+        attempt = 1
         result = self._run(args, action="init", timeout_seconds=900)
+        while attempt < attempts and result.exit_code != 0:
+            if not self._is_transient_init_failure(result.stderr_log_path):
+                break
+            attempt += 1
+            sleep_seconds = self._init_retry_sleep_seconds(attempt)
+            logger.warning(
+                "terraform init failed for workspace=%s (attempt %s/%s, exit=%s); "
+                "retrying in %.1fs",
+                self.workspace_slug,
+                attempt - 1,
+                attempts,
+                result.exit_code,
+                sleep_seconds,
+            )
+            if sleep_seconds > 0:
+                time.sleep(sleep_seconds)
+            result = self._run(args, action="init", timeout_seconds=900)
+
         if result.exit_code == 0:
             self._initialised = True
+            return result
+        if result.error is None:
+            if attempt > 1:
+                result.error = (
+                    f"terraform init failed after {attempt} attempts; "
+                    f"see stderr log at {result.stderr_log_path}"
+                )
+            else:
+                result.error = (
+                    f"terraform init failed; see stderr log at {result.stderr_log_path}"
+                )
         return result
 
     def plan(

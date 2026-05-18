@@ -83,6 +83,10 @@ import { BotBuilderRoute } from "@/routes/bots/builder/page";
 import { BotDebateRoute } from "@/routes/bots/[id]/debate/page";
 import { ChatRoute } from "@/routes/chat/page";
 import { AssistantsRoute } from "@/routes/assistants/page";
+import { ControlPlaneRoute } from "@/routes/control-plane/page";
+import { ControlPlaneKubernetesRoute } from "@/routes/control-plane/kubernetes/page";
+import { ControlPlaneIdentityRoute } from "@/routes/control-plane/identity/page";
+import { ControlPlaneDeploymentsRoute } from "@/routes/control-plane/deployments/page";
 import { CrewTraceRoute } from "@/routes/crew/page";
 import { DashboardRoute } from "@/routes/dashboard/page";
 import { DataCatalogRoute } from "@/routes/data/catalog/page";
@@ -314,6 +318,10 @@ const REAL_ROUTES: Record<string, () => ReactElement> = {
   // Phase 7 — Infrastructure / Terraform IaC.
   "/infra": InfraRoute,
   "/infra/terraform": InfraTerraformRoute,
+  "/control-plane": ControlPlaneRoute,
+  "/control-plane/kubernetes": ControlPlaneKubernetesRoute,
+  "/control-plane/identity": ControlPlaneIdentityRoute,
+  "/control-plane/deployments": ControlPlaneDeploymentsRoute,
   "/admin/onboarding": AdminOnboardingRoute,
   // Phase 5 — Admin / tenancy CRUD
   "/admin/orgs": OrgsAdminRoute,

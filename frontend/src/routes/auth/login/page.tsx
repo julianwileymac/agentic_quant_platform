@@ -6,7 +6,7 @@ import { GoogleButton } from "@/components/auth/GoogleButton";
 import { MicrosoftButton } from "@/components/auth/MicrosoftButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { isAuthEnabled, useAuth } from "@/lib/auth";
+import { authConfig, isAuthEnabled, isAuthRequired, useAuth } from "@/lib/auth";
 
 /**
  * Login route.
@@ -38,7 +38,7 @@ export function LoginRoute() {
   }, [enabled, isAuthenticated, isLoading, navigate, returnTo]);
 
   if (!enabled) {
-    return <LocalModeNotice />;
+    return isAuthRequired() ? <AuthRequiredConfigNotice /> : <LocalModeNotice />;
   }
 
   const withReturnTo = (path: string) => `${path}?return_to=${encodeURIComponent(returnTo)}`;
@@ -157,4 +157,31 @@ function LocalModeNotice() {
     );
   }
   return null;
+}
+
+function AuthRequiredConfigNotice() {
+  return (
+    <div className="flex min-h-screen items-center justify-center p-6">
+      <Card className="w-full max-w-lg">
+        <CardHeader>
+          <CardTitle>Authentication configuration required</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-[var(--text-secondary)]">
+          <p>
+            This AQP deployment requires authentication before the control plane can
+            load, but no Auth0/MSAL frontend configuration was provided.
+          </p>
+          <p>
+            Configure Auth0 with <code>VITE_AUTH0_DOMAIN</code>,{" "}
+            <code>VITE_AUTH0_CLIENT_ID</code>, and <code>VITE_AUTH0_AUDIENCE</code>,
+            or explicitly opt out for local-only development with{" "}
+            <code>VITE_AUTH_REQUIRED=false</code>.
+          </p>
+          <p className="text-xs">
+            Current provider: <code>{authConfig.provider}</code>
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }

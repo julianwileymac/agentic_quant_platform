@@ -111,7 +111,7 @@ resource "kubernetes_namespace" "aqp" {
   metadata {
     name = each.value
     labels = merge(var.common_tags, {
-      "istio-injection" = each.key == "system" || each.key == "terraform" ? "disabled" : "enabled"
+      "istio-injection"     = each.key == "system" || each.key == "terraform" ? "disabled" : "enabled"
       "aqp.io/logical-name" = each.key
     })
   }
@@ -184,8 +184,8 @@ resource "helm_release" "otel_operator" {
 
 output "cluster_endpoint" {
   value = (
-    local.is_aws   ? try(aws_eks_cluster.this[0].endpoint, "") :
-    local.is_gcp   ? try(google_container_cluster.this[0].endpoint, "") :
+    local.is_aws ? try(aws_eks_cluster.this[0].endpoint, "") :
+    local.is_gcp ? try(google_container_cluster.this[0].endpoint, "") :
     local.is_azure ? try(azurerm_kubernetes_cluster.this[0].kube_admin_config.0.host, "") :
     ""
   )

@@ -119,6 +119,10 @@ from aqp.api.routes import (  # noqa: E402
 from aqp.api.routes import (  # noqa: E402
     auth0_sync as auth0_sync_routes,
 )
+# SCIM 2.0 provisioning endpoint for Auth0 / enterprise IdP sync.
+from aqp.api.routes import (  # noqa: E402
+    scim as scim_routes,
+)
 # Account management surface — /me/* routes
 from aqp.api.routes import (  # noqa: E402
     me as me_routes,
@@ -136,6 +140,9 @@ from aqp.api.routes import (  # noqa: E402
 from aqp.api.routes import (  # noqa: E402
     infra as infra_routes,
     terraform as terraform_routes,
+)
+from aqp.api.routes import (  # noqa: E402
+    control_plane as control_plane_routes,
 )
 # Phase 7 — Terraform IaC control plane (REST + WS) + /infra dashboard.
 from aqp.api.routes import (  # noqa: E402
@@ -290,11 +297,13 @@ app.add_middleware(
 # --- Core platform routers -----------------------------------------------
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(scim_routes.router)
 app.include_router(me_routes.router)
 app.include_router(invites_routes.router)
 app.include_router(invites_routes.public_router)
 app.include_router(chat.router)
 app.include_router(agents.router)
+app.include_router(control_plane_routes.router)
 app.include_router(agentic.router)
 app.include_router(backtest.router)
 app.include_router(lob_backtest_routes.router)

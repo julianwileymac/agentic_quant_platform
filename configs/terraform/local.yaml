@@ -1,0 +1,33 @@
+# Canonical TerraformStackSpec for the local AQP stack.
+#
+# This spec describes the LOGICAL stack (cloud target, environment,
+# annotations) — the actual HCL lives at terraform/environments/local/.
+# The aqp deploy CLI / TerraformRuntime use ``prerendered_workspace_dir``
+# so the executor operates on that directory directly instead of running
+# the codegen path. The spec hash here is what gets persisted to
+# ``terraform_stack_spec_versions`` so replays are deterministic.
+name: aqp-local
+slug: aqp-local
+module_kind: composite
+description: |
+  Local AQP stack — k3d-in-Docker cluster + image build/push +
+  Kubernetes workloads (redis / postgres pgvector / neo4j / chromadb /
+  mlflow / jaeger / otel-collector / aqp-api / aqp-worker / aqp-beat /
+  aqp-frontend). Replaces the docker-compose canonical path. Driven by
+  ``aqp deploy up`` which routes through TerraformRuntime so every
+  apply lands a terraform_runs ledger row.
+
+cloud_provider: local
+environment: local
+
+provider:
+  kind: local
+
+backend:
+  kind: local
+  config:
+    path: ../../../data/terraform/state/local.tfstate
+
+annotations:
+  aqp.io/stack-kind: local-cluster
+  aqp.io/composition: hand-authored

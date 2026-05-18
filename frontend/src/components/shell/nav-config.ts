@@ -453,6 +453,10 @@ export const NAV_ITEMS: NavItem[] = [
   // Phase 7 — Infrastructure / Terraform IaC control plane.
   { key: "infra", label: "Infrastructure", href: "/infra", icon: CircuitBoard, group: "System" },
   { key: "infra-terraform", label: "Terraform IaC", href: "/infra/terraform", icon: Hammer, group: "System" },
+  { key: "control-plane", label: "Control Plane", href: "/control-plane", icon: CircuitBoard, group: "System" },
+  { key: "control-plane-k8s", label: "Kubernetes Control", href: "/control-plane/kubernetes", icon: Network, group: "System" },
+  { key: "control-plane-identity", label: "Identity / SCIM", href: "/control-plane/identity", icon: Users, group: "System" },
+  { key: "control-plane-deployments", label: "Deployments", href: "/control-plane/deployments", icon: Rocket, group: "System" },
   { key: "admin-configs", label: "Layered Config", href: "/admin/configs", icon: Settings, group: "Admin" },
 
   { key: "models", label: "Models & Providers", href: "/models", icon: Bot, group: "System" },

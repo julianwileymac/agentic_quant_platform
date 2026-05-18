@@ -52,21 +52,21 @@ variable "secret_mappings" {
     k8s_key    = string
   }))
   default = {
-    "aqp-broker-api-key"      = { vault_path = "aqp/broker/api_key",      k8s_key = "AQP_BROKER_API_KEY" }
-    "aqp-broker-api-secret"   = { vault_path = "aqp/broker/api_secret",   k8s_key = "AQP_BROKER_API_SECRET" }
-    "aqp-db-password"         = { vault_path = "aqp/database/password",   k8s_key = "AQP_DB_PASSWORD" }
-    "aqp-msal-client-secret"  = { vault_path = "aqp/msal/client_secret",  k8s_key = "AQP_MSAL_CLIENT_SECRET" }
-    "aqp-redis-password"      = { vault_path = "aqp/redis/password",      k8s_key = "AQP_REDIS_PASSWORD" }
-    "aqp-session-secret"      = { vault_path = "aqp/session/secret",      k8s_key = "AQP_AUTH_SESSION_SECRET" }
-    "aqp-alpaca-secret"       = { vault_path = "aqp/alpaca/secret",       k8s_key = "AQP_ALPACA_SECRET_KEY" }
-    "aqp-tradier-token"       = { vault_path = "aqp/tradier/token",       k8s_key = "AQP_TRADIER_TOKEN" }
-    "aqp-alpha-vantage-key"   = { vault_path = "aqp/alpha_vantage/key",   k8s_key = "AQP_ALPHA_VANTAGE_API_KEY" }
-    "aqp-fred-key"            = { vault_path = "aqp/fred/key",            k8s_key = "AQP_FRED_API_KEY" }
-    "aqp-polaris-secret"      = { vault_path = "aqp/polaris/secret",      k8s_key = "AQP_POLARIS_CLIENT_SECRET" }
-    "aqp-neo4j-password"      = { vault_path = "aqp/neo4j/password",      k8s_key = "AQP_NEO4J_PASSWORD" }
-    "aqp-datahub-token"       = { vault_path = "aqp/datahub/token",       k8s_key = "AQP_DATAHUB_TOKEN" }
-    "aqp-hcp-token"           = { vault_path = "aqp/hcp/token",           k8s_key = "AQP_HCP_TOKEN" }
-    "aqp-mathpix-key"         = { vault_path = "aqp/mathpix/key",         k8s_key = "AQP_MATHPIX_APP_KEY" }
+    "aqp-broker-api-key"     = { vault_path = "aqp/broker/api_key", k8s_key = "AQP_BROKER_API_KEY" }
+    "aqp-broker-api-secret"  = { vault_path = "aqp/broker/api_secret", k8s_key = "AQP_BROKER_API_SECRET" }
+    "aqp-db-password"        = { vault_path = "aqp/database/password", k8s_key = "AQP_DB_PASSWORD" }
+    "aqp-msal-client-secret" = { vault_path = "aqp/msal/client_secret", k8s_key = "AQP_MSAL_CLIENT_SECRET" }
+    "aqp-redis-password"     = { vault_path = "aqp/redis/password", k8s_key = "AQP_REDIS_PASSWORD" }
+    "aqp-session-secret"     = { vault_path = "aqp/session/secret", k8s_key = "AQP_AUTH_SESSION_SECRET" }
+    "aqp-alpaca-secret"      = { vault_path = "aqp/alpaca/secret", k8s_key = "AQP_ALPACA_SECRET_KEY" }
+    "aqp-tradier-token"      = { vault_path = "aqp/tradier/token", k8s_key = "AQP_TRADIER_TOKEN" }
+    "aqp-alpha-vantage-key"  = { vault_path = "aqp/alpha_vantage/key", k8s_key = "AQP_ALPHA_VANTAGE_API_KEY" }
+    "aqp-fred-key"           = { vault_path = "aqp/fred/key", k8s_key = "AQP_FRED_API_KEY" }
+    "aqp-polaris-secret"     = { vault_path = "aqp/polaris/secret", k8s_key = "AQP_POLARIS_CLIENT_SECRET" }
+    "aqp-neo4j-password"     = { vault_path = "aqp/neo4j/password", k8s_key = "AQP_NEO4J_PASSWORD" }
+    "aqp-datahub-token"      = { vault_path = "aqp/datahub/token", k8s_key = "AQP_DATAHUB_TOKEN" }
+    "aqp-hcp-token"          = { vault_path = "aqp/hcp/token", k8s_key = "AQP_HCP_TOKEN" }
+    "aqp-mathpix-key"        = { vault_path = "aqp/mathpix/key", k8s_key = "AQP_MATHPIX_APP_KEY" }
   }
 }
 
@@ -80,7 +80,7 @@ resource "helm_release" "vault_dev" {
   namespace        = "vault"
   create_namespace = true
   values = [yamlencode({
-    server = { dev = { enabled = true, devRootToken = "aqp-dev-token" } }
+    server   = { dev = { enabled = true, devRootToken = "aqp-dev-token" } }
     injector = { enabled = false }
   })]
 }
@@ -98,30 +98,30 @@ resource "kubernetes_manifest" "cluster_secret_store" {
           path    = var.vault_mount
           version = "v2"
         }
-      } : (var.vault_backend == "aws_secretsmanager" ? {
-        aws = {
-          service = "SecretsManager"
-          region  = var.aws_region
-          auth    = { jwt = { serviceAccountRef = { name = "external-secrets" } } }
-        }
-      } : (var.vault_backend == "gcp_secretmanager" ? {
-        gcpsm = {
-          projectID = var.gcp_project_id
-          auth = {
-            workloadIdentity = {
-              clusterLocation   = var.gcp_region
-              clusterName       = var.gcp_gke_cluster
-              serviceAccountRef = { name = "external-secrets" }
-            }
+        } : (var.vault_backend == "aws_secretsmanager" ? {
+          aws = {
+            service = "SecretsManager"
+            region  = var.aws_region
+            auth    = { jwt = { serviceAccountRef = { name = "external-secrets" } } }
           }
-        }
-      } : {
-        azurekv = {
-          authType = "WorkloadIdentity"
-          vaultUrl = var.azure_keyvault_url
-          tenantId = var.azure_tenant_id
-          serviceAccountRef = { name = "external-secrets", namespace = "external-secrets" }
-        }
+          } : (var.vault_backend == "gcp_secretmanager" ? {
+            gcpsm = {
+              projectID = var.gcp_project_id
+              auth = {
+                workloadIdentity = {
+                  clusterLocation   = var.gcp_region
+                  clusterName       = var.gcp_gke_cluster
+                  serviceAccountRef = { name = "external-secrets" }
+                }
+              }
+            }
+            } : {
+            azurekv = {
+              authType          = "WorkloadIdentity"
+              vaultUrl          = var.azure_keyvault_url
+              tenantId          = var.azure_tenant_id
+              serviceAccountRef = { name = "external-secrets", namespace = "external-secrets" }
+            }
       }))
     }
   }

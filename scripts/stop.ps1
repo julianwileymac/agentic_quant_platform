@@ -1,30 +1,31 @@
 <#
 .SYNOPSIS
-    Stop the Agentic Quant Platform stack.
+    Tear down the Agentic Quant Platform stack via Terraform.
 
 .DESCRIPTION
-    Runs ``docker compose down`` to tear down all AQP containers.  Data
-    volumes (redis, postgres, mlflow) are preserved by default so the
-    next ``start.ps1`` keeps your state.
+    Delegates to ``aqp deploy down`` which routes through TerraformRuntime
+    so the destroy lands a row in ``terraform_runs`` (rule 42) and is
+    halt-able from the global KillSwitch.
 
-.PARAMETER Volumes
-    If present, also deletes named volumes (DESTROYS DATA). Equivalent
-    to ``docker compose down --volumes``.
+    Image registry + cluster volumes are removed by Terraform's destroy
+    of the ``module.local_cluster.null_resource.cluster`` resource —
+    there's no Volumes flag because destroy is total.
 
-.PARAMETER Orphans
-    If present, removes services defined in profiles you aren't using.
-    Equivalent to ``docker compose down --remove-orphans``.
+.PARAMETER Yes
+    Skip the confirmation prompt.
+
+.PARAMETER Legacy
+    Bypass Terraform; tear down docker-compose directly.
 
 .EXAMPLE
     ./scripts/stop.ps1
-
-.EXAMPLE
-    ./scripts/stop.ps1 -Volumes   # full reset
+    ./scripts/stop.ps1 -Yes
+    ./scripts/stop.ps1 -Legacy
 #>
 [CmdletBinding()]
 param(
-    [switch]$Volumes,
-    [switch]$Orphans
+    [switch]$Yes,
+    [switch]$Legacy
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,25 +33,26 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 
 Push-Location $repoRoot
 try {
-    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        Write-Error "docker is not installed or not on PATH."
+    if ($Legacy) {
+        if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+            Write-Error "docker is not installed or not on PATH."
+        }
+        Write-Host "[stop.ps1] Legacy mode — docker compose down" -ForegroundColor Yellow
+        & docker compose down
+        return
     }
 
-    $args = @("compose", "down")
-    if ($Volumes) {
-        Write-Warning "Deleting data volumes (redis, postgres, mlflow)..."
-        $args += "--volumes"
-    }
-    if ($Orphans) {
-        $args += "--remove-orphans"
+    if (-not (Get-Command aqp -ErrorAction SilentlyContinue)) {
+        Write-Error "'aqp' CLI not on PATH. Use -Legacy or 'pip install -e .'."
     }
 
-    Write-Host "Stopping AQP stack..." -ForegroundColor Cyan
-    & docker @args
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "docker compose down failed (exit $LASTEXITCODE)"
+    Write-Host "[stop.ps1] aqp deploy down (Terraform destroy)" -ForegroundColor Cyan
+    if ($Yes) {
+        & aqp deploy down --yes
+    } else {
+        & aqp deploy down
     }
-
+    if ($LASTEXITCODE -ne 0) { Write-Error "aqp deploy down failed (exit $LASTEXITCODE)" }
     Write-Host "AQP stopped." -ForegroundColor Green
 }
 finally {

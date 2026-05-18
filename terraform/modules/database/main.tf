@@ -3,7 +3,7 @@
 ###############################################################################
 
 variable "cloud_provider" { type = string }
-variable "environment"    { type = string }
+variable "environment" { type = string }
 variable "common_tags" {
   type    = map(string)
   default = {}
@@ -22,7 +22,7 @@ variable "app_version" {
 }
 
 locals {
-  namespace = "aqp-system"
+  namespace       = "aqp-system"
   pgbouncer_image = "edoburu/pgbouncer:v1.23.1"
 }
 
@@ -48,7 +48,7 @@ default_pool_size = 25
 reserve_pool_size = 5
 server_idle_timeout = 600
 EOT
-    "userlist.txt" = "\"aqp\" \"md5_placeholder\"\n"
+    "userlist.txt"  = "\"aqp\" \"md5_placeholder\"\n"
   }
 }
 
@@ -172,7 +172,7 @@ resource "kubernetes_manifest" "postgres_exporter_servicemonitor" {
       labels    = var.common_tags
     }
     spec = {
-      selector = { matchLabels = { app = "aqp-postgres-exporter" } }
+      selector  = { matchLabels = { app = "aqp-postgres-exporter" } }
       endpoints = [{ port = "metrics", interval = "30s" }]
     }
   }

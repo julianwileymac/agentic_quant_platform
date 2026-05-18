@@ -1,0 +1,1 @@
+{"Modules":[{"Key":"","Source":"","Dir":"."},{"Key":"aqp_workloads","Source":"../../modules/aqp_workloads","Dir":"../../modules/aqp_workloads"},{"Key":"target","Source":"../../modules/rpi_kubernetes_target","Dir":"../../modules/rpi_kubernetes_target"}]}

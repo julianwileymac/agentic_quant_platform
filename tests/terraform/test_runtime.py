@@ -119,3 +119,48 @@ def test_runtime_handles_executor_exception(monkeypatch):
     assert "disk full" in (result.error or "")
     finalize.assert_called_once()
     assert finalize.call_args.kwargs["status"] == "errored"
+
+
+def test_open_run_row_uses_resolved_workspace_row_id(monkeypatch):
+    runtime = TerraformRuntime(
+        _spec(),
+        workspace_id="aqp-local",
+        run_id="run-row-test",
+        prerendered_workspace_dir="/tmp/aqp-local",
+    )
+    monkeypatch.setattr(runtime, "_persist_spec", lambda: "spec-ver-1")
+    monkeypatch.setattr(
+        runtime, "_resolve_workspace_row_id", lambda **_kwargs: "workspace-row-1"
+    )
+
+    captured: dict[str, Any] = {}
+
+    class _RunRow:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.id = kwargs.get("id")
+            self.owner_user_id = None
+            self.workspace_id = None
+            self.project_id = None
+            self.experiment_id = None
+            self.test_id = None
+
+    class _Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def add(self, _row):
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr("aqp.persistence.models_terraform.TerraformRun", _RunRow)
+    monkeypatch.setattr("aqp.persistence.db.SessionLocal", _Session)
+
+    row_id = runtime._open_run_row(run_kind="plan", started_by_user_id="me")
+    assert row_id == "run-row-test"
+    assert captured["terraform_workspace_id"] == "workspace-row-1"

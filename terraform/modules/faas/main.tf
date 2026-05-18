@@ -28,7 +28,7 @@ variable "app_version" {
 }
 
 locals {
-  ns = var.namespaces["live"]  # workers run in the env's primary ns
+  ns = var.namespaces["live"] # workers run in the env's primary ns
   queue_config = {
     "default" = {
       min         = 1
@@ -210,7 +210,7 @@ resource "kubernetes_manifest" "agent_pdb" {
     }
     spec = {
       minAvailable = 1
-      selector = { matchLabels = { app = "aqp-worker", queue = "agents" } }
+      selector     = { matchLabels = { app = "aqp-worker", queue = "agents" } }
     }
   }
 }

@@ -160,6 +160,12 @@ def current_user(
     except Exception:
         provider = "local"
 
+    auth_required = True
+    try:
+        auth_required = bool(getattr(settings, "auth_required", True))
+    except Exception:
+        auth_required = True
+
     if provider != "local":
         bearer_token: str | None = (
             credentials.credentials if credentials is not None else None
@@ -171,9 +177,15 @@ def current_user(
             # still reach the resolved identity.
             bearer_token = _token_from_session_cookie(request)
         if not bearer_token:
-            # No Authorization header supplied; surface the local default
-            # so unauthenticated reads (e.g. health probes) keep working.
-            # Routes that strictly require auth chain ``require_authenticated``.
+            if auth_required:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Authentication required",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            # Permissive rollout mode: no Authorization header supplied;
+            # surface the local default so legacy unauthenticated reads
+            # keep working. Cluster deployments set auth_required=True.
             return default_user()
 
         oidc_config = get_oidc_config()

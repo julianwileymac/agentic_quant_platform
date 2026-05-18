@@ -273,4 +273,72 @@ export const terraformApi = {
 
   halt: async (): Promise<{ halted: number; run_ids: string[] }> =>
     apiFetch("/terraform/halt", { method: "POST" }),
+
+  // ---------------------------------------------------------------------
+  // Local stack sugar routes — drive the canonical aqp-local stack via
+  // ``aqp.tasks.terraform_tasks.run_local_stack``. The frontend Local
+  // Stack panel uses these for one-click Up / Build / Down lifecycle
+  // and the read-only endpoints/status rollup. Each mutating call
+  // returns a TaskAccepted whose ``stream_url`` plugs into
+  // ``useChatStream(taskId, "terraform")``.
+  // ---------------------------------------------------------------------
+
+  localStackUp: async (
+    name: string = "aqp-local",
+    body: { spec_name?: string; inputs?: Record<string, unknown> } = {},
+  ): Promise<TerraformTaskAccepted> =>
+    apiFetch(`/terraform/stacks/${encodeURIComponent(name)}/up`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  localStackDown: async (
+    name: string = "aqp-local",
+    body: { spec_name?: string; inputs?: Record<string, unknown> } = {},
+  ): Promise<TerraformTaskAccepted> =>
+    apiFetch(`/terraform/stacks/${encodeURIComponent(name)}/down`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  localStackBuild: async (
+    name: string = "aqp-local",
+    body: { spec_name?: string; inputs?: Record<string, unknown> } = {},
+  ): Promise<TerraformTaskAccepted> =>
+    apiFetch(`/terraform/stacks/${encodeURIComponent(name)}/build`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  localStackRefresh: async (
+    name: string = "aqp-local",
+    body: { spec_name?: string; inputs?: Record<string, unknown> } = {},
+  ): Promise<TerraformTaskAccepted> =>
+    apiFetch(`/terraform/stacks/${encodeURIComponent(name)}/refresh`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  localStackEndpoints: async (
+    name: string = "aqp-local",
+  ): Promise<LocalStackEndpoints> =>
+    apiFetch(`/terraform/stacks/${encodeURIComponent(name)}/endpoints`),
 };
+
+export interface TerraformTaskAccepted {
+  task_id: string;
+  status: string;
+  stream_url: string;
+}
+
+export interface LocalStackEndpoints {
+  api_url?: string | null;
+  frontend_url?: string | null;
+  mlflow_url?: string | null;
+  jaeger_url?: string | null;
+  cluster_name?: string | null;
+  namespace?: string | null;
+  registry?: string | null;
+  pods: { running?: number; pending?: number; failed?: number; total?: number };
+  table_present?: boolean;
+}

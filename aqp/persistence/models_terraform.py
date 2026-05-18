@@ -89,6 +89,7 @@ TERRAFORM_PROVIDER_KINDS: tuple[str, ...] = (
     "gcp",
     "azure",
     "hcp",
+    "auth0",
 )
 
 
@@ -104,6 +105,7 @@ TERRAFORM_STATE_BACKENDS: tuple[str, ...] = (
 TERRAFORM_ENVIRONMENTS: tuple[str, ...] = (
     "local",
     "paper",
+    "rpi",
     "live",
     "sandbox",
 )

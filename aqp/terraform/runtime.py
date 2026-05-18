@@ -97,6 +97,7 @@ class TerraformRuntime:
         task_id: str | None = None,
         run_id: str | None = None,
         context: Any | None = None,
+        prerendered_workspace_dir: str | None = None,
     ) -> None:
         self.spec = spec
         self.workspace_id = workspace_id
@@ -112,8 +113,13 @@ class TerraformRuntime:
         self.context = context
         self._spec_version_id: str | None = None
         self._executor: Any | None = None
+        self._workspace_row_id: str | None = None
         self._workspace_slug: str | None = None
         self._workspace_org_id: str | None = None
+        # When set, the executor skips ``render_spec`` codegen and
+        # operates on the supplied directory directly. The local AQP
+        # stack uses this to point at terraform/environments/local/.
+        self._prerendered_workspace_dir = prerendered_workspace_dir
 
     # ------------------------------------------------------------------
     # Spec persistence + workspace lookup
@@ -148,13 +154,15 @@ class TerraformRuntime:
             from aqp.persistence.db import SessionLocal
             from aqp.persistence.models_terraform import TerraformWorkspace
 
+            workspace_row_id = self._resolve_workspace_row_id()
             with SessionLocal() as session:
                 row = (
                     session.query(TerraformWorkspace)
-                    .filter(TerraformWorkspace.id == self.workspace_id)
+                    .filter(TerraformWorkspace.id == workspace_row_id)
                     .one_or_none()
                 )
                 if row is not None:
+                    self._workspace_row_id = row.id
                     self._workspace_slug = row.slug
                     self._workspace_org_id = row.tenant_org_id
                     return row.slug
@@ -168,16 +176,132 @@ class TerraformRuntime:
         self._workspace_slug = self.spec.slug
         return self.spec.slug
 
+    def _resolve_workspace_row_id(self, *, spec_version_id: str | None = None) -> str:
+        """Resolve the canonical ``terraform_workspaces.id`` for this runtime.
+
+        Standard API-driven runs pass an existing workspace UUID and this method
+        simply returns it. Prerendered stacks (local/rpi convenience paths) can
+        start before any workspace row exists; in that case we upsert a synthetic
+        workspace row so ``TerraformRun`` FK writes succeed.
+        """
+        if self._workspace_row_id is not None:
+            return self._workspace_row_id
+        try:
+            from aqp.persistence.db import SessionLocal
+            from aqp.persistence.models_terraform import (
+                TerraformStackSpecVersion,
+                TerraformWorkspace,
+            )
+        except Exception:  # pragma: no cover
+            self._workspace_row_id = self.workspace_id
+            return self.workspace_id
+
+        try:
+            with SessionLocal() as session:
+                # First try the id exactly as supplied.
+                row = (
+                    session.query(TerraformWorkspace)
+                    .filter(TerraformWorkspace.id == self.workspace_id)
+                    .one_or_none()
+                )
+                # Prerendered stacks often supply ``workspace_id=spec.slug``;
+                # if no row by id exists, match by slug before creating.
+                if row is None and self._prerendered_workspace_dir:
+                    row = (
+                        session.query(TerraformWorkspace)
+                        .filter(TerraformWorkspace.slug == self.spec.slug)
+                        .order_by(TerraformWorkspace.created_at.desc())
+                        .first()
+                    )
+                if row is None and self._prerendered_workspace_dir:
+                    workspace_id = str(self.workspace_id or "").strip()
+                    if not workspace_id or len(workspace_id) > 36:
+                        workspace_id = str(uuid.uuid4())
+                    row = TerraformWorkspace(
+                        id=workspace_id,
+                        slug=self.spec.slug,
+                        name=self.spec.name,
+                        environment=self.spec.environment,
+                        state_backend=self.spec.backend.kind,
+                        owner_user_id=getattr(self.context, "user_id", None),
+                        workspace_id=getattr(self.context, "workspace_id", None),
+                        project_id=getattr(self.context, "project_id", None),
+                        tenant_org_id=getattr(self.context, "org_id", None),
+                    )
+                    if spec_version_id:
+                        version = (
+                            session.query(TerraformStackSpecVersion)
+                            .filter(TerraformStackSpecVersion.id == spec_version_id)
+                            .one_or_none()
+                        )
+                        if version is not None:
+                            row.stack_spec_id = version.spec_id
+                    session.add(row)
+                    session.commit()
+                    session.refresh(row)
+
+                if row is not None:
+                    if spec_version_id and not row.stack_spec_id:
+                        version = (
+                            session.query(TerraformStackSpecVersion)
+                            .filter(TerraformStackSpecVersion.id == spec_version_id)
+                            .one_or_none()
+                        )
+                        if version is not None:
+                            row.stack_spec_id = version.spec_id
+                            session.add(row)
+                            session.commit()
+                    self._workspace_row_id = row.id
+                    self._workspace_slug = row.slug
+                    self._workspace_org_id = row.tenant_org_id
+                    return row.id
+        except Exception:  # noqa: BLE001
+            logger.debug(
+                "TerraformRuntime: workspace id resolution failed for id=%s",
+                self.workspace_id,
+                exc_info=True,
+            )
+
+        self._workspace_row_id = self.workspace_id
+        return self.workspace_id
+
     def _get_executor(self):
         if self._executor is not None:
             return self._executor
         from aqp.terraform.runner import TerraformExecutor
 
-        self._executor = TerraformExecutor(
-            workspace_slug=self._resolve_workspace_slug(),
-            spec=self.spec,
-        )
+        kwargs: dict[str, Any] = {
+            "workspace_slug": self._resolve_workspace_slug(),
+            "spec": self.spec,
+        }
+        if self._prerendered_workspace_dir:
+            kwargs["prerendered_workspace_dir"] = self._prerendered_workspace_dir
+        topology_env = self._topology_env_overrides()
+        if topology_env:
+            kwargs["env_overrides"] = topology_env
+        self._executor = TerraformExecutor(**kwargs)
         return self._executor
+
+    def _topology_env_overrides(self) -> dict[str, str]:
+        """Best-effort target-specific Terraform env from deployment topology."""
+        try:
+            from aqp.deployment.topology import get_deployment_topology
+
+            topology = get_deployment_topology()
+            target = topology.target_by_stack_slug(self.spec.slug)
+            if target is None:
+                target = topology.target_by_stack_slug(self.workspace_id)
+            if target is None:
+                return {}
+            return topology.terraform_env_overrides(target.id)
+        except Exception:  # noqa: BLE001
+            logger.debug(
+                "TerraformRuntime: topology env lookup failed for spec=%s workspace=%s",
+                self.spec.slug,
+                self.workspace_id,
+                exc_info=True,
+            )
+            return {}
 
     # ------------------------------------------------------------------
     # Kill switch + approval gate
@@ -223,6 +347,7 @@ class TerraformRuntime:
         """
         if run_kind not in {"apply", "destroy", "unlock"}:
             return
+        workspace_row_id = self._resolve_workspace_row_id()
         try:
             from aqp.persistence.db import SessionLocal
             from aqp.persistence.models_terraform import TerraformPolicyAttachment
@@ -231,7 +356,8 @@ class TerraformRuntime:
                 row = (
                     session.query(TerraformPolicyAttachment)
                     .filter(
-                        TerraformPolicyAttachment.terraform_workspace_id == self.workspace_id
+                        TerraformPolicyAttachment.terraform_workspace_id
+                        == workspace_row_id
                     )
                     .filter(TerraformPolicyAttachment.hard_mandatory.is_(True))
                     .first()
@@ -263,6 +389,7 @@ class TerraformRuntime:
         celery_task_id: str | None = None,
     ) -> str | None:
         spec_version_id = self._persist_spec()
+        workspace_row_id = self._resolve_workspace_row_id(spec_version_id=spec_version_id)
         try:
             from aqp.persistence.db import SessionLocal
             from aqp.persistence.models_terraform import TerraformRun
@@ -270,7 +397,7 @@ class TerraformRuntime:
             with SessionLocal() as session:
                 row = TerraformRun(
                     id=self.run_id,
-                    terraform_workspace_id=self.workspace_id,
+                    terraform_workspace_id=workspace_row_id,
                     spec_version_id=spec_version_id,
                     run_kind=run_kind,
                     status="running",
@@ -359,6 +486,18 @@ class TerraformRuntime:
             ),
             started_by_user_id=started_by_user_id,
         )
+
+    def outputs(self) -> dict[str, Any]:
+        """Read ``terraform output -json`` through the sanctioned executor."""
+        try:
+            return self._get_executor().outputs_json()
+        except Exception:  # noqa: BLE001
+            logger.debug(
+                "TerraformRuntime: output read failed for workspace=%s",
+                self.workspace_id,
+                exc_info=True,
+            )
+            return {}
 
     def apply(
         self,
@@ -600,6 +739,7 @@ class TerraformRuntime:
         )
 
     def _evaluate_policy(self, plan_json_path: str) -> dict[str, Any]:
+        workspace_row_id = self._resolve_workspace_row_id()
         try:
             from aqp.persistence.db import SessionLocal
             from aqp.persistence.models_terraform import TerraformPolicyAttachment
@@ -609,7 +749,7 @@ class TerraformRuntime:
                 row = (
                     session.query(TerraformPolicyAttachment)
                     .filter(
-                        TerraformPolicyAttachment.terraform_workspace_id == self.workspace_id
+                        TerraformPolicyAttachment.terraform_workspace_id == workspace_row_id
                     )
                     .filter(TerraformPolicyAttachment.policy_engine == "opa")
                     .first()
@@ -628,6 +768,7 @@ class TerraformRuntime:
 
     def _snapshot_state_version(self, *, run_id: str | None) -> None:
         """Create a :class:`TerraformStateVersion` row after a successful apply."""
+        workspace_row_id = self._resolve_workspace_row_id()
         try:
             from aqp.persistence.db import SessionLocal
             from aqp.persistence.models_terraform import (
@@ -638,7 +779,7 @@ class TerraformRuntime:
                 last = (
                     session.query(TerraformStateVersion)
                     .filter(
-                        TerraformStateVersion.terraform_workspace_id == self.workspace_id
+                        TerraformStateVersion.terraform_workspace_id == workspace_row_id
                     )
                     .order_by(TerraformStateVersion.serial.desc())
                     .first()
@@ -646,10 +787,10 @@ class TerraformRuntime:
                 next_serial = (last.serial + 1) if last else 1
                 row = TerraformStateVersion(
                     id=str(uuid.uuid4()),
-                    terraform_workspace_id=self.workspace_id,
+                    terraform_workspace_id=workspace_row_id,
                     serial=next_serial,
                     lineage=None,
-                    state_json_uri=f"workspace://{self.workspace_id}/state/{next_serial}",
+                    state_json_uri=f"workspace://{workspace_row_id}/state/{next_serial}",
                     outputs_redacted={},
                     created_by_run_id=run_id,
                 )

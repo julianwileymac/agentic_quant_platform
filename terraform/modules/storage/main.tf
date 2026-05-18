@@ -24,19 +24,19 @@ locals {
 # --- AWS: RDS + S3 + ElastiCache -----------------------------------------
 
 resource "aws_db_instance" "pg" {
-  count                   = local.is_aws ? 1 : 0
-  identifier              = "${var.organization_slug}-${var.environment}-pg"
-  engine                  = "postgres"
-  engine_version          = "16.3"
-  instance_class          = "db.t4g.medium"
-  allocated_storage       = 50
-  storage_encrypted       = true
-  multi_az                = var.environment == "live"
-  publicly_accessible     = false
-  backup_retention_period = 7
-  deletion_protection     = var.environment == "live"
-  db_name                 = "aqp"
-  username                = "aqp"
+  count                       = local.is_aws ? 1 : 0
+  identifier                  = "${var.organization_slug}-${var.environment}-pg"
+  engine                      = "postgres"
+  engine_version              = "16.3"
+  instance_class              = "db.t4g.medium"
+  allocated_storage           = 50
+  storage_encrypted           = true
+  multi_az                    = var.environment == "live"
+  publicly_accessible         = false
+  backup_retention_period     = 7
+  deletion_protection         = var.environment == "live"
+  db_name                     = "aqp"
+  username                    = "aqp"
   manage_master_user_password = true
   parameter_group_name        = aws_db_parameter_group.pg[0].name
   tags                        = var.common_tags
@@ -47,8 +47,8 @@ resource "aws_db_parameter_group" "pg" {
   family = "postgres16"
   name   = "${var.organization_slug}-${var.environment}-pg"
   parameter {
-    name  = "shared_preload_libraries"
-    value = "pg_stat_statements"
+    name         = "shared_preload_libraries"
+    value        = "pg_stat_statements"
     apply_method = "pending-reboot"
   }
   parameter {
@@ -56,8 +56,8 @@ resource "aws_db_parameter_group" "pg" {
     value = "all"
   }
   parameter {
-    name  = "max_connections"
-    value = "200"
+    name         = "max_connections"
+    value        = "200"
     apply_method = "pending-reboot"
   }
   tags = var.common_tags
@@ -147,9 +147,9 @@ resource "google_sql_database_instance" "pg" {
 }
 
 resource "google_storage_bucket" "lake" {
-  count                    = local.is_gcp ? 1 : 0
-  name                     = "${var.organization_slug}-${var.environment}-aqp-lake"
-  location                 = "US"
+  count                       = local.is_gcp ? 1 : 0
+  name                        = "${var.organization_slug}-${var.environment}-aqp-lake"
+  location                    = "US"
   uniform_bucket_level_access = true
   versioning { enabled = true }
   lifecycle_rule {
@@ -200,13 +200,13 @@ resource "azurerm_storage_account" "lake" {
 }
 
 resource "azurerm_redis_cache" "redis" {
-  count               = local.is_azure ? 1 : 0
-  name                = "${var.organization_slug}-${var.environment}-redis"
-  resource_group_name = try(var.networking_outputs.azure_resource_group, "aqp-${var.environment}-rg")
-  location            = "eastus"
-  capacity            = 1
-  family              = "C"
-  sku_name            = var.environment == "live" ? "Standard" : "Basic"
+  count                = local.is_azure ? 1 : 0
+  name                 = "${var.organization_slug}-${var.environment}-redis"
+  resource_group_name  = try(var.networking_outputs.azure_resource_group, "aqp-${var.environment}-rg")
+  location             = "eastus"
+  capacity             = 1
+  family               = "C"
+  sku_name             = var.environment == "live" ? "Standard" : "Basic"
   non_ssl_port_enabled = false
   minimum_tls_version  = "1.2"
   tags                 = var.common_tags
@@ -266,8 +266,8 @@ resource "docker_container" "local_minio" {
 
 output "postgres_endpoint" {
   value = (
-    local.is_aws   ? try(aws_db_instance.pg[0].endpoint, "") :
-    local.is_gcp   ? try(google_sql_database_instance.pg[0].private_ip_address, "") :
+    local.is_aws ? try(aws_db_instance.pg[0].endpoint, "") :
+    local.is_gcp ? try(google_sql_database_instance.pg[0].private_ip_address, "") :
     local.is_azure ? try(azurerm_postgresql_flexible_server.pg[0].fqdn, "") :
     local.is_local ? "localhost:5432" :
     ""
@@ -276,8 +276,8 @@ output "postgres_endpoint" {
 
 output "object_store_url" {
   value = (
-    local.is_aws   ? try("s3://${aws_s3_bucket.lake[0].bucket}", "") :
-    local.is_gcp   ? try("gs://${google_storage_bucket.lake[0].name}", "") :
+    local.is_aws ? try("s3://${aws_s3_bucket.lake[0].bucket}", "") :
+    local.is_gcp ? try("gs://${google_storage_bucket.lake[0].name}", "") :
     local.is_azure ? try(azurerm_storage_account.lake[0].primary_dfs_endpoint, "") :
     local.is_local ? "http://localhost:9000" :
     ""
@@ -286,8 +286,8 @@ output "object_store_url" {
 
 output "redis_url" {
   value = (
-    local.is_aws   ? try("redis://${aws_elasticache_replication_group.redis[0].primary_endpoint_address}:6379", "") :
-    local.is_gcp   ? try("redis://${google_redis_instance.redis[0].host}:${google_redis_instance.redis[0].port}", "") :
+    local.is_aws ? try("redis://${aws_elasticache_replication_group.redis[0].primary_endpoint_address}:6379", "") :
+    local.is_gcp ? try("redis://${google_redis_instance.redis[0].host}:${google_redis_instance.redis[0].port}", "") :
     local.is_azure ? try("rediss://${azurerm_redis_cache.redis[0].hostname}:6380", "") :
     local.is_local ? "redis://localhost:6379" :
     ""

@@ -1,0 +1,19 @@
+name: aqp-rpi-kubernetes
+slug: aqp-rpi-kubernetes
+module_kind: composite
+description: |
+  Terraform-owned AQP deployment target for the rpi_kubernetes cluster.
+  The HCL composition lives under terraform/environments/rpi and is
+  driven through TerraformRuntime / aqp deploy so plan/apply/destroy
+  runs are ledgered and halt-able.
+cloud_provider: rpi_cluster
+environment: rpi
+provider:
+  kind: rpi_cluster
+backend:
+  kind: local
+  config:
+    path: data/terraform/state/rpi.tfstate
+annotations:
+  aqp.io/stack-kind: rpi-kubernetes
+  aqp.io/source: terraform-owned

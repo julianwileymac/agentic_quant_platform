@@ -1,0 +1,18 @@
+name: aqp-auth0-identity
+slug: aqp-auth0-identity
+module_kind: composite
+description: |
+  Auth0 identity stack for AQP: SPA app, API audience, M2M client,
+  default roles/scopes, and post-login Action that calls
+  /_internal/auth0/sync for AQP custom claims.
+cloud_provider: auth0
+environment: live
+provider:
+  kind: auth0
+backend:
+  kind: local
+  config:
+    path: data/terraform/state/auth0_identity.tfstate
+annotations:
+  aqp.io/stack-kind: identity
+  aqp.io/provider: auth0

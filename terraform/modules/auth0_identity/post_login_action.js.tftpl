@@ -1,0 +1,40 @@
+exports.onExecutePostLogin = async (event, api) => {
+  const namespace = "${claims_namespace}";
+  const body = {
+    user_id: event.user.user_id,
+    email: event.user.email,
+    organization_id: event.organization ? event.organization.id : null,
+    organization_name: event.organization ? event.organization.name : null,
+    requested_claims: {
+      connection: event.connection ? event.connection.name : null,
+      strategy: event.connection ? event.connection.strategy : null
+    }
+  };
+
+  const tokenResponse = await api.authentication.getAccessToken({
+    audience: "${api_audience}",
+    scope: "data:read scim:write"
+  });
+
+  const response = await fetch("${sync_url}", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "authorization": `Bearer $${tokenResponse.access_token}`
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    console.log(`AQP sync failed: $${response.status}`);
+    return;
+  }
+
+  const claims = await response.json();
+  for (const [key, value] of Object.entries(claims)) {
+    if (value !== null && value !== undefined) {
+      api.accessToken.setCustomClaim(`${namespace}$${key}`, value);
+      api.idToken.setCustomClaim(`${namespace}$${key}`, value);
+    }
+  }
+};

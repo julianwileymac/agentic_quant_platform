@@ -54,6 +54,7 @@ from aqp.api.security import (
     secure_router,
 )
 from aqp.auth import CurrentUser, RequestContext, current_context
+from aqp.deployment.topology import get_deployment_topology, get_target
 
 logger = logging.getLogger(__name__)
 
@@ -898,7 +899,7 @@ async def stream_run_progress(ws: WebSocket, run_id: str) -> None:
 
 
 async def _async_subscribe(channel: str):
-    """Adapter — pump :func:`aqp.ws.broker.subscribe` into an async generator."""
+    """Adapter pumping :func:`aqp.ws.broker.subscribe` into an async generator."""
     from aqp.ws.broker import subscribe
 
     loop = asyncio.get_running_loop()
@@ -920,6 +921,167 @@ async def _async_subscribe(channel: str):
         yield msg
         if isinstance(msg, dict) and msg.get("stage") in {"done", "error"}:
             break
+
+
+# ---------------------------------------------------------------------------
+# Local stack sugar routes - drive the canonical aqp-local stack via the
+# ``aqp.tasks.terraform_tasks.run_local_stack`` Celery task. Every route
+# returns a TaskAccepted so the frontend's Local Stack panel can attach
+# its useChatStream(taskId, "terraform") consumer.
+# ---------------------------------------------------------------------------
+
+
+class LocalStackRunRequest(BaseModel):
+    spec_name: str = Field(default="")
+    inputs: dict[str, Any] = Field(default_factory=dict)
+
+
+def _local_stack_spec_name(*, route_name: str, body: LocalStackRunRequest | None) -> str:
+    if body and body.spec_name:
+        return body.spec_name
+    topology = get_deployment_topology()
+    if route_name in topology.targets:
+        return topology.target(route_name).terraform.stack_slug
+    return route_name or get_target("local").terraform.stack_slug
+
+
+def _local_stack_runtime():
+    """Build the topology-backed local TerraformRuntime for read-only endpoints."""
+    from aqp.cli.deploy_cmd import _load_local_spec
+    from aqp.terraform.runtime import TerraformRuntime
+
+    target = get_target("local")
+    return TerraformRuntime(
+        spec=_load_local_spec(),
+        workspace_id=target.terraform.stack_slug,
+        prerendered_workspace_dir=str(target.terraform.environment_path),
+    )
+
+
+def _enqueue_local_stack(*, action: str, spec_name: str) -> TaskAccepted:
+    try:
+        from aqp.tasks.terraform_tasks import (  # noqa: F401 - inline per route hygiene
+            run_local_stack,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=503,
+            detail=f"terraform task module unavailable: {exc}",
+        ) from exc
+
+    async_result = run_local_stack.apply_async(
+        kwargs={"action": action, "spec_name": spec_name}
+    )
+    task_id = str(async_result.id)
+    return TaskAccepted(
+        task_id=task_id,
+        status="accepted",
+        stream_url=f"/ws/terraform/runs/{task_id}",
+    )
+
+
+@router.post("/stacks/{name}/up", response_model=TaskAccepted)
+def local_stack_up(
+    name: str,
+    body: LocalStackRunRequest | None = None,
+    user: CurrentUser = Depends(require_authenticated),
+) -> TaskAccepted:
+    """Bring the local stack up (Terraform plan + apply)."""
+    spec_name = _local_stack_spec_name(route_name=name, body=body)
+    return _enqueue_local_stack(action="up", spec_name=spec_name)
+
+
+@router.post("/stacks/{name}/down", response_model=TaskAccepted)
+def local_stack_down(
+    name: str,
+    body: LocalStackRunRequest | None = None,
+    user: CurrentUser = Depends(require_authenticated),
+) -> TaskAccepted:
+    """Tear down the local stack (Terraform destroy)."""
+    spec_name = _local_stack_spec_name(route_name=name, body=body)
+    return _enqueue_local_stack(action="down", spec_name=spec_name)
+
+
+@router.post("/stacks/{name}/build", response_model=TaskAccepted)
+def local_stack_build(
+    name: str,
+    body: LocalStackRunRequest | None = None,
+    user: CurrentUser = Depends(require_authenticated),
+) -> TaskAccepted:
+    """Rebuild + push every AQP image. Workloads pick up new images on next apply."""
+    spec_name = _local_stack_spec_name(route_name=name, body=body)
+    return _enqueue_local_stack(action="build", spec_name=spec_name)
+
+
+@router.post("/stacks/{name}/refresh", response_model=TaskAccepted)
+def local_stack_refresh(
+    name: str,
+    body: LocalStackRunRequest | None = None,
+    user: CurrentUser = Depends(require_authenticated),
+) -> TaskAccepted:
+    """Run ``terraform apply -refresh-only`` for the local stack."""
+    spec_name = _local_stack_spec_name(route_name=name, body=body)
+    return _enqueue_local_stack(action="refresh", spec_name=spec_name)
+
+
+class LocalStackEndpoints(BaseModel):
+    api_url: str | None = None
+    frontend_url: str | None = None
+    mlflow_url: str | None = None
+    jaeger_url: str | None = None
+    cluster_name: str | None = None
+    namespace: str | None = None
+    registry: str | None = None
+    pods: dict[str, int] = Field(default_factory=dict)
+    table_present: bool = True
+
+
+@router.get("/stacks/{name}/endpoints", response_model=LocalStackEndpoints)
+def local_stack_endpoints(name: str) -> LocalStackEndpoints:
+    """Return the local stack outputs + a quick pod-status rollup.
+
+    Best-effort: Terraform outputs are read through TerraformRuntime /
+    TerraformExecutor and pod counts through KubernetesAdapter. Returns
+    blank values when the stack has not been applied yet.
+    """
+
+    payload = LocalStackEndpoints()
+    target = get_target("local")
+
+    try:
+        outputs = _local_stack_runtime().outputs()
+        payload.api_url = outputs.get("api_url")
+        payload.frontend_url = outputs.get("frontend_url")
+        payload.mlflow_url = outputs.get("mlflow_url_in_cluster")
+        payload.jaeger_url = outputs.get("jaeger_url_in_cluster")
+        payload.cluster_name = outputs.get("cluster_name")
+        payload.namespace = outputs.get("namespace")
+        extra = outputs.get("endpoints") or {}
+        if isinstance(extra, dict):
+            payload.registry = extra.get("registry")
+            if not payload.namespace:
+                payload.namespace = extra.get("namespace")
+    except Exception:  # noqa: BLE001
+        logger.debug("terraform output read failed", exc_info=True)
+
+    namespace = payload.namespace or target.namespace
+    pod_counts: dict[str, int] = {"running": 0, "pending": 0, "failed": 0, "total": 0}
+    try:
+        from aqp.api.routes.control_plane import _adapter_for_target
+
+        for pod in _adapter_for_target("local").list_pods(namespace=namespace):
+            phase = str(getattr(pod, "phase", "") or "Unknown").lower()
+            pod_counts["total"] += 1
+            if phase == "running":
+                pod_counts["running"] += 1
+            elif phase in ("pending", "containercreating"):
+                pod_counts["pending"] += 1
+            elif phase in ("failed", "crashloopbackoff", "error"):
+                pod_counts["failed"] += 1
+    except Exception:  # noqa: BLE001
+        logger.debug("KubernetesAdapter pod rollup failed", exc_info=True)
+    payload.pods = pod_counts
+    return payload
 
 
 __all__ = ["router", "ws_router"]

@@ -1,37 +1,37 @@
 <#
 .SYNOPSIS
-    Start the Agentic Quant Platform stack.
+    Start the Agentic Quant Platform stack via Terraform + k3d.
 
 .DESCRIPTION
-    Brings up the docker compose services (redis, postgres, mlflow, chromadb,
-    otel-collector, jaeger, api, worker(s), ui, paper-trader, beat).  Waits
-    for health checks and prints the primary endpoints once the platform
-    is reachable.
+    Delegates to ``aqp deploy up`` — the new canonical entrypoint that
+    routes through TerraformRuntime so each apply lands a row in
+    ``terraform_runs`` (rule 42), emits canonical progress frames, and
+    is halt-able from the global KillSwitch.
 
-.PARAMETER Profile
-    Optional docker compose profile to enable (e.g. "streaming" for the
-    Kafka + IB Gateway pipeline).
-
-.PARAMETER Pull
-    If present, pulls the latest images before starting.
+    The legacy docker-compose path is still available via
+    ``./scripts/start.ps1 -Legacy`` (which runs ``make up-compose-legacy``).
 
 .PARAMETER Build
-    If present, rebuilds the api / worker / ui images before starting.
+    If present, runs ``aqp deploy build`` first to rebuild + push every
+    AQP image into the local k3d registry.
+
+.PARAMETER Legacy
+    Bypass Terraform; bring up the docker-compose stack directly. Use
+    only when k3d / Terraform is broken locally.
 
 .EXAMPLE
     ./scripts/start.ps1
 
 .EXAMPLE
-    ./scripts/start.ps1 -Pull -Build
+    ./scripts/start.ps1 -Build
 
 .EXAMPLE
-    ./scripts/start.ps1 -Profile streaming
+    ./scripts/start.ps1 -Legacy
 #>
 [CmdletBinding()]
 param(
-    [string]$Profile = "",
-    [switch]$Pull,
-    [switch]$Build
+    [switch]$Build,
+    [switch]$Legacy
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,55 +39,37 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 
 Push-Location $repoRoot
 try {
-    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        Write-Error "docker is not installed or not on PATH. Install Docker Desktop first."
+    if ($Legacy) {
+        if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+            Write-Error "docker is not installed or not on PATH. Install Docker Desktop first."
+        }
+        Write-Host "[start.ps1] Legacy mode — bringing up docker compose stack..." -ForegroundColor Yellow
+        & docker compose up -d
+        if ($LASTEXITCODE -ne 0) { Write-Error "docker compose up failed" }
+        return
     }
 
-    $composeArgs = @()
-    if ($Profile) {
-        $composeArgs += @("--profile", $Profile)
-    }
-
-    if ($Pull) {
-        Write-Host "Pulling latest images..." -ForegroundColor Cyan
-        & docker compose @composeArgs pull
+    if (-not (Get-Command aqp -ErrorAction SilentlyContinue)) {
+        Write-Error "'aqp' CLI not on PATH. Install with 'pip install -e .' from the repo root, or use -Legacy."
     }
 
     if ($Build) {
-        Write-Host "Rebuilding local images..." -ForegroundColor Cyan
-        & docker compose @composeArgs build
+        Write-Host "[start.ps1] aqp deploy build (rebuild + push images)" -ForegroundColor Cyan
+        & aqp deploy build
+        if ($LASTEXITCODE -ne 0) { Write-Error "aqp deploy build failed (exit $LASTEXITCODE)" }
     }
 
-    Write-Host "Starting AQP stack..." -ForegroundColor Cyan
-    & docker compose @composeArgs up -d
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "docker compose up failed (exit $LASTEXITCODE)"
-    }
-
-    Write-Host ""
-    Write-Host "Waiting for API health..." -ForegroundColor Cyan
-    $apiReady = $false
-    for ($i = 0; $i -lt 30; $i++) {
-        try {
-            $null = Invoke-WebRequest -Uri "http://localhost:8000/" -UseBasicParsing -TimeoutSec 2
-            $apiReady = $true
-            break
-        } catch {
-            Start-Sleep -Seconds 2
-        }
-    }
-    if (-not $apiReady) {
-        Write-Warning "API did not respond within 60s; check 'scripts/status.ps1'"
-    }
+    Write-Host "[start.ps1] aqp deploy up (Terraform + k3d)" -ForegroundColor Cyan
+    & aqp deploy up
+    if ($LASTEXITCODE -ne 0) { Write-Error "aqp deploy up failed (exit $LASTEXITCODE)" }
 
     Write-Host ""
     Write-Host "AQP is up." -ForegroundColor Green
     Write-Host ""
-    Write-Host "  UI          http://localhost:8765"
-    Write-Host "  API docs    http://localhost:8000/docs"
-    Write-Host "  Dash        http://localhost:8000/dash/"
-    Write-Host "  Jaeger      http://localhost:16686"
-    Write-Host "  MLflow      http://localhost:5000"
+    Write-Host "  Next:"
+    Write-Host "    ./scripts/status.ps1     # pod / service rollup"
+    Write-Host "    aqp deploy endpoints     # printable URL list"
+    Write-Host "    aqp deploy logs api      # tail API pod logs"
     Write-Host ""
     Write-Host "Stop with: ./scripts/stop.ps1" -ForegroundColor DarkGray
 }

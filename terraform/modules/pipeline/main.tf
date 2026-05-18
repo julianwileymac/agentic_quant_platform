@@ -3,7 +3,7 @@
 ###############################################################################
 
 variable "cloud_provider" { type = string }
-variable "environment"    { type = string }
+variable "environment" { type = string }
 variable "common_tags" {
   type    = map(string)
   default = {}
@@ -124,8 +124,8 @@ resource "kubernetes_stateful_set" "duckdb" {
       spec {
         service_account_name = "aqp-duckdb"
         container {
-          name  = "duckdb"
-          image = "aqp-api:${var.app_version}"
+          name    = "duckdb"
+          image   = "aqp-api:${var.app_version}"
           command = ["python", "-m", "aqp.data.duckdb_worker"]
           resources {
             requests = {
@@ -185,7 +185,7 @@ resource "kubernetes_manifest" "pipeline_netpol" {
       egress = [
         # DNS
         {
-          to    = [{ namespaceSelector = { matchLabels = { "kubernetes.io/metadata.name" = "kube-system" } } }]
+          to = [{ namespaceSelector = { matchLabels = { "kubernetes.io/metadata.name" = "kube-system" } } }]
           ports = [
             { protocol = "UDP", port = 53 },
             { protocol = "TCP", port = 53 },
@@ -193,7 +193,7 @@ resource "kubernetes_manifest" "pipeline_netpol" {
         },
         # Postgres + Redis + storage (cluster-internal)
         {
-          to    = [{ namespaceSelector = { matchLabels = { "kubernetes.io/metadata.name" = "aqp-system" } } }]
+          to = [{ namespaceSelector = { matchLabels = { "kubernetes.io/metadata.name" = "aqp-system" } } }]
           ports = [
             { protocol = "TCP", port = 5432 },
             { protocol = "TCP", port = 6379 },

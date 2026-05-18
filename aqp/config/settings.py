@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     default_project_id: str = Field(default=DEFAULT_PROJECT_ID)
     default_lab_id: str = Field(default=DEFAULT_LAB_ID)
     auth_provider: str = Field(default="local")  # local | auth0 | oidc | mock | jwt | msal_entra
+    # ``auth_required`` is the cluster-default guard: when true and
+    # ``auth_provider`` is not ``local``, API dependencies refuse
+    # missing Bearer/session tokens instead of silently falling back to
+    # the deterministic default user. Local developer mode remains
+    # available only when AQP_AUTH_PROVIDER=local.
+    auth_required: bool = Field(default=True)
     auth_oidc_issuer: str = Field(default="")
     auth_oidc_client_id: str = Field(default="")
     auth_oidc_client_secret: str = Field(default="")
@@ -135,6 +141,15 @@ class Settings(BaseSettings):
     auth_m2m_audience: str = Field(default="")
     auth_m2m_scope: str = Field(default="")
     auth_m2m_token_ttl_seconds: int = Field(default=900)
+    # --- SCIM 2.0 provisioning (Auth0 -> AQP tenancy) ---
+    # AQP exposes /scim/v2/* so Auth0 Actions / jobs can upsert users
+    # and groups into the AQP tenancy tables. The endpoint is disabled
+    # by default until the cluster deployment provides either an M2M
+    # audience or a static bearer-token hash.
+    auth_scim_enabled: bool = Field(default=False)
+    auth_scim_m2m_audience: str = Field(default="")
+    auth_scim_bearer_token_hash: str = Field(default="")
+    auth_scim_default_org_slug: str = Field(default="wiley-tech")
     # --- Kubernetes adapter (M4) ---
     # ``none`` (default) keeps AQP standalone. ``rpi_cluster`` activates
     # automatically when ``cluster_mgmt_url`` is set. ``in_cluster`` uses
@@ -143,6 +158,11 @@ class Settings(BaseSettings):
     # platform overlay. Cloud adapters (``aws_eks`` / ``gcp_gke`` /
     # ``azure_aks``) auto-promote when ``default_cloud_provider`` is set.
     kubernetes_adapter: str = Field(default="")  # none | rpi_cluster | in_cluster | local_compose | aws_eks | gcp_gke | azure_aks
+    # Canonical deployment topology manifest consumed by Terraform entrypoints,
+    # control-plane routes, and the frontend deployment views.
+    deployment_topology_path: str = Field(
+        default="./configs/deployment/topology.yaml"
+    )
     # --- Default cloud provider (multi-cloud + tenant onboarding) ---
     # Empty means "local" — every Terraform / KubernetesAdapter /
     # CredentialResolver default short-circuits to local execution.
@@ -615,6 +635,15 @@ class Settings(BaseSettings):
     terraform_workspaces_dir: Path = Field(default=Path("./data/terraform/workspaces"))
     terraform_state_backend: str = Field(default="local")  # local | s3 | azurerm | gcs | hcp
     terraform_plugin_cache_dir: Path = Field(default=Path("./data/terraform/plugin-cache"))
+    # Optional Terraform CLI config file path. When set and the file exists
+    # the runner exports ``TF_CLI_CONFIG_FILE`` so provider mirrors /
+    # installation rules can be enforced centrally.
+    terraform_cli_config_file: str = Field(default="")
+    # Bounded retry policy for ``terraform init`` on transient provider
+    # fetch/network errors (connection reset, TLS timeout, etc).
+    terraform_init_retry_attempts: int = Field(default=3)
+    terraform_init_retry_backoff_seconds: float = Field(default=2.0)
+    terraform_init_retry_max_backoff_seconds: float = Field(default=30.0)
     terraform_parallelism: int = Field(default=10)
     terraform_runner_image: str = Field(default="aqp-terraform-runner:latest")
     terraform_runner_namespace: str = Field(default="aqp-system")

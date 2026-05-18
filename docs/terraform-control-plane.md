@@ -85,6 +85,19 @@ httpx wrapper around `app.terraform.io/api/v2`) — no
 `python-terrasnek` dep so cold installs without HCP credentials still
 boot cleanly.
 
+## Bootstrap and reliability notes
+
+- During cold-start deployments, prefer CLI-first `terraform init/plan/apply`
+  until API + Celery + Redis + Postgres are all healthy.
+- Control-plane-triggered Terraform actions require broker + worker
+  availability to enqueue and stream progress.
+- `TerraformExecutor` retries transient `terraform init` provider/network
+  failures with bounded exponential backoff.
+- Use `AQP_TERRAFORM_CLI_CONFIG_FILE` to point at a Terraform CLI config
+  that defines `provider_installation` mirror rules when registry access
+  is unreliable.
+- Provider cache is shared through `AQP_TERRAFORM_PLUGIN_CACHE_DIR`.
+
 ## Kill switch
 
 `POST /terraform/halt` is the 6th endpoint fanned out by the topbar

@@ -1,5 +1,5 @@
 variable "cloud_provider" { type = string }
-variable "environment"    { type = string }
+variable "environment" { type = string }
 variable "primary_domain" {
   type    = string
   default = ""
@@ -139,12 +139,12 @@ resource "kubernetes_manifest" "cluster_issuer" {
     metadata   = { name = "aqp-letsencrypt" }
     spec = var.cloud_provider == "local" ? {
       selfSigned = {}
-    } : {
+      } : {
       acme = {
-        server = "https://acme-v02.api.letsencrypt.org/directory"
-        email  = "admin@${var.primary_domain}"
+        server              = "https://acme-v02.api.letsencrypt.org/directory"
+        email               = "admin@${var.primary_domain}"
         privateKeySecretRef = { name = "aqp-letsencrypt-key" }
-        solvers = [{ http01 = { ingress = { class = "nginx" } } }]
+        solvers             = [{ http01 = { ingress = { class = "nginx" } } }]
       }
     }
   }

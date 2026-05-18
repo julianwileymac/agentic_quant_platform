@@ -1,17 +1,26 @@
-.PHONY: help install install-full up down logs bootstrap ingest index train backtest \
+.PHONY: help install install-full up down logs bootstrap deploy-up deploy-down deploy-build deploy-status deploy-plan deploy-logs \
+	up-compose-legacy down-compose-legacy logs-compose-legacy ingest index train backtest \
 	api worker beat ui dash paper paper-dry otel test lint format clean \
 	webui-install webui-dev webui-build webui-start webui-lint webui-typecheck \
-	webui-test webui-gen-api webui-export-openapi
+	webui-test webui-gen-api webui-export-openapi \
+	frontend-install frontend-dev frontend-build frontend-typecheck
 
 help:
 	@echo "Agentic Quant Platform — Makefile targets"
 	@echo ""
 	@echo "  install       Install python package in editable mode with dev extras"
 	@echo "  install-full  Install package with every optional extra (alpaca, ibkr, tradier, otel, cli, paper)"
-	@echo "  up            docker compose up -d (redis, postgres, mlflow, chromadb, otel, jaeger, api, worker, webui, paper)"
-	@echo "  down          docker compose down"
-	@echo "  logs          Tail container logs"
-	@echo "  bootstrap     Create data dirs and apply DB migrations"
+	@echo "  up            Bring up the local AQP stack via Terraform (k3d + workloads). Delegates to 'aqp deploy up'."
+	@echo "  down          Tear down the local stack. Delegates to 'aqp deploy down'."
+	@echo "  logs          Tail aqp-api pod logs. Delegates to 'aqp deploy logs api'."
+	@echo "  deploy-build  Rebuild + push backend + frontend images. Delegates to 'aqp deploy build'."
+	@echo "  deploy-status Pod / service rollup via 'aqp deploy status'."
+	@echo "  deploy-plan   Show terraform plan for the local stack."
+	@echo "  bootstrap     Build images, bring up stack, then apply DB migrations."
+	@echo ""
+	@echo "  up-compose-legacy  Emergency bypass: 'docker compose up -d' (for cases where Terraform is broken)."
+	@echo "  down-compose-legacy Tear down via docker compose."
+	@echo "  logs-compose-legacy Tail docker compose logs."
 	@echo "  ingest        Download default universe via yfinance"
 	@echo "  index         Index local data metadata into ChromaDB"
 	@echo "  train         Train a DRL agent with the default config"
@@ -39,17 +48,55 @@ install:
 install-full:
 	pip install -e ".[dev,alpaca,ibkr,tradier,otel,cli,paper]"
 
-up:
-	docker compose up -d
+# ---------------------------------------------------------------------------
+# Canonical local lifecycle — Terraform + k3d via the aqp deploy CLI.
+# Each call lands a row in terraform_runs (rule 42) and respects the
+# global kill switch.
+# ---------------------------------------------------------------------------
 
-down:
-	docker compose down
+up: deploy-up
 
-logs:
-	docker compose logs -f --tail=200
+down: deploy-down
+
+logs: deploy-logs
+
+deploy-up:
+	aqp deploy up
+
+deploy-down:
+	aqp deploy down --yes
+
+deploy-plan:
+	aqp deploy plan
+
+deploy-build:
+	aqp deploy build
+
+deploy-status:
+	aqp deploy status
+
+deploy-logs:
+	aqp deploy logs api
 
 bootstrap:
+	aqp deploy build
+	aqp deploy up
 	python -m scripts.bootstrap
+
+# ---------------------------------------------------------------------------
+# Legacy docker-compose bypass — kept ONLY for cases where the Terraform
+# path is broken (missing k3d, port collisions, etc.). The default
+# entrypoints above are now the supported workflow.
+# ---------------------------------------------------------------------------
+
+up-compose-legacy:
+	docker compose up -d
+
+down-compose-legacy:
+	docker compose down
+
+logs-compose-legacy:
+	docker compose logs -f --tail=200
 
 ingest:
 	python -m scripts.download_data
@@ -140,3 +187,21 @@ webui-export-openapi:
 
 webui-gen-api: webui-export-openapi
 	pnpm --dir webui exec openapi-typescript ../data/openapi.json -o lib/api/generated/schema.d.ts
+
+# ---------------------------------------------------------------------------
+# Vite frontend (canonical post-rewrite). Built bundle lands in
+# frontend/dist and is consumed by the aqp-frontend image during
+# 'aqp deploy build'.
+# ---------------------------------------------------------------------------
+
+frontend-install:
+	pnpm --dir frontend install
+
+frontend-dev:
+	pnpm --dir frontend dev
+
+frontend-build:
+	pnpm --dir frontend build
+
+frontend-typecheck:
+	pnpm --dir frontend typecheck

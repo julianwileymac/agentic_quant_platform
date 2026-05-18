@@ -10,6 +10,8 @@ import {
 } from "@/lib/api/terraform";
 import { useEffect } from "react";
 
+import { LocalStackCard } from "./LocalStackCard";
+
 /**
  * /infra/terraform — Terraform workspace IDE.
  *
@@ -95,6 +97,7 @@ export function InfraTerraformRoute() {
       title="Terraform IaC"
       subtitle="Plan / apply / destroy AQP stacks across local + cloud + rpi_cluster"
     >
+      <LocalStackCard />
       {error && (
         <div className="mb-3 rounded border border-[var(--neg-border,#dc2626)] bg-[var(--bg-card)] p-2 text-xs text-[var(--neg-fg)]">
           {error}

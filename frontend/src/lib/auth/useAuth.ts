@@ -1,7 +1,7 @@
 import { useAuth0 } from "@auth0/auth0-react";
 import { useCallback, useMemo } from "react";
 
-import { authConfig, isAuthEnabled } from "./config";
+import { authConfig, isAuthEnabled, isAuthRequired } from "./config";
 
 /**
  * Identity surface for the rest of the app. Returns the same shape
@@ -76,10 +76,11 @@ function readStringEnv(key: string, fallback: string): string {
 
 export function useAuth(): AuthSurface {
   if (!isAuthEnabled()) {
+    const required = isAuthRequired();
     return {
       enabled: false,
       isLoading: false,
-      isAuthenticated: true,
+      isAuthenticated: !required,
       user: LOCAL_DEFAULT,
       claims: LOCAL_CLAIMS,
       loginWithRedirect: async () => {},

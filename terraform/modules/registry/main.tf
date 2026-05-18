@@ -1,5 +1,5 @@
 variable "cloud_provider" { type = string }
-variable "environment"    { type = string }
+variable "environment" { type = string }
 variable "common_tags" {
   type    = map(string)
   default = {}
@@ -50,11 +50,11 @@ resource "docker_container" "registry" {
 
 # AWS ECR — one repo per image.
 resource "aws_ecr_repository" "aqp" {
-  for_each              = var.cloud_provider == "aws" ? toset(var.image_names) : []
-  name                  = each.value
-  image_tag_mutability  = "MUTABLE"
+  for_each             = var.cloud_provider == "aws" ? toset(var.image_names) : []
+  name                 = each.value
+  image_tag_mutability = "MUTABLE"
   image_scanning_configuration { scan_on_push = true }
-  tags                  = var.common_tags
+  tags = var.common_tags
 }
 
 resource "aws_ecr_lifecycle_policy" "aqp" {
