@@ -293,6 +293,25 @@ app.add_middleware(
 # --- Core platform routers -----------------------------------------------
 app.include_router(health.router)
 app.include_router(auth.router)
+# Management Engine Phase E — additive BFF auth surface
+# (/auth/providers + /auth/refresh).
+try:
+    from aqp.api.routes import auth_bff as auth_bff_routes  # noqa: E402
+
+    app.include_router(auth_bff_routes.router)
+except Exception as exc:  # noqa: BLE001
+    logging.getLogger(__name__).warning(
+        "auth_bff router unavailable (%s); /auth/providers + /auth/refresh disabled",
+        exc,
+    )
+# Trust X-Forwarded-* on the Auth0FastAPI DPoP path. No-op when the
+# auth0-fastapi-api SDK is not present.
+try:
+    from aqp.auth.auth0_fastapi import configure_auth0_fastapi_on_app
+
+    configure_auth0_fastapi_on_app(app)
+except Exception as exc:  # noqa: BLE001
+    logging.getLogger(__name__).debug("Auth0FastAPI trust_proxy not configured: %s", exc)
 app.include_router(scim_routes.router)
 app.include_router(me_routes.router)
 app.include_router(invites_routes.router)
@@ -431,6 +450,16 @@ app.include_router(terraform_routes.router)
 app.include_router(terraform_routes.ws_router)
 app.include_router(infra_routes.router)
 app.include_router(infra_routes.ws_router)
+# Management Engine — Cloudflare edge (tunnels / DNS / Access apps).
+try:
+    from aqp.api.routes import cloudflare as cloudflare_routes  # noqa: E402
+
+    app.include_router(cloudflare_routes.router)
+except Exception as exc:  # noqa: BLE001
+    logging.getLogger(__name__).warning(
+        "cloudflare router unavailable (%s); /cloudflare/* endpoints disabled",
+        exc,
+    )
 # (control_plane_routes.router is registered earlier alongside auth /
 # scim / me / invites; rule 45 — high-level /control-plane API for the
 # Vite UI delegates to TerraformRuntime + KubernetesAdapter.)

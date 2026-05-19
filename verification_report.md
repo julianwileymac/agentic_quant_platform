@@ -1,3 +1,7 @@
+> Archived context note: point-in-time verification output retained for
+> traceability. Current operational checks live in active runbooks under
+> `docs/operations/*`. See `docs/archive/README.md`.
+
 # AQP Metadata & Lineage Consolidation Verification Report
 
 ## Smoke imports

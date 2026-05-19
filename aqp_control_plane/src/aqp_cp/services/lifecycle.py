@@ -1,32 +1,92 @@
-"""Provider lookup + audit-wrapped orchestration of workload ops."""
+"""Provider lookup + audit-wrapped orchestration of workload ops.
+
+Phase A of the Management Engine moved the shared lifecycle logic into
+:class:`aqp_platform_core.runtime.WorkloadRuntime`. This module now:
+
+- Resolves the active :class:`InfrastructureProvider` via
+  :func:`aqp_cp.providers.bootstrap` + the shared registry.
+- Wraps the runtime in a thin :func:`execute_with_audit` helper that
+  keeps the historical signature (so existing routers in
+  ``aqp_cp/api/routers/*`` keep compiling) while delegating to
+  :class:`WorkloadRuntime` under the hood.
+- Plugs the existing :mod:`aqp_cp.services.audit` JSONL writer into
+  the runtime via :class:`JsonlAuditSink`.
+
+The in-monolith path (``aqp/api/routes/control_plane.py``) constructs
+its own :class:`WorkloadRuntime` with a Postgres-backed audit sink and
+does NOT import this module.
+"""
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Awaitable
+import threading
+from typing import Any, Awaitable, Callable
 
 from fastapi import HTTPException, status
 
-from aqp_cp.auth.deps import AuthenticatedUser
-from aqp_cp.models import (
-    ConfigMapPatch,
-    DeploymentSpec,
-    DeploymentStatus,
-    ServiceConfig,
+from aqp_platform_core.models.workloads import (
     WorkloadAction,
     WorkloadRun,
     WorkloadRunStatus,
 )
-from aqp_cp.providers import (
+from aqp_platform_core.providers import (
     InfrastructureProvider,
     InfrastructureProviderError,
     InfrastructureProviderUnavailable,
+)
+from aqp_platform_core.runtime import (
+    AuditSink,
+    LoggingAuditSink,
+    WorkloadHaltedError,
+    WorkloadRuntime,
+)
+from aqp_platform_core.runtime.workload import WorkloadRequestContext
+
+from aqp_cp.auth.deps import AuthenticatedUser
+from aqp_cp.providers import (
     bootstrap,
     get_provider_registry,
 )
-from aqp_cp.services import audit
+from aqp_cp.services import audit as audit_service
 from aqp_cp.settings import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Audit sink adapter — bridges WorkloadRuntime to aqp_cp.services.audit
+# ---------------------------------------------------------------------------
+
+
+class JsonlAuditSink(LoggingAuditSink):
+    """Audit sink that ALSO appends to the configured JSONL file.
+
+    The micro-project's default; production environments that want the
+    Postgres ledger set ``AQP_CP_AUDIT_BACKEND=postgres`` (follow-up PR).
+    """
+
+    def start_run(self, run: WorkloadRun) -> None:  # noqa: D401
+        super().start_run(run)
+        try:
+            audit_service._persist(run, phase="start")  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            logger.warning("JsonlAuditSink start_run failed", exc_info=True)
+
+    def finish_run(self, run: WorkloadRun) -> None:  # noqa: D401
+        super().finish_run(run)
+        try:
+            audit_service._persist(run, phase="finish")  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            logger.warning("JsonlAuditSink finish_run failed", exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# Runtime cache + provider resolution
+# ---------------------------------------------------------------------------
+
+
+_RUNTIME_CACHE: dict[str, WorkloadRuntime] = {}
+_RUNTIME_LOCK = threading.RLock()
 
 
 def get_active_provider(alias: str | None = None) -> InfrastructureProvider:
@@ -47,6 +107,43 @@ def get_active_provider(alias: str | None = None) -> InfrastructureProvider:
         ) from exc
 
 
+def get_workload_runtime(alias: str | None = None) -> WorkloadRuntime:
+    """Return a cached :class:`WorkloadRuntime` for ``alias``.
+
+    The runtime is keyed on alias so swapping providers (rare) gives
+    each its own halt-aware execution path. The audit sink is the
+    JSONL-augmented logger by default; replace via
+    :meth:`WorkloadRuntime.set_audit_sink` from boot wiring.
+    """
+    bootstrap()
+    settings = get_settings()
+    chosen = alias or settings.provider
+    with _RUNTIME_LOCK:
+        if chosen not in _RUNTIME_CACHE:
+            _RUNTIME_CACHE[chosen] = WorkloadRuntime(
+                chosen,
+                audit_sink=JsonlAuditSink(),
+                mode="sidecar",
+            )
+        return _RUNTIME_CACHE[chosen]
+
+
+def set_workload_runtime_audit_sink(sink: AuditSink) -> None:
+    """Swap the audit sink for every cached runtime.
+
+    Used by deployments that want to plug in a Postgres-backed sink at
+    boot time (after the database engine is initialised).
+    """
+    with _RUNTIME_LOCK:
+        for runtime in _RUNTIME_CACHE.values():
+            runtime.set_audit_sink(sink)
+
+
+# ---------------------------------------------------------------------------
+# Backwards-compat shim — old function-style helper used by api/routers
+# ---------------------------------------------------------------------------
+
+
 async def execute_with_audit(
     *,
     action: WorkloadAction,
@@ -57,23 +154,37 @@ async def execute_with_audit(
     request_id: str | None = None,
     provider_alias: str | None = None,
 ) -> tuple[WorkloadRun, Any]:
-    """Wrap a provider call with audit start + finish + structured errors."""
+    """Wrap a provider call with audit start + finish + structured errors.
+
+    Backwards-compatible wrapper around :meth:`WorkloadRuntime._run`.
+    New routers should construct a :class:`WorkloadRuntime` directly and
+    call the typed action methods (:meth:`start`, :meth:`scale`, etc.).
+    """
     settings = get_settings()
     prov_alias = provider_alias or settings.provider
-    run = audit.start_run(
-        action=action,
-        provider=prov_alias,
-        target=target,
+    runtime = get_workload_runtime(prov_alias)
+    ctx = WorkloadRequestContext(
         user_id=user.sub,
-        request_id=request_id,
         org_id=user.org_id,
         workspace_id=user.workspace_id,
-        payload=payload,
+        request_id=request_id,
     )
+
+    async def _wrapped(_provider) -> Any:  # noqa: ANN001
+        return await fn()
+
     try:
-        result = await fn()
+        return await runtime._run(  # noqa: SLF001 - intentional bridge
+            action=action,
+            target=target,
+            namespace=(payload or {}).get("namespace")
+            if isinstance(payload, dict)
+            else None,
+            payload=payload or {},
+            ctx=ctx,
+            fn=_wrapped,
+        )
     except InfrastructureProviderUnavailable as exc:
-        audit.finish_run(run, status=WorkloadRunStatus.FAILED, error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -84,7 +195,6 @@ async def execute_with_audit(
             },
         ) from exc
     except InfrastructureProviderError as exc:
-        audit.finish_run(run, status=WorkloadRunStatus.FAILED, error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={
@@ -94,26 +204,27 @@ async def execute_with_audit(
                 "details": exc.details,
             },
         ) from exc
+    except WorkloadHaltedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "workload_halted",
+                "error_description": exc.reason,
+            },
+        ) from exc
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
-        audit.finish_run(run, status=WorkloadRunStatus.FAILED, error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "internal", "error_description": str(exc)},
         ) from exc
 
-    # Normalise result -> dict for the audit row.
-    if hasattr(result, "model_dump"):
-        result_dict = result.model_dump(mode="json")
-    elif isinstance(result, list):
-        result_dict = {"count": len(result)}
-    elif isinstance(result, dict):
-        result_dict = result
-    else:
-        result_dict = {"value": str(result)}
-    audit.finish_run(run, status=WorkloadRunStatus.SUCCEEDED, result=result_dict)
-    return run, result
 
-
-__all__ = ["execute_with_audit", "get_active_provider"]
+__all__ = [
+    "JsonlAuditSink",
+    "execute_with_audit",
+    "get_active_provider",
+    "get_workload_runtime",
+    "set_workload_runtime_audit_sink",
+]

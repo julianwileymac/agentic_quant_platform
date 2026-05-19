@@ -1,0 +1,76 @@
+---
+description: Cloudflare edge rule — runtime adapter, REST routes, MCP tools, Terraform module, CloudflareAccessProvider. Applies to aqp/cloudflare/, aqp/api/routes/cloudflare.py, aqp/data/mcp/tools/cloudflare.py, aqp/auth/providers/cloudflare_access.py, terraform/modules/cloudflare_edge/, aqp/terraform/codegen/templates/cloudflare_edge.tf.j2.
+globs: aqp/cloudflare/**/*.py,aqp/api/routes/cloudflare.py,aqp/data/mcp/tools/cloudflare.py,aqp/auth/providers/cloudflare_access.py,terraform/modules/cloudflare_edge/**,aqp/terraform/codegen/templates/cloudflare_edge.tf.j2
+alwaysApply: false
+---
+
+# Cloudflare edge
+
+Scoped rule for the Cloudflare-related surfaces of the AQP
+Management Engine (Phase D of the `aqp_management_engine` plan).
+
+## Hard rules
+
+1. **Single sanctioned client.** Every Cloudflare API call goes
+   through `aqp.cloudflare.get_cloudflare_client()` (which itself
+   resolves credentials via
+   [`CredentialResolver`](mdc:aqp/credentials/resolver.py),
+   AGENTS rule 26). Don't import `cloudflare.Cloudflare` directly
+   from REST routes, MCP tools, or DataMCP bridges.
+2. **Adapter == one place for control-plane shape.**
+   [`CloudflareEdgeAdapter`](mdc:aqp/cloudflare/adapter.py) is the
+   single Python surface that REST routes
+   ([`aqp/api/routes/cloudflare.py`](mdc:aqp/api/routes/cloudflare.py)),
+   MCP tools
+   ([`aqp/data/mcp/tools/cloudflare.py`](mdc:aqp/data/mcp/tools/cloudflare.py)),
+   and the in-CP
+   [`CloudflareProvider`](mdc:aqp_control_plane/src/aqp_cp/providers/cloudflare.py)
+   share. New CRUD verbs land on the adapter first, then get
+   wrappers on the route + MCP layers.
+3. **Auto-append the catch-all.** Tunnel ingress configs MUST end
+   with `{"service": "http_status:404"}`. The adapter's
+   `put_tunnel_config` does this for you; raw Terraform / SDK
+   calls that bypass it are a rule violation.
+4. **Validate `Cf-Access-Jwt-Assertion`.** When the edge fronts
+   AQP with Cloudflare Access, every request carries the JWT
+   header. The
+   [`CloudflareAccessProvider`](mdc:aqp/auth/providers/cloudflare_access.py)
+   validates it against
+   `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`.
+   The merge into the active `RequestContext` happens inside
+   [`aqp/api/security.py::_granted_scopes_for`](mdc:aqp/api/security.py)
+   — don't add a parallel validator in route code.
+5. **JWKS cache TTL = 6h.** Cloudflare rotates signing keys
+   every ~6 weeks; previous keys stay valid for 7 days. The
+   provider's cache TTL is set to 6h to balance freshness with
+   reliability. Don't lower it below 1h (rate limit) or raise it
+   above 24h (stale-key window).
+6. **Terraform module is the durable path.** For new public
+   endpoints, prefer
+   [`terraform/modules/cloudflare_edge`](mdc:terraform/modules/cloudflare_edge/main.tf)
+   over the runtime adapter so the change lands in an immutable
+   `terraform_stack_spec_versions` row (AGENTS rule 43). Adapter
+   verbs are for hot-fixes and one-off operator ops.
+7. **Provider pin.** `cloudflare = "~> 5.6"` in
+   [`terraform/versions.tf`](mdc:terraform/versions.tf). Bumping
+   the major version requires updating the codegen template +
+   testing against the existing rpi tunnel before the merge.
+
+## Don't
+
+- Don't log `CLOUDFLARE_API_TOKEN`, tunnel secrets, Access app
+  client_secrets, or the `Cf-Access-Jwt-Assertion` JWT value.
+  The
+  [`aqp-management-engine.mdc`](mdc:.cursor/rules/aqp-management-engine.mdc)
+  always-on rule already bans these; this rule restates them for
+  scope visibility.
+- Don't enable `AQP_CP_CLOUDFLARE_DESTRUCTIVE_ROTATION=1` without
+  scheduling a cloudflared rollout immediately afterwards —
+  tunnel secret rotation requires delete+recreate, and the public
+  edge goes dark until the daemon reconnects.
+- Don't wire a Cloudflare Worker as the Kubernetes ingress
+  controller without a parity test against
+  [`KubernetesAdapter`](mdc:aqp/kubernetes/protocol.py) — the
+  pod-level exec / log / archive ops MUST keep working.
+
+Canonical doc: [docs/management-engine.md](mdc:docs/management-engine.md).

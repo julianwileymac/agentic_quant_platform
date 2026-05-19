@@ -6,12 +6,23 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = "~> 2.30"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.6"
+    }
   }
 }
 
 provider "kubernetes" {
   config_path    = pathexpand(var.rpi_kubeconfig_path)
   config_context = var.rpi_kube_context != "" ? var.rpi_kube_context : null
+}
+
+provider "cloudflare" {
+  # API token resolved from the env (CLOUDFLARE_API_TOKEN) so the
+  # plan never has the token inlined. Disable cloudflare provisioning
+  # by leaving the token unset; the conditional module block below
+  # gates resource creation on var.cloudflare_enabled.
 }
 
 locals {
@@ -59,4 +70,23 @@ module "aqp_workloads" {
   auth_scim_bearer_token_hash_secret_name = var.auth_scim_bearer_token_hash_secret_name
 
   depends_on = [module.target]
+}
+
+# Management Engine Phase D — optional Cloudflare Zero Trust edge.
+# Replaces the previously hand-operated ``cloudflared`` deployment under
+# rpi_kubernetes/kubernetes/base-services/cloudflared/ so the tunnel +
+# DNS routes + Access app are IaC-managed alongside everything else.
+# Disable by setting ``cloudflare_enabled=false`` in tfvars.
+module "cloudflare_edge" {
+  count  = var.cloudflare_enabled ? 1 : 0
+  source = "../../modules/cloudflare_edge"
+
+  tunnel_name                 = var.cloudflare_tunnel_name
+  account_id                  = var.cloudflare_account_id
+  zone_id                     = var.cloudflare_zone_id
+  ingress_rules               = var.cloudflare_ingress_rules
+  enable_access_app           = var.cloudflare_enable_access_app
+  access_app_name             = var.cloudflare_access_app_name
+  access_app_session_duration = var.cloudflare_access_app_session_duration
+  access_policies             = var.cloudflare_access_policies
 }

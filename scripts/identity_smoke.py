@@ -12,9 +12,16 @@ verify the resolver chain picks up M2M tokens when the toggle is on.
 This is a diagnostic + validation tool. It always uses the in-process
 :class:`MockProvider` regardless of ``AQP_AUTH_PROVIDER`` so the smoke
 output is deterministic.
+
+Per the Management Engine subagent rule
+(``.cursor/rules/aqp-management-engine.mdc``) this script NEVER prints
+raw token prefixes. The ``--unsafe-print-token-prefixes`` flag is a
+hard opt-in for local debugging only; in CI / shared-transcript
+environments the redacted output keeps tokens out of audit logs.
 """
 from __future__ import annotations
 
+import argparse
 import sys
 from urllib.parse import parse_qs, urlparse
 
@@ -26,6 +33,18 @@ from aqp.auth.providers import (
     register_provider,
     reset_active_provider,
 )
+
+
+_PRINT_TOKEN_PREFIXES = False
+
+
+def _safe_token(value: str | None) -> str:
+    """Return ``"<redacted>"`` unless the operator opted in with the flag."""
+    if not value:
+        return "<empty>"
+    if _PRINT_TOKEN_PREFIXES:
+        return f"{value[:4]}…"
+    return "<redacted>"
 
 
 def _print_header(title: str) -> None:
@@ -77,15 +96,15 @@ def main() -> int:
         redirect_uri=redirect_uri,
         code_verifier=verifier,
     )
-    print(f"  access_token:  {tokens.access_token[:18]}...")
-    print(f"  id_token:      {(tokens.id_token or '')[:18]}...")
-    print(f"  refresh_token: {(tokens.refresh_token or '')[:18]}...")
+    print(f"  access_token:  {_safe_token(tokens.access_token)}")
+    print(f"  id_token:      {_safe_token(tokens.id_token)}")
+    print(f"  refresh_token: {_safe_token(tokens.refresh_token)}")
     print(f"  expires_in:    {tokens.expires_in}")
     print(f"  scope:         {tokens.scope}")
 
     _print_header("refresh -> rotate")
     refreshed = provider.refresh(tokens.refresh_token or "")
-    print(f"  rotated:       {refreshed.access_token[:18]}...")
+    print(f"  rotated:       {_safe_token(refreshed.access_token)}")
 
     _print_header("logout URL")
     logout = provider.logout_url(return_to="http://localhost/done")
@@ -97,7 +116,10 @@ def main() -> int:
     if polaris is None:
         print("  <m2m disabled or no audience>")
     else:
-        print(f"  audience=polaris  access_token={polaris.access_token[:18]}...  ttl={polaris.expires_in}s")
+        print(
+            f"  audience=polaris  access_token={_safe_token(polaris.access_token)}  "
+            f"ttl={polaris.expires_in}s"
+        )
 
     print()
     print("[OK] identity_smoke passed")
@@ -105,4 +127,15 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--unsafe-print-token-prefixes",
+        action="store_true",
+        help=(
+            "Print the first 4 characters of every minted token. NEVER pass "
+            "this in CI or shared transcripts — only local one-off debugging."
+        ),
+    )
+    args = parser.parse_args()
+    _PRINT_TOKEN_PREFIXES = bool(args.unsafe_print_token_prefixes)
     sys.exit(main())

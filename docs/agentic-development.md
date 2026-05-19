@@ -14,13 +14,14 @@ execution trails", and "MCP control planes" as if they were novel
 patterns to invent. AQP already implements every one of them — under
 different names, with stronger invariants, and with ledger-backed
 audit chains. This doc makes that mapping explicit so you don't waste
-time inventing a parallel "skill" surface alongside the four spec
+time inventing a parallel "skill" surface alongside the current spec
 runtimes that already exist.
 
 The doc has three sections:
 
 1. **AQP's spec-pattern is the skill-artifact pattern.** The
-   four-runtime architecture (Agent / Bot / RL / Analysis) is the
+   spec-runtime architecture (Agent / Bot / RL / Analysis / Workflow /
+   Terraform) is the
    skill-graph + Memento-skill equivalent. Including where AQP
    deliberately diverges from research recommendations.
 2. **Working with Cursor agents in AQP.** Static channel + dynamic
@@ -71,7 +72,7 @@ Here's how each lands on AQP's primitives:
 | Research term | AQP equivalent | Notes |
 | --- | --- | --- |
 | "Skill artifact" | One row in a `*_versions` table | The artifact has semantic interface (the Pydantic spec), preconditions (the spec's input schema), executable payload (the runtime invocation), and deterministic postconditions (the run row + Iceberg outputs). |
-| "Skill graph" | The full registry across the four runtimes | Each runtime hosts one graph; `BotSpec` references `AgentSpec`s, `RLExperimentSpec` references data pipelines, `AnalysisSpec` references flows. |
+| "Skill graph" | The full registry across the active spec runtimes | Each runtime hosts one graph; `BotSpec` references `AgentSpec`s, `RLExperimentSpec` references data pipelines, `AnalysisSpec` references flows, and orchestration/deployment specs compose the runtime graph at higher levels. |
 | "Auditable execution trail" | `*_runs` ledger rows + Iceberg outputs + per-step result tables | E.g. `analysis_runs` + `analysis_step_results` + `aqp_gold_analysis_<flow.namespace>` |
 | "MCP control plane" | The DataMCPTool catalog | One catalog, two transports (in-process bridge + FastAPI router + stdio binary). See [data-mcp.md](data-mcp.md). |
 | "Memento-skill / continual learning" | Re-snapshot on change | When a spec changes, `persist_spec` inserts a **new** version row — old versions stay for replay. The "memory" is the immutable history. |
@@ -143,7 +144,7 @@ AQP follows the static / dynamic context bifurcation pattern that
 Anthropic's Cursor integration recommends:
 
 - **Static channel** — what doesn't change between sessions:
-  - [AGENTS.md](../AGENTS.md) — 25 hard rules
+  - [AGENTS.md](../AGENTS.md) — 45 hard rules
   - [.cursor/rules/](../.cursor/rules) — glob-scoped rule files
   - [docs/](../docs) — narrative architecture
 - **Dynamic channel** — what changes session-to-session:
@@ -294,7 +295,7 @@ runs a fixed adversarial battery against it before promotion.
 
 ## When in doubt
 
-1. Read [../AGENTS.md](../AGENTS.md) — the canonical 25 rules.
+1. Read [../AGENTS.md](../AGENTS.md) — the canonical 45 rules.
 2. Read [../WORKFLOW.md](../WORKFLOW.md) — the cadence.
 3. Read [multi-agent-patterns.md](multi-agent-patterns.md) — when
    you're scaling the agent topology.

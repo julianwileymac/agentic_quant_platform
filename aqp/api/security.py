@@ -184,6 +184,33 @@ def _granted_scopes_for(user: CurrentUser, request: Request | None) -> set[str]:
     scopes: set[str] = set()
     if request is not None:
         claims = getattr(request.state, "oidc_claims", None)
+        # Phase D of the Management Engine: merge Cloudflare Access
+        # claims when the request entered through a Cloudflare Tunnel
+        # + Access app. Lazy-imported because the provider module
+        # depends on optional crypto libs and we don't want to take a
+        # hard import dep at the security-layer boot path.
+        try:
+            from aqp.auth.providers.cloudflare_access import (
+                extract_cloudflare_access_claims,
+            )
+
+            cf_claims = extract_cloudflare_access_claims(request)
+        except Exception:  # noqa: BLE001
+            cf_claims = None
+        if isinstance(cf_claims, dict):
+            # Stash on request.state for downstream consumers + merge
+            # into the active claims bundle so role / scope expansion
+            # picks them up like any other OIDC claim.
+            request.state.cf_access_claims = cf_claims
+            if not isinstance(claims, dict):
+                claims = dict(cf_claims)
+            else:
+                # Cloudflare Access claims take precedence on collision
+                # because the edge is the trust boundary closest to the
+                # user, but we keep the upstream OIDC sub when present.
+                merged = dict(cf_claims)
+                merged.update({k: v for k, v in claims.items() if k not in merged})
+                claims = merged
         if isinstance(claims, dict):
             scope_str = claims.get("scope")
             if isinstance(scope_str, str):

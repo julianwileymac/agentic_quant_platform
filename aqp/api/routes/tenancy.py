@@ -222,6 +222,100 @@ def link_org_to_entra_tenant(
     return result.data
 
 
+class PromoteEntraLinkPayload(BaseModel):
+    organization_id: str = Field(..., min_length=1)
+    # ``default_role`` mirrors the EntraTenantLinkWizard's existing
+    # payload: when set, the route writes ``{"_default": default_role}``
+    # into ``role_mapping`` so subsequent first-login provisions pick
+    # the bootstrap role without an explicit per-group mapping.
+    default_role: str | None = None
+    role_mapping: dict[str, str] | None = None
+    allowed_email_domains: list[str] | None = None
+
+
+@router.post("/entra-links/{link_id}/promote")
+def promote_entra_link(
+    link_id: str,
+    body: PromoteEntraLinkPayload,
+    user: CurrentUser = Depends(require_scope("tenancy:admin")),
+    ctx: RequestContext = Depends(current_context),
+) -> dict[str, Any]:
+    """Promote a ``pending`` :class:`EntraTenantLink` to ``active``.
+
+    AGENTS rule 44 keeps :class:`EntraTenantLink` rows ``pending`` until
+    an AQP super-admin attaches them to an :class:`Organization`. This
+    route — called by
+    :mod:`frontend/src/components/onboarding/EntraTenantLinkWizard` —
+    is the only sanctioned promotion ingress. The wizard does NOT post
+    the raw Entra ``tid`` (the link row already carries it); it posts
+    the chosen org plus optional role / domain whitelists.
+    """
+    from datetime import datetime, timezone
+
+    from aqp.auth.audit import emit_audit_event
+    from aqp.persistence.db import get_session
+    from aqp.persistence.models_terraform import EntraTenantLink
+
+    with get_session() as session:
+        link = (
+            session.query(EntraTenantLink)
+            .filter(EntraTenantLink.id == link_id)
+            .one_or_none()
+        )
+        if link is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"entra tenant link {link_id!r} not found",
+            )
+        if str(link.status or "").lower() not in ("pending", "suspended"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"link {link_id!r} is in status={link.status!r}; "
+                    "only pending / suspended links can be promoted"
+                ),
+            )
+        link.organization_id = body.organization_id
+        link.status = "active"
+        link.approved_by_user_id = user.id
+        link.approved_at = datetime.now(timezone.utc)
+        merged_role_mapping: dict[str, str] = {}
+        if body.role_mapping is not None:
+            merged_role_mapping.update({str(k): str(v) for k, v in body.role_mapping.items()})
+        if body.default_role:
+            merged_role_mapping.setdefault("_default", str(body.default_role))
+        if merged_role_mapping:
+            link.role_mapping = merged_role_mapping
+        if body.allowed_email_domains is not None:
+            link.allowed_email_domains = ",".join(body.allowed_email_domains)
+        session.add(link)
+        session.commit()
+        promoted = {
+            "id": link.id,
+            "organization_id": link.organization_id,
+            "entra_tenant_id": link.entra_tenant_id,
+            "status": link.status,
+            "approved_at": link.approved_at.isoformat() if link.approved_at else None,
+            "approved_by_user_id": link.approved_by_user_id,
+        }
+
+    try:
+        emit_audit_event(
+            event_type="tenancy.entra_link.promoted",
+            user_id=user.id,
+            event_category="tenancy",
+            severity="info",
+            source="api.tenancy.promote_entra_link",
+            details={
+                "entra_link_id": link_id,
+                "organization_id": body.organization_id,
+            },
+        )
+    except Exception:  # noqa: BLE001 - audit is best-effort
+        logger.debug("emit_audit_event for entra_link.promoted failed", exc_info=True)
+    return promoted
+
+
 @router.get("/entra-links")
 def list_entra_links(
     organization_id: str | None = Query(default=None),

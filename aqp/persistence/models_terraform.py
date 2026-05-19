@@ -173,10 +173,14 @@ class EntraTenantLink(Base):
     __tablename__ = "entra_tenant_links"
 
     id = Column(String(36), primary_key=True, default=_uuid)
+    # Alembic 0056 relaxes this to nullable so the ``pending`` lifecycle
+    # in AGENTS rule 44 actually works — first-login provisioning in
+    # ``aqp.auth.user._apply_entra_tenant_link`` creates the link row
+    # BEFORE a super-admin promotes it to a real Organization.
     organization_id = Column(
         String(36),
         ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     entra_tenant_id = Column(String(80), nullable=False, unique=True, index=True)

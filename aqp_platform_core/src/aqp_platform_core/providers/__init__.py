@@ -14,6 +14,7 @@ from __future__ import annotations
 from aqp_platform_core.providers.protocol import (
     InfrastructureProvider,
     InfrastructureProviderError,
+    InfrastructureProviderMeta,
     InfrastructureProviderUnavailable,
     ProviderKind,
 )
@@ -26,6 +27,7 @@ from aqp_platform_core.providers.registry import (
 __all__ = [
     "InfrastructureProvider",
     "InfrastructureProviderError",
+    "InfrastructureProviderMeta",
     "InfrastructureProviderUnavailable",
     "ProviderKind",
     "ProviderRegistry",

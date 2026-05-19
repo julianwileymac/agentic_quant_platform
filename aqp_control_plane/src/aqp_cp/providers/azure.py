@@ -25,6 +25,28 @@ class AzureProvider(CloudProviderStub):
     cloud_name = "Azure"
     follow_up_pr = "aqp-control-plane#azure-impl"
     docs_link = "docs/operations/add-new-provider.md#azure"
+    delegate_kubernetes_alias = (
+        "kubernetes"
+        if os.environ.get("AQP_CP_AZURE_DELEGATE_K8S", "").lower() in ("1", "true", "yes")
+        else None
+    )
+
+    def _real_health_probe(self) -> tuple[bool, dict | None, str | None]:
+        """Use ``azure-identity`` to confirm a token can be minted for ARM."""
+        try:
+            from azure.identity import DefaultAzureCredential  # type: ignore[import-not-found]
+        except ImportError:
+            return False, None, "azure-identity not installed"
+        try:
+            cred = DefaultAzureCredential(exclude_interactive_browser_credential=True)
+            token = cred.get_token("https://management.azure.com/.default")
+            return True, {
+                "subscription_id": os.environ.get("AZURE_SUBSCRIPTION_ID", ""),
+                "tenant_id": os.environ.get("AZURE_TENANT_ID", ""),
+                "token_expires_in_s": int(token.expires_on - __import__("time").time()),
+            }, None
+        except Exception as exc:  # noqa: BLE001
+            return False, None, f"Azure token mint failed: {exc}"
 
     def _check_credentials(self) -> tuple[bool, str | None]:
         # azure-identity supports the same chain as the CLI / Managed

@@ -45,8 +45,21 @@ try:  # pragma: no cover - dep guard
 except Exception:  # noqa: BLE001
     MsalEntraProvider = None  # type: ignore[assignment]
 
+# Same pattern for CloudflareAccessProvider — PyJWT + httpx are both
+# already AQP hard deps, but we keep the import lazy so an unrelated
+# import error here doesn't break the auth bootstrap.
+try:  # pragma: no cover - dep guard
+    from aqp.auth.providers.cloudflare_access import (  # noqa: F401
+        CloudflareAccessProvider,
+        extract_cloudflare_access_claims,
+    )
+except Exception:  # noqa: BLE001
+    CloudflareAccessProvider = None  # type: ignore[assignment]
+    extract_cloudflare_access_claims = None  # type: ignore[assignment]
+
 __all__ = [
     "Auth0Provider",
+    "CloudflareAccessProvider",
     "GenericOidcProvider",
     "IDENTITY_PROVIDER_KIND",
     "IdentityProvider",
@@ -57,6 +70,7 @@ __all__ = [
     "MockProvider",
     "MsalEntraProvider",
     "TokenResponse",
+    "extract_cloudflare_access_claims",
     "get_active_provider",
     "list_provider_classes",
     "register_provider",

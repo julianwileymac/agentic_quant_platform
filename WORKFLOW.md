@@ -198,7 +198,7 @@ finished change.
 
 ## Cross-references
 
-- [AGENTS.md](AGENTS.md) — the canonical 25 hard rules
+- [AGENTS.md](AGENTS.md) — the canonical 45 hard rules
 - [CONTRIBUTING.md](CONTRIBUTING.md) — human dev-environment
   onboarding
 - [.cursor/rules/](.cursor/rules/) — glob-scoped rule files

@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any
@@ -31,6 +32,11 @@ from aqp_platform_core.models.deployment import (
 )
 from aqp_platform_core.models.health import HealthStatus, ProviderHealth
 from aqp_platform_core.models.telemetry import MetricPoint
+from aqp_platform_core.models.workloads import (
+    SecretRotationResult,
+    WorkloadExecResult,
+    WorkloadLogEvent,
+)
 from aqp_platform_core.providers.protocol import (
     InfrastructureProvider,
     InfrastructureProviderError,
@@ -359,6 +365,331 @@ class KubernetesProvider(InfrastructureProvider):
             except Exception as exc:  # noqa: BLE001
                 logger.warning("kubernetes rolling-restart annotation failed: %s", exc)
         return True
+
+    # ---- Management Engine extensions (Phase A) ----------------------
+
+    async def restart(
+        self,
+        service_id: str,
+        *,
+        namespace: str | None = None,
+    ) -> DeploymentStatus:
+        """Rolling-restart by stamping ``aqp.internal/restarted-at`` on the pod template."""
+        _core, apps, _co = await asyncio.to_thread(self._ensure_client)
+        ns = namespace or self.default_namespace
+        ts = _now().isoformat()
+        body = {
+            "spec": {
+                "template": {
+                    "metadata": {
+                        "annotations": {"aqp.internal/restarted-at": ts}
+                    }
+                }
+            }
+        }
+        try:
+            await asyncio.to_thread(
+                apps.patch_namespaced_deployment,
+                name=service_id,
+                namespace=ns,
+                body=body,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise InfrastructureProviderError(
+                f"kubernetes restart failed for {service_id}: {exc}",
+                code="restart_failed",
+                provider=self.provider_alias,
+            ) from exc
+        return await self.status(service_id, namespace=ns)
+
+    async def exec(
+        self,
+        service_id: str,
+        *,
+        command: list[str],
+        container: str | None = None,
+        timeout_seconds: int = 60,
+        stdin: bytes | None = None,
+        namespace: str | None = None,
+    ) -> WorkloadExecResult:
+        """Execute ``command`` in a pod backing ``service_id``.
+
+        Uses ``kubernetes.stream.stream`` with ``_preload_content=False``
+        per the documented client bug. The first pod matching the
+        ``app=<service_id>`` label is targeted; for finer control,
+        callers should use the lower-level pod exec route.
+        """
+        core, _apps, _co = await asyncio.to_thread(self._ensure_client)
+        ns = namespace or self.default_namespace
+        try:
+            from kubernetes.stream import stream  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise InfrastructureProviderUnavailable(
+                "kubernetes stream module not installed",
+                provider=self.provider_alias,
+            ) from exc
+
+        pod_name = await self._find_pod_for_service(service_id, namespace=ns)
+        started_at = _now()
+        try:
+            resp = await asyncio.to_thread(
+                stream,
+                core.connect_get_namespaced_pod_exec,
+                pod_name,
+                ns,
+                command=command,
+                container=container,
+                stderr=True,
+                stdin=stdin is not None,
+                stdout=True,
+                tty=False,
+                _preload_content=False,
+                _request_timeout=timeout_seconds,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise InfrastructureProviderError(
+                f"kubernetes exec dispatch failed for {service_id}/{pod_name}: {exc}",
+                code="exec_failed",
+                provider=self.provider_alias,
+            ) from exc
+
+        stdout_chunks: list[str] = []
+        stderr_chunks: list[str] = []
+
+        def _drain() -> tuple[str, str, int | None]:
+            try:
+                if stdin is not None:
+                    resp.write_stdin(stdin.decode("utf-8", errors="replace"))
+                deadline = time.monotonic() + timeout_seconds
+                while resp.is_open():
+                    if time.monotonic() > deadline:
+                        break
+                    resp.update(timeout=1)
+                    if resp.peek_stdout():
+                        stdout_chunks.append(resp.read_stdout())
+                    if resp.peek_stderr():
+                        stderr_chunks.append(resp.read_stderr())
+                # Read any tail buffered after the socket closed.
+                if resp.peek_stdout():
+                    stdout_chunks.append(resp.read_stdout())
+                if resp.peek_stderr():
+                    stderr_chunks.append(resp.read_stderr())
+            finally:
+                try:
+                    resp.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            rc = None
+            try:
+                # kubernetes-client surfaces the exit code via returncode.
+                rc = int(getattr(resp, "returncode", None) or 0)
+            except Exception:  # noqa: BLE001
+                rc = None
+            return "".join(stdout_chunks), "".join(stderr_chunks), rc
+
+        stdout, stderr, rc = await asyncio.to_thread(_drain)
+        finished_at = _now()
+        return WorkloadExecResult(
+            service_id=service_id,
+            namespace=ns,
+            container=container,
+            command=list(command),
+            stdout=stdout,
+            stderr=stderr,
+            returncode=rc,
+            elapsed_ms=(finished_at - started_at).total_seconds() * 1000.0,
+            started_at=started_at,
+            finished_at=finished_at,
+        )
+
+    async def tail_logs(
+        self,
+        service_id: str,
+        *,
+        container: str | None = None,
+        since_seconds: int | None = None,
+        tail: int | None = 200,
+        follow: bool = False,
+        max_lines: int | None = None,
+        namespace: str | None = None,
+    ) -> AsyncIterator[WorkloadLogEvent]:
+        """Stream :class:`WorkloadLogEvent` frames for ``service_id``.
+
+        CRITICAL: passes ``_preload_content=False`` and consumes through
+        ``kubernetes.watch.Watch().stream(...)`` per the documented
+        sparse-log hang in the Python client.
+        """
+        core, _apps, _co = await asyncio.to_thread(self._ensure_client)
+        ns = namespace or self.default_namespace
+        try:
+            from kubernetes import watch  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise InfrastructureProviderUnavailable(
+                "kubernetes watch module not installed",
+                provider=self.provider_alias,
+            ) from exc
+
+        pod_name = await self._find_pod_for_service(service_id, namespace=ns)
+        emitted = 0
+
+        def _open_stream():
+            kwargs: dict[str, Any] = {
+                "name": pod_name,
+                "namespace": ns,
+                "follow": bool(follow),
+                "_preload_content": False,
+            }
+            if container:
+                kwargs["container"] = container
+            if since_seconds is not None:
+                kwargs["since_seconds"] = int(since_seconds)
+            if tail is not None:
+                kwargs["tail_lines"] = int(tail)
+            if follow:
+                w = watch.Watch()
+                return ("watch", w.stream(core.read_namespaced_pod_log, **kwargs))
+            # One-shot tail: stream chunks then close.
+            resp = core.read_namespaced_pod_log(**kwargs)
+            return ("response", resp)
+
+        kind, source = await asyncio.to_thread(_open_stream)
+        try:
+            if kind == "watch":
+                # ``source`` is a generator of complete lines from Watch.stream.
+                for line in source:
+                    if max_lines is not None and emitted >= max_lines:
+                        break
+                    emitted += 1
+                    yield WorkloadLogEvent(
+                        service_id=service_id,
+                        namespace=ns,
+                        container=container,
+                        line=str(line).rstrip("\n"),
+                        timestamp=_now(),
+                    )
+            else:
+                # ``source`` is the raw HTTPResponse; iterate by line.
+                buffer = ""
+                for chunk in source.stream(amt=4096, decode_content=False):
+                    buffer += chunk.decode("utf-8", errors="replace")
+                    while "\n" in buffer:
+                        line, _, buffer = buffer.partition("\n")
+                        if max_lines is not None and emitted >= max_lines:
+                            return
+                        emitted += 1
+                        yield WorkloadLogEvent(
+                            service_id=service_id,
+                            namespace=ns,
+                            container=container,
+                            line=line.rstrip("\n"),
+                            timestamp=_now(),
+                        )
+                if buffer.strip():
+                    yield WorkloadLogEvent(
+                        service_id=service_id,
+                        namespace=ns,
+                        container=container,
+                        line=buffer.rstrip("\n"),
+                        timestamp=_now(),
+                    )
+        finally:
+            try:
+                if kind == "response":
+                    source.release_conn()
+            except Exception:  # noqa: BLE001
+                pass
+
+    async def rotate_secret(
+        self,
+        service_id: str,
+        *,
+        secret_name: str,
+        namespace: str | None = None,
+    ) -> SecretRotationResult:
+        """Rotate a Kubernetes Secret by recreating it with refreshed material.
+
+        AQP-level rotation: this method bumps the
+        ``aqp.internal/rotated-at`` annotation on the secret + the
+        deployment template (so pods pick up the new value via the next
+        rollout). The actual secret material MUST be pre-provisioned by
+        the ESO/External Secrets pipeline; this method does NOT fetch
+        plaintext secrets. The Management Engine rule forbids logging
+        secret values.
+        """
+        core, apps, _co = await asyncio.to_thread(self._ensure_client)
+        ns = namespace or self.default_namespace
+        ts = _now().isoformat()
+        rotation_id = f"k8s-{service_id}-{secret_name}-{int(time.time())}"
+        try:
+            from kubernetes.client.exceptions import ApiException  # type: ignore[import-not-found]
+
+            secret = await asyncio.to_thread(
+                core.read_namespaced_secret, name=secret_name, namespace=ns
+            )
+            # Annotate the secret with the rotation marker.
+            annotations = dict(getattr(secret.metadata, "annotations", None) or {})
+            annotations["aqp.internal/rotated-at"] = ts
+            annotations["aqp.internal/rotation-id"] = rotation_id
+            secret.metadata.annotations = annotations
+            await asyncio.to_thread(
+                core.patch_namespaced_secret,
+                name=secret_name,
+                namespace=ns,
+                body=secret,
+            )
+            # Trigger a rolling restart so pods re-mount the secret.
+            try:
+                await self.restart(service_id, namespace=ns)
+            except InfrastructureProviderError as exc:
+                logger.warning(
+                    "rotate_secret: rolling restart of %s failed: %s",
+                    service_id,
+                    exc,
+                )
+        except ApiException as exc:
+            raise InfrastructureProviderError(
+                f"kubernetes rotate_secret failed for {service_id}/{secret_name}: {exc}",
+                code="rotate_secret_failed",
+                provider=self.provider_alias,
+            ) from exc
+        return SecretRotationResult(
+            service_id=service_id,
+            secret_name=secret_name,
+            backend="k8s_secret",
+            rotation_id=rotation_id,
+            new_version=ts,
+            rotated_at=_now(),
+            metadata={"namespace": ns},
+        )
+
+    async def _find_pod_for_service(
+        self, service_id: str, *, namespace: str
+    ) -> str:
+        """Return the first ready pod name matching ``app=<service_id>``."""
+        core, _apps, _co = await asyncio.to_thread(self._ensure_client)
+        try:
+            pods = await asyncio.to_thread(
+                core.list_namespaced_pod,
+                namespace=namespace,
+                label_selector=f"app={service_id}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise InfrastructureProviderError(
+                f"kubernetes list_pods failed for {service_id}: {exc}",
+                code="list_pods_failed",
+                provider=self.provider_alias,
+            ) from exc
+        for pod in pods.items:
+            phase = getattr(getattr(pod, "status", None), "phase", "")
+            if str(phase).lower() == "running":
+                return pod.metadata.name
+        if pods.items:
+            return pods.items[0].metadata.name
+        raise InfrastructureProviderError(
+            f"no pods found for service {service_id!r} in namespace {namespace!r}",
+            code="no_pods",
+            provider=self.provider_alias,
+        )
 
     # ---- Telemetry ---------------------------------------------------
 

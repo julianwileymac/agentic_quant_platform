@@ -1,3 +1,7 @@
+> Archived context note: this document is historical planning material.  
+> Canonical operational guidance lives in `README.md`, `CONTRIBUTING.md`,
+> `docs/index.md`, and `docs/operations/*`. See `docs/archive/README.md`.
+
 # AQP Refactor Master Prompt
 
 Use this prompt with a coding model to implement the refactor program described in the report, but grounded in the current AQP codebase and hard rules.

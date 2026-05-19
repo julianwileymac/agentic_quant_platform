@@ -28,6 +28,10 @@ from aqp_platform_core.models.deployment import (
 )
 from aqp_platform_core.models.health import HealthStatus, ProviderHealth
 from aqp_platform_core.models.telemetry import MetricPoint
+from aqp_platform_core.models.workloads import (
+    WorkloadExecResult,
+    WorkloadLogEvent,
+)
 from aqp_platform_core.providers.protocol import (
     InfrastructureProvider,
     InfrastructureProviderError,
@@ -305,6 +309,199 @@ class DockerComposeProvider(InfrastructureProvider):
                 provider=self.provider_alias,
             )
         return True
+
+    # ---- Management Engine extensions (Phase A) ----------------------
+
+    async def restart(
+        self,
+        service_id: str,
+        *,
+        namespace: str | None = None,
+    ) -> DeploymentStatus:
+        """``docker compose restart`` the given service."""
+        await self._require_compose()
+        args = self._compose_args() + ["restart", service_id]
+        rc, _stdout, stderr = await self._run(args)
+        if rc != 0:
+            raise InfrastructureProviderError(
+                f"docker compose restart failed for {service_id}: {stderr.strip()}",
+                code="restart_failed",
+                provider=self.provider_alias,
+            )
+        return await self.status(service_id, namespace=namespace)
+
+    async def exec(
+        self,
+        service_id: str,
+        *,
+        command: list[str],
+        container: str | None = None,
+        timeout_seconds: int = 60,
+        stdin: bytes | None = None,
+        namespace: str | None = None,
+    ) -> WorkloadExecResult:
+        """Execute ``command`` in the first running container of ``service_id``.
+
+        Uses the Docker SDK with ``Accept-Encoding: identity`` to avoid
+        the documented gigabyte-output latency bug.
+        """
+        await self._require_compose()
+        try:
+            import docker  # type: ignore[import-not-found]
+            from docker.errors import APIError  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise InfrastructureProviderUnavailable(
+                "docker SDK not installed (pip install 'aqp-control-plane[docker_compose]')",
+                provider=self.provider_alias,
+            ) from exc
+
+        started_at = _now()
+        client = docker.from_env()
+        # Disable response gzip — Docker SDK aggressively re-encodes large
+        # outputs and the daemon's reverse proxy hangs without this header.
+        try:
+            client.api._session.headers["Accept-Encoding"] = "identity"
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            label_filter = [
+                f"com.docker.compose.service={service_id}",
+                f"com.docker.compose.project={self.project_name}",
+            ]
+            containers = client.containers.list(filters={"label": label_filter})
+            if not containers:
+                raise InfrastructureProviderError(
+                    f"no compose container found for service {service_id!r}",
+                    code="no_container",
+                    provider=self.provider_alias,
+                )
+            ctr = containers[0]
+
+            def _exec() -> tuple[str, str, int | None]:
+                try:
+                    rc_value, output = ctr.exec_run(
+                        cmd=list(command),
+                        stdout=True,
+                        stderr=True,
+                        stdin=stdin is not None,
+                        tty=False,
+                        demux=True,
+                    )
+                except APIError as exc:
+                    raise InfrastructureProviderError(
+                        f"docker exec failed for {service_id}: {exc}",
+                        code="exec_failed",
+                        provider=self.provider_alias,
+                    ) from exc
+                # demux=True -> (stdout_bytes, stderr_bytes) tuple.
+                stdout_b, stderr_b = output if isinstance(output, tuple) else (output, b"")
+                return (
+                    (stdout_b or b"").decode("utf-8", errors="replace"),
+                    (stderr_b or b"").decode("utf-8", errors="replace"),
+                    int(rc_value) if rc_value is not None else None,
+                )
+
+            stdout, stderr, rc = await asyncio.wait_for(
+                asyncio.to_thread(_exec), timeout=timeout_seconds
+            )
+        except asyncio.TimeoutError as exc:
+            raise InfrastructureProviderError(
+                f"docker exec timed out after {timeout_seconds}s",
+                code="exec_timeout",
+                provider=self.provider_alias,
+            ) from exc
+        finally:
+            try:
+                client.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+        finished_at = _now()
+        return WorkloadExecResult(
+            service_id=service_id,
+            namespace=namespace,
+            container=ctr.name,
+            command=list(command),
+            stdout=stdout,
+            stderr=stderr,
+            returncode=rc,
+            elapsed_ms=(finished_at - started_at).total_seconds() * 1000.0,
+            started_at=started_at,
+            finished_at=finished_at,
+        )
+
+    async def tail_logs(
+        self,
+        service_id: str,
+        *,
+        container: str | None = None,
+        since_seconds: int | None = None,
+        tail: int | None = 200,
+        follow: bool = False,
+        max_lines: int | None = None,
+        namespace: str | None = None,
+    ) -> AsyncIterator[WorkloadLogEvent]:
+        """Stream container logs via the Docker SDK."""
+        await self._require_compose()
+        try:
+            import docker  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise InfrastructureProviderUnavailable(
+                "docker SDK not installed",
+                provider=self.provider_alias,
+            ) from exc
+
+        client = docker.from_env()
+        try:
+            client.api._session.headers["Accept-Encoding"] = "identity"
+        except Exception:  # noqa: BLE001
+            pass
+
+        label_filter = [
+            f"com.docker.compose.service={service_id}",
+            f"com.docker.compose.project={self.project_name}",
+        ]
+        containers = client.containers.list(filters={"label": label_filter})
+        if not containers:
+            client.close()
+            raise InfrastructureProviderError(
+                f"no compose container for {service_id!r}",
+                code="no_container",
+                provider=self.provider_alias,
+            )
+        ctr = containers[0]
+        emitted = 0
+        kwargs: dict[str, Any] = {
+            "stream": True,
+            "follow": bool(follow),
+            "stdout": True,
+            "stderr": True,
+            "timestamps": True,
+        }
+        if tail is not None:
+            kwargs["tail"] = int(tail)
+        if since_seconds is not None:
+            kwargs["since"] = int(since_seconds)
+        try:
+            for chunk in ctr.logs(**kwargs):
+                if max_lines is not None and emitted >= max_lines:
+                    break
+                line = chunk.decode("utf-8", errors="replace").rstrip("\n")
+                if not line:
+                    continue
+                emitted += 1
+                yield WorkloadLogEvent(
+                    service_id=service_id,
+                    namespace=namespace,
+                    container=ctr.name,
+                    line=line,
+                    timestamp=_now(),
+                )
+        finally:
+            try:
+                client.close()
+            except Exception:  # noqa: BLE001
+                pass
 
     # ---- Telemetry ---------------------------------------------------
 

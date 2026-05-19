@@ -1,0 +1,151 @@
+---
+description: Credential-handling guardrails for direct-control over the AQP Management Engine. Bans printing tokens, refresh tokens, M2M secrets, MFA seeds, Cf-Access-Jwt-Assertion values, kubeconfig contents, Cloudflare API tokens, raw invite tokens, and full Authorization headers in transcripts or logs. Always-on for the AQP project so transcripts remain shareable.
+globs:
+alwaysApply: true
+---
+
+# AQP Management Engine — credential safety (always on)
+
+This rule is the transcript-boundary enforcement of the
+`aqp-management-engine` subagent contract. It applies to every
+file in this repository because the same agent surface is reached
+from many touch points (subagent invocations, ad-hoc tool calls,
+smoke scripts, manual debugging).
+
+## Never print / log / echo
+
+The following values MUST NEVER appear in:
+
+- chat / agent transcripts (visible to the user OR a reviewer)
+- structured log lines (`logger.info`, `logger.warning`, …)
+- `print(...)` output from any module under `aqp/`, `scripts/`,
+  `aqp_control_plane/`, `aqp_platform_core/`, or `frontend/src/`
+- `console.log` / `console.warn` output from `frontend/src/` or
+  any file under `theia-extensions/aqp/`
+- audit ledger rows (`workload_runs`, `security_audit_events`,
+  `terraform_runs`, `agent_runs_v2`, `assistant_runs`)
+- exception messages re-raised back to the route layer
+- response bodies returned from any `/auth/*`, `/manage/*`,
+  `/cluster/*`, `/cloudflare/*`, `/terraform/*`, or `/tenancy/*`
+  endpoint
+
+Forbidden values:
+
+- Access tokens, refresh tokens, id tokens (full or truncated
+  beyond the safe 4-character debug prefix described below)
+- M2M client_secrets, OAuth client_secrets, Auth0 Management API
+  tokens
+- MFA enrollment secrets, recovery codes, TOTP seeds
+- Raw tenancy invite tokens (only the HMAC hash + `token_prefix`
+  may be persisted; the raw token returns once on create)
+- `secondary_jwt` payloads from the link-account flow
+- Cloudflare API tokens (`CLOUDFLARE_API_TOKEN`), tunnel secrets
+  (`tunnel_secret`), Access app `client_secret` values
+- `Cf-Access-Jwt-Assertion` header values (the JWT itself, not
+  just the header name)
+- Kubernetes kubeconfig contents, ServiceAccount tokens, Strimzi
+  user secrets, KafkaUser passwords
+- Cloud-provider credentials: `~/.aws/credentials`,
+  `~/.azure/credentials`, `~/.config/gcloud/`, Workload Identity
+  Federation JWTs, federated tokens
+- `cloudflared/cert.pem` / tunnel credentials files
+- Full `Authorization` headers or any dump of `request.headers`
+  (including `httpx` request reprs, `curl -v` output, Theia
+  WebSocket frame dumps)
+
+## Allowed: opt-in redacted prefixes
+
+For local debugging ONLY, code MAY print the first 4 characters
+of a token (no more) followed by an ellipsis, but ONLY behind an
+explicit operator opt-in flag:
+
+```python
+# OK — guarded by an explicit unsafe-print flag
+if args.unsafe_print_token_prefixes:
+    print(f"  access_token: {tokens.access_token[:4]}…")
+else:
+    print("  access_token: <redacted>")
+```
+
+The flag MUST default to off, MUST live in a `scripts/` smoke
+test or a developer-only utility (never in `aqp/` route or task
+code), and MUST NOT be enabled in CI.
+
+## Never load + print
+
+Code MUST NOT read these files and emit their contents:
+
+- `.env`, `.env.local`, `.env.production`
+- `~/.kube/config`, `~/.config/aqp/credentials/*.json`
+- `~/.aws/credentials`, `~/.aws/config`
+- `~/.azure/credentials`, `~/.azure/auth`
+- `~/.config/gcloud/application_default_credentials.json`,
+  `~/.config/gcloud/legacy_credentials/`
+- `cloudflared/cert.pem`, `cloudflared/<tunnel-id>.json`
+
+When debugging credential resolution, use the existing
+`CredentialResolver.describe()` surface — it returns store kind
++ priority + alias only, never the resolved fields.
+
+## Forbidden code patterns
+
+The following patterns are direct rule violations:
+
+```python
+# BAD
+print(f"token: {access_token[:18]}...")
+logger.info("calling %s with header %s", url, request.headers)
+logger.debug("auth bearer %s", authorization)
+return {"token": tokens.access_token}  # in an audit endpoint
+```
+
+```typescript
+// BAD
+console.warn("getAccessTokenSilently failed:", err);  // err may embed the token
+console.log("Bearer", token);
+toast.info(`refreshed: ${result.accessToken}`);
+```
+
+## Required code patterns
+
+```python
+# OK
+print(f"  access_token: {_safe_token(tokens.access_token)}")
+logger.warning("getAccessTokenSilently failed: code=%s", code or "unknown")
+```
+
+```typescript
+// OK
+const code = (err as { error?: string })?.error;
+console.warn("getAccessTokenSilently failed: code=%s", code ?? "unknown");
+```
+
+## Audit ledger redaction
+
+The shared `WorkloadRuntime` redaction in
+[aqp_platform_core/runtime/workload.py](../../aqp_platform_core/src/aqp_platform_core/runtime/workload.py)
+strips any key whose lowercased name contains `password`,
+`secret`, `token`, `key`, `credential`, `private`,
+`authorization`, `kubeconfig`, `client_secret`, `api_token`,
+`api_key`, `jwt`, `refresh_token`, or `access_token`. New
+audit-writing code MUST go through this helper — do not write
+your own.
+
+## When the subagent operates
+
+The `aqp-management-engine` subagent
+(`.cursor/agents/aqp-management-engine.md`) reads this rule on
+every invocation. The subagent will refuse to execute any
+sub-step that would surface a forbidden value to the user, and
+will recommend the safe alternative (e.g. `CredentialResolver.describe()`,
+`<redacted>` placeholder, an MCP tool that returns metadata
+instead of secret material).
+
+## When you must escalate
+
+If a backend response accidentally surfaces a secret value (e.g.
+an Auth0 SDK error envelope leaks the token), STOP, log a
+generic error message, and surface the issue to the operator via
+a structured audit event with the secret redacted. Do not paste
+the leaked value into the transcript even to ask whether it
+should have been redacted.

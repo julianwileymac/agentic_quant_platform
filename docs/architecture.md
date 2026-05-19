@@ -2,6 +2,10 @@
 
 > Human entry point. Pair with [AGENTS.md](../AGENTS.md) (the agentic
 > entry point) and [docs/index.md](index.md) (the doc map).
+>
+> Canonical run/deploy entry points live in
+> [operations/local-setup.md](operations/local-setup.md) and
+> [operations/kubernetes-deploy.md](operations/kubernetes-deploy.md).
 
 AQP is a **local-first, agentic quantitative research and trading
 platform**. Every LLM call, every backtest, every reinforcement-learning
@@ -15,7 +19,7 @@ TradingAgents into one coherent platform.
 ```mermaid
 flowchart TB
     subgraph clients [Clients]
-        Browser[Next.js webui :3000]
+        Browser[Vite frontend :3001]
         CLI[aqp CLI / scripts]
         Notebook[Jupyter notebooks]
     end
@@ -103,7 +107,7 @@ A typical "kick off a backtest from the UI" request:
 ```mermaid
 sequenceDiagram
     actor User
-    participant UI as Next.js webui
+    participant UI as Vite frontend
     participant API as FastAPI
     participant Redis as Redis (broker)
     participant Worker as Celery worker
@@ -142,7 +146,7 @@ RL training — only the worker's task module changes. See
 | `aqp/<package>/` | Responsibility | Canonical doc |
 | --- | --- | --- |
 | [agents/](../aqp/agents/) | CrewAI agent definitions, prompts, tools | [agentic-pipeline.md](agentic-pipeline.md) |
-| [api/](../aqp/api/) | FastAPI app + 30 route modules | [webui.md](webui.md) (consumer) |
+| [api/](../aqp/api/) | FastAPI app + 30 route modules | [../frontend/README.md](../frontend/README.md) (primary consumer) |
 | [backtest/](../aqp/backtest/) | Seven backtest engines behind a shared `BaseBacktestEngine` ABC: vbt-pro (primary), event-driven, OSS vectorbt, backtesting.py, ZVT, AAT, fallback cascade | [backtest-engines.md](backtest-engines.md) |
 | [backtest/vbtpro/](../aqp/backtest/vbtpro/) | Deep vectorbt-pro integration (signals/orders/optimizer/holding/random modes, WFO, Param sweeps, IndicatorFactory bridge) | [vbtpro-integration.md](vbtpro-integration.md) |
 | [bots/](../aqp/bots/) | Bot entity (TradingBot / ResearchBot) — smallest deployable unit; aggregates universe + strategy + engine + ML + agents + RAG + metrics. Drives backtest / paper / chat / k8s deploy via `BotRuntime`. | [bots.md](bots.md) |
@@ -163,7 +167,7 @@ RL training — only the worker's task module changes. See
 | [streaming/](../aqp/streaming/) | Kafka producers/consumers, IBKR / Alpaca ingesters | [streaming.md](streaming.md), [live-market.md](live-market.md) |
 | [tasks/](../aqp/tasks/) | Celery task modules (backtest, ingest, agents, …) | (per consumer) |
 | [trading/](../aqp/trading/) | Paper-trading session loop, broker abstractions | [paper-trading.md](paper-trading.md) |
-| [ui/](../aqp/ui/) | Legacy Solara UI (deprecated; see `legacy` profile) | [webui.md](webui.md) |
+| [ui/](../aqp/ui/) | Legacy Solara UI (deprecated; see `legacy` profile) | [webui.md](webui.md) _(legacy)_ |
 | [utils/](../aqp/utils/) | Cross-cutting utilities (key derivation, etc.) | – |
 | [ws/](../aqp/ws/) | Redis pub/sub bridge + WebSocket helpers | [observability.md](observability.md) |
 
@@ -212,7 +216,7 @@ Adds a containerised vLLM inference server (`:8002`). Configure with
 ### Native dev (no Docker)
 
 ```bash
-pip install -e ".[all]"
+pip install -e ".[full,dev]"
 alembic upgrade head
 uvicorn aqp.api.main:app --reload
 celery -A aqp.tasks.celery_app worker --loglevel=info
@@ -223,9 +227,10 @@ The catalog falls back to a local `./data/iceberg/` SQL catalog. See
 
 ### Kubernetes
 
-Manifests live under [deploy/k8s/](../deploy/k8s/). Targets the
-`rpi_kubernetes` cluster which provides Kafka, MinIO, Ray, and a
-managed Postgres. See the README in that directory.
+Primary manifests live under
+[deployments/kubernetes/](../deployments/kubernetes/). The older
+[deploy/k8s/](../deploy/k8s/) tree is legacy and retained for rollback
+compatibility.
 
 ## Where to start
 
@@ -253,7 +258,8 @@ flowchart LR
 | Sync metadata to DataHub | [datahub-sync.md](datahub-sync.md) |
 | Schedule jobs via Dagster | [dagster.md](dagster.md) |
 | Trace a slow request | [observability.md](observability.md) |
-| Hack on the webui | [webui.md](webui.md) |
+| Hack on the active frontend | [../frontend/README.md](../frontend/README.md) |
+| Review legacy Next.js rollback surface | [webui.md](webui.md) |
 
 ## Key invariants
 

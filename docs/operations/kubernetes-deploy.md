@@ -37,12 +37,22 @@ Produces:
 
 ```powershell
 $env:IMAGE_TAG = "rc-$(git rev-parse --short HEAD)-$(Get-Date -Format yyyy-MM-dd)"
-make build IMAGE_TAG=$env:IMAGE_TAG
+make build-client IMAGE_TAG=$env:IMAGE_TAG
+make build-cp IMAGE_TAG=$env:IMAGE_TAG
+
+# Optional (only if the Dockerfiles exist in build/docker/*)
+make build-worker IMAGE_TAG=$env:IMAGE_TAG
+make build-ingestion IMAGE_TAG=$env:IMAGE_TAG
+
 docker push ghcr.io/julianwiley/aqp-client:$env:IMAGE_TAG
 docker push ghcr.io/julianwiley/aqp-control-plane:$env:IMAGE_TAG
 docker push ghcr.io/julianwiley/aqp-worker:$env:IMAGE_TAG
 docker push ghcr.io/julianwiley/aqp-ingestion:$env:IMAGE_TAG
 ```
+
+If `make build-worker` or `make build-ingestion` reports a missing Dockerfile,
+pin those image tags to known-good prebuilt registry tags in the target overlay
+before applying.
 
 ## Step 4 — pin the image tag in the target overlay
 

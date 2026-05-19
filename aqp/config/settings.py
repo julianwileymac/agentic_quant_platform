@@ -15,7 +15,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aqp.config.defaults import (
@@ -85,7 +85,18 @@ class Settings(BaseSettings):
     # Allow external (B2B / non-home) tenants to provision new
     # EntraTenantLink rows on first login. The link starts in
     # ``pending`` state; an AQP super-admin promotes to ``active``.
-    auth_msal_b2b_enabled: bool = Field(default=True)
+    #
+    # The Pydantic ``validation_alias`` accepts both the canonical
+    # ``AQP_AUTH_MSAL_B2B_ENABLED`` env var and the legacy
+    # ``AQP_MSAL_B2B_ENABLED`` documented in older ``.env.example``
+    # files so deployments don't silently regress to the default.
+    auth_msal_b2b_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "AQP_AUTH_MSAL_B2B_ENABLED",
+            "AQP_MSAL_B2B_ENABLED",
+        ),
+    )
     auth_msal_known_tenants: str = Field(default="")  # CSV of tenant_ids
     # --- Auth0 Management API (account management, MFA, sessions) ---
     # The Management API M2M Application in the Auth0 tenant is the

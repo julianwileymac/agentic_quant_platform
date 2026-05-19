@@ -11,13 +11,14 @@
 > FREEMODE).
 > [.cursor/rules/](.cursor/rules) — glob-scoped Cursor rules
 > derived from this file (a slim always-on `aqp.mdc` plus seven
-> domain-scoped rules). The 41 hard rules below remain canonical
-> (rules 40 + 41 cover the additive `WorkflowRuntime` +
+> domain-scoped rules). The 45 hard rules below remain canonical
+> (rules 40-45 cover the additive `WorkflowRuntime` +
 > `workflow_spec_versions` shipped by the orchestration refactor —
 > see [docs/workflow-studio.md](docs/workflow-studio.md) for the
 > operator-facing walkthrough and
 > [docs/orchestration-refactor-rollout.md](docs/orchestration-refactor-rollout.md)
-> for the rollback runbook).
+> for the rollback runbook, plus TerraformRuntime, Entra tenant links,
+> and hosted deployment controls).
 > [docs/agentic-development.md](docs/agentic-development.md) — how
 > AQP's spec-pattern (`AgentSpec` / `BotSpec` / `RLExperimentSpec` /
 > `AnalysisSpec`) maps to the broader agentic-coder vocabulary
@@ -93,8 +94,8 @@ External code:
 
 | Path | Purpose |
 | --- | --- |
-| [webui/](webui/) | Legacy Next.js 15 webui on `:3000`. Canonical operator UI until the [frontend/](frontend/) rewrite reaches parity. See [frontend/CUTOVER.md](frontend/CUTOVER.md). |
-| [frontend/](frontend/) | Vite 7 + React 19 + Tailwind 4 + shadcn/ui rewrite on `:3001`. Phase 0 + Phase 1 ship today (Live Trading Desk, Action Center, kill-switch, sandbox banner, throttled WS pipeline, lightweight-charts WebGL OHLC, CodeMirror IDE). Remaining ~120 routes progressively port in phases 2-6. |
+| [webui/](webui/) | Legacy Next.js 15 webui on `:3000`, retained for rollback/reference only. |
+| [frontend/](frontend/) | Active operator UI (Vite 7 + React 19 + Tailwind 4 + shadcn/ui) on `:3001` in dev. Cutover completed; see [frontend/CUTOVER.md](frontend/CUTOVER.md) for rollback notes. |
 | [alembic/versions/](alembic/versions/) | DB migrations (immutable once shipped) |
 | [deploy/k8s/](deploy/k8s/) | Kubernetes manifests for the rpi_kubernetes cluster |
 | [scripts/](scripts/) | Operational scripts (`iceberg_smoke.py`, `ingest_regulatory.py`, …) |
@@ -244,12 +245,24 @@ These hold across the codebase. Any PR that violates one will be sent back.
  [docs/credentials.md](docs/credentials.md).
 27. **All identity / token operations go through
  [`aqp.auth.providers.IdentityProvider`](aqp/auth/providers/protocol.py).**
- Concrete providers (Auth0 / generic OIDC / mock) self-register via
+ Concrete providers (Auth0 / generic OIDC / mock / MSAL Entra /
+ Cloudflare Access) self-register via
  [`IdentityProviderMeta`](aqp/auth/providers/protocol.py). M2M tokens
  mint through [`M2MTokenIssuer`](aqp/auth/m2m.py); JWT validation
  reads JWKS through the active provider. Don't call vendor SDKs or
  hit `*.well-known/openid-configuration` directly from service code.
- See [docs/identity.md](docs/identity.md).
+ When `settings.auth_provider == "auth0"`, the optional
+ `auth0-fastapi-api` SDK is the preferred validator (cached via
+ [`get_auth0_fastapi`](aqp/auth/auth0_fastapi.py); DPoP mixed-mode
+ + `app.state.trust_proxy = True` for the Cloudflare/nginx edge).
+ The
+ [`CloudflareAccessProvider`](aqp/auth/providers/cloudflare_access.py)
+ validates `Cf-Access-Jwt-Assertion` headers against the team's
+ JWKS at `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`
+ and merges its claims into the active `RequestContext` (handled
+ inside [`aqp/api/security.py`](aqp/api/security.py)). See
+ [docs/identity.md](docs/identity.md) and
+ [docs/management-engine.md](docs/management-engine.md).
 28. **All cluster-side ops go through
  [`aqp.kubernetes.KubernetesAdapter`](aqp/kubernetes/protocol.py).**
  Concrete adapters (none / rpi_cluster / in_cluster / local_compose)
@@ -487,24 +500,35 @@ These hold across the codebase. Any PR that violates one will be sent back.
  [`IdentityProviderMeta`](aqp/auth/providers/protocol.py) metaclass —
  never decorate them by hand.
 45. **All runtime workload operations go through the
- `InfrastructureProvider` ABC inside
- [`aqp_control_plane`](../aqp_control_plane/) (driven by
- `WorkloadRuntime`).** Start, stop, scale, restart, exec, log-tail,
- and `apply_config` are workload ops — they never reach for
- TerraformRuntime. Each provider (`docker_compose`, `kubernetes`,
- `aws`, `azure`, `gcp`) self-registers via the
- `InfrastructureProviderMeta` metaclass in
- [`aqp_platform_core/providers/protocol.py`](../aqp_platform_core/providers/protocol.py).
- A new `workload_runs` ledger row is written with full audit context
- (`user_id`, `action`, `target`, `provider`, `timestamp`) BEFORE
- the provider call executes. List endpoints in the control plane
- API pass results through
- [`aqp_platform_core.auth.resource_filter`](../aqp_platform_core/auth/resource_filter.py)
+ `InfrastructureProvider` ABC + `WorkloadRuntime` in
+ [`aqp_platform_core`](aqp_platform_core/).** Start, stop, scale,
+ restart, exec, tail_logs, apply_config, rotate_secret are workload
+ ops — they never reach for TerraformRuntime. Both the in-monolith
+ (`AQP_MANAGEMENT_MODE=embedded`) and sidecar
+ (`AQP_MANAGEMENT_MODE=sidecar`, deployed as
+ [`aqp_control_plane`](aqp_control_plane/)) paths import the SAME
+ [`WorkloadRuntime`](aqp_platform_core/src/aqp_platform_core/runtime/workload.py)
+ class. Each provider (`docker_compose`, `kubernetes`, `aws`,
+ `azure`, `gcp`, `cloudflare`) self-registers via the
+ [`InfrastructureProviderMeta`](aqp_platform_core/src/aqp_platform_core/providers/protocol.py)
+ metaclass (the legacy `register_provider_class` decorator stays
+ for backwards compat). A `workload_runs` ledger row is written
+ with full audit context (`user_id`, `action`, `target`, `provider`,
+ `experiment_id`, `test_id`, `request_id`, `timestamp`) BEFORE the
+ provider call executes — sidecar deployments persist to JSONL via
+ [`JsonlAuditSink`](aqp_control_plane/src/aqp_cp/services/lifecycle.py);
+ embedded deployments persist to Postgres via the
+ [`PostgresWorkloadAuditSink`](aqp/persistence/models_workloads.py)
+ (Alembic 0055 creates the `workload_runs` table). List endpoints in
+ the control plane API pass results through
+ [`aqp_platform_core.auth.resource_filter`](aqp_platform_core/auth/resource_filter.py)
  so users only see resources in their
  `https://aqp.internal/resources` claim (except `admin:cluster`).
  The micro-project never imports `aqp.*` — only
- `aqp_platform_core.*`. See
- [docs/architecture/decisions/004-provider-abstraction.md](docs/architecture/decisions/004-provider-abstraction.md)
+ `aqp_platform_core.*`. The frontend KillSwitch fans out to
+ `POST /workloads/halt` alongside every other halt endpoint. See
+ [docs/management-engine.md](docs/management-engine.md),
+ [docs/architecture/decisions/004-provider-abstraction.md](docs/architecture/decisions/004-provider-abstraction.md),
  and
  [docs/architecture/decisions/005-separated-control-plane.md](docs/architecture/decisions/005-separated-control-plane.md).
 

@@ -4,10 +4,20 @@ Returns a cached ``Auth0FastAPI`` (from ``auth0-fastapi-api``) when
 ``settings.auth_provider == "auth0"`` and the SDK is importable. When the
 provider is anything else (msal_entra, oidc, mock, local), or the SDK is not
 installed, returns ``None``.
+
+Phase E of the Management Engine flips two SDK knobs:
+
+- ``app.state.trust_proxy = True`` so the SDK trusts ``X-Forwarded-*``
+  headers (every AQP deployment is fronted by Cloudflare Tunnel +
+  nginx-ingress).
+- DPoP enabled in **mixed mode** (accepts both Bearer and DPoP tokens)
+  — this lets the SPA + Theia migrate to DPoP without breaking
+  existing service-token callers.
 """
 from __future__ import annotations
 
 import logging
+import os
 import threading
 
 from aqp.config import settings
@@ -46,8 +56,46 @@ def get_auth0_fastapi() -> object | None:
             logger.warning("auth0-fastapi-api SDK unavailable; falling back to multi-provider deps")
             return None
         _AUTH0_TRIED = True
-        _AUTH0 = Auth0FastAPI(domain=domain, audience=audience)
+        # Mixed-mode DPoP: accept both Bearer and DPoP tokens by default.
+        # Operators can flip ``AQP_AUTH0_DPOP_REQUIRED=true`` to reject
+        # Bearer once every client has migrated.
+        dpop_required = (
+            str(os.environ.get("AQP_AUTH0_DPOP_REQUIRED", "")).lower()
+            in ("1", "true", "yes")
+        )
+        dpop_enabled = (
+            str(os.environ.get("AQP_AUTH0_DPOP_ENABLED", "true")).lower()
+            in ("1", "true", "yes")
+        )
+        try:
+            _AUTH0 = Auth0FastAPI(
+                domain=domain,
+                audience=audience,
+                dpop_enabled=dpop_enabled,
+                dpop_required=dpop_required,
+            )
+        except TypeError:
+            # Older SDK signature without DPoP kwargs.
+            _AUTH0 = Auth0FastAPI(domain=domain, audience=audience)
         return _AUTH0
+
+
+def configure_auth0_fastapi_on_app(app: object) -> None:
+    """Mark the FastAPI app so the SDK trusts ``X-Forwarded-*`` headers.
+
+    Every AQP deployment terminates TLS at Cloudflare and re-proxies via
+    nginx-ingress / cloudflared. Without this knob the DPoP path
+    rejects every request because the URL the SDK reconstructs differs
+    from the URL the client signed. Called once from ``aqp.api.main``
+    AFTER the FastAPI app object is built.
+    """
+    try:
+        state = getattr(app, "state", None)
+        if state is None:
+            return
+        state.trust_proxy = True
+    except Exception:  # noqa: BLE001 - never fail boot on this
+        logger.debug("configure_auth0_fastapi_on_app: app.state unwriteable")
 
 
 def reset_auth0_fastapi() -> None:
@@ -68,4 +116,8 @@ def _issuer_to_domain(issuer: str) -> str:
     return normalized.strip().strip("/")
 
 
-__all__ = ["get_auth0_fastapi", "reset_auth0_fastapi"]
+__all__ = [
+    "configure_auth0_fastapi_on_app",
+    "get_auth0_fastapi",
+    "reset_auth0_fastapi",
+]

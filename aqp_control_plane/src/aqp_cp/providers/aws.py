@@ -26,6 +26,31 @@ class AwsProvider(CloudProviderStub):
     cloud_name = "AWS"
     follow_up_pr = "aqp-control-plane#aws-impl"
     docs_link = "docs/operations/add-new-provider.md#aws"
+    delegate_kubernetes_alias = (
+        "kubernetes"
+        if os.environ.get("AQP_CP_AWS_DELEGATE_K8S", "").lower() in ("1", "true", "yes")
+        else None
+    )
+
+    def _real_health_probe(self) -> tuple[bool, dict | None, str | None]:
+        """Single STS GetCallerIdentity call when boto3 is available."""
+        try:
+            import boto3  # type: ignore[import-not-found]
+            from botocore.exceptions import BotoCoreError, ClientError  # type: ignore[import-not-found]
+        except ImportError:
+            return False, None, "boto3 not installed"
+        try:
+            sts = boto3.client("sts")
+            ident = sts.get_caller_identity()
+            return True, {
+                "account": ident.get("Account"),
+                "arn": ident.get("Arn"),
+                "region": os.environ.get("AWS_REGION", ""),
+            }, None
+        except (BotoCoreError, ClientError) as exc:
+            return False, None, f"STS GetCallerIdentity failed: {exc}"
+        except Exception as exc:  # noqa: BLE001
+            return False, None, str(exc)
 
     def _check_credentials(self) -> tuple[bool, str | None]:
         # boto3 walks the standard credential chain itself; we only do

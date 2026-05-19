@@ -10,13 +10,20 @@ from aqp_platform_core.providers import (
 )
 
 
-def test_bootstrap_registers_all_five() -> None:
+def test_bootstrap_registers_all_six() -> None:
     """The bootstrap helper imports every provider module."""
     from aqp_cp.providers import bootstrap
 
     registry = bootstrap()
     aliases = registry.aliases()
-    for expected in ("docker_compose", "kubernetes", "aws", "azure", "gcp"):
+    for expected in (
+        "docker_compose",
+        "kubernetes",
+        "aws",
+        "azure",
+        "gcp",
+        "cloudflare",
+    ):
         assert expected in aliases, f"{expected} missing from {aliases}"
 
 
@@ -39,6 +46,7 @@ def test_provider_kind_matches_alias() -> None:
         "aws": ProviderKind.AWS,
         "azure": ProviderKind.AZURE,
         "gcp": ProviderKind.GCP,
+        "cloudflare": ProviderKind.CLOUDFLARE,
     }
     for alias, kind in expected_kind.items():
         cls = registry.get_class(alias)

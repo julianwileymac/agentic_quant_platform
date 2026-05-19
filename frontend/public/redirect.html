@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AQP MSAL redirect</title>
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex" />
+    <style>body{font-family:system-ui,sans-serif;color:#94a3b8;background:#0f172a;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}p{font-size:14px;}</style>
+  </head>
+  <body>
+    <p>Finishing sign-in…</p>
+    <script>
+      // MSAL v5 redirect bridge — required when @azure/msal-browser
+      // handles redirects from Entra ID. The library reads the URL
+      // fragment, finds the matching cached request, and forwards the
+      // result back to the parent SPA via postMessage / sessionStorage.
+      // No app-level code lives here intentionally.
+    </script>
+  </body>
+</html>

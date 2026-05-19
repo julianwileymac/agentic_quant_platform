@@ -55,5 +55,13 @@ terraform {
       source  = "auth0/auth0"
       version = "~> 1.11"
     }
+    # Management Engine Phase D — Cloudflare Zero Trust edge (tunnels,
+    # DNS, Access apps). 5.6+ ships zero_trust_tunnel_cloudflared +
+    # zero_trust_access_application + dns_record as first-class
+    # resources matching the in-AQP CloudflareEdgeAdapter shape.
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.6"
+    }
   }
 }

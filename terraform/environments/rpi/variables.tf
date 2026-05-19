@@ -81,3 +81,64 @@ variable "enabled_services" {
   ]
   description = "Deployment topology service IDs enabled for the rpi target."
 }
+
+# ---------------------------------------------------------------------------
+# Management Engine Phase D — optional Cloudflare Zero Trust edge.
+# ---------------------------------------------------------------------------
+
+variable "cloudflare_enabled" {
+  type        = bool
+  default     = false
+  description = "When true, provision a Cloudflare tunnel + DNS routes + (optional) Access app."
+}
+
+variable "cloudflare_tunnel_name" {
+  type        = string
+  default     = "aqp-rpi-edge"
+  description = "Tunnel name shown in the Cloudflare dashboard."
+}
+
+variable "cloudflare_account_id" {
+  type        = string
+  default     = ""
+  description = "Cloudflare account id (required when cloudflare_enabled=true)."
+  sensitive   = true
+}
+
+variable "cloudflare_zone_id" {
+  type        = string
+  default     = ""
+  description = "Cloudflare DNS zone id (required when cloudflare_enabled=true)."
+}
+
+variable "cloudflare_ingress_rules" {
+  type    = list(object({ hostname = string, service = string }))
+  default = []
+  description = <<-EOT
+    List of ingress rules. Each item is { hostname, service }. The
+    `service` typically points at the in-cluster ingress-nginx
+    controller, e.g.
+    'http://ingress-nginx-controller.ingress.svc.cluster.local:80'.
+  EOT
+}
+
+variable "cloudflare_enable_access_app" {
+  type    = bool
+  default = false
+}
+
+variable "cloudflare_access_app_name" {
+  type    = string
+  default = ""
+}
+
+variable "cloudflare_access_app_session_duration" {
+  type    = string
+  default = "24h"
+}
+
+variable "cloudflare_access_policies" {
+  type    = any
+  default = []
+  description = "Cloudflare Access policies — see modules/cloudflare_edge/main.tf."
+}

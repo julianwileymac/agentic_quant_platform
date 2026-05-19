@@ -213,6 +213,10 @@ import { TerraformRunDetailRoute } from "@/routes/infra/terraform/runs/[id]/page
 import { TerraformStacksRoute } from "@/routes/infra/terraform/stacks/page";
 import { OnboardingRoute as AdminOnboardingRoute } from "@/routes/admin/onboarding/page";
 import { InviteAcceptRoute } from "@/routes/onboarding/invite/[token]/page";
+// Management Engine (Phase F of aqp_management_engine plan).
+import { ManageStudioRoute } from "@/routes/manage/page";
+import { ClusterMgmtRoute } from "@/routes/cluster-mgmt/page";
+import { CloudflareEdgeRoute } from "@/routes/cloudflare/page";
 
 /**
  * Routes implemented with real components. Anything in NAV_ITEMS that
@@ -322,6 +326,10 @@ const REAL_ROUTES: Record<string, () => ReactElement> = {
   "/control-plane/kubernetes": ControlPlaneKubernetesRoute,
   "/control-plane/identity": ControlPlaneIdentityRoute,
   "/control-plane/deployments": ControlPlaneDeploymentsRoute,
+  // Management Engine (aqp_management_engine plan, Phase F).
+  "/manage": ManageStudioRoute,
+  "/cluster-mgmt": ClusterMgmtRoute,
+  "/cloudflare": CloudflareEdgeRoute,
   "/admin/onboarding": AdminOnboardingRoute,
   // Phase 5 — Admin / tenancy CRUD
   "/admin/orgs": OrgsAdminRoute,

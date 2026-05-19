@@ -36,6 +36,7 @@ def bootstrap() -> ProviderRegistry:
         "aqp_cp.providers.aws",
         "aqp_cp.providers.azure",
         "aqp_cp.providers.gcp",
+        "aqp_cp.providers.cloudflare",
     ):
         try:
             __import__(module_name)

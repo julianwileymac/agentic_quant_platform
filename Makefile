@@ -291,11 +291,19 @@ build-cp:
 		-t ghcr.io/julianwiley/aqp-control-plane:$(IMAGE_TAG) .
 
 build-worker:
+	@if [ ! -f build/docker/aqp_worker/Dockerfile ]; then \
+		echo "[build-worker] build/docker/aqp_worker/Dockerfile missing; skipping worker image build."; \
+		exit 0; \
+	fi
 	docker buildx build --platform $(PLATFORMS) --load \
 		-f build/docker/aqp_worker/Dockerfile \
 		-t ghcr.io/julianwiley/aqp-worker:$(IMAGE_TAG) .
 
 build-ingestion:
+	@if [ ! -f build/docker/aqp_ingestion/Dockerfile ]; then \
+		echo "[build-ingestion] build/docker/aqp_ingestion/Dockerfile missing; skipping ingestion image build."; \
+		exit 0; \
+	fi
 	docker buildx build --platform $(PLATFORMS) --load \
 		-f build/docker/aqp_ingestion/Dockerfile \
 		-t ghcr.io/julianwiley/aqp-ingestion:$(IMAGE_TAG) .

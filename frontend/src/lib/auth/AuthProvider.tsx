@@ -3,22 +3,32 @@ import type { AppState } from "@auth0/auth0-react";
 import { type ReactNode, useEffect } from "react";
 
 import { authConfig, isAuthEnabled } from "./config";
+import { MsalProvider } from "./MsalProvider";
 import { setAccessTokenGetter } from "./tokenStore";
 
 /**
- * Wrap the application in `<Auth0Provider>` when the SPA build was
- * given Auth0 credentials, otherwise render children directly. This
- * means local-first developer setups never load the Auth0 SDK at
- * runtime.
+ * Multi-IdP wrapper for the Vite frontend.
  *
- * The provider also installs the access-token getter into the
- * module-level `tokenStore` so `apiFetch` can attach
- * `Authorization: Bearer <jwt>` on every request without each route
- * having to thread the user object through.
+ * Mounts the matching SDK based on the build-time configuration
+ * surfaced by `authConfig.provider`:
+ *
+ * - `msal_entra` -> `<MsalProvider>` (`@azure/msal-react`)
+ * - `auth0`      -> `<Auth0Provider>` (`@auth0/auth0-react`)
+ * - `local`      -> children directly (no IdP at all)
+ *
+ * Per the 2026 multi-IdP guidance (Microsoft Q&A 5588463) the SPA
+ * picks ONE provider at boot and instantiates `PublicClientApplication`
+ * lazily — there is no clean way to nest multiple MSAL providers, so
+ * deployments that need Auth0 + Entra side-by-side route through the
+ * AQP BFF (`/auth/providers`) and pick at the user level.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   if (!isAuthEnabled()) {
     return <>{children}</>;
+  }
+
+  if (authConfig.provider === "msal_entra") {
+    return <MsalProvider>{children}</MsalProvider>;
   }
 
   return (
@@ -41,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }}
     >
-      <TokenStoreBinder>{children}</TokenStoreBinder>
+      <Auth0TokenStoreBinder>{children}</Auth0TokenStoreBinder>
     </Auth0Provider>
   );
 }
@@ -50,9 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
  * Wires the Auth0 SDK's `getAccessTokenSilently` into the global token
  * store so the API client can attach `Authorization: Bearer` without
  * being a React component. Lives inside Auth0Provider's tree to call
- * `useAuth0()`.
+ * `useAuth0()`. The MSAL branch lives in `MsalProvider.tsx`.
  */
-function TokenStoreBinder({ children }: { children: ReactNode }) {
+function Auth0TokenStoreBinder({ children }: { children: ReactNode }) {
   const { getAccessTokenSilently, isAuthenticated } = useAuth0();
 
   useEffect(() => {
@@ -73,9 +83,12 @@ function TokenStoreBinder({ children }: { children: ReactNode }) {
         // login_required / consent_required mean the silent call failed;
         // returning null lets the api client choose how to react (most
         // routes will surface a 401 and the route guard will redirect).
+        // We deliberately do NOT include the err object in the log to
+        // avoid leaking any embedded token material per the Management
+        // Engine subagent rule.
         const code = (err as { error?: string })?.error;
         if (code !== "login_required" && code !== "consent_required") {
-          console.warn("getAccessTokenSilently failed:", err);
+          console.warn("getAccessTokenSilently failed: code=%s", code ?? "unknown");
         }
         return null;
       }

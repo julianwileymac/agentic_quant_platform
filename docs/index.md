@@ -9,6 +9,37 @@ Triple-axis table of contents for the AQP docs.
 >
 > Both link back here.
 
+## Canonical runtime surfaces (May 2026)
+
+| Surface | Canonical path | Status | Notes |
+| --- | --- | --- | --- |
+| Local setup + run | [operations/local-setup.md](operations/local-setup.md) | active | Default entry point for local development |
+| Kubernetes rollout | [operations/kubernetes-deploy.md](operations/kubernetes-deploy.md) | active | Production-oriented deployment path |
+| Deployment artifacts | [../deployments/README.md](../deployments/README.md) | active | Compose + Kubernetes manifests for current architecture |
+| Operator UI | [../frontend/README.md](../frontend/README.md) | active | Vite frontend is the primary UI |
+| Legacy Next.js UI | [webui.md](webui.md) | rollback | Keep only for emergency rollback context |
+| Legacy Solara UI | [../aqp/ui/](../aqp/ui/) | rollback | Deprecated runtime surface |
+| Legacy k8s manifests | [../deploy/k8s/README.md](../deploy/k8s/README.md) | legacy | Historical manifests; do not use for new rollouts |
+| Archived planning/audit docs | [archive/README.md](archive/README.md) | archive | Historical context only; not operational guidance |
+
+## Operational snippet catalog
+
+Reusable commands that are valid against the current repository layout:
+
+```bash
+# Generate local config from schema
+make generate-config ENV=local
+
+# Start the local workload stack
+make dev
+
+# Start the isolated admin/control-plane stack
+make dev-admin
+
+# Deploy current dev overlay to Kubernetes
+make deploy-k8s ENV=dev
+```
+
 ## By audience
 
 ### I'm new and human
@@ -51,7 +82,7 @@ flowchart LR
 | **Agentic** | [agentic-pipeline.md](agentic-pipeline.md), [providers.md](providers.md) |
 | **Bots** | [bots.md](bots.md) (smallest deployable unit; aggregates universe + strategy + engine + ML + agents + RAG + metrics) |
 | **Paper / Live** | [paper-trading.md](paper-trading.md), [live-market.md](live-market.md), [streaming.md](streaming.md), [streaming-admin.md](streaming-admin.md) |
-| **Cross-cutting** | [observability.md](observability.md), [webui.md](webui.md), [core-types.md](core-types.md), [domain-model.md](domain-model.md), [alpha-vantage.md](alpha-vantage.md), [credentials.md](credentials.md), [cloud-credentials.md](cloud-credentials.md), [identity.md](identity.md), [scim-provisioning.md](scim-provisioning.md), [msal-entra-setup.md](msal-entra-setup.md), [multi-tenancy.md](multi-tenancy.md), [kubernetes-adapter.md](kubernetes-adapter.md), [kubernetes-rpi-deployment.md](kubernetes-rpi-deployment.md), [local-platform.md](local-platform.md), [terraform-control-plane.md](terraform-control-plane.md), [iac-runbook.md](iac-runbook.md) |
+| **Cross-cutting** | [observability.md](observability.md), [../frontend/README.md](../frontend/README.md), [webui.md](webui.md) _(legacy)_, [core-types.md](core-types.md), [domain-model.md](domain-model.md), [alpha-vantage.md](alpha-vantage.md), [credentials.md](credentials.md), [cloud-credentials.md](cloud-credentials.md), [identity.md](identity.md), [scim-provisioning.md](scim-provisioning.md), [msal-entra-setup.md](msal-entra-setup.md), [multi-tenancy.md](multi-tenancy.md), [kubernetes-adapter.md](kubernetes-adapter.md), [kubernetes-rpi-deployment.md](kubernetes-rpi-deployment.md), [local-platform.md](local-platform.md), [terraform-control-plane.md](terraform-control-plane.md), [iac-runbook.md](iac-runbook.md) |
 
 ## By subsystem
 
@@ -133,7 +164,8 @@ flowchart LR
 | [paper-metadata-gate.md](paper-metadata-gate.md) | Strict startup metadata validation + operator runbook |
 | [bots.md](bots.md) | Bot entity (TradingBot / ResearchBot), graphical builder, deployment |
 | [observability.md](observability.md) | OTEL → Jaeger + structured logs |
-| [webui.md](webui.md) | Next.js page tree |
+| [../frontend/README.md](../frontend/README.md) | Active Vite frontend route/model overview |
+| [webui.md](webui.md) | Legacy Next.js page tree (rollback only) |
 
 ## Latest changes
 
@@ -151,7 +183,7 @@ flowchart LR
 
 - **Mermaid** is the diagram format. GitHub renders it natively.
   Don't commit PNG/SVG diagrams unless they're irreplaceable.
-- **Cross-link** with relative markdown paths (`[foo](foo.md)`) so
+- **Cross-link** with relative markdown paths (for example, `bar.md`) so
   the navigation works on GitHub and locally.
 - **Cite code** with full repo paths from the doc:
   `[aqp/data/pipelines/director.py](../aqp/data/pipelines/director.py)`.

@@ -29,6 +29,14 @@ from aqp_platform_core.models.telemetry import (
     MetricPoint,
     MetricSeries,
 )
+from aqp_platform_core.models.workloads import (
+    SecretRotationResult,
+    WorkloadAction,
+    WorkloadExecResult,
+    WorkloadLogEvent,
+    WorkloadRun,
+    WorkloadRunStatus,
+)
 
 __all__ = [
     # config
@@ -52,4 +60,11 @@ __all__ = [
     "AlertSeverity",
     "MetricPoint",
     "MetricSeries",
+    # workloads (Management Engine — actions, runs, exec, logs, secrets)
+    "SecretRotationResult",
+    "WorkloadAction",
+    "WorkloadExecResult",
+    "WorkloadLogEvent",
+    "WorkloadRun",
+    "WorkloadRunStatus",
 ]

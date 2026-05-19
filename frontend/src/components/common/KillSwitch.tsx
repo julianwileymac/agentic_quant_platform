@@ -54,6 +54,14 @@ const HALT_ENDPOINTS: ReadonlyArray<{ path: string; label: string }> = [
   // ``halted_runs: [...]`` so the aggregate toast can summarise
   // exactly which IaC operations got killed.
   { path: "/terraform/halt", label: "terraform IaC runs (plan / apply / destroy / refresh)" },
+  // Management Engine (Phase B of aqp_management_engine plan) — halts
+  // every in-flight ``workload_runs`` row dispatched via
+  // :class:`WorkloadRuntime` (start / stop / scale / restart / exec /
+  // tail_logs / apply_config / rotate_secret / delete). Per
+  // AGENTS rule 45, this is the canonical kill-path for any direct
+  // workload control. Refuses (503) when the Management Engine is not
+  // enabled; other halt endpoints still fire.
+  { path: "/workloads/halt", label: "workload runs (WorkloadRuntime dispatches)" },
 ];
 
 /**

@@ -1,3 +1,7 @@
+> Archived context note: this blueprint is retained for historical reference.  
+> Treat it as background only; current architecture contracts are in
+> `AGENTS.md`, ADRs, and `docs/operations/*`. See `docs/archive/README.md`.
+
 # **Architectural Analysis and Enhancement Blueprint for an Agentic Quantitative Trading Platform**
 
 ## **Executive Overview of the Paradigm Shift in Quantitative Systems**

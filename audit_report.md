@@ -1,3 +1,7 @@
+> Archived context note: point-in-time audit output retained for traceability.  
+> Use current rules and runbooks for active decisions. See
+> `docs/archive/README.md`.
+
 # AQP Metadata & Lineage Consolidation Hard-Rules Audit
 
 Scope audited: metadata/aspect refactor files listed in the request (plus directly adjacent migration/agent boundary checks needed for AGENTS hard-rule validation).  

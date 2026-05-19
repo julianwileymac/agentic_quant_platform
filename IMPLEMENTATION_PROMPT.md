@@ -1,3 +1,7 @@
+> Archived context note: this file captures a historical implementation prompt.  
+> Canonical runbooks and governance now live in `docs/index.md`,
+> `docs/operations/*`, and `AGENTS.md`. See `docs/archive/README.md`.
+
 # 🚀 Actionable Implementation Prompt: Institutional-Grade AQP Refactor
 
 **Context**: You are an expert quantitative developer tasked with enhancing the Agentic Quant Platform (AQP). The project has already transitioned to a 5-stage framework (Universe -> Alpha -> Portfolio -> Risk -> Execution) and has defined core event types for an event-driven transition.

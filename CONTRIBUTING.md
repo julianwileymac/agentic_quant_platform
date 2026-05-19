@@ -24,7 +24,7 @@ Welcome. This file is the **human onboarding guide** — pair with
 # Clone + install editable so tests + scripts can import aqp
 git clone <repo>
 cd agentic_quant_platform
-pip install -e ".[all]"
+pip install -e ".[full,dev]"
 cp .env.example .env
 
 # Create the host-persisted warehouse
@@ -45,7 +45,7 @@ The webui is at <http://localhost:3000>; the API at <http://localhost:8000/docs>
 ### Native path (no Docker)
 
 ```bash
-pip install -e ".[all]"
+pip install -e ".[full,dev]"
 cp .env.example .env
 
 # Make sure Postgres + Redis + Chroma are reachable; set AQP_*_URL accordingly
@@ -82,7 +82,7 @@ automatically.
    ```
 
 3. Add `newprovider_api_key: str = Field(default="")` to
-   [aqp/config.py](aqp/config.py)'s `Settings` class.
+   [aqp/config/settings.py](aqp/config/settings.py)'s `Settings` class.
 4. Add `AQP_NEWPROVIDER_API_KEY=` to [.env.example](.env.example).
 5. Use it: `router_complete(provider="newprovider", model="np-best", ...)`.
 
@@ -227,7 +227,7 @@ for a reference implementation.
 If you're using Cursor (or another LLM-driven IDE) to develop on
 AQP, read these in order before you start:
 
-1. [AGENTS.md](AGENTS.md) — the 25 hard rules. The agent is
+1. [AGENTS.md](AGENTS.md) — the 45 hard rules. The agent is
    contracted to follow them; you should know what it's contracted
    to.
 2. [WORKFLOW.md](WORKFLOW.md) — the **Plan → Act → Reflect**
@@ -341,7 +341,10 @@ docs/
 ├── live-market.md       ← live subscribe + WS
 ├── paper-trading.md     ← session lifecycle
 ├── observability.md     ← OTEL + tracing
-└── webui.md             ← Next.js page tree
+├── operations/local-setup.md ← canonical local setup/runbook
+├── operations/kubernetes-deploy.md ← canonical Kubernetes rollout runbook
+├── webui.md             ← legacy Next.js webui reference (rollback only)
+└── ../frontend/README.md ← active Vite frontend operator UI
 AGENTS.md                ← AI agent rule-set (root)
 CONTRIBUTING.md          ← this file (root)
 ```

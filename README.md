@@ -4,6 +4,18 @@ A **local-first, agentic quantitative research and trading platform** that fuses
 
 > **New here?** Humans → [CONTRIBUTING.md](CONTRIBUTING.md) + [docs/architecture.md](docs/architecture.md). AI agents → [AGENTS.md](AGENTS.md). Doc index → [docs/index.md](docs/index.md).
 
+## Canonical paths (May 2026)
+
+- **Active local setup/run**: [docs/operations/local-setup.md](docs/operations/local-setup.md)
+- **Active deployment docs**: [deployments/README.md](deployments/README.md) + [docs/operations/kubernetes-deploy.md](docs/operations/kubernetes-deploy.md)
+- **Active operator UI**: [`frontend/`](frontend/) (Vite). [`webui/`](webui/) is rollback-only.
+- **Active CLI surface**: `aqp config`, `aqp viz`, `aqp deploy` (see `aqp/cli/main.py`).
+- **Legacy context and archived planning artifacts**: [docs/archive/README.md](docs/archive/README.md)
+
+The remainder of this README includes historical release notes. If a command in
+those notes conflicts with the canonical paths above, follow the canonical
+paths.
+
 AQP distills architectural patterns from the best-of-breed open-source quant ecosystem:
 
 | Inspiration | Pattern adopted |

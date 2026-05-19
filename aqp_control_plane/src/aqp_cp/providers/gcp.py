@@ -25,6 +25,29 @@ class GcpProvider(CloudProviderStub):
     cloud_name = "GCP"
     follow_up_pr = "aqp-control-plane#gcp-impl"
     docs_link = "docs/operations/add-new-provider.md#gcp"
+    delegate_kubernetes_alias = (
+        "kubernetes"
+        if os.environ.get("AQP_CP_GCP_DELEGATE_K8S", "").lower() in ("1", "true", "yes")
+        else None
+    )
+
+    def _real_health_probe(self) -> tuple[bool, dict | None, str | None]:
+        """Use google-auth to resolve ADC + project."""
+        try:
+            import google.auth  # type: ignore[import-not-found]
+            from google.auth.exceptions import DefaultCredentialsError  # type: ignore[import-not-found]
+        except ImportError:
+            return False, None, "google-auth not installed"
+        try:
+            creds, project = google.auth.default()
+            return True, {
+                "project": project or os.environ.get("GOOGLE_CLOUD_PROJECT", ""),
+                "creds_kind": creds.__class__.__name__,
+            }, None
+        except DefaultCredentialsError as exc:
+            return False, None, f"ADC unavailable: {exc}"
+        except Exception as exc:  # noqa: BLE001
+            return False, None, str(exc)
 
     def _check_credentials(self) -> tuple[bool, str | None]:
         creds_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
