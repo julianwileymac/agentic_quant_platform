@@ -206,3 +206,8 @@ schemas/json/
 schemas/avro/
 schemas/pdl/
 !schemas/.gitkeep
+
+# Generated Kubernetes manifests that may contain environment-derived
+# secret values. These are rendered locally by
+# `build/scripts/sync_auth0_env_to_k8s.py` and MUST NOT be committed.
+deployments/kubernetes/generated/

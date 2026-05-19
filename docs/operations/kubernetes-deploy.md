@@ -1,0 +1,122 @@
+# Operations runbook — Kubernetes deployment
+
+End-to-end walkthrough for shipping AQP to a real Kubernetes cluster (EKS, AKS, GKE, or rpi_kubernetes).
+
+## Prerequisites
+
+- `kubectl` 1.30+ with a current context pointing at the target cluster
+- Cluster admin (you'll create namespaces + RBAC)
+- A container registry the cluster can pull from (GHCR / ECR / ACR / GCR)
+- Auth0 tenant configured per [docs/architecture/decisions/003-auth0-zero-trust.md](../architecture/decisions/003-auth0-zero-trust.md)
+
+## Step 1 — provision Auth0 (one-time)
+
+```powershell
+$env:AUTH0_DOMAIN = "your-tenant.us.auth0.com"
+$env:AUTH0_M2M_CLIENT_ID = "..."
+$env:AUTH0_M2M_CLIENT_SECRET = "..."
+$env:AQP_SYNC_URL = "https://api.aqp.enterprise.com/_internal/auth0/sync"
+
+python build/scripts/provision_auth0.py --dry-run    # preview
+python build/scripts/provision_auth0.py              # apply
+```
+
+This idempotently creates the API resource server, the four roles, and the post-login Action.
+
+## Step 2 — generate the K8s ConfigMap + Secret scaffold
+
+```powershell
+make generate-config ENV=k8s
+```
+
+Produces:
+- `deployments/kubernetes/base/configmaps/aqp-config.yaml` (commit this)
+- `deployments/kubernetes/base/secrets/aqp-secrets.yaml.template` (DO NOT commit values — CI/CD or external-secrets-operator patches real values)
+
+## Step 3 — build + push images
+
+```powershell
+$env:IMAGE_TAG = "rc-$(git rev-parse --short HEAD)-$(Get-Date -Format yyyy-MM-dd)"
+make build IMAGE_TAG=$env:IMAGE_TAG
+docker push ghcr.io/julianwiley/aqp-client:$env:IMAGE_TAG
+docker push ghcr.io/julianwiley/aqp-control-plane:$env:IMAGE_TAG
+docker push ghcr.io/julianwiley/aqp-worker:$env:IMAGE_TAG
+docker push ghcr.io/julianwiley/aqp-ingestion:$env:IMAGE_TAG
+```
+
+## Step 4 — pin the image tag in the target overlay
+
+Edit `deployments/kubernetes/overlays/<env>/kustomization.yaml`:
+
+```yaml
+images:
+  - name: ghcr.io/julianwiley/aqp-client
+    newTag: rc-abcdef01-2026-05-19
+  ...
+```
+
+## Step 5 — apply
+
+```powershell
+# Dry-run first
+kubectl apply -k deployments/kubernetes/overlays/dev --dry-run=server
+
+# Apply
+make deploy-k8s ENV=dev
+
+# Verify
+kubectl -n aqp get pods,svc,hpa,pdb
+kubectl -n aqp-admin get pods,svc
+```
+
+## Step 6 — populate the Secret
+
+If you're not using external-secrets-operator, populate the placeholder Secret manually:
+
+```powershell
+kubectl -n aqp create secret generic aqp-secrets `
+  --from-literal=AQP_DATABASE_PASSWORD="<value>" `
+  --from-literal=AQP_AUTH_M2M_CLIENT_SECRET="<value>" `
+  --from-literal=AQP_SESSION_COOKIE_SECRET="<value>" `
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+For external-secrets-operator users, point an `ExternalSecret` at your secret store (Vault / SSM / Key Vault / Secret Manager) and let the operator create the K8s `Secret`.
+
+## Step 7 — DNS + TLS
+
+The Ingresses expect:
+- `api.aqp.enterprise.com` -> `aqp-client` Service in the `aqp` namespace
+- `manage.aqp.enterprise.com` -> `aqp-cp` Service in the `aqp-admin` namespace
+
+Point DNS at the NGINX Ingress controller's LoadBalancer IP. cert-manager handles TLS via the `letsencrypt-prod` ClusterIssuer (configure separately).
+
+## Step 8 — smoke test
+
+```powershell
+# Client should serve the SPA shell
+curl -fsS https://api.aqp.enterprise.com/ | findstr "<!doctype html"
+
+# Control plane health (unauthenticated)
+curl -fsS https://manage.aqp.enterprise.com/manage/health
+
+# OpenAPI spec
+curl -fsS https://manage.aqp.enterprise.com/manage/openapi.json | python -m json.tool | findstr title
+```
+
+## Rollback
+
+```powershell
+# Re-apply the previous overlay with the previous image tag.
+git checkout HEAD~1 -- deployments/kubernetes/overlays/dev/kustomization.yaml
+make deploy-k8s ENV=dev
+```
+
+Or, for an immediate rollback that doesn't touch git:
+
+```powershell
+kubectl -n aqp rollout undo deployment/aqp-client
+kubectl -n aqp rollout undo deployment/aqp-core
+kubectl -n aqp rollout undo deployment/aqp-worker
+kubectl -n aqp-admin rollout undo deployment/aqp-cp
+```

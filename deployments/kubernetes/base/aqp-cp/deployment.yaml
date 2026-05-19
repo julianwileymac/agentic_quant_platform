@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aqp-cp
+  namespace: aqp-admin
+  labels:
+    app: aqp-cp
+    app.kubernetes.io/name: aqp-cp
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/component: control-plane
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: aqp-cp
+  template:
+    metadata:
+      labels:
+        app: aqp-cp
+        app.kubernetes.io/name: aqp-cp
+        app.kubernetes.io/part-of: aqp
+        app.kubernetes.io/component: control-plane
+    spec:
+      serviceAccountName: aqp-cp
+      # The control plane talks to the K8s API via the kubernetes
+      # provider — it's the only AQP pod that needs the projected
+      # ServiceAccount token mounted.
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: control-plane
+          image: ghcr.io/julianwiley/aqp-control-plane:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: aqp-config
+            - secretRef:
+                name: aqp-secrets
+          env:
+            - name: AQP_CP_PROVIDER
+              value: "kubernetes"
+            - name: AQP_CP_KUBE_NAMESPACE_DEFAULT
+              value: "aqp"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            httpGet:
+              path: /manage/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /manage/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /home/aqp/.cache
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}

@@ -140,14 +140,44 @@ def require_authenticated(
 # ---------------------------------------------------------------------------
 
 
+def _namespaced_claim(claims: dict, name: str) -> object:
+    """Return ``claims[<ns><name>]`` for the canonical namespace or any alias.
+
+    Per ADR 003 the canonical namespace is ``settings.auth_claims_namespace``
+    (default ``https://aqp.internal/``); legacy tokens issued before the
+    migration window may still carry ``settings.auth_claims_namespace_aliases``
+    entries (default ``["https://aqp/"]``).
+    """
+    namespaces = [str(settings.auth_claims_namespace or "https://aqp.internal/")]
+    aliases = getattr(settings, "auth_claims_namespace_aliases", None) or []
+    for alias in aliases:
+        if alias:
+            namespaces.append(str(alias))
+    for ns in namespaces:
+        if not ns.endswith("/"):
+            ns = ns + "/"
+        key = f"{ns}{name}"
+        if key in claims:
+            return claims[key]
+    return None
+
+
 def _granted_scopes_for(user: CurrentUser, request: Request | None) -> set[str]:
     """Best-effort union of JWT-derived and DB-derived scopes.
 
+    Sources (in priority order):
+
     - OAuth standard ``scope`` claim (space-separated string).
     - Auth0 RBAC ``permissions`` claim (array of strings).
-    - AQP-namespaced custom claim ``https://aqp/scopes`` (array).
-    - AQP-namespaced custom claim ``https://aqp/roles`` (array) is
-      expanded to ``data:read`` / ``data:write`` / ``admin``.
+    - AQP-namespaced custom claim ``<ns>scopes`` (array) — canonical or alias.
+    - AQP-namespaced custom claim ``<ns>roles`` (array) — expanded via the
+      four-role lattice from ``aqp_platform_core.auth.rbac`` (ADR 003):
+        aqp-viewer     -> read:infrastructure
+        aqp-operator   -> + manage:agents
+        aqp-admin      -> + manage:infrastructure
+        aqp-superadmin -> + admin:cluster
+      Legacy role names (admin/owner/editor/viewer) retain their pre-Phase-4
+      data:* mapping.
     - Local-default users get ``data:read`` + ``data:write`` so the
       local dev loop keeps working.
     """
@@ -158,13 +188,29 @@ def _granted_scopes_for(user: CurrentUser, request: Request | None) -> set[str]:
             scope_str = claims.get("scope")
             if isinstance(scope_str, str):
                 scopes.update(scope_str.split())
-            for arr_key in ("permissions", "scopes", "https://aqp/scopes"):
-                arr = claims.get(arr_key)
-                if isinstance(arr, list):
-                    scopes.update(str(s) for s in arr if isinstance(s, str))
-            roles = claims.get("https://aqp/roles")
-            if isinstance(roles, list):
-                for role in roles:
+            # Auth0 RBAC permissions array — flat.
+            permissions = claims.get("permissions")
+            if isinstance(permissions, list):
+                scopes.update(str(s) for s in permissions if isinstance(s, str))
+            # AQP-namespaced ``scopes`` claim (array).
+            ns_scopes = _namespaced_claim(claims, "scopes")
+            if isinstance(ns_scopes, list):
+                scopes.update(str(s) for s in ns_scopes if isinstance(s, str))
+            # AQP-namespaced ``roles`` claim (array) -> scope expansion.
+            ns_roles = _namespaced_claim(claims, "roles")
+            if isinstance(ns_roles, list):
+                try:
+                    from aqp_platform_core.auth.rbac import expand_role
+
+                    for role in ns_roles:
+                        role_str = str(role)
+                        expanded = expand_role(role_str)
+                        scopes.update(expanded)
+                except Exception:  # noqa: BLE001
+                    pass
+                # Legacy role names continue to grant data:* / admin so
+                # existing routes don't break during the migration window.
+                for role in ns_roles:
                     role_str = str(role).lower()
                     if role_str in ("admin", "owner"):
                         scopes.update({"data:read", "data:write", "admin"})
@@ -179,6 +225,29 @@ def _granted_scopes_for(user: CurrentUser, request: Request | None) -> set[str]:
         # ``AQP_AUTH_PROVIDER=auth0`` so the default user can't exist.
         scopes.update({"data:read", "data:write"})
     return scopes
+
+
+def filter_resources_for_user(
+    items: list,
+    request: Request | None,
+    *,
+    id_getter=None,
+) -> list:
+    """Apply :func:`aqp_platform_core.auth.resource_filter.filter_resources`.
+
+    Drop-in helper for FastAPI routes that need resource-scoped list
+    filtering (ADR 003). Reads OIDC claims from
+    ``request.state.oidc_claims``; pass-through when no claims are
+    present (local default user).
+    """
+    from aqp_platform_core.auth import filter_resources
+
+    if request is None:
+        return list(items)
+    claims = getattr(request.state, "oidc_claims", None)
+    if not isinstance(claims, dict):
+        return list(items)
+    return filter_resources(items, claims, id_getter=id_getter)
 
 
 def require_scope(*required: str) -> Callable[..., CurrentUser]:
@@ -307,6 +376,7 @@ def secure_router(
 
 __all__ = [
     "PUBLIC_ROUTERS",
+    "filter_resources_for_user",
     "require_authenticated",
     "require_membership",
     "require_scope",

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: aqp-core
+  namespace: aqp
+  labels:
+    app: aqp-core
+    app.kubernetes.io/part-of: aqp
+spec:
+  type: ClusterIP
+  selector:
+    app: aqp-core
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP

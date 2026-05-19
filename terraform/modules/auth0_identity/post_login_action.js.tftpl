@@ -1,3 +1,21 @@
+// =============================================================================
+// AQP post-login Auth0 Action.
+//
+// Calls POST <sync_url> with an M2M-issued bearer token. The sync endpoint
+// (aqp/api/routes/auth0_sync.py) returns the AQP custom claims to inject:
+//
+//   org_id, team_id, workspace_id, project_id, lab_id,
+//   roles[], resources[], scopes[], connection, internal_user_id, is_new_user
+//
+// All claims are namespaced under ${claims_namespace} (canonical:
+// "https://aqp.internal/" per ADR 003 — legacy "https://aqp/" still
+// readable by the validator during the one-release migration window).
+//
+// The `resources` array is the explicit resource-scoping grant. Every
+// list endpoint in aqp_control_plane (and the in-AQP /control-plane/*
+// proxy) calls filter_resources(items, payload) to drop items not in
+// this array. Operators on aqp-superadmin (admin:cluster scope) bypass.
+// =============================================================================
 exports.onExecutePostLogin = async (event, api) => {
   const namespace = "${claims_namespace}";
   const body = {
@@ -32,9 +50,25 @@ exports.onExecutePostLogin = async (event, api) => {
 
   const claims = await response.json();
   for (const [key, value] of Object.entries(claims)) {
-    if (value !== null && value !== undefined) {
-      api.accessToken.setCustomClaim(`${namespace}$${key}`, value);
-      api.idToken.setCustomClaim(`${namespace}$${key}`, value);
+    if (value === null || value === undefined) {
+      continue;
     }
+    api.accessToken.setCustomClaim(`${namespace}$${key}`, value);
+    api.idToken.setCustomClaim(`${namespace}$${key}`, value);
+  }
+
+  // Mirror the `scopes` claim onto the OAuth `scope` string so backend
+  // services that only inspect the standard claim see the grant.
+  if (Array.isArray(claims.scopes) && claims.scopes.length > 0) {
+    const existing = api.accessToken.getCustomClaim
+      ? api.accessToken.getCustomClaim("scope") || ""
+      : "";
+    const existingScopes = typeof existing === "string"
+      ? new Set(existing.split(/\s+/).filter(Boolean))
+      : new Set();
+    for (const s of claims.scopes) {
+      existingScopes.add(String(s));
+    }
+    api.accessToken.setCustomClaim("scope", Array.from(existingScopes).join(" "));
   }
 };

@@ -199,7 +199,22 @@ class Settings(BaseSettings):
     # See ``docs/auth0-actions.md``. Decoupled from the issuer URL so
     # the same Action works against staging / prod tenants without
     # rebuilding the SPA.
-    auth_claims_namespace: str = Field(default="https://aqp/")
+    #
+    # Canonical namespace as of the refactor is ``https://aqp.internal/``
+    # (per ADR 003 — `docs/architecture/decisions/003-auth0-zero-trust.md`).
+    # The legacy ``https://aqp/`` namespace continues to be read for one
+    # release via ``auth_claims_namespace_aliases`` so existing tokens
+    # validate during the rollout window.
+    auth_claims_namespace: str = Field(default="https://aqp.internal/")
+    auth_claims_namespace_aliases: list[str] = Field(
+        default_factory=lambda: ["https://aqp/"],
+        description=(
+            "Backward-compatible claim namespaces still honoured by the "
+            "JWT validator. Keep ``https://aqp/`` here for one release "
+            "after migrating the post-login Action to the canonical "
+            "``https://aqp.internal/`` namespace."
+        ),
+    )
 
     # --- runtime ---
     env: str = Field(default="dev")

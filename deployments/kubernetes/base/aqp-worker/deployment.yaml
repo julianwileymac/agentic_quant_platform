@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aqp-worker
+  namespace: aqp
+  labels:
+    app: aqp-worker
+    app.kubernetes.io/name: aqp-worker
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: aqp-worker
+  template:
+    metadata:
+      labels:
+        app: aqp-worker
+        app.kubernetes.io/name: aqp-worker
+        app.kubernetes.io/part-of: aqp
+        app.kubernetes.io/component: worker
+    spec:
+      serviceAccountName: aqp-worker
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: ghcr.io/julianwiley/aqp-worker:dev
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+            - -A
+            - aqp.tasks.celery_app
+            - worker
+            - --queues
+            - default,backtest,agents,training,paper
+            - --concurrency
+            - "2"
+          envFrom:
+            - configMapRef:
+                name: aqp-config
+            - secretRef:
+                name: aqp-secrets
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 4000m
+              memory: 8Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            exec:
+              command:
+                - celery
+                - -A
+                - aqp.tasks.celery_app
+                - inspect
+                - ping
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "test -d /proc/1"
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /home/aqp/.cache
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+      # Workers carry heavy ML/RL workloads — give them an anti-affinity
+      # hint so we don't co-schedule them with the latency-sensitive
+      # aqp-core API pods.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: aqp-core
+                topologyKey: kubernetes.io/hostname

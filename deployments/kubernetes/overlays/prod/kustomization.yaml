@@ -1,0 +1,85 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+commonLabels:
+  app.kubernetes.io/environment: prod
+
+images:
+  - name: ghcr.io/julianwiley/aqp-client
+    newTag: latest-stable
+  - name: ghcr.io/julianwiley/aqp-api
+    newTag: latest-stable
+  - name: ghcr.io/julianwiley/aqp-worker
+    newTag: latest-stable
+  - name: ghcr.io/julianwiley/aqp-control-plane
+    newTag: latest-stable
+
+patches:
+  # Prod ups baseline replicas, doubles HPA ceiling, bumps resource limits.
+  - target:
+      kind: Deployment
+      name: aqp-client
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      kind: Deployment
+      name: aqp-core
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      kind: Deployment
+      name: aqp-worker
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 4
+  - target:
+      kind: Deployment
+      name: aqp-cp
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: aqp-client
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 20
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: aqp-core
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 12
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: aqp-worker
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 4
+      - op: replace
+        path: /spec/maxReplicas
+        value: 24
+  - target:
+      kind: PodDisruptionBudget
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 2

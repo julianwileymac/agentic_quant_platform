@@ -1,0 +1,43 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aqp-worker
+  namespace: aqp
+  labels:
+    app.kubernetes.io/part-of: aqp
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aqp-worker
+  minReplicas: 2
+  maxReplicas: 12
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+    # Custom metric: Celery queue depth (requires a metrics adapter
+    # like prometheus-adapter exposing aqp_celery_queue_depth).
+    - type: Pods
+      pods:
+        metric:
+          name: aqp_celery_queue_depth
+        target:
+          type: AverageValue
+          averageValue: "5"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+        - type: Percent
+          value: 25
+          periodSeconds: 120

@@ -439,13 +439,16 @@ These hold across the codebase. Any PR that violates one will be sent back.
  34). New ``OrchestrationAdapter`` subclasses register through the
  [`OrchestrationAdapterMeta`](aqp/agents/orchestration/base.py)
  metaclass — never decorate them by hand.
-42. **All Terraform IaC lifecycle actions go through
+42. **All Terraform IaC PROVISIONING actions go through
  [`aqp/terraform/runtime.py::TerraformRuntime`](aqp/terraform/runtime.py).**
- The `terraform_runs` ledger, the `terraform_stack_spec_versions`
- hash-lock, the kill-switch hook (`/terraform/halt`), policy
- enforcement (OPA via [`aqp/terraform/policy.py`](aqp/terraform/policy.py)),
- and `experiment_id` / `test_id` stamping all depend on it. REST
- routes ([`aqp/api/routes/terraform.py`](aqp/api/routes/terraform.py)),
+ Cluster bootstrap, IAM, Auth0 tenant + roles + Action, namespaces,
+ secrets, network policies, and Ingress class registration are all
+ "provisioning". The `terraform_runs` ledger, the
+ `terraform_stack_spec_versions` hash-lock, the kill-switch hook
+ (`/terraform/halt`), policy enforcement (OPA via
+ [`aqp/terraform/policy.py`](aqp/terraform/policy.py)), and
+ `experiment_id` / `test_id` stamping all depend on it. REST routes
+ ([`aqp/api/routes/terraform.py`](aqp/api/routes/terraform.py)),
  Celery tasks ([`aqp/tasks/terraform_tasks.py`](aqp/tasks/terraform_tasks.py)),
  and DataMCP tools ([`aqp/data/mcp/tools/terraform.py`](aqp/data/mcp/tools/terraform.py))
  wrap it — nothing calls `subprocess.run(["terraform", ...])`
@@ -454,6 +457,8 @@ These hold across the codebase. Any PR that violates one will be sent back.
  CDKTF was deprecated by HashiCorp on 2025-12-10 — Python-side HCL
  codegen uses Jinja2 templates under
  [`aqp/terraform/codegen/templates/`](aqp/terraform/codegen/templates).
+ Runtime workload operations (start / stop / scale / restart / exec /
+ logs / `apply_config`) DO NOT use TerraformRuntime — see rule 45.
 43. **`terraform_stack_spec_versions` rows are immutable,
  hash-locked snapshots.** Re-snapshotting via
  [`aqp/terraform/registry.py::persist_spec`](aqp/terraform/registry.py)
@@ -481,6 +486,27 @@ These hold across the codebase. Any PR that violates one will be sent back.
  register through the
  [`IdentityProviderMeta`](aqp/auth/providers/protocol.py) metaclass —
  never decorate them by hand.
+45. **All runtime workload operations go through the
+ `InfrastructureProvider` ABC inside
+ [`aqp_control_plane`](../aqp_control_plane/) (driven by
+ `WorkloadRuntime`).** Start, stop, scale, restart, exec, log-tail,
+ and `apply_config` are workload ops — they never reach for
+ TerraformRuntime. Each provider (`docker_compose`, `kubernetes`,
+ `aws`, `azure`, `gcp`) self-registers via the
+ `InfrastructureProviderMeta` metaclass in
+ [`aqp_platform_core/providers/protocol.py`](../aqp_platform_core/providers/protocol.py).
+ A new `workload_runs` ledger row is written with full audit context
+ (`user_id`, `action`, `target`, `provider`, `timestamp`) BEFORE
+ the provider call executes. List endpoints in the control plane
+ API pass results through
+ [`aqp_platform_core.auth.resource_filter`](../aqp_platform_core/auth/resource_filter.py)
+ so users only see resources in their
+ `https://aqp.internal/resources` claim (except `admin:cluster`).
+ The micro-project never imports `aqp.*` — only
+ `aqp_platform_core.*`. See
+ [docs/architecture/decisions/004-provider-abstraction.md](docs/architecture/decisions/004-provider-abstraction.md)
+ and
+ [docs/architecture/decisions/005-separated-control-plane.md](docs/architecture/decisions/005-separated-control-plane.md).
 
 ## Common workflows
 

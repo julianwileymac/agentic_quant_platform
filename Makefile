@@ -3,7 +3,12 @@
 	api worker beat ui dash paper paper-dry otel test lint format clean \
 	webui-install webui-dev webui-build webui-start webui-lint webui-typecheck \
 	webui-test webui-gen-api webui-export-openapi \
-	frontend-install frontend-dev frontend-build frontend-typecheck
+	frontend-install frontend-dev frontend-build frontend-typecheck \
+	dev dev-client dev-admin stop logs-svc generate-config validate-config \
+	sync-auth0-k8s \
+	build build-client build-cp build-worker build-ingestion \
+	test-auth test-providers test-platform-core \
+	deploy-k8s deploy-helm docs docs-serve
 
 help:
 	@echo "Agentic Quant Platform — Makefile targets"
@@ -205,3 +210,127 @@ frontend-build:
 
 frontend-typecheck:
 	pnpm --dir frontend typecheck
+
+# ---------------------------------------------------------------------------
+# Refactor — /build/ + /deployments/ + aqp_platform_core + aqp_control_plane
+# Drives the docker-compose-based local + admin stacks alongside the existing
+# `aqp deploy` (TerraformRuntime) workflow. See docs/architecture/decisions/.
+# ---------------------------------------------------------------------------
+
+COMPOSE_DIR := deployments/compose
+ENV ?= local
+COMPOSE := docker compose \
+	-f $(COMPOSE_DIR)/docker-compose.base.yml \
+	-f $(COMPOSE_DIR)/docker-compose.local.yml \
+	-f $(COMPOSE_DIR)/docker-compose.override.yml \
+	--env-file $(COMPOSE_DIR)/.env.local
+
+# ---- Config generation (Phase 2) -----------------------------------------
+
+generate-config:
+	@if [ "$(ENV)" = "local" ]; then \
+		python build/scripts/generate_config.py --env local --out $(COMPOSE_DIR)/.env.local; \
+	elif [ "$(ENV)" = "cloud" ]; then \
+		python build/scripts/generate_config.py --env cloud --out $(COMPOSE_DIR)/.env.cloud; \
+	elif [ "$(ENV)" = "k8s" ]; then \
+		python build/scripts/generate_config.py --env k8s --kind configmap; \
+		python build/scripts/generate_config.py --env k8s --kind secret; \
+	else \
+		echo "Usage: make generate-config ENV=local|cloud|k8s"; exit 2; \
+	fi
+
+validate-config:
+	python build/scripts/generate_config.py --env local --diff
+	python build/scripts/generate_config.py --env cloud --diff
+	python build/scripts/generate_config.py --env k8s --kind configmap --diff
+	python build/scripts/generate_config.py --env k8s --kind secret --diff
+
+sync-auth0-k8s:
+	python build/scripts/sync_auth0_env_to_k8s.py
+
+# ---- Local dev (compose) -------------------------------------------------
+
+dev: generate-config
+	$(COMPOSE) up -d
+
+dev-client:
+	$(COMPOSE) up -d aqp-client aqp-core redis-stack aqp-postgres
+
+dev-admin: generate-config
+	docker compose \
+		-f $(COMPOSE_DIR)/docker-compose.base.yml \
+		-f $(COMPOSE_DIR)/docker-compose.local.yml \
+		-f $(COMPOSE_DIR)/docker-compose.admin.yml \
+		--env-file $(COMPOSE_DIR)/.env.local \
+		up -d
+
+stop:
+	$(COMPOSE) down
+
+logs-svc:
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "Usage: make logs-svc SERVICE=<aqp-client|aqp-core|aqp-cp|aqp-worker|...>"; exit 2; \
+	fi
+	$(COMPOSE) logs -f --tail=200 $(SERVICE)
+
+# ---- Build (multi-arch via buildx where supported) -----------------------
+
+PLATFORMS ?= linux/amd64,linux/arm64
+IMAGE_TAG ?= dev
+
+build: build-client build-cp build-worker build-ingestion
+
+build-client:
+	docker buildx build --platform $(PLATFORMS) --load \
+		-f build/docker/aqp_client/Dockerfile \
+		-t ghcr.io/julianwiley/aqp-client:$(IMAGE_TAG) .
+
+build-cp:
+	docker buildx build --platform $(PLATFORMS) --load \
+		-f build/docker/aqp_control_plane/Dockerfile \
+		-t ghcr.io/julianwiley/aqp-control-plane:$(IMAGE_TAG) .
+
+build-worker:
+	docker buildx build --platform $(PLATFORMS) --load \
+		-f build/docker/aqp_worker/Dockerfile \
+		-t ghcr.io/julianwiley/aqp-worker:$(IMAGE_TAG) .
+
+build-ingestion:
+	docker buildx build --platform $(PLATFORMS) --load \
+		-f build/docker/aqp_ingestion/Dockerfile \
+		-t ghcr.io/julianwiley/aqp-ingestion:$(IMAGE_TAG) .
+
+# ---- Test (compose + provider contract tests) ----------------------------
+
+test-platform-core:
+	cd aqp_platform_core && pytest -ra
+
+test-auth:
+	pytest tests/auth -ra
+	cd aqp_platform_core && pytest tests/test_jwt_validator.py tests/test_resource_filter.py tests/test_rbac.py -ra
+
+test-providers:
+	cd aqp_control_plane && pytest tests/ -ra -k "provider"
+
+# ---- Deploy (Kubernetes via kustomize / Helm) ----------------------------
+
+deploy-k8s:
+	@if [ -z "$(ENV)" ]; then echo "Usage: make deploy-k8s ENV=dev|staging|prod"; exit 2; fi
+	kubectl apply -k deployments/kubernetes/overlays/$(ENV)
+
+deploy-helm:
+	@if [ -z "$(CHART)" ] || [ -z "$(ENV)" ]; then \
+		echo "Usage: make deploy-helm CHART=aqp-backend ENV=dev"; exit 2; \
+	fi
+	helm upgrade --install $(CHART) deployments/kubernetes/helm/$(CHART) \
+		-f deployments/kubernetes/helm/$(CHART)/values.$(ENV).yaml
+
+# ---- Docs (OpenAPI + markdown) -------------------------------------------
+
+docs:
+	python -m scripts.export_openapi --out data/openapi.json
+	@echo "[docs] Generated data/openapi.json"
+	@echo "[docs] Run 'make docs-serve' to preview at http://localhost:8090"
+
+docs-serve:
+	@python -m http.server 8090 --directory docs

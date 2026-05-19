@@ -155,10 +155,15 @@ class Auth0SyncResponse(BaseModel):
     """Custom claims the Action injects into the access token.
 
     Every key is namespaced under ``settings.auth_claims_namespace``
-    (default ``https://aqp/``) so it can never collide with reserved
-    JWT claims. The Action passes this dict directly to
+    (default ``https://aqp.internal/``) so it can never collide with
+    reserved JWT claims. The Action passes this dict directly to
     ``api.accessToken.setCustomClaim`` so the SPA + backend see a
     uniform claim namespace.
+
+    The ``resources`` claim (ADR 003) is the canonical resource-scoping
+    grant. Every list endpoint in the control plane filters its results
+    through :func:`aqp_platform_core.auth.resource_filter.filter_resources`
+    against this claim. The bypass scope is ``admin:cluster``.
     """
 
     org_id: str | None = None
@@ -167,6 +172,22 @@ class Auth0SyncResponse(BaseModel):
     project_id: str | None = None
     lab_id: str | None = None
     roles: list[str] = Field(default_factory=list)
+    resources: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Explicit resource IDs (Deployments, Bots, RL experiments, etc.) "
+            "the user is allowed to see. Anyone without admin:cluster will see "
+            "ONLY items whose id is in this list."
+        ),
+    )
+    scopes: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional RBAC scope grants on top of the roles array. Standard "
+            "values: read:infrastructure, manage:agents, manage:infrastructure, "
+            "admin:cluster (the only one that bypasses resource filtering)."
+        ),
+    )
     connection: str | None = None
     internal_user_id: str | None = None
     is_new_user: bool = False
@@ -192,6 +213,45 @@ def auth0_sync(
     from aqp.config.defaults import DEFAULT_WORKSPACE_ID, ROLE_VIEWER
     from aqp.persistence.db import get_session
     from aqp.persistence.models_tenancy import Membership, User
+
+    # Phase 4 / ADR 003 — resource scoping. Local default until a richer
+    # resolver lands in Phase 7 (rpi_kubernetes absorption); for now we
+    # emit an empty list so non-admin users see nothing (deny by default).
+    # Operators on aqp-superadmin (admin:cluster) bypass via the scope
+    # claim — never via this list.
+    def _resolve_resource_ids(user_id: int | None) -> list[str]:
+        if user_id is None:
+            return []
+        try:
+            from aqp.auth.resource_scope import (  # type: ignore[import-not-found]
+                list_user_resource_ids,
+            )
+
+            return list_user_resource_ids(user_id)
+        except ImportError:
+            # Resource resolver not yet present in this branch — fall
+            # through to the empty list. Admins bypass via the scope
+            # check; non-admins simply see only what they own once the
+            # resolver lands.
+            return []
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "resource id resolution failed for user_id=%s; emitting empty list",
+                user_id,
+            )
+            return []
+
+    def _resolve_scopes(role_list: list[str]) -> list[str]:
+        # Map roles to the canonical four-scope grid (ADR 003).
+        try:
+            from aqp_platform_core.auth.rbac import expand_role
+
+            granted: set[str] = set()
+            for role in role_list:
+                granted.update(expand_role(role))
+            return sorted(granted)
+        except Exception:  # noqa: BLE001
+            return []
 
     requested_claims = body.requested_claims if isinstance(body.requested_claims, dict) else {}
     # Convention: the Auth0 post-login Action sends connection metadata via
@@ -275,10 +335,15 @@ def auth0_sync(
     except Exception:
         pass
 
+    resource_ids = _resolve_resource_ids(internal_user_id)
+    scopes = _resolve_scopes(roles)
+
     return Auth0SyncResponse(
         org_id=org_id,
         workspace_id=workspace_id,
         roles=roles,
+        resources=resource_ids,
+        scopes=scopes,
         connection=connection,
         internal_user_id=internal_user_id,
         is_new_user=is_new,

@@ -1,0 +1,107 @@
+# =============================================================================
+# AQP docker-compose — full local dev stack.
+# Usage:
+#   docker compose \
+#     -f deployments/compose/docker-compose.base.yml \
+#     -f deployments/compose/docker-compose.local.yml \
+#     --env-file deployments/compose/.env.local \
+#     up -d
+# =============================================================================
+services:
+  aqp-postgres:
+    image: ankane/pgvector:v0.5.1
+    environment:
+      POSTGRES_USER: aqp
+      POSTGRES_PASSWORD: ${AQP_DATABASE_PASSWORD:-aqp}
+      POSTGRES_DB: aqp
+    volumes:
+      - aqp-postgres-data:/var/lib/postgresql/data
+    networks:
+      - aqp-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aqp -d aqp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-stack:
+    image: redis/redis-stack:7.4.0-v3
+    command:
+      [
+        "redis-stack-server",
+        "--maxmemory-policy", "allkeys-lru",
+        "--protected-mode", "no",
+      ]
+    volumes:
+      - aqp-redis-data:/data
+    networks:
+      - aqp-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "PING"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  aqp-core:
+    image: ghcr.io/julianwiley/aqp-api:${AQP_APP_VERSION:-dev}
+    command: ["uvicorn", "aqp.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file:
+      - .env.local
+    environment:
+      - AQP_DATABASE_URL=postgresql+psycopg://aqp:${AQP_DATABASE_PASSWORD:-aqp}@aqp-postgres:5432/aqp
+      - AQP_REDIS_URL=redis://redis-stack:6379
+      - AQP_CONTROL_PLANE_URL=http://aqp-cp:9000
+      - AQP_KUBERNETES_ADAPTER=${AQP_KUBERNETES_ADAPTER:-local_compose}
+    depends_on:
+      aqp-postgres:
+        condition: service_healthy
+      redis-stack:
+        condition: service_healthy
+    networks:
+      - aqp-internal
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  aqp-worker:
+    image: ghcr.io/julianwiley/aqp-worker:${AQP_APP_VERSION:-dev}
+    command:
+      [
+        "celery", "-A", "aqp.tasks.celery_app", "worker",
+        "--queues", "default,backtest,agents,training,paper",
+        "--concurrency", "2",
+      ]
+    env_file:
+      - .env.local
+    environment:
+      - AQP_DATABASE_URL=postgresql+psycopg://aqp:${AQP_DATABASE_PASSWORD:-aqp}@aqp-postgres:5432/aqp
+      - AQP_REDIS_URL=redis://redis-stack:6379
+    depends_on:
+      - aqp-core
+    networks:
+      - aqp-internal
+
+  aqp-client:
+    build:
+      context: ../../
+      dockerfile: build/docker/aqp_client/Dockerfile
+    image: ghcr.io/julianwiley/aqp-client:${AQP_APP_VERSION:-dev}
+    ports:
+      - "3000:8080"
+    env_file:
+      - .env.local
+    environment:
+      - AQP_CORE_API_URL=http://aqp-core:8000
+      - AQP_REDIS_URL=redis://redis-stack:6379
+      - AQP_CONTROL_PLANE_URL=http://aqp-cp:9000
+    depends_on:
+      - aqp-core
+    networks:
+      - aqp-internal
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

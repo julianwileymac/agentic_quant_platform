@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aqp-worker
+  namespace: aqp
+  labels:
+    app.kubernetes.io/part-of: aqp
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: aqp-worker

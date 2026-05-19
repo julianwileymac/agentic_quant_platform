@@ -1,0 +1,66 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+commonLabels:
+  app.kubernetes.io/environment: dev
+
+images:
+  - name: ghcr.io/julianwiley/aqp-client
+    newTag: dev
+  - name: ghcr.io/julianwiley/aqp-api
+    newTag: dev
+  - name: ghcr.io/julianwiley/aqp-worker
+    newTag: dev
+  - name: ghcr.io/julianwiley/aqp-control-plane
+    newTag: dev
+
+# Smaller resource footprint + lower replica count for dev.
+patches:
+  - target:
+      kind: Deployment
+      name: aqp-client
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: Deployment
+      name: aqp-core
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: Deployment
+      name: aqp-worker
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: Deployment
+      name: aqp-cp
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  # Drop PDBs to minAvailable=0 so dev can roll cleanly with replicas=1.
+  - target:
+      kind: PodDisruptionBudget
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 0
+  # Tighten HPA min/max for dev — don't over-provision.
+  - target:
+      kind: HorizontalPodAutoscaler
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3

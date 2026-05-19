@@ -1,0 +1,25 @@
+# =============================================================================
+# AQP docker-compose — shared base (networks, volumes, common defaults).
+# Combine with one of:
+#   - docker-compose.local.yml       (full local dev stack)
+#   - docker-compose.admin.yml       (aqp_client + aqp_control_plane only)
+#   - docker-compose.legacy.yml      (Solara + legacy webui rollback)
+# =============================================================================
+networks:
+  aqp-internal:
+    # Application network — every backend service goes here.
+    # The aqp_client gateway is the only ingress.
+    driver: bridge
+
+  aqp-admin:
+    # Management network for the aqp_control_plane micro-project.
+    # Strictly separate from aqp-internal — the control plane must not
+    # share a network with workloads it manages (see ADR 005).
+    driver: bridge
+    internal: false  # needs outbound for Auth0 JWKS fetch
+
+volumes:
+  aqp-postgres-data:
+  aqp-redis-data:
+  aqp-mlflow-artifacts:
+  aqp-terraform-state:

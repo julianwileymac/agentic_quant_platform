@@ -7,9 +7,12 @@ import { useTenancyStore } from "@/store/tenancy";
  * Hydrate the tenancy store from Auth0 custom claims after login.
  *
  * The Auth0 Action (see ``docs/auth0-actions.md``) injects
- * ``https://aqp/org_id``, ``https://aqp/team_id``,
- * ``https://aqp/workspace_id``, and ``https://aqp/roles`` into the
- * access token. On the first render after login we copy those values
+ * ``https://aqp.internal/org_id``, ``https://aqp.internal/team_id``,
+ * ``https://aqp.internal/workspace_id``, and
+ * ``https://aqp.internal/roles`` into the access token (canonical
+ * namespace per ADR 003). The legacy ``https://aqp/`` namespace is
+ * still read for one release. On the first render after login we copy
+ * those values
  * onto :func:`useTenancyStore` so:
  *
  * - the API client sends the matching ``X-AQP-*`` headers on the

@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aqp
+  labels:
+    app.kubernetes.io/name: aqp
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    # Pod Security Standards (PSS) "restricted" — refuses pods that
+    # run as root, mount the host network, or otherwise break the
+    # least-privilege contract. Every aqp pod sets the matching
+    # securityContext in its Deployment manifest.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+  annotations:
+    aqp.internal/description: "Primary namespace for AQP workloads (aqp-core, aqp-worker, aqp-client, aqp-cp, redis-master)."
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aqp-admin
+  labels:
+    app.kubernetes.io/name: aqp-admin
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    # The admin namespace is strictly separated from `aqp` so the
+    # control plane can manage workloads in `aqp` without sharing
+    # network identity or RBAC with them (ADR 005).
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+  annotations:
+    aqp.internal/description: "Isolated namespace for aqp_control_plane (separate from `aqp` per ADR 005)."

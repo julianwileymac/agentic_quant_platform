@@ -1,0 +1,72 @@
+# =============================================================================
+# AQP docker-compose — ADMIN overlay (aqp_client + aqp_control_plane).
+# Brings up the unified client + the isolated control-plane micro-project.
+# Designed to layer on top of docker-compose.local.yml OR run standalone
+# against a remote AQP backend.
+#
+# Usage (layered on local):
+#   docker compose \
+#     -f deployments/compose/docker-compose.base.yml \
+#     -f deployments/compose/docker-compose.local.yml \
+#     -f deployments/compose/docker-compose.admin.yml \
+#     --env-file deployments/compose/.env.local \
+#     up -d
+#
+# Usage (standalone, against remote backend):
+#   docker compose \
+#     -f deployments/compose/docker-compose.base.yml \
+#     -f deployments/compose/docker-compose.admin.yml \
+#     --env-file deployments/compose/.env.local \
+#     up -d
+#
+# The control plane lives on the aqp-admin network — strictly separate from
+# aqp-internal. The client reaches it via its published port (localhost:9000).
+# =============================================================================
+services:
+  aqp-cp:
+    build:
+      context: ../../
+      dockerfile: build/docker/aqp_control_plane/Dockerfile
+    image: ghcr.io/julianwiley/aqp-control-plane:${AQP_APP_VERSION:-dev}
+    ports:
+      - "9000:9000"
+    env_file:
+      - .env.local
+    environment:
+      # Active provider chosen at startup. docker_compose is the default for
+      # local dev so the control plane can manage the same compose stack
+      # it ships next to.
+      - AQP_CP_PROVIDER=${AQP_CP_PROVIDER:-docker_compose}
+      - AQP_CP_COMPOSE_FILE=/workspace/deployments/compose/docker-compose.local.yml
+      # JWT validation — never trust headers from the gateway; always
+      # re-validate against Auth0 JWKS.
+      - AQP_AUTH_OIDC_ISSUER=${AQP_AUTH_OIDC_ISSUER}
+      - AQP_AUTH_OIDC_AUDIENCE=${AQP_AUTH_OIDC_AUDIENCE:-https://api.aqp.internal/manage}
+      - AQP_AUTH_CLAIMS_NAMESPACE=${AQP_AUTH_CLAIMS_NAMESPACE:-https://aqp.internal/}
+    volumes:
+      # The control plane reaches the Docker daemon to drive the
+      # docker_compose provider. READ-ONLY mount — the control plane
+      # never invokes write-mutating Docker API endpoints directly;
+      # write ops go through `docker compose` subprocess.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Workspace mount so the control plane can read the compose files
+      # it manages.
+      - ../../:/workspace:ro
+    networks:
+      - aqp-admin
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/manage/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  aqp-client:
+    environment:
+      # When run with the admin overlay, the client knows the control
+      # plane is on aqp-admin (not aqp-internal). The proxy reaches it
+      # via the host-published port to preserve the network boundary.
+      - AQP_CONTROL_PLANE_URL=http://host.docker.internal:9000
+    extra_hosts:
+      # Linux Docker doesn't include host.docker.internal by default.
+      - "host.docker.internal:host-gateway"

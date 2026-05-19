@@ -34,7 +34,32 @@ export interface AuthSurface {
     teamId: string | null;
     workspaceId: string | null;
     roles: string[];
+    /**
+     * Explicit resource IDs the user is allowed to see (ADR 003).
+     * Operators on `aqp-superadmin` (`admin:cluster` scope) bypass
+     * resource filtering server-side; UI uses `hasScope('admin:cluster')`
+     * to decide whether to render the "show everything" toggle.
+     */
+    resources: string[];
+    /**
+     * Granted RBAC scopes — read:infrastructure, manage:agents,
+     * manage:infrastructure, admin:cluster. Sourced from the
+     * AQP-namespaced `scopes` claim plus Auth0's `permissions` array.
+     */
+    scopes: string[];
   };
+  /**
+   * Convenience helper for scope-gated nav items. Returns true when the
+   * user has the requested scope OR admin:cluster (which bypasses all
+   * resource filtering).
+   */
+  hasScope: (scope: string) => boolean;
+  /**
+   * Returns true when the resource is in the user's resources claim,
+   * OR the user has admin:cluster. Convenience helper for permission-
+   * aware UI rendering.
+   */
+  canSeeResource: (resourceId: string) => boolean;
   loginWithRedirect: (returnTo?: string, opts?: { organization?: string }) => Promise<void>;
   loginWithMicrosoft: (returnTo?: string) => Promise<void>;
   loginWithGoogle: (returnTo?: string) => Promise<void>;
@@ -60,12 +85,34 @@ const LOCAL_CLAIMS: AuthSurface["claims"] = {
   orgId: "00000000-0000-0000-0000-000000000001",
   teamId: "00000000-0000-0000-0000-000000000002",
   workspaceId: "00000000-0000-0000-0000-000000000004",
-  roles: ["owner"],
+  roles: ["owner", "aqp-superadmin"],
+  resources: [],
+  scopes: ["admin:cluster"], // local dev sees everything
 };
 
-const CLAIMS_NS = "https://aqp/";
+// Canonical claims namespace per ADR 003. Legacy `https://aqp/` is
+// still read (one-release backward compatibility) — the backend's
+// post-login Action will move to the canonical namespace first, with
+// the alias kept around until existing tokens age out.
+const CLAIMS_NS_CANONICAL = "https://aqp.internal/";
+const CLAIMS_NS_LEGACY = "https://aqp/";
+const CLAIMS_NS_LIST = [CLAIMS_NS_CANONICAL, CLAIMS_NS_LEGACY] as const;
 const DEFAULT_MS_CONNECTION = "azure-ad-myorg";
 const DEFAULT_GOOGLE_CONNECTION = "google-oauth2";
+
+function readNamespacedClaim<T>(
+  user: Record<string, unknown> | undefined,
+  field: string,
+): T | undefined {
+  if (!user) return undefined;
+  for (const ns of CLAIMS_NS_LIST) {
+    const key = `${ns}${field}`;
+    if (user[key] !== undefined) {
+      return user[key] as T;
+    }
+  }
+  return undefined;
+}
 
 function readStringEnv(key: string, fallback: string): string {
   const value = (import.meta.env as Record<string, string | undefined>)[key];
@@ -83,6 +130,10 @@ export function useAuth(): AuthSurface {
       isAuthenticated: !required,
       user: LOCAL_DEFAULT,
       claims: LOCAL_CLAIMS,
+      hasScope: (scope: string) =>
+        LOCAL_CLAIMS.scopes.includes(scope) ||
+        LOCAL_CLAIMS.scopes.includes("admin:cluster"),
+      canSeeResource: () => true, // local dev bypasses resource filtering
       loginWithRedirect: async () => {},
       loginWithMicrosoft: async () => {},
       loginWithGoogle: async () => {},
@@ -102,29 +153,59 @@ function _claimsFromUser(
   user: Record<string, unknown> | undefined,
 ): AuthSurface["claims"] {
   if (!user) {
-    return { orgId: null, teamId: null, workspaceId: null, roles: [] };
+    return {
+      orgId: null,
+      teamId: null,
+      workspaceId: null,
+      roles: [],
+      resources: [],
+      scopes: [],
+    };
   }
   const orgId =
-    (user[`${CLAIMS_NS}org_id`] as string | undefined) ??
+    readNamespacedClaim<string>(user, "org_id") ??
     (user.org_id as string | undefined) ??
     null;
   const teamId =
-    (user[`${CLAIMS_NS}team_id`] as string | undefined) ??
+    readNamespacedClaim<string>(user, "team_id") ??
     (user.team_id as string | undefined) ??
     null;
   const workspaceId =
-    (user[`${CLAIMS_NS}workspace_id`] as string | undefined) ??
+    readNamespacedClaim<string>(user, "workspace_id") ??
     (user.workspace_id as string | undefined) ??
     null;
   const rolesRaw =
-    (user[`${CLAIMS_NS}roles`] as string[] | undefined) ??
+    readNamespacedClaim<string[]>(user, "roles") ??
     (user.roles as string[] | undefined) ??
     [];
+  const resourcesRaw =
+    readNamespacedClaim<string[]>(user, "resources") ??
+    (user.resources as string[] | undefined) ??
+    [];
+  const scopesRaw =
+    readNamespacedClaim<string[]>(user, "scopes") ??
+    (user.scopes as string[] | undefined) ??
+    [];
+  // Auth0's RBAC injects `permissions` (array) on the access token.
+  const permsRaw = (user.permissions as string[] | undefined) ?? [];
+  const scopeStr = (user.scope as string | undefined) ?? "";
+  const scopesFromString = scopeStr ? scopeStr.split(/\s+/).filter(Boolean) : [];
+  const scopes = Array.from(
+    new Set(
+      [
+        ...(Array.isArray(scopesRaw) ? scopesRaw : []),
+        ...(Array.isArray(permsRaw) ? permsRaw : []),
+        ...scopesFromString,
+      ].map(String),
+    ),
+  );
   return {
     orgId: orgId ?? null,
     teamId: teamId ?? null,
     workspaceId: workspaceId ?? null,
     roles: Array.isArray(rolesRaw) ? rolesRaw.map(String) : [],
+    resources: Array.isArray(resourcesRaw) ? resourcesRaw.map(String) : [],
+    scopes,
   };
 }
 
@@ -204,6 +285,24 @@ function useAuthEnabled(): AuthSurface {
     return (claims as Record<string, unknown>) ?? null;
   }, [a0]);
 
+  const claims = useMemo(
+    () => _claimsFromUser(a0.user as Record<string, unknown> | undefined),
+    [a0.user],
+  );
+
+  const hasScope = useCallback(
+    (scope: string) =>
+      claims.scopes.includes(scope) || claims.scopes.includes("admin:cluster"),
+    [claims.scopes],
+  );
+
+  const canSeeResource = useCallback(
+    (resourceId: string) =>
+      claims.scopes.includes("admin:cluster") ||
+      claims.resources.includes(resourceId),
+    [claims.scopes, claims.resources],
+  );
+
   return useMemo<AuthSurface>(
     () => ({
       enabled: true,
@@ -218,7 +317,9 @@ function useAuthEnabled(): AuthSurface {
           null,
         picture: (a0.user?.picture as string | undefined) ?? null,
       },
-      claims: _claimsFromUser(a0.user as Record<string, unknown> | undefined),
+      claims,
+      hasScope,
+      canSeeResource,
       loginWithRedirect,
       loginWithMicrosoft,
       loginWithGoogle,
@@ -231,6 +332,9 @@ function useAuthEnabled(): AuthSurface {
       a0.isLoading,
       a0.isAuthenticated,
       a0.user,
+      claims,
+      hasScope,
+      canSeeResource,
       loginWithRedirect,
       loginWithMicrosoft,
       loginWithGoogle,

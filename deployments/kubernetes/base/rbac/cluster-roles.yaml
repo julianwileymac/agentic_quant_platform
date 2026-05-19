@@ -1,0 +1,74 @@
+# RBAC for aqp_control_plane — least-privilege over the AQP namespace.
+#
+# The control plane needs to:
+#   - apply / patch / scale Deployments in `aqp`
+#   - read Pods + logs + Pod metrics + ConfigMaps
+#   - patch ConfigMaps in `aqp`
+# It does NOT need:
+#   - cluster-admin
+#   - cross-namespace mutation (admins use a separate cluster role)
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: aqp-cp-workload-manager
+  namespace: aqp
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale", "deployments/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/status"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: aqp-cp-workload-manager
+  namespace: aqp
+subjects:
+  - kind: ServiceAccount
+    name: aqp-cp
+    namespace: aqp-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: aqp-cp-workload-manager
+---
+# Cluster-scoped: enumerate namespaces + nodes for the operator UI.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aqp-cp-cluster-reader
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: aqp-cp-cluster-reader
+subjects:
+  - kind: ServiceAccount
+    name: aqp-cp
+    namespace: aqp-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aqp-cp-cluster-reader

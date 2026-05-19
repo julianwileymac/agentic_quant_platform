@@ -1,0 +1,23 @@
+# =============================================================================
+# AQP docker-compose — developer-local OVERRIDE (git-ignored if you want).
+# Auto-loaded by `docker compose` alongside the base + local files.
+# Use it for: extra port mappings, local bind mounts for live reload,
+# Xdebug ports, etc. Examples below are commented out.
+# =============================================================================
+services:
+  # Example: mount aqp/ source into the core API container for hot reload.
+  # aqp-core:
+  #   volumes:
+  #     - ../../aqp:/app/aqp:cached
+  #     - ../../aqp_platform_core:/app/aqp_platform_core:cached
+  #   command:
+  #     [
+  #       "uvicorn", "aqp.api.main:app",
+  #       "--host", "0.0.0.0", "--port", "8000",
+  #       "--reload",
+  #     ]
+
+  # Example: expose Postgres to host for psql sessions.
+  # aqp-postgres:
+  #   ports:
+  #     - "5432:5432"

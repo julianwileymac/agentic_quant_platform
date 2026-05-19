@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: aqp-client
+  namespace: aqp
+  labels:
+    app: aqp-client
+    app.kubernetes.io/part-of: aqp
+spec:
+  type: ClusterIP
+  selector:
+    app: aqp-client
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

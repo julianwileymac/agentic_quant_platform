@@ -1,0 +1,42 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+commonLabels:
+  app.kubernetes.io/environment: staging
+
+images:
+  - name: ghcr.io/julianwiley/aqp-client
+    newTag: staging
+  - name: ghcr.io/julianwiley/aqp-api
+    newTag: staging
+  - name: ghcr.io/julianwiley/aqp-worker
+    newTag: staging
+  - name: ghcr.io/julianwiley/aqp-control-plane
+    newTag: staging
+
+patches:
+  # Staging matches prod replica counts but smaller HPA ceilings.
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: aqp-client
+    patch: |-
+      - op: replace
+        path: /spec/maxReplicas
+        value: 6
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: aqp-core
+    patch: |-
+      - op: replace
+        path: /spec/maxReplicas
+        value: 5
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: aqp-worker
+    patch: |-
+      - op: replace
+        path: /spec/maxReplicas
+        value: 8

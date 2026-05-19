@@ -136,18 +136,14 @@ from aqp.api.routes import (  # noqa: E402
     msal_sync as msal_sync_routes,
     tenancy as tenancy_routes,
 )
-# Phase 7 — Terraform IaC control plane + /infra dashboard routes.
+# Phase 7 — Terraform IaC control plane (REST + WS) + /infra dashboard +
+# the high-level /control-plane API consumed by the Vite Control Plane UI.
 from aqp.api.routes import (  # noqa: E402
     infra as infra_routes,
     terraform as terraform_routes,
 )
 from aqp.api.routes import (  # noqa: E402
     control_plane as control_plane_routes,
-)
-# Phase 7 — Terraform IaC control plane (REST + WS) + /infra dashboard.
-from aqp.api.routes import (  # noqa: E402
-    infra as infra_routes,
-    terraform as terraform_routes,
 )
 # Phase 7 — LEAN strategy template catalog + clone-to-workspace REST.
 from aqp.api.routes import (  # noqa: E402
@@ -435,10 +431,9 @@ app.include_router(terraform_routes.router)
 app.include_router(terraform_routes.ws_router)
 app.include_router(infra_routes.router)
 app.include_router(infra_routes.ws_router)
-# --- Phase 7 — Terraform IaC control plane + /infra dashboard --------
-app.include_router(terraform_routes.router)
-app.include_router(infra_routes.router)
-app.include_router(infra_routes.ws_router)
+# (control_plane_routes.router is registered earlier alongside auth /
+# scim / me / invites; rule 45 — high-level /control-plane API for the
+# Vite UI delegates to TerraformRuntime + KubernetesAdapter.)
 # (Phase 7 strategy_templates router is registered earlier, BEFORE
 # ``strategies.router``, so the ``/strategies/templates`` prefix isn't
 # shadowed by ``/strategies/{strategy_id}``.)
@@ -521,12 +516,43 @@ def _mount_dash() -> None:
 _mount_dash()
 
 
-@app.get("/")
+# ---------------------------------------------------------------------------
+# Refactor — unified aqp_client gateway (Phase 3).
+#
+# When AQP_CLIENT_MODE=true the same FastAPI process additionally serves
+# the Vite SPA at /, the Solara legacy UI at /legacy, the rollback Next.js
+# bundle at /webui, and reverse-proxies /api, /ml, /mcp, /manage, /ws/* to
+# the backend services addressed by ConnectivityConfig.
+#
+# When AQP_CLIENT_MODE is unset / false this is a no-op so the existing
+# AQP API container behaviour is unchanged.
+# ---------------------------------------------------------------------------
+def _install_client_mode() -> None:
+    try:
+        from aqp.api.client_routes import install_client_surfaces
+
+        install_client_surfaces(app)
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "aqp_client mode install failed; SPA / proxy / Solara mounts skipped"
+        )
+
+
+_install_client_mode()
+
+
+# ``/`` is the root informational endpoint when client mode is OFF.
+# In client mode the SPA fallback in client_routes.py owns / via a
+# catch-all route registered AFTER this one. FastAPI's matcher is
+# greedy on more-specific paths, so this exact-/ route still wins
+# when both are registered.
+@app.get("/", include_in_schema=False)
 def root() -> dict:
     return {
         "app": "agentic-quant-platform",
         "version": "0.3.0",
         "docs": "/docs",
         "dash": "/dash/",
+        "client_mode": __import__("os").environ.get("AQP_CLIENT_MODE", "").lower() in {"1", "true", "yes", "on"},
         "routes": [r.path for r in app.routes if hasattr(r, "path")],
     }

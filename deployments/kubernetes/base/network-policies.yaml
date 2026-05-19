@@ -1,0 +1,169 @@
+# Default-deny baseline + explicit allow rules.
+# Operators on AKS / EKS / GKE must enable a NetworkPolicy controller
+# (Calico, Cilium, etc.) for these to be enforced.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: aqp
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-client-to-core
+  namespace: aqp
+spec:
+  podSelector:
+    matchLabels:
+      app: aqp-core
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: aqp-client
+        - podSelector:
+            matchLabels:
+              app: aqp-worker
+      ports:
+        - port: 8000
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-worker-to-redis
+  namespace: aqp
+spec:
+  podSelector:
+    matchLabels:
+      app: redis-master
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: aqp-worker
+        - podSelector:
+            matchLabels:
+              app: aqp-core
+        - podSelector:
+            matchLabels:
+              app: aqp-client
+      ports:
+        - port: 6379
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-client
+  namespace: aqp
+spec:
+  podSelector:
+    matchLabels:
+      app: aqp-client
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 8080
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-dns
+  namespace: aqp
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow https-out for the JWKS fetch + container image pulls handled at the node level.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 443
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: aqp-admin
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cp-to-aqp-namespace
+  namespace: aqp-admin
+spec:
+  podSelector:
+    matchLabels:
+      app: aqp-cp
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: aqp
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 443
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-cp
+  namespace: aqp-admin
+spec:
+  podSelector:
+    matchLabels:
+      app: aqp-cp
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 9000
+          protocol: TCP

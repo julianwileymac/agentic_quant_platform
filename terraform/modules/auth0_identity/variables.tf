@@ -22,7 +22,7 @@ variable "api_name" {
 
 variable "api_identifier" {
   type    = string
-  default = "https://aqp/api"
+  default = "https://api.aqp.internal/manage"
 }
 
 variable "callback_urls" {
@@ -54,5 +54,5 @@ variable "auth0_sync_url" {
 
 variable "claims_namespace" {
   type    = string
-  default = "https://aqp/"
+  default = "https://aqp.internal/"
 }
