@@ -71,8 +71,8 @@ variable "access_policies" {
     (list of { email_domain | group | everyone }), requires (optional
     list of the same), excludes (optional list of the same) }.
   EOT
-  type    = any
-  default = []
+  type        = any
+  default     = []
 }
 
 resource "cloudflare_zero_trust_tunnel_cloudflared" "tunnel" {
@@ -121,15 +121,15 @@ resource "cloudflare_dns_record" "tunnel_routes" {
 resource "cloudflare_zero_trust_access_application" "app" {
   count = var.enable_access_app ? 1 : 0
 
-  account_id                  = var.account_id
-  name                        = coalesce(var.access_app_name, var.tunnel_name)
-  domain                      = var.ingress_rules[0].hostname
-  type                        = "self_hosted"
-  session_duration            = var.access_app_session_duration
-  auto_redirect_to_identity   = true
-  app_launcher_visible        = true
-  http_only_cookie_attribute  = true
-  same_site_cookie_attribute  = "lax"
+  account_id                 = var.account_id
+  name                       = coalesce(var.access_app_name, var.tunnel_name)
+  domain                     = var.ingress_rules[0].hostname
+  type                       = "self_hosted"
+  session_duration           = var.access_app_session_duration
+  auto_redirect_to_identity  = true
+  app_launcher_visible       = true
+  http_only_cookie_attribute = true
+  same_site_cookie_attribute = "lax"
 }
 
 resource "cloudflare_zero_trust_access_policy" "policies" {

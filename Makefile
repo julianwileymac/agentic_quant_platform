@@ -277,18 +277,19 @@ logs-svc:
 
 PLATFORMS ?= linux/amd64,linux/arm64
 IMAGE_TAG ?= dev
+REGISTRY ?= docker.io/julianwiley
 
 build: build-client build-cp build-worker build-ingestion
 
 build-client:
 	docker buildx build --platform $(PLATFORMS) --load \
 		-f build/docker/aqp_client/Dockerfile \
-		-t ghcr.io/julianwiley/aqp-client:$(IMAGE_TAG) .
+		-t $(REGISTRY)/aqp-client:$(IMAGE_TAG) .
 
 build-cp:
 	docker buildx build --platform $(PLATFORMS) --load \
 		-f build/docker/aqp_control_plane/Dockerfile \
-		-t ghcr.io/julianwiley/aqp-control-plane:$(IMAGE_TAG) .
+		-t $(REGISTRY)/aqp-control-plane:$(IMAGE_TAG) .
 
 build-worker:
 	@if [ ! -f build/docker/aqp_worker/Dockerfile ]; then \
@@ -297,7 +298,7 @@ build-worker:
 	fi
 	docker buildx build --platform $(PLATFORMS) --load \
 		-f build/docker/aqp_worker/Dockerfile \
-		-t ghcr.io/julianwiley/aqp-worker:$(IMAGE_TAG) .
+		-t $(REGISTRY)/aqp-worker:$(IMAGE_TAG) .
 
 build-ingestion:
 	@if [ ! -f build/docker/aqp_ingestion/Dockerfile ]; then \
@@ -306,7 +307,7 @@ build-ingestion:
 	fi
 	docker buildx build --platform $(PLATFORMS) --load \
 		-f build/docker/aqp_ingestion/Dockerfile \
-		-t ghcr.io/julianwiley/aqp-ingestion:$(IMAGE_TAG) .
+		-t $(REGISTRY)/aqp-ingestion:$(IMAGE_TAG) .
 
 # ---- Test (compose + provider contract tests) ----------------------------
 

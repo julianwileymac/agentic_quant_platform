@@ -22,28 +22,28 @@ variable "app_version" {
 
 variable "rpi_image_registry" {
   type        = string
-  default     = "ghcr.io/julianwiley"
-  description = "Registry reachable by rpi nodes. Images are expected as <registry>/aqp-<service>:<app_version>."
+  default     = "docker.io/julian0215"
+  description = "Registry reachable by rpi nodes. Images are expected as <registry>/aqp-<service>:<app_version> (Docker Hub: docker.io/<user>/aqp-api)."
 }
 
 variable "rpi_ingress_host" {
   type    = string
-  default = ""
+  default = "aqp.fund"
 }
 
 variable "auth0_domain" {
   type    = string
-  default = ""
+  default = "aqp-fund.us.auth0.com"
 }
 
 variable "auth0_audience" {
   type    = string
-  default = "https://aqp/api"
+  default = "https://api.aqp.internal/manage"
 }
 
 variable "auth0_client_id" {
   type    = string
-  default = ""
+  default = "ZwJvVAYGRj6drndJhpKlvyLv18Jybavz"
 }
 
 variable "auth_scim_m2m_audience" {
@@ -67,10 +67,11 @@ variable "auth_scim_bearer_token_hash_secret_name" {
 variable "enabled_services" {
   type = list(string)
   default = [
-    "aqp-api",
+    "aqp-core",
     "aqp-worker",
     "aqp-beat",
-    "aqp-frontend",
+    "aqp-client",
+    "aqp-cp",
     "postgres",
     "redis",
     "neo4j",
@@ -94,7 +95,7 @@ variable "cloudflare_enabled" {
 
 variable "cloudflare_tunnel_name" {
   type        = string
-  default     = "aqp-rpi-edge"
+  default     = "aqp-fund-edge"
   description = "Tunnel name shown in the Cloudflare dashboard."
 }
 
@@ -112,13 +113,27 @@ variable "cloudflare_zone_id" {
 }
 
 variable "cloudflare_ingress_rules" {
-  type    = list(object({ hostname = string, service = string }))
-  default = []
+  type = list(object({ hostname = string, service = string }))
+  default = [
+    {
+      hostname = "aqp.fund"
+      service  = "http://aqp-client.aqp.svc.cluster.local:80"
+    },
+    {
+      hostname = "api.aqp.fund"
+      service  = "http://aqp-core.aqp.svc.cluster.local:8000"
+    },
+    {
+      hostname = "manage.aqp.fund"
+      service  = "http://aqp-cp.aqp-admin.svc.cluster.local:80"
+    },
+  ]
   description = <<-EOT
     List of ingress rules. Each item is { hostname, service }. The
-    `service` typically points at the in-cluster ingress-nginx
-    controller, e.g.
-    'http://ingress-nginx-controller.ingress.svc.cluster.local:80'.
+    default routes use the in-cluster Kubernetes Services directly:
+    aqp.fund -> aqp-client, api.aqp.fund -> aqp-core, and
+    manage.aqp.fund -> aqp-cp. Operators can override this to point at
+    ingress-nginx instead if they prefer ingress-level routing.
   EOT
 }
 
@@ -138,7 +153,7 @@ variable "cloudflare_access_app_session_duration" {
 }
 
 variable "cloudflare_access_policies" {
-  type    = any
-  default = []
+  type        = any
+  default     = []
   description = "Cloudflare Access policies — see modules/cloudflare_edge/main.tf."
 }

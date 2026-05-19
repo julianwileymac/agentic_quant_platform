@@ -160,6 +160,7 @@ resource "auth0_client" "spa" {
 
   callbacks                  = var.callback_urls
   allowed_logout_urls        = var.logout_urls
+  allowed_origins            = var.web_origins
   web_origins                = var.web_origins
   grant_types                = ["authorization_code", "refresh_token"]
   token_endpoint_auth_method = "none"

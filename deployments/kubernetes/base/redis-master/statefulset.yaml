@@ -31,10 +31,11 @@ spec:
           type: RuntimeDefault
       containers:
         - name: redis
-          image: redis/redis-stack:7.4.0-v3
+          # Plain Redis on ARM64 edge nodes — redis-stack RediSearch fails on RPi.
+          image: redis:7.4-alpine
           imagePullPolicy: IfNotPresent
           command:
-            - redis-stack-server
+            - redis-server
             - /etc/redis/redis.conf
           ports:
             - name: redis
@@ -169,11 +170,6 @@ data:
     dbfilename dump.rdb
     dir /data
     maxmemory-policy allkeys-lru
-    # Redis Stack modules — JSON, Search, TimeSeries, Bloom
-    loadmodule /opt/redis-stack/lib/rejson.so
-    loadmodule /opt/redis-stack/lib/redisearch.so
-    loadmodule /opt/redis-stack/lib/redistimeseries.so
-    loadmodule /opt/redis-stack/lib/redisbloom.so
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget

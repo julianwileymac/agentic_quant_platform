@@ -97,35 +97,35 @@ variable "auth0_enabled" {
 variable "auth0_domain" {
   type        = string
   description = "Auth0 tenant domain (example: dev-abc.us.auth0.com). Auth0 provider credentials are supplied through env vars."
-  default     = ""
+  default     = "aqp-fund.us.auth0.com"
 }
 
 variable "auth0_aqp_api_identifier" {
   type        = string
   description = "Auth0 API identifier / audience for AQP."
-  default     = "https://aqp/api"
+  default     = "https://api.aqp.internal/manage"
 }
 
 variable "auth0_callback_urls" {
   type        = list(string)
   description = "Allowed callback URLs for the AQP SPA."
-  default     = []
+  default     = ["http://127.0.0.1:3001", "http://localhost:3001", "https://aqp.fund"]
 }
 
 variable "auth0_logout_urls" {
   type        = list(string)
   description = "Allowed logout URLs for the AQP SPA."
-  default     = []
+  default     = ["http://127.0.0.1:3001", "http://localhost:3001", "https://aqp.fund"]
 }
 
 variable "auth0_web_origins" {
   type        = list(string)
   description = "Allowed web origins for the AQP SPA."
-  default     = []
+  default     = ["http://127.0.0.1:3001", "http://localhost:3001", "https://aqp.fund"]
 }
 
 variable "auth0_sync_url" {
   type        = string
   description = "Public URL for /_internal/auth0/sync used by Auth0 post-login Action."
-  default     = ""
+  default     = "https://api.aqp.fund/_internal/auth0/sync"
 }

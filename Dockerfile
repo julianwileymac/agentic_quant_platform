@@ -6,13 +6,13 @@
 # both the standard x86_64 cloud nodes and the Raspberry Pi 5 ARM64
 # edge cluster. Build via:
 #   docker buildx build --platform linux/amd64,linux/arm64 \
-#     --target api --tag ghcr.io/julianwiley/aqp-api:<tag> --push .
+#     --target api --tag docker.io/julianwiley/aqp-api:<tag> --push .
 # The ``$BUILDPLATFORM`` ARG is auto-populated by buildx when running
 # under buildx; falls back to the build host's native arch otherwise.
 ###############################################################################
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
-FROM --platform=$BUILDPLATFORM python:3.11-slim AS base
+FROM --platform=$TARGETPLATFORM python:3.11-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

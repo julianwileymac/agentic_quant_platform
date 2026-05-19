@@ -53,10 +53,10 @@ variable "local_shell_interpreter" {
 variable "enabled_services" {
   type = list(string)
   default = [
-    "aqp-api",
+    "aqp-core",
     "aqp-worker",
     "aqp-beat",
-    "aqp-frontend",
+    "aqp-client",
     "postgres",
     "redis",
     "neo4j",

@@ -8,13 +8,13 @@ commonLabels:
   app.kubernetes.io/environment: dev
 
 images:
-  - name: ghcr.io/julianwiley/aqp-client
+  - name: docker.io/julian0215/aqp-client
     newTag: dev
-  - name: ghcr.io/julianwiley/aqp-api
+  - name: docker.io/julian0215/aqp-api
     newTag: dev
-  - name: ghcr.io/julianwiley/aqp-worker
+  - name: docker.io/julian0215/aqp-worker
     newTag: dev
-  - name: ghcr.io/julianwiley/aqp-control-plane
+  - name: docker.io/julian0215/aqp-control-plane
     newTag: dev
 
 # Smaller resource footprint + lower replica count for dev.

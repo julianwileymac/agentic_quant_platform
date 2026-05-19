@@ -420,7 +420,7 @@ def endpoints() -> None:
 
 @app.command("publish-rpi")
 def publish_rpi(
-    registry: str = typer.Option(..., "--registry", help="Registry reachable by rpi nodes, e.g. ghcr.io/org"),
+    registry: str = typer.Option(..., "--registry", help="Registry reachable by rpi nodes, e.g. docker.io/<user>"),
     tag: str = typer.Option(..., "--tag", help="Immutable image tag to publish, e.g. 2026-05-18-sha"),
     skip_frontend: bool = typer.Option(False, "--skip-frontend", help="Skip pnpm frontend build."),
 ) -> None:

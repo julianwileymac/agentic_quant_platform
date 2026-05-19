@@ -21,15 +21,16 @@ tooling:
       - C:/Program Files/Git/bin
 
 services:
-  - id: aqp-api
-    label: AQP API
+  - id: aqp-core
+    aliases: [aqp-api]
+    label: AQP Core API
     role: api
     workload: deployment
-    app_label: aqp-api
+    app_label: aqp-core
     container: api
     image_key: api
     port: 8000
-    health_path: /healthz
+    health_path: /readyz
     restartable: true
     logs_enabled: true
   - id: aqp-worker
@@ -50,15 +51,27 @@ services:
     image_key: beat
     restartable: true
     logs_enabled: true
-  - id: aqp-frontend
-    label: AQP Frontend
+  - id: aqp-client
+    aliases: [aqp-frontend]
+    label: AQP Client
     role: frontend
     workload: deployment
-    app_label: aqp-frontend
-    container: frontend
+    app_label: aqp-client
+    container: client
     image_key: frontend
     port: 80
     health_path: /
+    restartable: true
+    logs_enabled: true
+  - id: aqp-cp
+    label: AQP Control Plane
+    role: control-plane
+    workload: deployment
+    app_label: aqp-cp
+    container: control-plane
+    image_key: cp
+    port: 9000
+    health_path: /manage/readyz
     restartable: true
     logs_enabled: true
   - id: postgres
@@ -165,22 +178,22 @@ targets:
       app_version: latest
       build_locally: true
       services:
-        api: aqp-api
+        api: aqp-core
         worker: aqp-worker
         beat: aqp-beat
         paper: aqp-paper
         serving: aqp-serving
         ingester: aqp-ingester
-        frontend: aqp-frontend
+        frontend: aqp-client
     auth:
       provider: local
       required: false
       scim_enabled: false
     services:
-      - aqp-api
+      - aqp-core
       - aqp-worker
       - aqp-beat
-      - aqp-frontend
+      - aqp-client
       - postgres
       - redis
       - neo4j
@@ -209,34 +222,37 @@ targets:
       kubeconfig_path: ~/.kube/config
       kube_context: ""
       ingress_class: nginx
-      ingress_host: ""
+      ingress_host: aqp.fund
     endpoints:
-      frontend: ""
-      api: ""
+      frontend: https://aqp.fund
+      api: https://api.aqp.fund
+      manage: https://manage.aqp.fund
     images:
-      registry: ghcr.io/julianwiley
+      registry: docker.io/julian0215
       app_version: replace-with-immutable-tag
       build_locally: false
       services:
-        api: aqp-api
+        api: aqp-core
         worker: aqp-worker
         beat: aqp-beat
-        frontend: aqp-frontend
+        frontend: aqp-client
+        cp: aqp-cp
     auth:
       provider: auth0
       required: true
-      oidc_issuer: ""
-      audience: https://aqp/api
-      client_id: ""
+      oidc_issuer: https://aqp-fund.us.auth0.com/
+      audience: https://api.aqp.internal/manage
+      client_id: ZwJvVAYGRj6drndJhpKlvyLv18Jybavz
       scim_enabled: true
       secret_refs:
         client_secret: auth0-client-secret
         scim_bearer_token_hash: auth0-scim-bearer-token-hash
     services:
-      - aqp-api
+      - aqp-core
       - aqp-worker
       - aqp-beat
-      - aqp-frontend
+      - aqp-client
+      - aqp-cp
       - postgres
       - redis
       - neo4j

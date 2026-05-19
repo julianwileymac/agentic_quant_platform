@@ -71,10 +71,11 @@ variable "deployment_topology_target" {
 variable "enabled_services" {
   type = list(string)
   default = [
-    "aqp-api",
+    "aqp-core",
     "aqp-worker",
     "aqp-beat",
-    "aqp-frontend",
+    "aqp-client",
+    "aqp-cp",
     "postgres",
     "redis",
     "neo4j",
@@ -96,6 +97,12 @@ variable "frontend_auth_config_map_name" {
   type        = string
   default     = ""
   description = "Optional ConfigMap containing public frontend auth settings."
+}
+
+variable "control_plane_auth_config_map_name" {
+  type        = string
+  default     = ""
+  description = "Optional ConfigMap containing public/runtime auth settings for aqp_control_plane."
 }
 
 variable "auth0_client_secret_secret_name" {

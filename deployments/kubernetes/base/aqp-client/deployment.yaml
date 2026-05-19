@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/part-of: aqp
     app.kubernetes.io/component: client
 spec:
-  replicas: 2
+  replicas: 1
   revisionHistoryLimit: 5
   strategy:
     type: RollingUpdate
@@ -38,8 +38,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: client
-          image: ghcr.io/julianwiley/aqp-client:dev
-          imagePullPolicy: IfNotPresent
+          image: docker.io/julian0215/aqp-client:dev
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8080
@@ -50,6 +50,8 @@ spec:
           env:
             - name: AQP_CLIENT_MODE
               value: "true"
+            - name: NODE_OPTIONS
+              value: "--dns-result-order=ipv4first"
           resources:
             requests:
               cpu: 100m
@@ -105,10 +107,16 @@ spec:
       # multi-arch.
       affinity:
         nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["arm64"]
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 50
               preference:
                 matchExpressions:
                   - key: kubernetes.io/arch
                     operator: In
-                    values: ["arm64", "amd64"]
+                    values: ["arm64"]

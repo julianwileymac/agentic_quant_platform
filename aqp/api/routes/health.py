@@ -227,9 +227,9 @@ def _check_iceberg(timeout_s: float = 3.0) -> dict[str, Any]:
     ``settings.readyz_iceberg_strict`` (covered by an opt-in).
     """
     try:
-        from aqp.data.iceberg_catalog import _get_catalog  # type: ignore[attr-defined]
+        from aqp.data.iceberg_catalog import get_catalog
 
-        catalog = _get_catalog()
+        catalog = get_catalog()
         if catalog is None:
             return {"name": "iceberg", "status": "skipped"}
         # Most catalog impls expose ``list_namespaces``; if not, fall

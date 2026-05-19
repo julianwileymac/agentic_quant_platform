@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/part-of: aqp
     app.kubernetes.io/component: worker
 spec:
-  replicas: 2
+  replicas: 1
   revisionHistoryLimit: 5
   selector:
     matchLabels:
@@ -33,8 +33,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: ghcr.io/julianwiley/aqp-worker:dev
-          imagePullPolicy: IfNotPresent
+          image: docker.io/julian0215/aqp-worker:dev
+          imagePullPolicy: Always
           command:
             - celery
             - -A
@@ -100,13 +100,19 @@ spec:
       # edge cluster and standard cloud (amd64) nodes alike.
       affinity:
         nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["arm64"]
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 50
               preference:
                 matchExpressions:
                   - key: kubernetes.io/arch
                     operator: In
-                    values: ["arm64", "amd64"]
+                    values: ["arm64"]
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 100

@@ -6,7 +6,7 @@ End-to-end walkthrough for shipping AQP to a real Kubernetes cluster (EKS, AKS, 
 
 - `kubectl` 1.30+ with a current context pointing at the target cluster
 - Cluster admin (you'll create namespaces + RBAC)
-- A container registry the cluster can pull from (GHCR / ECR / ACR / GCR)
+- A container registry the cluster can pull from (Docker Hub / ECR / ACR / GCR)
 - Auth0 tenant configured per [docs/architecture/decisions/003-auth0-zero-trust.md](../architecture/decisions/003-auth0-zero-trust.md)
 
 ## Step 1 — provision Auth0 (one-time)
@@ -44,10 +44,11 @@ make build-cp IMAGE_TAG=$env:IMAGE_TAG
 make build-worker IMAGE_TAG=$env:IMAGE_TAG
 make build-ingestion IMAGE_TAG=$env:IMAGE_TAG
 
-docker push ghcr.io/julianwiley/aqp-client:$env:IMAGE_TAG
-docker push ghcr.io/julianwiley/aqp-control-plane:$env:IMAGE_TAG
-docker push ghcr.io/julianwiley/aqp-worker:$env:IMAGE_TAG
-docker push ghcr.io/julianwiley/aqp-ingestion:$env:IMAGE_TAG
+docker login
+docker push docker.io/julianwiley/aqp-client:$env:IMAGE_TAG
+docker push docker.io/julianwiley/aqp-control-plane:$env:IMAGE_TAG
+docker push docker.io/julianwiley/aqp-worker:$env:IMAGE_TAG
+docker push docker.io/julianwiley/aqp-ingestion:$env:IMAGE_TAG
 ```
 
 If `make build-worker` or `make build-ingestion` reports a missing Dockerfile,
@@ -60,10 +61,35 @@ Edit `deployments/kubernetes/overlays/<env>/kustomization.yaml`:
 
 ```yaml
 images:
-  - name: ghcr.io/julianwiley/aqp-client
+  - name: docker.io/julianwiley/aqp-client
     newTag: rc-abcdef01-2026-05-19
   ...
 ```
+
+### Docker Hub pull secret (private repos)
+
+Deployments reference `dockerhub-pull-secret`. Create it in both workload
+namespaces before rollout:
+
+```powershell
+$env:DOCKERHUB_USER = "<dockerhub-username>"
+$env:DOCKERHUB_TOKEN = "<dockerhub-access-token>"  # hub.docker.com → Account Settings → Security
+
+kubectl create secret docker-registry dockerhub-pull-secret `
+  --docker-server=https://index.docker.io/v1/ `
+  --docker-username=$env:DOCKERHUB_USER `
+  --docker-password=$env:DOCKERHUB_TOKEN `
+  -n aqp --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create secret docker-registry dockerhub-pull-secret `
+  --docker-server=https://index.docker.io/v1/ `
+  --docker-username=$env:DOCKERHUB_USER `
+  --docker-password=$env:DOCKERHUB_TOKEN `
+  -n aqp-admin --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Public repositories can omit the secret by removing `imagePullSecrets` from
+the deployment manifests.
 
 ## Step 5 — apply
 

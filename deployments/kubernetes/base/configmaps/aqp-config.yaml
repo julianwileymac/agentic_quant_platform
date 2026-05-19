@@ -13,17 +13,17 @@ data:
   AQP_CORE_API_URL: http://aqp-core:8000
   AQP_ML_API_URL: http://aqp-ml:8001
   AQP_MCP_URL: http://aqp-mcp:8002
-  AQP_REDIS_URL: redis://redis-stack:6379
-  AQP_CONTROL_PLANE_URL: http://aqp-cp:9000
-  AQP_INGRESS_BASE_URL: ''
+  AQP_REDIS_URL: redis://redis-master:6379
+  AQP_CONTROL_PLANE_URL: http://aqp-cp.aqp-admin.svc.cluster.local:9000
+  AQP_INGRESS_BASE_URL: https://aqp.fund
   AQP_CONTROL_PLANE_M2M_AUDIENCE: https://api.aqp.internal/manage
-  AQP_DATABASE_URL: postgresql+psycopg://aqp:aqp@postgres:5432/aqp
-  AQP_CELERY_BROKER_URL: redis://redis-stack:6379/0
-  AQP_CELERY_RESULT_URL: redis://redis-stack:6379/1
+  AQP_DATABASE_URL: postgresql+psycopg://aqp:aqp@postgresql.data-services.svc.cluster.local:5432/aqp
+  AQP_CELERY_BROKER_URL: redis://redis-master:6379/0
+  AQP_CELERY_RESULT_URL: redis://redis-master:6379/1
   AQP_AUTH_PROVIDER: auth0
-  AQP_AUTH_OIDC_ISSUER: https://dev-4zy4dzau.us.auth0.com/
+  AQP_AUTH_OIDC_ISSUER: https://aqp-fund.us.auth0.com/
   AQP_AUTH_OIDC_AUDIENCE: https://api.aqp.internal/manage
-  AQP_AUTH_OIDC_CLIENT_ID: O487L8TEnQ0uBKi4gShZYbMzYyOejZR4
+  AQP_AUTH_OIDC_CLIENT_ID: ZwJvVAYGRj6drndJhpKlvyLv18Jybavz
   AQP_AUTH_M2M_CLIENT_ID: ''
   AQP_AUTH_M2M_AUDIENCE: https://api.aqp.internal/manage
   AQP_AUTH_CLAIMS_NAMESPACE: https://aqp.internal/
@@ -44,6 +44,9 @@ data:
   AQP_JAEGER_UI_URL: http://jaeger:16686
   VITE_AUTH_REQUIRED: 'true'
   VITE_AQP_API_BASE_URL: /api
-  VITE_AUTH0_DOMAIN: dev-4zy4dzau.us.auth0.com
-  VITE_AUTH0_CLIENT_ID: O487L8TEnQ0uBKi4gShZYbMzYyOejZR4
+  VITE_API_URL: https://api.aqp.fund
+  VITE_WS_URL: wss://api.aqp.fund
+  VITE_AUTH0_DOMAIN: aqp-fund.us.auth0.com
+  VITE_AUTH0_CLIENT_ID: ZwJvVAYGRj6drndJhpKlvyLv18Jybavz
   VITE_AUTH0_AUDIENCE: https://api.aqp.internal/manage
+  VITE_AUTH0_REDIRECT_URI: https://aqp.fund

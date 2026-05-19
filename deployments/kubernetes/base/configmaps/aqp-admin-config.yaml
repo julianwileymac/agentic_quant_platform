@@ -6,16 +6,17 @@ metadata:
   labels:
     app.kubernetes.io/part-of: aqp
 data:
+  AQP_INGRESS_BASE_URL: https://manage.aqp.fund
   AQP_AUTH_PROVIDER: auth0
   AQP_AUTH_ENFORCE: strict
-  AQP_AUTH_OIDC_ISSUER: https://dev-4zy4dzau.us.auth0.com/
+  AQP_AUTH_OIDC_ISSUER: https://aqp-fund.us.auth0.com/
   AQP_AUTH_OIDC_AUDIENCE: https://api.aqp.internal/manage
-  AQP_AUTH_OIDC_CLIENT_ID: O487L8TEnQ0uBKi4gShZYbMzYyOejZR4
+  AQP_AUTH_OIDC_CLIENT_ID: ZwJvVAYGRj6drndJhpKlvyLv18Jybavz
   AQP_AUTH_M2M_CLIENT_ID: ''
   AQP_AUTH_M2M_AUDIENCE: https://api.aqp.internal/manage
   AQP_AUTH_CLAIMS_NAMESPACE: https://aqp.internal/
   AQP_AUTH_SCIM_ENABLED: 'false'
   VITE_AUTH_REQUIRED: 'true'
-  VITE_AUTH0_DOMAIN: dev-4zy4dzau.us.auth0.com
-  VITE_AUTH0_CLIENT_ID: O487L8TEnQ0uBKi4gShZYbMzYyOejZR4
+  VITE_AUTH0_DOMAIN: aqp-fund.us.auth0.com
+  VITE_AUTH0_CLIENT_ID: ZwJvVAYGRj6drndJhpKlvyLv18Jybavz
   VITE_AUTH0_AUDIENCE: https://api.aqp.internal/manage

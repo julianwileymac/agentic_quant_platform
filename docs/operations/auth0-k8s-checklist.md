@@ -6,7 +6,7 @@ deployment to support login through the Vite SPA and JWT validation in
 
 Current local `.env` discovery:
 
-- Auth0 tenant domain: `dev-4zy4dzau.us.auth0.com`
+- Auth0 tenant domain: `aqp-fund.us.auth0.com`
 - SPA client id: present in `.env`
 - SPA / confidential client secret: present in `.env`
 - M2M client id/secret: **missing**; create a dedicated M2M app before enabling
@@ -68,16 +68,16 @@ Configure:
 | Application Type | Single Page Application |
 | Token Endpoint Authentication Method | `None` |
 | Grant Types | Authorization Code, Refresh Token |
-| Allowed Callback URLs | `http://127.0.0.1:3001/auth/callback`, `http://localhost:3001/auth/callback`, `https://api.aqp.enterprise.com/auth/callback` |
-| Allowed Logout URLs | `http://127.0.0.1:3001`, `http://localhost:3001`, `https://api.aqp.enterprise.com` |
-| Allowed Web Origins | `http://127.0.0.1:3001`, `http://localhost:3001`, `https://api.aqp.enterprise.com` |
+| Allowed Callback URLs | `http://127.0.0.1:3001`, `http://localhost:3001`, `https://aqp.fund` |
+| Allowed Logout URLs | `http://127.0.0.1:3001`, `http://localhost:3001`, `https://aqp.fund` |
+| Allowed Web Origins | `http://127.0.0.1:3001`, `http://localhost:3001`, `https://aqp.fund` |
 | Allowed Origins (CORS) | same as Web Origins |
 
 Kubernetes ConfigMap values now generated from `.env`:
 
 ```yaml
 VITE_AUTH_REQUIRED: "true"
-VITE_AUTH0_DOMAIN: "dev-4zy4dzau.us.auth0.com"
+VITE_AUTH0_DOMAIN: "aqp-fund.us.auth0.com"
 VITE_AUTH0_CLIENT_ID: "<from .env AUTH0_CLIENT_ID>"
 VITE_AUTH0_AUDIENCE: "https://api.aqp.internal/manage"
 ```
@@ -118,7 +118,7 @@ Configure the deployed Action with:
 | --- | --- |
 | `claims_namespace` | `https://aqp.internal/` |
 | `api_audience` | `https://api.aqp.internal/manage` |
-| `sync_url` | production: `https://api.aqp.enterprise.com/_internal/auth0/sync` |
+| `sync_url` | production: `https://api.aqp.fund/_internal/auth0/sync` |
 
 The Action injects these custom claims:
 
@@ -180,4 +180,4 @@ Frontend login should no longer show:
 > Authentication is required ... frontend was not given identity-provider configuration
 
 Instead, it should redirect to Auth0 Universal Login for the
-`dev-4zy4dzau.us.auth0.com` tenant.
+`aqp-fund.us.auth0.com` tenant.

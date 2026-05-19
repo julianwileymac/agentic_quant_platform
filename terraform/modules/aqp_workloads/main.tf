@@ -10,10 +10,10 @@
 #   mlflow (Deployment + Service)
 #   otel-collector (Deployment + Service)
 #   jaeger (Deployment + Service)
-#   aqp-api (Deployment + Service + Ingress)
+#   aqp-core (Deployment + Service + Ingress)
 #   aqp-worker (Deployment)
 #   aqp-beat (Deployment)
-#   aqp-frontend (Deployment + Service + Ingress)
+#   aqp-client (Deployment + Service + Ingress)
 #
 # Every resource gates on local/docker so cloud installs use the
 # managed-services modules (database, storage, etc.).
@@ -584,14 +584,24 @@ locals {
   worker_image   = lookup(var.images, "worker", "")
   beat_image     = lookup(var.images, "beat", lookup(var.images, "api", ""))
   frontend_image = lookup(var.images, "frontend", "")
+  cp_image       = lookup(var.images, "cp", "")
+  cp_ns          = lookup(var.namespaces, "admin", "aqp-admin")
+
+  # Phase 1 of the RPi migration: Kubernetes object names are
+  # `aqp-core`/`aqp-client`, while older topology files used
+  # `aqp-api`/`aqp-frontend`. Accept both service IDs during the
+  # cutover, but create only the canonical Kubernetes objects.
+  api_enabled      = contains(var.enabled_services, "aqp-core") || contains(var.enabled_services, "aqp-api")
+  frontend_enabled = contains(var.enabled_services, "aqp-client") || contains(var.enabled_services, "aqp-frontend")
+  cp_enabled       = contains(var.enabled_services, "aqp-cp")
 }
 
 resource "kubernetes_deployment" "aqp_api" {
-  count = local.is_local && contains(var.enabled_services, "aqp-api") && local.api_image != "" ? 1 : 0
+  count = local.is_local && local.api_enabled && local.api_image != "" ? 1 : 0
   metadata {
-    name      = "aqp-api"
+    name      = "aqp-core"
     namespace = local.ns
-    labels    = merge(local.common_labels, { app = "aqp-api" })
+    labels    = merge(local.common_labels, { app = "aqp-core" })
     annotations = {
       "aqp.io/version"      = var.app_version
       "aqp.io/ready-marker" = var.ready_marker
@@ -599,9 +609,9 @@ resource "kubernetes_deployment" "aqp_api" {
   }
   spec {
     replicas = 1
-    selector { match_labels = { app = "aqp-api" } }
+    selector { match_labels = { app = "aqp-core" } }
     template {
-      metadata { labels = merge(local.common_labels, { app = "aqp-api" }) }
+      metadata { labels = merge(local.common_labels, { app = "aqp-core" }) }
       spec {
         enable_service_links = false
         container {
@@ -642,7 +652,7 @@ resource "kubernetes_deployment" "aqp_api" {
           }
           readiness_probe {
             http_get {
-              path = "/healthz"
+              path = "/readyz"
               port = "http"
             }
             initial_delay_seconds = 10
@@ -651,7 +661,7 @@ resource "kubernetes_deployment" "aqp_api" {
           }
           liveness_probe {
             http_get {
-              path = "/healthz"
+              path = "/livez"
               port = "http"
             }
             initial_delay_seconds = 30
@@ -664,14 +674,14 @@ resource "kubernetes_deployment" "aqp_api" {
 }
 
 resource "kubernetes_service" "aqp_api" {
-  count = local.is_local && contains(var.enabled_services, "aqp-api") && local.api_image != "" ? 1 : 0
+  count = local.is_local && local.api_enabled && local.api_image != "" ? 1 : 0
   metadata {
-    name      = "aqp-api"
+    name      = "aqp-core"
     namespace = local.ns
-    labels    = merge(local.common_labels, { app = "aqp-api" })
+    labels    = merge(local.common_labels, { app = "aqp-core" })
   }
   spec {
-    selector = { app = "aqp-api" }
+    selector = { app = "aqp-core" }
     port {
       name        = "http"
       port        = 8000
@@ -798,11 +808,11 @@ resource "kubernetes_deployment" "aqp_beat" {
 }
 
 resource "kubernetes_deployment" "aqp_frontend" {
-  count = local.is_local && contains(var.enabled_services, "aqp-frontend") && local.frontend_image != "" ? 1 : 0
+  count = local.is_local && local.frontend_enabled && local.frontend_image != "" ? 1 : 0
   metadata {
-    name      = "aqp-frontend"
+    name      = "aqp-client"
     namespace = local.ns
-    labels    = merge(local.common_labels, { app = "aqp-frontend" })
+    labels    = merge(local.common_labels, { app = "aqp-client" })
     annotations = {
       "aqp.io/version"      = var.app_version
       "aqp.io/ready-marker" = var.ready_marker
@@ -810,9 +820,9 @@ resource "kubernetes_deployment" "aqp_frontend" {
   }
   spec {
     replicas = 1
-    selector { match_labels = { app = "aqp-frontend" } }
+    selector { match_labels = { app = "aqp-client" } }
     template {
-      metadata { labels = merge(local.common_labels, { app = "aqp-frontend" }) }
+      metadata { labels = merge(local.common_labels, { app = "aqp-client" }) }
       spec {
         enable_service_links = false
         container {
@@ -846,14 +856,14 @@ resource "kubernetes_deployment" "aqp_frontend" {
 }
 
 resource "kubernetes_service" "aqp_frontend" {
-  count = local.is_local && contains(var.enabled_services, "aqp-frontend") && local.frontend_image != "" ? 1 : 0
+  count = local.is_local && local.frontend_enabled && local.frontend_image != "" ? 1 : 0
   metadata {
-    name      = "aqp-frontend"
+    name      = "aqp-client"
     namespace = local.ns
-    labels    = merge(local.common_labels, { app = "aqp-frontend" })
+    labels    = merge(local.common_labels, { app = "aqp-client" })
   }
   spec {
-    selector = { app = "aqp-frontend" }
+    selector = { app = "aqp-client" }
     port {
       name        = "http"
       port        = 80
@@ -862,14 +872,98 @@ resource "kubernetes_service" "aqp_frontend" {
   }
 }
 
+resource "kubernetes_deployment" "aqp_cp" {
+  count = local.is_local && local.cp_enabled && local.cp_image != "" ? 1 : 0
+  metadata {
+    name      = "aqp-cp"
+    namespace = local.cp_ns
+    labels    = merge(local.common_labels, { app = "aqp-cp" })
+    annotations = {
+      "aqp.io/version"      = var.app_version
+      "aqp.io/ready-marker" = var.ready_marker
+    }
+  }
+  spec {
+    replicas = 1
+    selector { match_labels = { app = "aqp-cp" } }
+    template {
+      metadata { labels = merge(local.common_labels, { app = "aqp-cp" }) }
+      spec {
+        enable_service_links            = false
+        automount_service_account_token = true
+        container {
+          name              = "control-plane"
+          image             = local.cp_image
+          image_pull_policy = "Always"
+          command           = ["python", "-m", "uvicorn", "aqp_cp.main:app", "--host", "0.0.0.0", "--port", "9000"]
+          dynamic "env_from" {
+            for_each = var.control_plane_auth_config_map_name != "" ? [var.control_plane_auth_config_map_name] : []
+            content {
+              config_map_ref {
+                name = env_from.value
+              }
+            }
+          }
+          env {
+            name  = "AQP_CP_PROVIDER"
+            value = "kubernetes"
+          }
+          env {
+            name  = "AQP_CP_KUBE_NAMESPACE_DEFAULT"
+            value = local.ns
+          }
+          port {
+            name           = "http"
+            container_port = 9000
+          }
+          readiness_probe {
+            http_get {
+              path = "/manage/readyz"
+              port = "http"
+            }
+            initial_delay_seconds = 5
+            period_seconds        = 10
+            failure_threshold     = 12
+          }
+          liveness_probe {
+            http_get {
+              path = "/manage/livez"
+              port = "http"
+            }
+            initial_delay_seconds = 30
+            period_seconds        = 30
+          }
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_service" "aqp_cp" {
+  count = local.is_local && local.cp_enabled && local.cp_image != "" ? 1 : 0
+  metadata {
+    name      = "aqp-cp"
+    namespace = local.cp_ns
+    labels    = merge(local.common_labels, { app = "aqp-cp" })
+  }
+  spec {
+    selector = { app = "aqp-cp" }
+    port {
+      name        = "http"
+      port        = 80
+      target_port = 9000
+    }
+  }
+}
+
 # ---------------------------------------------------------------------------
 # Ingress — Traefik on k3d. Routes:
-#   /           -> aqp-frontend:80
-#   /api/       -> aqp-api:8000  (rewritten to / before forwarding)
+#   /           -> aqp-client:80
+#   /api/       -> aqp-core:8000  (rewritten to / before forwarding)
 # ---------------------------------------------------------------------------
 
 resource "kubernetes_ingress_v1" "aqp" {
-  count = local.is_local && contains(var.enabled_services, "aqp-api") && contains(var.enabled_services, "aqp-frontend") && local.api_image != "" && local.frontend_image != "" ? 1 : 0
+  count = local.is_local && local.api_enabled && local.frontend_enabled && local.api_image != "" && local.frontend_image != "" ? 1 : 0
   metadata {
     name      = "aqp"
     namespace = local.ns

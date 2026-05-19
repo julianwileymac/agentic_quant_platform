@@ -46,7 +46,13 @@ function readEnv(key: string): string {
 
 function defaultRedirectUri(): string {
   if (typeof window === "undefined") return "";
-  return `${window.location.origin}/auth/callback`;
+  // Auth0 React's SPA quickstart recommends redirecting back to the
+  // application origin. The SDK processes the code+state callback
+  // before React Router renders, then `onRedirectCallback` restores
+  // appState.returnTo. Keeping this at the origin avoids brittle
+  // dashboard setup where `/auth/callback` is missing from Allowed
+  // Callback URLs, and it works for both localhost and 127.0.0.1.
+  return window.location.origin;
 }
 
 export const authConfig: AuthConfig = (() => {

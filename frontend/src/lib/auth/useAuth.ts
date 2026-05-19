@@ -121,6 +121,18 @@ function readStringEnv(key: string, fallback: string): string {
   return trimmed.length > 0 ? trimmed : fallback;
 }
 
+function baseAuth0AuthorizationParams(): {
+  redirect_uri: string;
+  audience: string;
+  scope: string;
+} {
+  return {
+    redirect_uri: authConfig.redirectUri,
+    audience: authConfig.audience,
+    scope: authConfig.scope,
+  };
+}
+
 export function useAuth(): AuthSurface {
   if (!isAuthEnabled()) {
     const required = isAuthRequired();
@@ -217,12 +229,13 @@ function useAuthEnabled(): AuthSurface {
   const loginWithRedirect = useCallback(
     async (returnTo?: string, opts?: { organization?: string }) => {
       const appState = returnTo ? { returnTo } : undefined;
-      const authorizationParams = opts?.organization
-        ? { organization: opts.organization }
-        : undefined;
+      const authorizationParams = {
+        ...baseAuth0AuthorizationParams(),
+        ...(opts?.organization ? { organization: opts.organization } : {}),
+      };
       await a0.loginWithRedirect({
         ...(appState ? { appState } : {}),
-        ...(authorizationParams ? { authorizationParams } : {}),
+        authorizationParams,
       });
     },
     [a0],
@@ -233,7 +246,10 @@ function useAuthEnabled(): AuthSurface {
       const appState = returnTo ? { returnTo } : undefined;
       await a0.loginWithRedirect({
         ...(appState ? { appState } : {}),
-        authorizationParams: { connection: msConnection },
+        authorizationParams: {
+          ...baseAuth0AuthorizationParams(),
+          connection: msConnection,
+        },
       });
     },
     [a0, msConnection],
@@ -244,7 +260,10 @@ function useAuthEnabled(): AuthSurface {
       const appState = returnTo ? { returnTo } : undefined;
       await a0.loginWithRedirect({
         ...(appState ? { appState } : {}),
-        authorizationParams: { connection: googleConnection },
+        authorizationParams: {
+          ...baseAuth0AuthorizationParams(),
+          connection: googleConnection,
+        },
       });
     },
     [a0, googleConnection],
@@ -255,7 +274,10 @@ function useAuthEnabled(): AuthSurface {
       const appState = returnTo ? { returnTo } : undefined;
       await a0.loginWithRedirect({
         ...(appState ? { appState } : {}),
-        authorizationParams: { screen_hint: "signup" },
+        authorizationParams: {
+          ...baseAuth0AuthorizationParams(),
+          screen_hint: "signup",
+        },
       });
     },
     [a0],
@@ -266,7 +288,10 @@ function useAuthEnabled(): AuthSurface {
       const appState = returnTo ? { returnTo } : undefined;
       await a0.loginWithRedirect({
         ...(appState ? { appState } : {}),
-        authorizationParams: { screen_hint: "reset" },
+        authorizationParams: {
+          ...baseAuth0AuthorizationParams(),
+          screen_hint: "reset",
+        },
       });
     },
     [a0],

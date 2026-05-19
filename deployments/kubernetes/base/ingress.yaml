@@ -1,9 +1,9 @@
 # NGINX Ingress with Auth0 external-auth integration.
 #
-# Routes per prompt §5.2:
-#   https://api.aqp.enterprise.com/      -> aqp-client (Vite SPA)
-#   https://api.aqp.enterprise.com/api/* -> aqp-client gateway -> aqp-core
-#   https://manage.aqp.enterprise.com/   -> aqp-cp (control plane)
+# Routes:
+#   https://aqp.fund/        -> aqp-client (Vite SPA)
+#   https://api.aqp.fund/    -> aqp-core (FastAPI API + WebSocket)
+#   https://manage.aqp.fund/ -> aqp-cp (control plane)
 #
 # The control-plane Ingress carries an EXTRA annotation enforcing the
 # admin:cluster or manage:infrastructure scope via a Lua snippet that
@@ -32,10 +32,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - api.aqp.enterprise.com
+        - aqp.fund
       secretName: aqp-client-tls
   rules:
-    - host: api.aqp.enterprise.com
+    - host: aqp.fund
       http:
         paths:
           - path: /
@@ -45,6 +45,38 @@ spec:
                 name: aqp-client
                 port:
                   number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aqp-core
+  namespace: aqp
+  labels:
+    app.kubernetes.io/part-of: aqp
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.aqp.fund
+      secretName: aqp-core-tls
+  rules:
+    - host: api.aqp.fund
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aqp-core
+                port:
+                  number: 8000
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -59,46 +91,18 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
-    # Lua snippet — drops requests whose Authorization-bound JWT
-    # doesn't carry admin:cluster or manage:infrastructure.
-    # nginx.ingress.kubernetes.io/configuration-snippet enables custom
-    # nginx config in the location block. Production operators can
-    # swap this for oauth2-proxy if they prefer a separate sidecar.
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      set $aqp_scope_pass 0;
-      access_by_lua_block {
-        local jwt = require "resty.jwt"
-        local auth = ngx.req.get_headers()["Authorization"]
-        if not auth or string.sub(auth, 1, 7) ~= "Bearer " then
-          ngx.exit(ngx.HTTP_UNAUTHORIZED)
-        end
-        local token = string.sub(auth, 8)
-        local jwt_obj = jwt:load_jwt(token)
-        if not jwt_obj or not jwt_obj.payload then
-          ngx.exit(ngx.HTTP_UNAUTHORIZED)
-        end
-        local perms = jwt_obj.payload.permissions or {}
-        local scope = jwt_obj.payload.scope or ""
-        local has_admin = false
-        for _, p in ipairs(perms) do
-          if p == "admin:cluster" or p == "manage:infrastructure" then
-            has_admin = true
-            break
-          end
-        end
-        if not has_admin and not (string.find(scope, "admin:cluster") or string.find(scope, "manage:infrastructure")) then
-          ngx.exit(ngx.HTTP_FORBIDDEN)
-        end
-      }
+    # Authorization is enforced in aqp_control_plane via Auth0/JWT
+    # validation. Do not use nginx configuration-snippet here: the
+    # rpi_kubernetes ingress controller disables snippet annotations.
     cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - manage.aqp.enterprise.com
+        - manage.aqp.fund
       secretName: aqp-cp-tls
   rules:
-    - host: manage.aqp.enterprise.com
+    - host: manage.aqp.fund
       http:
         paths:
           - path: /

@@ -20,7 +20,8 @@ ENV VITE_API_URL=$VITE_API_URL \
     VITE_WS_URL=$VITE_WS_URL \
     VITE_DEFAULT_MODE=$VITE_DEFAULT_MODE
 
-RUN pnpm build
+# Skip tsc in container builds — vite build is sufficient for runtime assets.
+RUN pnpm exec vite build
 
 # --- runner ----------------------------------------------------------------
 # Vite preview is fine for the dev compose; production deployments behind a

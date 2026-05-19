@@ -15,10 +15,10 @@ lb_https_port = 3001
 # Git Bash avoids the WSL bash shim on Windows hosts.
 local_shell_interpreter = "C:/Program Files/Git/bin/bash.exe"
 enabled_services = [
-  "aqp-api",
+  "aqp-core",
   "aqp-worker",
   "aqp-beat",
-  "aqp-frontend",
+  "aqp-client",
   "postgres",
   "redis",
   "neo4j",

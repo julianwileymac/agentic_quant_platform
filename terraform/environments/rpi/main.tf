@@ -38,6 +38,7 @@ locals {
     worker   = "${var.rpi_image_registry}/aqp-worker:${var.app_version}"
     beat     = "${var.rpi_image_registry}/aqp-beat:${var.app_version}"
     frontend = "${var.rpi_image_registry}/aqp-frontend:${var.app_version}"
+    cp       = "${var.rpi_image_registry}/aqp-control-plane:${var.app_version}"
   }
 }
 
@@ -57,6 +58,7 @@ module "aqp_workloads" {
   cloud_provider                          = "rpi_cluster"
   environment                             = "rpi"
   namespace                               = module.target.namespace
+  namespaces                              = { admin = module.target.admin_namespace }
   images                                  = local.images
   app_version                             = var.app_version
   ingress_class                           = "nginx"
@@ -66,6 +68,7 @@ module "aqp_workloads" {
   enabled_services                        = var.enabled_services
   auth_config_map_name                    = module.target.auth_config_map
   frontend_auth_config_map_name           = module.target.frontend_auth_config_map
+  control_plane_auth_config_map_name      = module.target.admin_auth_config_map
   auth0_client_secret_secret_name         = var.auth0_client_secret_secret_name
   auth_scim_bearer_token_hash_secret_name = var.auth_scim_bearer_token_hash_secret_name
 

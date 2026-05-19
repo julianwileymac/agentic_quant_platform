@@ -12,7 +12,7 @@ Terraform runtime path. The source-of-truth HCL lives in
 - Immutable AQP image tag published with:
 
 ```bash
-aqp deploy publish-rpi --registry ghcr.io/<org> --tag <immutable-tag>
+aqp deploy publish-rpi --registry docker.io/<org> --tag <immutable-tag>
 ```
 
 ## Configure
@@ -23,7 +23,7 @@ Edit or override `terraform/environments/rpi/terraform.tfvars`:
 rpi_kubeconfig_path = "~/.kube/config"
 rpi_kube_context    = "rpi"
 rpi_namespace       = "aqp"
-rpi_image_registry  = "ghcr.io/<org>"
+rpi_image_registry  = "docker.io/<org>"
 app_version         = "<immutable-tag>"
 rpi_ingress_host    = "aqp.example.com"
 auth0_domain        = "example.us.auth0.com"
