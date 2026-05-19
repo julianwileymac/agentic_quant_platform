@@ -27,6 +27,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.core.types import Symbol
 from aqp.data.feature_sets import (
@@ -37,7 +38,7 @@ from aqp.data.feature_sets import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/feature-sets", tags=["feature-sets"])
+router = secure_router(prefix="/feature-sets", tags=["feature-sets"], default_scope="data:read")
 
 
 # ---------------------------------------------------------------------------

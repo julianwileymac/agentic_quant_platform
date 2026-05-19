@@ -15,10 +15,11 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.config import settings
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/dagster", tags=["dagster"])
+router = secure_router(prefix="/dagster", tags=["dagster"], default_scope="read:infrastructure")
 
 
 class TriggerRequest(BaseModel):

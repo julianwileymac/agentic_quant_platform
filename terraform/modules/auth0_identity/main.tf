@@ -8,44 +8,146 @@ terraform {
 }
 
 locals {
+  # Canonical AQP scope catalogue. The single source of truth is
+  # ``aqp/auth/scopes.py::AQPScope`` in the agentic_quant_platform repo;
+  # this list MUST stay in sync with ``ALL_AQP_SCOPES``. Adding a new
+  # scope here is a no-op until role permissions reference it below
+  # and route handlers call ``Depends(require_scope(<scope>))``.
   scopes = [
+    # Data plane
     { value = "data:read", description = "Read AQP data and metadata" },
     { value = "data:write", description = "Mutate AQP data through sanctioned APIs" },
+    { value = "admin:iceberg", description = "Drop, consolidate, or redefine Iceberg tables" },
+    # Infrastructure (ADR 003)
     { value = "read:infrastructure", description = "View deployment status, pods, logs, and non-secret config" },
     { value = "manage:agents", description = "Start, stop, restart, and scale assigned AQP agents and bot workloads" },
     { value = "manage:infrastructure", description = "Deploy and update AQP services and non-secret ConfigMaps within an assigned org" },
     { value = "admin:cluster", description = "Full cluster control and resource-scope bypass for AQP super-admins" },
+    # Agents
+    { value = "agent:view", description = "Inspect agent specs, runs, and telemetry" },
+    { value = "agent:execute", description = "Invoke or schedule a registered AQP agent" },
+    { value = "agent:terminate", description = "Halt a running agent or revoke a long-lived spec" },
+    # Trading / portfolio
+    { value = "trade:read", description = "Inspect paper / live trading sessions, orders, fills, and PnL" },
+    { value = "trade:execute", description = "Submit paper-broker or sandbox-broker orders" },
+    { value = "trade:live", description = "Submit real-money orders to a connected live broker" },
+    # Backtesting
+    { value = "backtest:read", description = "Inspect backtest runs and historical metrics" },
+    { value = "backtest:create", description = "Submit a new backtest job to the engine fleet" },
+    # ML / RL / RAG
+    { value = "rag:query", description = "Query the hierarchical RAG corpus" },
+    { value = "ml:workbench", description = "Run ML workbench flows (training, evaluation, registry)" },
+    { value = "rl:train", description = "Submit RLExperimentSpec runs through RLRuntime" },
+    # Deployment lifecycle
     { value = "deploy:run", description = "Run Terraform/Kubernetes deployments" },
     { value = "deploy:halt", description = "Halt AQP deployments and long-running runtimes" },
+    # Terraform IaC (rule 42)
+    { value = "terraform:plan", description = "Generate a Terraform plan for an AQP stack" },
+    { value = "terraform:apply", description = "Apply a Terraform plan against an AQP stack" },
+    { value = "terraform:destroy", description = "Destroy an AQP Terraform stack (super-admin only)" },
+    { value = "terraform:cancel", description = "Cancel a running Terraform run" },
+    # WorkloadRuntime kill-switch (rule 45)
+    { value = "workloads:halt", description = "Halt every running workload via the WorkloadRuntime kill-switch" },
+    # Tenancy
+    { value = "tenancy:invite", description = "Issue tenancy invites for org / team / workspace / project membership" },
+    { value = "tenancy:admin", description = "Mutate tenancy state (orgs, teams, memberships)" },
     { value = "scim:write", description = "Provision AQP users and groups through SCIM" },
+    # Platform
+    { value = "platform:admin", description = "Implicit super-scope: satisfies any other scope check" },
   ]
 
+  # Role -> permission lattice. Mirrors the lattice in
+  # ``aqp_platform_core/auth/rbac.py::_ROLE_LATTICE``. Keep them aligned
+  # — the test suite at tests/auth/test_scopes.py asserts that every
+  # role's set is the same on both sides.
   role_permissions = {
-    viewer = ["read:infrastructure", "data:read"]
-    operator = [
+    viewer = [
       "read:infrastructure",
-      "manage:agents",
       "data:read",
+      "agent:view",
+      "trade:read",
+      "backtest:read",
+      "rag:query",
+    ]
+    operator = [
+      # viewer +
+      "read:infrastructure",
+      "data:read",
+      "agent:view",
+      "trade:read",
+      "backtest:read",
+      "rag:query",
+      # operator-only:
+      "manage:agents",
+      "agent:execute",
+      "agent:terminate",
+      "backtest:create",
+      "ml:workbench",
+      "rl:train",
+      "trade:execute",
+      "deploy:run",
+      "deploy:halt",
+      "workloads:halt",
     ]
     admin = [
+      # operator +
       "read:infrastructure",
-      "manage:agents",
-      "manage:infrastructure",
       "data:read",
-      "data:write",
+      "agent:view",
+      "trade:read",
+      "backtest:read",
+      "rag:query",
+      "manage:agents",
+      "agent:execute",
+      "agent:terminate",
+      "backtest:create",
+      "ml:workbench",
+      "rl:train",
+      "trade:execute",
       "deploy:run",
       "deploy:halt",
+      "workloads:halt",
+      # admin-only:
+      "manage:infrastructure",
+      "data:write",
+      "admin:iceberg",
+      "terraform:plan",
+      "terraform:apply",
+      "terraform:cancel",
+      "tenancy:invite",
     ]
     superadmin = [
+      # admin +
       "read:infrastructure",
-      "manage:agents",
-      "manage:infrastructure",
-      "admin:cluster",
       "data:read",
-      "data:write",
+      "agent:view",
+      "trade:read",
+      "backtest:read",
+      "rag:query",
+      "manage:agents",
+      "agent:execute",
+      "agent:terminate",
+      "backtest:create",
+      "ml:workbench",
+      "rl:train",
+      "trade:execute",
       "deploy:run",
       "deploy:halt",
+      "workloads:halt",
+      "manage:infrastructure",
+      "data:write",
+      "admin:iceberg",
+      "terraform:plan",
+      "terraform:apply",
+      "terraform:cancel",
+      "tenancy:invite",
+      # superadmin-only:
+      "admin:cluster",
+      "terraform:destroy",
+      "tenancy:admin",
       "scim:write",
+      "trade:live",
+      "platform:admin",
     ]
   }
 }

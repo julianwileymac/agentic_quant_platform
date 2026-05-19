@@ -7,6 +7,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy import desc, func, select
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import (
     ChatRequest,
     ChatResponse,
@@ -23,7 +24,7 @@ from aqp.ws.broker import asubscribe
 from aqp.ws.manager import manager
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/chat", tags=["chat"])
+router = secure_router(prefix="/chat", tags=["chat"], default_scope="agent:view")
 
 
 def _context_to_system_prompt(req: ChatRequest) -> str:
@@ -211,8 +212,24 @@ def _load_history(session_id: str, include_meta: bool = False) -> list[dict]:
 
 @router.websocket("/stream/{task_id}")
 async def stream(ws: WebSocket, task_id: str) -> None:
-    """Relay pub/sub progress for a given task_id to the connected client."""
+    """Relay pub/sub progress for a given task_id to the connected client.
+
+    Phase 3a authentication: after ``manager.connect`` accepts the socket,
+    the first client frame must be ``{"type":"auth","token":"<JWT>"}``.
+    Failure modes are handled by :class:`aqp.auth.ws.WebSocketAuthenticator`
+    which closes the socket with the appropriate close code (4001 for
+    protocol error, 4003 for invalid token). When
+    ``settings.ws_auth_required`` is False (default during cutover),
+    a missing or malformed first frame falls back to the local-first
+    default context.
+    """
+    from aqp.auth.ws import ws_authenticator
+
     await manager.connect(task_id, ws)
+    auth_result = await ws_authenticator.authenticate(ws)
+    if auth_result is None:
+        await manager.disconnect(task_id, ws)
+        return
     try:
         async for msg in asubscribe(task_id):
             await ws.send_json(msg)

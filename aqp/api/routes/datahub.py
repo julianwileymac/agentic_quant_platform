@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.config import settings
 from aqp.data.datahub import (
     get_client,
@@ -23,7 +24,7 @@ from aqp.data.datahub import (
 from aqp.persistence.db import get_session
 from aqp.persistence.models_pipelines import DatahubSyncLog
 
-router = APIRouter(prefix="/datahub", tags=["datahub"])
+router = secure_router(prefix="/datahub", tags=["datahub"], default_scope="data:read")
 
 
 class PushRequest(BaseModel):

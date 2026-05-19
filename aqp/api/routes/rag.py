@@ -20,11 +20,12 @@ from typing import Any
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/rag", tags=["rag"])
+router = secure_router(prefix="/rag", tags=["rag"], default_scope="data:read")
 
 
 class RagCorpusInfo(BaseModel):

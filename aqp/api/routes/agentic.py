@@ -28,6 +28,7 @@ from sqlalchemy import desc, select
 
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import (
     AgenticBacktestRequest,
     AgenticPipelineRequest,
@@ -55,7 +56,7 @@ from aqp.tasks.agentic_backtest_tasks import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/agentic", tags=["agentic"])
+router = secure_router(prefix="/agentic", tags=["agentic"], default_scope="agent:view")
 
 
 _CONFIGS_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "configs"

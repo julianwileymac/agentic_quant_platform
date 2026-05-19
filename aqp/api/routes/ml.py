@@ -23,6 +23,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.config import settings
 from aqp.core.types import Symbol
@@ -43,7 +44,7 @@ from aqp.persistence.models import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/ml", tags=["ml"])
+router = secure_router(prefix="/ml", tags=["ml"], default_scope="data:read")
 
 
 class TrainRequest(BaseModel):

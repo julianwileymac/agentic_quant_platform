@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import (
     BacktestRequest,
     BacktestSummary,
@@ -26,7 +27,7 @@ from aqp.persistence.models import (
 )
 from aqp.tasks.backtest_tasks import run_backtest, run_monte_carlo, run_walk_forward
 
-router = APIRouter(prefix="/backtest", tags=["backtest"])
+router = secure_router(prefix="/backtest", tags=["backtest"], default_scope="trade:read")
 
 
 class IterateRequest(BaseModel):

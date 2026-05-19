@@ -8,12 +8,13 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.persistence.db import get_session
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/agents/selection", tags=["agents", "selection"])
+router = secure_router(prefix="/agents/selection", tags=["agents", "selection"], default_scope="agent:view")
 
 
 class SelectionRequest(BaseModel):

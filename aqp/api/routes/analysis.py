@@ -27,6 +27,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.analysis.registry import (
     list_analysis_flows,
     persist_spec,
@@ -37,7 +38,7 @@ from aqp.analysis.spec import AnalysisSpec
 from aqp.api.schemas import TaskAccepted
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/analysis", tags=["analysis"])
+router = secure_router(prefix="/analysis", tags=["analysis"], default_scope="data:read")
 
 
 # ---------------------------------------------------------------------------

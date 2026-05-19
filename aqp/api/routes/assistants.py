@@ -31,6 +31,7 @@ from fastapi import (
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.auth.context import RequestContext
 from aqp.auth.deps import current_context
 from aqp.config import settings
@@ -39,7 +40,7 @@ from aqp.ws.broker import asubscribe
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/assistants", tags=["assistants"])
+router = secure_router(prefix="/assistants", tags=["assistants"], default_scope="agent:view")
 
 
 # ----------------------------------------------------------------------------
@@ -493,7 +494,17 @@ def _halt_runs(*, run_id: str | None, reason: str) -> list[dict[str, Any]]:
 
 @router.websocket("/stream/{task_id}")
 async def stream(ws: WebSocket, task_id: str) -> None:
+    """Stream Celery progress for an assistant run.
+
+    Phase 3a authentication: first client frame must be
+    ``{"type":"auth","token":"<JWT>"}``. See :mod:`aqp.auth.ws`.
+    """
+    from aqp.auth.ws import ws_authenticator
+
     await ws.accept()
+    auth_result = await ws_authenticator.authenticate(ws)
+    if auth_result is None:
+        return
     try:
         async for msg in asubscribe(task_id):
             await ws.send_json(msg)

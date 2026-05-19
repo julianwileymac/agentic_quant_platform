@@ -14,6 +14,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.auth.context import RequestContext
 from aqp.auth.deps import current_context
 from aqp.data.dataset_presets import (
@@ -29,7 +30,7 @@ from aqp.data.dataset_presets_wizards import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/dataset-presets", tags=["dataset-presets"])
+router = secure_router(prefix="/dataset-presets", tags=["dataset-presets"], default_scope="data:read")
 
 
 class PresetView(BaseModel):

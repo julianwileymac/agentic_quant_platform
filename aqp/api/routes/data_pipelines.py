@@ -26,6 +26,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.config import settings
 from aqp.data.loading_templates import (
@@ -40,7 +41,7 @@ from aqp.data.pipelines.local_paths import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["data-pipelines"])
+router = secure_router(tags=["data-pipelines"], default_scope="data:read")
 
 
 def _resolve_ingest_path_or_400(raw_path: str) -> Path:

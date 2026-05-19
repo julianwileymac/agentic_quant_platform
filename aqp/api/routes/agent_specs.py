@@ -14,11 +14,12 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.persistence.db import get_session
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/agents", tags=["agents", "specs"])
+router = secure_router(prefix="/agents", tags=["agents", "specs"], default_scope="agent:view")
 
 
 class AgentSpecSummary(BaseModel):

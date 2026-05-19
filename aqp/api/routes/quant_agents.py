@@ -34,9 +34,11 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
+
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/quant-agents", tags=["quant-agents"])
+router = secure_router(prefix="/quant-agents", tags=["quant-agents"], default_scope="agent:view")
 
 
 # ---------------------------------------------------------------------------
@@ -631,8 +633,16 @@ async def alpha_factor_presence(ws: WebSocket) -> None:
     Query params:
       - ``display_name`` (optional) — short label rendered on the
         peer's badge. Defaults to ``Anonymous``.
+
+    Phase 3a authentication: first client frame must be
+    ``{"type":"auth","token":"<JWT>"}``. See :mod:`aqp.auth.ws`.
     """
+    from aqp.auth.ws import ws_authenticator
+
     await ws.accept()
+    auth_result = await ws_authenticator.authenticate(ws)
+    if auth_result is None:
+        return
     display_name = ws.query_params.get("display_name") or "Anonymous"
     participant_id = uuid.uuid4().hex[:8]
     await _ALPHA_PRESENCE.join(participant_id, ws, display_name)

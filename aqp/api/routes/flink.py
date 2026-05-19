@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.streaming.admin import (
     FlinkAdminError,
     FlinkAdminUnavailableError,
@@ -23,7 +24,7 @@ from aqp.streaming.runtime import submit_factor_job
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/streaming/flink", tags=["streaming"])
+router = secure_router(prefix="/streaming/flink", tags=["streaming"], default_scope="read:infrastructure")
 
 
 class FlinkSessionJobView(BaseModel):

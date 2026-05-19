@@ -21,11 +21,12 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.tasks.factor_tasks import evaluate_factor
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/factors", tags=["factors"])
+router = secure_router(prefix="/factors", tags=["factors"], default_scope="trade:read")
 
 
 class FactorRequest(BaseModel):

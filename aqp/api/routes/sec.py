@@ -8,12 +8,13 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.persistence.db import get_session
 from aqp.persistence.models import SecFiling
 from aqp.tasks.ingestion_tasks import ingest_sec_filings
 
-router = APIRouter(prefix="/sec", tags=["sec"])
+router = secure_router(prefix="/sec", tags=["sec"], default_scope="data:read")
 
 
 class SecFilingSummary(BaseModel):

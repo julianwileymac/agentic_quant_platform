@@ -73,6 +73,10 @@ dependencies = [
     # CLI + resilience
     "typer>=0.12",
     "tenacity>=8.2",
+    # Structured logging (Phase 4a control-plane maturation). Pure-Python,
+    # zero compile-time deps; required by the API gateway middleware that
+    # injects correlation IDs + OTel trace_id/span_id into every log line.
+    "structlog>=24.1",
 ]
 
 [project.optional-dependencies]

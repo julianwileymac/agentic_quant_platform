@@ -8,11 +8,12 @@ from fastapi import APIRouter, Body, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.persistence.db import get_session
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/memory", tags=["memory", "agents"])
+router = secure_router(prefix="/memory", tags=["memory", "agents"], default_scope="data:read")
 
 
 class EpisodeRow(BaseModel):

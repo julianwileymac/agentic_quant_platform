@@ -6,9 +6,10 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from aqp.api.security import secure_router
 from aqp.services import service_manager
 
-router = APIRouter(prefix="/service-manager", tags=["service-manager"])
+router = secure_router(prefix="/service-manager", tags=["service-manager"], default_scope="read:infrastructure")
 
 ServiceName = Literal[
     "trino",

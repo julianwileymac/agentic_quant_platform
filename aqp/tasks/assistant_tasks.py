@@ -25,6 +25,7 @@ from typing import Any
 
 from aqp.tasks._progress import emit, emit_done, emit_error
 from aqp.tasks.celery_app import celery_app
+from aqp.tasks.secure_task import SecureTask
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,7 @@ def _run_assistant_impl(
     return payload
 
 
-@celery_app.task(bind=True, name="aqp.tasks.assistant_tasks.run_assistant")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.assistant_tasks.run_assistant")
 def run_assistant(
     self,
     *,

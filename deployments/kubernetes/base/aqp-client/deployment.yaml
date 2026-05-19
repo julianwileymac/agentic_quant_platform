@@ -100,3 +100,15 @@ spec:
           labelSelector:
             matchLabels:
               app: aqp-client
+      # Phase 4c control-plane maturation: schedule on arm64 (RPi5
+      # edge cluster) or amd64 (standard cloud nodes). Image must be
+      # multi-arch.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["arm64", "amd64"]

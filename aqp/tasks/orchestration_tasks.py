@@ -30,6 +30,7 @@ from typing import Any
 
 from aqp.tasks._progress import emit, emit_done, emit_error
 from aqp.tasks.celery_app import celery_app
+from aqp.tasks.secure_task import SecureTask
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +119,7 @@ def _replay_run_impl(task_id: str, run_id: str) -> dict[str, Any]:
     )
 
 
-@celery_app.task(bind=True, name="aqp.tasks.orchestration_tasks.run_workflow")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.orchestration_tasks.run_workflow")
 def run_workflow(
     self,
     spec_version_id: str | None = None,
@@ -151,7 +152,7 @@ def run_workflow(
     )
 
 
-@celery_app.task(bind=True, name="aqp.tasks.orchestration_tasks.replay_run")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.orchestration_tasks.replay_run")
 def replay_run(
     self,
     run_id: str,

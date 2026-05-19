@@ -18,10 +18,11 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.data.feature_catalog import all_candidates, filter_candidates, to_dicts
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/feature-catalog", tags=["feature-catalog"])
+router = secure_router(prefix="/feature-catalog", tags=["feature-catalog"], default_scope="data:read")
 
 
 @router.get("/candidates")

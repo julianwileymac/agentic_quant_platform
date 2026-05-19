@@ -14,11 +14,12 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from aqp.api.security import secure_router
 from aqp.data.sources.resolvers.identifiers import IdentifierResolver
 from aqp.persistence.db import get_session
 from aqp.persistence.models import Instrument
 
-router = APIRouter(prefix="/identifiers", tags=["identifiers"])
+router = secure_router(prefix="/identifiers", tags=["identifiers"], default_scope="data:read")
 
 
 class InstrumentSummary(BaseModel):

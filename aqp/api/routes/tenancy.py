@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from aqp.api.security import (
     require_authenticated,
+    require_dpop_token,
     require_membership,
     require_scope,
     secure_router,
@@ -180,6 +181,7 @@ def invite_user(
     body: InvitePayload,
     user: CurrentUser = Depends(require_scope("tenancy:invite")),
     ctx: RequestContext = Depends(current_context),
+    _dpop: CurrentUser = Depends(require_dpop_token()),
 ) -> dict[str, Any]:
     tool = InviteUserTool()
     result = tool.invoke(

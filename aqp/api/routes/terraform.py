@@ -49,6 +49,7 @@ from pydantic import BaseModel, Field
 from aqp.api.schemas import TaskAccepted
 from aqp.api.security import (
     require_authenticated,
+    require_dpop_token,
     require_membership,
     require_scope,
     secure_router,
@@ -537,6 +538,7 @@ def apply_workspace(
     body: ApplyRequest,
     user: CurrentUser = Depends(require_scope("terraform:apply")),
     _ctx: RequestContext = Depends(require_membership("admin", "workspace")),
+    _dpop: CurrentUser = Depends(require_dpop_token()),
 ) -> TaskAccepted:
     from aqp.persistence.db import get_session
     from aqp.persistence.models_terraform import TerraformRun
@@ -587,6 +589,7 @@ def destroy_workspace(
     body: DestroyRequest,
     user: CurrentUser = Depends(require_scope("terraform:destroy")),
     _ctx: RequestContext = Depends(require_membership("admin", "workspace")),
+    _dpop: CurrentUser = Depends(require_dpop_token()),
 ) -> TaskAccepted:
     from aqp.persistence.db import get_session
     from aqp.persistence.models_terraform import (
@@ -864,8 +867,16 @@ async def stream_run_progress(ws: WebSocket, run_id: str) -> None:
     Connects to the Redis pub/sub channel the Celery task publishes
     progress frames to. Frames already follow the canonical
     ``{task_id, stage, message, timestamp, **extras}`` shape (rule 4).
+
+    Phase 3a authentication: first client frame must be
+    ``{"type":"auth","token":"<JWT>"}``. See :mod:`aqp.auth.ws`.
     """
+    from aqp.auth.ws import ws_authenticator
+
     await ws.accept()
+    auth_result = await ws_authenticator.authenticate(ws)
+    if auth_result is None:
+        return
     from aqp.ws.broker import subscribe
 
     try:

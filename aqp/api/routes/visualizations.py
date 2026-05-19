@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.config import settings
 from aqp.data import iceberg_catalog
@@ -20,7 +21,7 @@ from aqp.visualization.superset_sync import build_current_asset_plan
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/visualizations", tags=["visualizations"])
+router = secure_router(prefix="/visualizations", tags=["visualizations"], default_scope="data:read")
 
 
 class GuestTokenRequest(BaseModel):

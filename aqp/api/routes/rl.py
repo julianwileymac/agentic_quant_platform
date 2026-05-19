@@ -32,12 +32,13 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted, TrainRLRequest
 from aqp.tasks.training_tasks import evaluate_rl, train_rl
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/rl", tags=["rl"])
+router = secure_router(prefix="/rl", tags=["rl"], default_scope="data:read")
 
 
 # ---------------------------------------------------------------------------

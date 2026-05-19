@@ -4,17 +4,20 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import require_dpop_token, require_scope, secure_router
 from aqp.api.schemas import TaskAccepted
+from aqp.auth import CurrentUser
+from aqp.auth.scopes import AQPScope
 from aqp.persistence.db import get_session
 from aqp.persistence.models import Fill, LedgerEntry, OrderRecord, PaperTradingRun
 from aqp.tasks.paper_tasks import publish_stop_signal, run_paper
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/paper", tags=["paper"])
+router = secure_router(prefix="/paper", tags=["paper"], default_scope="trade:read")
 
 
 class PaperRunRequest(BaseModel):
@@ -51,7 +54,22 @@ class PaperRunDetail(PaperRunSummary):
 
 
 @router.post("/start", response_model=TaskAccepted)
-def start_paper(req: PaperRunRequest) -> TaskAccepted:
+def start_paper(
+    req: PaperRunRequest,
+    user: CurrentUser = Depends(require_scope(AQPScope.TRADE_EXECUTE)),
+    _dpop: CurrentUser = Depends(require_dpop_token()),
+) -> TaskAccepted:
+    """Start a paper / live trading session.
+
+    Phase 4d enforcement: when ``settings.dpop_enforcement_enabled`` is
+    True, requires a DPoP proof header on top of the ``trade:execute``
+    scope. The Phase 1 canonical lattice grants ``trade:execute`` to
+    every role from ``aqp-operator`` upward; sessions that target a
+    real-money broker live-trade should also satisfy the
+    ``trade:live`` scope, which is checked downstream in
+    :class:`aqp.tasks.paper_tasks.run_paper` against the resolved
+    broker config (paper vs live).
+    """
     async_result = run_paper.delay(req.config, req.run_name)
     return TaskAccepted(
         task_id=async_result.id,

@@ -13,12 +13,13 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.persistence import StreamingDatasetLink
 from aqp.persistence.db import get_session
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["streaming"])
+router = secure_router(tags=["streaming"], default_scope="data:read")
 
 
 class StreamingLinkView(BaseModel):

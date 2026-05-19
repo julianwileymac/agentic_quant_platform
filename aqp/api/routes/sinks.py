@@ -14,6 +14,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.auth.context import RequestContext
 from aqp.auth.deps import current_context
 from aqp.data.fetchers.sinks import list_sink_kinds
@@ -33,7 +34,7 @@ from aqp.persistence.db import get_session
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/sinks", tags=["sinks"])
+router = secure_router(prefix="/sinks", tags=["sinks"], default_scope="data:read")
 
 
 class SinkKindView(BaseModel):

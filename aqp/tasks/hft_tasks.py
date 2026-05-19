@@ -25,6 +25,7 @@ from typing import Any
 from aqp.core.registry import resolve
 from aqp.tasks._progress import emit, emit_done, emit_error
 from aqp.tasks.celery_app import celery_app
+from aqp.tasks.secure_task import SecureTask
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ logger = logging.getLogger(__name__)
 _PROGRESS_INTERVAL_SEC = 2.0
 
 
-@celery_app.task(bind=True, name="aqp.tasks.hft_tasks.run_lob_backtest")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.hft_tasks.run_lob_backtest")
 def run_lob_backtest(
     self,
     *,

@@ -7,11 +7,12 @@ from typing import Any
 from fastapi import APIRouter, Body
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/agents/analysis", tags=["agents", "analysis"])
+router = secure_router(prefix="/agents/analysis", tags=["agents", "analysis"], default_scope="agent:view")
 
 
 class AnalyzeRequest(BaseModel):

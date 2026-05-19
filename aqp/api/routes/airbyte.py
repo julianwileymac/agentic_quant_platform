@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.config import settings
 from aqp.data.airbyte import (
@@ -30,7 +31,7 @@ from aqp.persistence.models_airbyte import (
 )
 from aqp.services.airbyte_client import AirbyteClient, AirbyteClientError
 
-router = APIRouter(prefix="/airbyte", tags=["airbyte"])
+router = secure_router(prefix="/airbyte", tags=["airbyte"], default_scope="data:read")
 
 
 def _airbyte_config_snapshot() -> dict[str, Any]:

@@ -29,10 +29,11 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 logger = logging.getLogger(__name__)
 
 
-router = APIRouter(prefix="/analytics/portfolio", tags=["analytics", "portfolio"])
+router = secure_router(prefix="/analytics/portfolio", tags=["analytics", "portfolio"], default_scope="data:read")
 
 
 # ---------------------------------------------------------------------------

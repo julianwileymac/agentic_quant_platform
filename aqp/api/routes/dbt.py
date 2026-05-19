@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from aqp.api.security import secure_router
 from aqp.data.dbt import (
     DbtExportOptions,
     DbtExporter,
@@ -30,7 +31,7 @@ from aqp.persistence.models_dbt import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/dbt", tags=["dbt"])
+router = secure_router(prefix="/dbt", tags=["dbt"], default_scope="data:read")
 
 
 class BootstrapRequest(BaseModel):

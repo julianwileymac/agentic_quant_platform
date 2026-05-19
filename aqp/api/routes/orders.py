@@ -35,6 +35,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.config import settings
 from aqp.core.types import OrderRequest, OrderSide, OrderType, Symbol
 from aqp.persistence.db import get_session
@@ -42,7 +43,7 @@ from aqp.persistence.models import Fill, OrderRecord
 from aqp.risk.kill_switch import is_engaged
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/orders", tags=["orders"])
+router = secure_router(prefix="/orders", tags=["orders"], default_scope="trade:read")
 
 
 _OPEN_STATUSES = {"submitting", "new", "partial", "partially_filled", "accepted"}

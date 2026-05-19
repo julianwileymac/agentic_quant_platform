@@ -95,8 +95,18 @@ spec:
           emptyDir: {}
       # Workers carry heavy ML/RL workloads — give them an anti-affinity
       # hint so we don't co-schedule them with the latency-sensitive
-      # aqp-core API pods.
+      # aqp-core API pods. Phase 4c control-plane maturation also adds a
+      # multi-arch nodeAffinity so workers schedule on RPi5 (arm64)
+      # edge cluster and standard cloud (amd64) nodes alike.
       affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["arm64", "amd64"]
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 100

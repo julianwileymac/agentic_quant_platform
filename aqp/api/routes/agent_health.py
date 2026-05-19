@@ -6,10 +6,12 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from aqp.api.security import secure_router
+
 logger = logging.getLogger(__name__)
 
 
-router = APIRouter(prefix="/agents", tags=["agents", "health"])
+router = secure_router(prefix="/agents", tags=["agents", "health"], default_scope="agent:view")
 
 
 @router.get("/health")

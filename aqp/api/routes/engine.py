@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.data.engine import (
     Pipeline,
@@ -22,7 +23,7 @@ from aqp.persistence.models_pipelines import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/engine", tags=["data-engine"])
+router = secure_router(prefix="/engine", tags=["data-engine"], default_scope="trade:read")
 
 
 # ---------------------------------------------------------------------------

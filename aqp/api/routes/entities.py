@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, or_, select
 
+from aqp.api.security import secure_router
 from aqp.persistence.db import get_session
 from aqp.persistence.models import Instrument
 from aqp.persistence.models_entities import (
@@ -28,7 +29,7 @@ from aqp.persistence.models_entities import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/entities", tags=["entities"])
+router = secure_router(prefix="/entities", tags=["entities"], default_scope="data:read")
 
 
 # ---------------------------------------------------------------------------

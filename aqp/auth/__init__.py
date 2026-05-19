@@ -46,6 +46,14 @@ from aqp.auth.user import (
     resolve_user,
     user_can,
 )
+from aqp.auth.ws import (
+    WS_CLOSE_INSUFFICIENT_SCOPE,
+    WS_CLOSE_PROTOCOL_ERROR,
+    WS_CLOSE_TOKEN_INVALID,
+    WebSocketAuthResult,
+    WebSocketAuthenticator,
+    ws_authenticator,
+)
 
 __all__ = [
     "CurrentUser",
@@ -71,4 +79,11 @@ __all__ = [
     "scope_id_for",
     "use_context",
     "user_can",
+    # WebSocket auth
+    "WS_CLOSE_INSUFFICIENT_SCOPE",
+    "WS_CLOSE_PROTOCOL_ERROR",
+    "WS_CLOSE_TOKEN_INVALID",
+    "WebSocketAuthResult",
+    "WebSocketAuthenticator",
+    "ws_authenticator",
 ]

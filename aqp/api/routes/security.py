@@ -25,6 +25,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import (
     CalendarResponse,
     CorporateActionsResponse,
@@ -37,7 +38,7 @@ from aqp.data.cache import cached_json
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/data/security", tags=["security"])
+router = secure_router(prefix="/data/security", tags=["security"], default_scope="data:read")
 
 # Cache scopes — one per facet so operators can flush granularly.
 _SCOPE_FUNDAMENTALS = "security:fundamentals"

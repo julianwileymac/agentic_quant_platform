@@ -13,12 +13,13 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.data.entities import registry as entity_registry
 from aqp.data.entities.sync import active_instruments, sync_active_instruments_to_graph
 from aqp.persistence.db import get_session
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/registry/entities", tags=["entity-registry"])
+router = secure_router(prefix="/registry/entities", tags=["entity-registry"], default_scope="data:read")
 
 
 # ---------------------------------------------------------------------------

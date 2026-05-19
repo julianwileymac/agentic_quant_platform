@@ -24,6 +24,7 @@ from typing import Any
 
 from aqp.tasks._progress import emit, emit_done, emit_error
 from aqp.tasks.celery_app import celery_app
+from aqp.tasks.secure_task import SecureTask
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ def _load_run_and_spec(run_id: str):
 # ---------------------------------------------------------------------------
 
 
-@celery_app.task(bind=True, name="aqp.tasks.terraform_tasks.run_terraform_plan")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.terraform_tasks.run_terraform_plan")
 def run_terraform_plan(self, *, run_id: str) -> dict[str, Any]:
     """Execute ``terraform plan`` for an existing :class:`TerraformRun` row."""
     task_id = self.request.id or run_id
@@ -105,7 +106,7 @@ def run_terraform_plan(self, *, run_id: str) -> dict[str, Any]:
     return payload
 
 
-@celery_app.task(bind=True, name="aqp.tasks.terraform_tasks.run_terraform_apply")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.terraform_tasks.run_terraform_apply")
 def run_terraform_apply(
     self,
     *,
@@ -137,7 +138,7 @@ def run_terraform_apply(
     return result.to_dict()
 
 
-@celery_app.task(bind=True, name="aqp.tasks.terraform_tasks.run_terraform_destroy")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.terraform_tasks.run_terraform_destroy")
 def run_terraform_destroy(
     self,
     *,
@@ -167,7 +168,7 @@ def run_terraform_destroy(
     return result.to_dict()
 
 
-@celery_app.task(bind=True, name="aqp.tasks.terraform_tasks.run_terraform_refresh")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.terraform_tasks.run_terraform_refresh")
 def run_terraform_refresh(self, *, run_id: str) -> dict[str, Any]:
     """Execute ``terraform apply -refresh-only`` to detect drift."""
     task_id = self.request.id or run_id
@@ -187,7 +188,7 @@ def run_terraform_refresh(self, *, run_id: str) -> dict[str, Any]:
     return runtime.refresh(started_by_user_id=run.started_by_user_id).to_dict()
 
 
-@celery_app.task(bind=True, name="aqp.tasks.terraform_tasks.terraform_drift_scan")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.terraform_tasks.terraform_drift_scan")
 def terraform_drift_scan(self) -> dict[str, Any]:
     """Beat task — fan out ``refresh`` runs across every active workspace.
 
@@ -251,7 +252,7 @@ def terraform_drift_scan(self) -> dict[str, Any]:
         return {"enqueued": enqueued, "error": str(exc)}
 
 
-@celery_app.task(bind=True, name="aqp.tasks.terraform_tasks.cancel_terraform_run")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.terraform_tasks.cancel_terraform_run")
 def cancel_terraform_run(self, *, run_id: str) -> dict[str, Any]:
     """Mark a running terraform run as cancelled and best-effort revoke."""
     task_id = self.request.id or run_id
@@ -551,7 +552,7 @@ def _run_rpi_stack_impl(
     return {"ok": False, "error": msg}
 
 
-@celery_app.task(bind=True, name="aqp.tasks.terraform_tasks.run_local_stack")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.terraform_tasks.run_local_stack")
 def run_local_stack(
     self,
     *,
@@ -569,7 +570,7 @@ def run_local_stack(
     return _run_local_stack_impl(task_id, action=action, spec_name=spec_name)
 
 
-@celery_app.task(bind=True, name="aqp.tasks.terraform_tasks.run_rpi_stack")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.terraform_tasks.run_rpi_stack")
 def run_rpi_stack(
     self,
     *,

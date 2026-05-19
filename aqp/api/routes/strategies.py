@@ -25,6 +25,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.persistence.db import get_session
 from aqp.persistence.models import (
@@ -35,7 +36,7 @@ from aqp.persistence.models import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/strategies", tags=["strategies"])
+router = secure_router(prefix="/strategies", tags=["strategies"], default_scope="trade:read")
 
 
 # ---------------------------------------------------------------------------

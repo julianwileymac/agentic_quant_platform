@@ -10,9 +10,10 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
+from aqp.api.security import secure_router
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/data/entities", tags=["data-entities"])
+router = secure_router(prefix="/data/entities", tags=["data-entities"], default_scope="data:read")
 
 
 @router.get("/{vt_symbol}")

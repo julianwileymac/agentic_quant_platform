@@ -15,6 +15,10 @@ from __future__ import annotations
 
 from aqp.observability.dagster import instrument_dagster
 from aqp.observability.decorators import traced
+from aqp.observability.logging import (
+    configure_structured_logging,
+    get_logger,
+)
 from aqp.observability.tracing import (
     configure_tracing,
     get_tracer,
@@ -24,7 +28,9 @@ from aqp.observability.tracing import (
 )
 
 __all__ = [
+    "configure_structured_logging",
     "configure_tracing",
+    "get_logger",
     "get_tracer",
     "instrument_celery",
     "instrument_dagster",

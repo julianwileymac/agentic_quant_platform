@@ -206,6 +206,26 @@ class Settings(BaseSettings):
     # OTEL span without blocking the request so the rollout can flip
     # to ``strict`` only when the dashboard shows zero would-be denies.
     auth_enforce: str = Field(default="strict")  # strict | permissive
+    # Phase 3a of the AQP control-plane maturation gates the
+    # WebSocket first-frame token protocol on this flag. When False
+    # (default during the cutover), an unauthenticated WS connection
+    # silently degrades to the local-first default user, mirroring
+    # the HTTP path's ``current_user`` fallback. When True, WS routes
+    # close the socket with code 4001 if the first frame is not a
+    # valid ``{"type":"auth","token":"..."}`` payload. Flip to True
+    # in production once the frontend has cut over to the new
+    # protocol (see ``frontend/src/lib/ws/client.ts``).
+    ws_auth_required: bool = Field(default=False)
+    # Phase 4d of the AQP control-plane maturation gates per-route
+    # DPoP (RFC 9449) proof-of-possession enforcement. When True, the
+    # ``require_dpop_token`` dependency rejects Bearer-only requests
+    # to the highest-value endpoints (terraform apply / destroy,
+    # workloads:halt, live trade execute, tenancy invite). Off by
+    # default so existing API clients keep working until they migrate
+    # to a DPoP-capable client (the SPA via the auth0-fastapi-api SDK
+    # mixed-mode handshake, programmatic clients via the Auth0
+    # client-credentials grant with a DPoP header).
+    dpop_enforcement_enabled: bool = Field(default=False)
     # AQP-namespaced custom claim prefix injected by the Auth0 Action.
     # See ``docs/auth0-actions.md``. Decoupled from the issuer URL so
     # the same Action works against staging / prod tenants without

@@ -99,6 +99,8 @@ def _register_root(app: FastAPI) -> None:
                 "deployments": "/manage/deployments",
                 "telemetry_snapshot": "/manage/telemetry/snapshot",
                 "config": "/manage/config/{service_id}",
+                "workloads_halt": "/manage/workloads/halt",
+                "workloads_halt_status": "/manage/workloads/halt/status",
             },
         }
 
@@ -120,14 +122,15 @@ def _register_routers(app: FastAPI) -> None:
     except ImportError:
         logger.info("health router not yet implemented; skipping")
 
-    # The deployment / telemetry / config / secrets routers land in
-    # Phase 5i after the provider fan-out. Each guards itself with
-    # require_auth + require_scope.
+    # The deployment / telemetry / config / secrets / workloads routers
+    # land in Phase 5i after the provider fan-out. Each guards itself
+    # with require_auth + require_scope.
     for module_name, attr in (
         ("aqp_cp.api.routers.deployments", "router"),
         ("aqp_cp.api.routers.telemetry", "router"),
         ("aqp_cp.api.routers.config", "router"),
         ("aqp_cp.api.routers.secrets", "router"),
+        ("aqp_cp.api.routers.workloads", "router"),
     ):
         try:
             module = __import__(module_name, fromlist=[attr])

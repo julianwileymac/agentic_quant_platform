@@ -29,6 +29,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.config import settings
 from aqp.core.interfaces import IAsyncBrokerage
 from aqp.core.types import (
@@ -42,7 +43,7 @@ from aqp.core.types import (
 from aqp.risk.kill_switch import is_engaged
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/brokers", tags=["brokers"])
+router = secure_router(prefix="/brokers", tags=["brokers"], default_scope="trade:read")
 
 
 # Tunables: probe + connect timeouts kept short so an unresponsive gateway

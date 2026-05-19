@@ -6,11 +6,12 @@ from typing import Any
 
 from aqp.tasks._progress import emit, emit_done, emit_error
 from aqp.tasks.celery_app import celery_app
+from aqp.tasks.secure_task import SecureTask
 
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, name="aqp.tasks.backtest_tasks.run_backtest")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.backtest_tasks.run_backtest")
 def run_backtest(self, cfg: dict[str, Any], run_name: str = "adhoc") -> dict[str, Any]:
     task_id = self.request.id or "local"
     emit(task_id, "start", "Loading config and data…")
@@ -27,7 +28,7 @@ def run_backtest(self, cfg: dict[str, Any], run_name: str = "adhoc") -> dict[str
         raise
 
 
-@celery_app.task(bind=True, name="aqp.tasks.backtest_tasks.run_walk_forward")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.backtest_tasks.run_walk_forward")
 def run_walk_forward(self, cfg: dict[str, Any], train: int = 252, test: int = 63, step: int = 63) -> dict[str, Any]:
     task_id = self.request.id or "local"
     emit(task_id, "start", "Starting walk-forward optimisation…")
@@ -43,7 +44,7 @@ def run_walk_forward(self, cfg: dict[str, Any], train: int = 252, test: int = 63
         raise
 
 
-@celery_app.task(bind=True, name="aqp.tasks.backtest_tasks.run_monte_carlo")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.backtest_tasks.run_monte_carlo")
 def run_monte_carlo(self, backtest_id: str, n_runs: int = 500, method: str = "bootstrap") -> dict[str, Any]:
     task_id = self.request.id or "local"
     emit(task_id, "start", f"Running Monte Carlo ({n_runs} paths)…")

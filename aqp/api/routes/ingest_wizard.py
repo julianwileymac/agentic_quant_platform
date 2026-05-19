@@ -14,6 +14,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.api.routes import (
     compute as compute_routes,
     data_pipelines as pipelines_routes,
@@ -31,7 +32,7 @@ from aqp.services import service_manager
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/ingest/wizard", tags=["ingest-wizard"])
+router = secure_router(prefix="/ingest/wizard", tags=["ingest-wizard"], default_scope="data:read")
 
 
 Severity = Literal["info", "warn", "error"]

@@ -22,6 +22,7 @@ from typing import Any
 
 from aqp.tasks._progress import emit, emit_done, emit_error
 from aqp.tasks.celery_app import celery_app
+from aqp.tasks.secure_task import SecureTask
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ def _looks_like_uuid(value: str) -> bool:
     return isinstance(value, str) and len(value) == 36 and value.count("-") == 4
 
 
-@celery_app.task(bind=True, name="aqp.tasks.bot_tasks.run_bot_backtest")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.bot_tasks.run_bot_backtest")
 def run_bot_backtest(
     self,
     bot_ref: str,
@@ -91,7 +92,7 @@ def run_bot_backtest(
         raise
 
 
-@celery_app.task(bind=True, name="aqp.tasks.bot_tasks.run_bot_paper")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.bot_tasks.run_bot_paper")
 def run_bot_paper(
     self,
     bot_ref: str,
@@ -117,7 +118,7 @@ def run_bot_paper(
         raise
 
 
-@celery_app.task(bind=True, name="aqp.tasks.bot_tasks.chat_research_bot")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.bot_tasks.chat_research_bot")
 def chat_research_bot(
     self,
     bot_ref: str,
@@ -152,7 +153,7 @@ def chat_research_bot(
         raise
 
 
-@celery_app.task(bind=True, name="aqp.tasks.bot_tasks.deploy_bot")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.bot_tasks.deploy_bot")
 def deploy_bot(
     self,
     bot_ref: str,

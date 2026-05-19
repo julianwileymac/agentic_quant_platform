@@ -25,6 +25,7 @@ from aqp_platform_core.auth.rbac import (
     SCOPE_MANAGE_INFRA,
     SCOPE_READ_INFRA,
     ALL_SCOPES,
+    ALL_CANONICAL_SCOPES,
     ROLE_ADMIN,
     ROLE_OPERATOR,
     ROLE_SUPERADMIN,
@@ -54,6 +55,7 @@ __all__ = [
     "SCOPE_MANAGE_INFRA",
     "SCOPE_READ_INFRA",
     "ALL_SCOPES",
+    "ALL_CANONICAL_SCOPES",
     # RBAC roles
     "ROLE_ADMIN",
     "ROLE_OPERATOR",

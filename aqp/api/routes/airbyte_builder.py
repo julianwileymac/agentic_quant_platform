@@ -21,6 +21,7 @@ from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
+from aqp.api.security import secure_router
 from aqp.config import settings
 from aqp.data.airbyte.builder import (
     infer_streams,
@@ -33,7 +34,7 @@ from aqp.persistence.db import get_session
 from aqp.persistence.models_airbyte import AirbyteConnectorRow
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/airbyte/builder", tags=["airbyte", "builder"])
+router = secure_router(prefix="/airbyte/builder", tags=["airbyte", "builder"], default_scope="data:read")
 
 
 _FETCHER_USERLAND_DIR = Path("aqp/data/fetchers/userland")

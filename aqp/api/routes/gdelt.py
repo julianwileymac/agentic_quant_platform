@@ -8,12 +8,13 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.persistence.db import get_session
 from aqp.persistence.models import GDeltMention, Instrument
 from aqp.tasks.ingestion_tasks import ingest_gdelt_window
 
-router = APIRouter(prefix="/gdelt", tags=["gdelt"])
+router = secure_router(prefix="/gdelt", tags=["gdelt"], default_scope="data:read")
 
 
 class ManifestEntryResponse(BaseModel):

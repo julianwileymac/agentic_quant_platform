@@ -16,12 +16,17 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.auth.context import RequestContext
 from aqp.auth.deps import current_context
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/agents/dataset-loading", tags=["agents", "data-pipelines"])
+router = secure_router(
+    prefix="/agents/dataset-loading",
+    tags=["agents", "data-pipelines"],
+    default_scope="agent:view",
+)
 
 
 class ConsultRequest(BaseModel):

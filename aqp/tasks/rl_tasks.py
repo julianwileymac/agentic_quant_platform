@@ -15,6 +15,7 @@ from typing import Any
 
 from aqp.tasks._progress import emit, emit_done, emit_error
 from aqp.tasks.celery_app import celery_app
+from aqp.tasks.secure_task import SecureTask
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ def _build_runtime(spec_payload: dict[str, Any], task_id: str | None) -> Any:
     return RLRuntime(spec, task_id=task_id)
 
 
-@celery_app.task(bind=True, name="aqp.tasks.rl_tasks.train_rl_experiment")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.rl_tasks.train_rl_experiment")
 def train_rl_experiment(
     self,
     spec_payload: dict[str, Any],
@@ -47,7 +48,7 @@ def train_rl_experiment(
         raise
 
 
-@celery_app.task(bind=True, name="aqp.tasks.rl_tasks.evaluate_rl_experiment")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.rl_tasks.evaluate_rl_experiment")
 def evaluate_rl_experiment(
     self,
     spec_payload: dict[str, Any],
@@ -67,7 +68,7 @@ def evaluate_rl_experiment(
         raise
 
 
-@celery_app.task(bind=True, name="aqp.tasks.rl_tasks.replay_trajectories")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.rl_tasks.replay_trajectories")
 def replay_trajectories(
     self,
     spec_payload: dict[str, Any],
@@ -87,7 +88,7 @@ def replay_trajectories(
         raise
 
 
-@celery_app.task(bind=True, name="aqp.tasks.rl_tasks.walk_forward_ensemble")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.rl_tasks.walk_forward_ensemble")
 def walk_forward_ensemble(
     self,
     spec_payload: dict[str, Any],
@@ -106,7 +107,7 @@ def walk_forward_ensemble(
         raise
 
 
-@celery_app.task(bind=True, name="aqp.tasks.rl_tasks.best_of_n_search")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.rl_tasks.best_of_n_search")
 def best_of_n_search(
     self,
     spec_payload: dict[str, Any],
@@ -133,7 +134,7 @@ def best_of_n_search(
         raise
 
 
-@celery_app.task(bind=True, name="aqp.tasks.rl_tasks.paper_trade_rl")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.rl_tasks.paper_trade_rl")
 def paper_trade_rl(
     self,
     spec_payload: dict[str, Any],

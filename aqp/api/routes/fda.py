@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.persistence.db import get_session
 from aqp.tasks.regulatory_tasks import (
@@ -18,7 +19,7 @@ from aqp.tasks.regulatory_tasks import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/fda", tags=["fda", "regulatory"])
+router = secure_router(prefix="/fda", tags=["fda", "regulatory"], default_scope="data:read")
 
 
 class FdaProbeResponse(BaseModel):

@@ -1,7 +1,18 @@
 ###############################################################################
 # Stage 1: shared base with system deps.
+#
+# Phase 4c control-plane maturation: the base image is multi-arch
+# (linux/amd64 + linux/arm64) so the same Dockerfile can be built for
+# both the standard x86_64 cloud nodes and the Raspberry Pi 5 ARM64
+# edge cluster. Build via:
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     --target api --tag ghcr.io/julianwiley/aqp-api:<tag> --push .
+# The ``$BUILDPLATFORM`` ARG is auto-populated by buildx when running
+# under buildx; falls back to the build host's native arch otherwise.
 ###############################################################################
-FROM python:3.11-slim AS base
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+FROM --platform=$BUILDPLATFORM python:3.11-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

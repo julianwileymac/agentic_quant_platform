@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 # Eager import side-effect: registering every bundled fetcher / transform /
 # sink with the engine + upserting its row in ``data_sources``. Imported here
 # rather than in ``aqp.api.main`` so the registration pass happens once
@@ -16,7 +17,7 @@ from aqp.data.engine.manifest import FetchSliceSpec
 from aqp.data.engine.nodes import NodeKind
 from aqp.data.engine.registry import build_node, get_node_class
 
-router = APIRouter(prefix="/fetchers", tags=["fetchers"])
+router = secure_router(prefix="/fetchers", tags=["fetchers"], default_scope="data:read")
 
 
 class NodeSummary(BaseModel):

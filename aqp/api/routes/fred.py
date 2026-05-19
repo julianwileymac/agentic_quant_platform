@@ -15,12 +15,13 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.persistence.db import get_session
 from aqp.persistence.models import FredSeries
 from aqp.tasks.ingestion_tasks import ingest_fred_series
 
-router = APIRouter(prefix="/fred", tags=["fred"])
+router = secure_router(prefix="/fred", tags=["fred"], default_scope="data:read")
 
 
 class FredSeriesSummary(BaseModel):

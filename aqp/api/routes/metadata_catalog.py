@@ -8,9 +8,10 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from aqp.api.security import secure_router
 from aqp.services.metadata_catalog_service import MetadataCatalogService
 
-router = APIRouter(prefix="/metadata/catalog", tags=["metadata-catalog"])
+router = secure_router(prefix="/metadata/catalog", tags=["metadata-catalog"], default_scope="data:read")
 
 
 class MetadataDatasetResponse(BaseModel):

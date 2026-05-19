@@ -242,16 +242,40 @@ def auth0_sync(
             return []
 
     def _resolve_scopes(role_list: list[str]) -> list[str]:
-        # Map roles to the canonical four-scope grid (ADR 003).
+        # Phase 1 of the AQP control-plane maturation routes scope
+        # expansion through :func:`aqp.auth.scopes.expand_roles`, which
+        # accepts BOTH the canonical ``aqp-*`` role flavour AND the
+        # legacy tenancy ``viewer / editor / admin / owner`` flavour
+        # (translating the latter via :func:`legacy_role_to_aqp_role`
+        # before expansion). Closes the empty-claim drift bug where a
+        # user whose only Membership.role was ``editor`` ended up with
+        # an empty ``scopes`` array in the issued JWT.
         try:
-            from aqp_platform_core.auth.rbac import expand_role
+            from aqp.auth.scopes import expand_roles
 
-            granted: set[str] = set()
-            for role in role_list:
-                granted.update(expand_role(role))
-            return sorted(granted)
+            return sorted(expand_roles(role_list))
         except Exception:  # noqa: BLE001
             return []
+
+    def _resolve_canonical_roles(role_list: list[str]) -> list[str]:
+        # Emit BOTH legacy and canonical role names into the JWT so
+        # downstream code that branches on either flavour keeps working.
+        try:
+            from aqp.auth.scopes import normalize_role
+
+            seen: set[str] = set()
+            out: list[str] = []
+            for role in role_list:
+                if role and role not in seen:
+                    seen.add(role)
+                    out.append(role)
+                aqp_role = normalize_role(role)
+                if aqp_role and aqp_role not in seen:
+                    seen.add(aqp_role)
+                    out.append(aqp_role)
+            return out
+        except Exception:  # noqa: BLE001
+            return list(role_list)
 
     requested_claims = body.requested_claims if isinstance(body.requested_claims, dict) else {}
     # Convention: the Auth0 post-login Action sends connection metadata via
@@ -336,12 +360,13 @@ def auth0_sync(
         pass
 
     resource_ids = _resolve_resource_ids(internal_user_id)
-    scopes = _resolve_scopes(roles)
+    canonical_roles = _resolve_canonical_roles(roles)
+    scopes = _resolve_scopes(canonical_roles)
 
     return Auth0SyncResponse(
         org_id=org_id,
         workspace_id=workspace_id,
-        roles=roles,
+        roles=canonical_roles,
         resources=resource_ids,
         scopes=scopes,
         connection=connection,

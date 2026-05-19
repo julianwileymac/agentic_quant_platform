@@ -21,13 +21,14 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, model_validator
 
+from aqp.api.security import secure_router
 from aqp.core.types import Symbol
 from aqp.observability import get_tracer
 from aqp.ws.broker import asubscribe, publish
 
 logger = logging.getLogger(__name__)
 tracer = get_tracer("aqp.live")
-router = APIRouter(prefix="/live", tags=["live-market"])
+router = secure_router(prefix="/live", tags=["live-market"], default_scope="data:read")
 
 
 # ---------------------------------------------------------------------------
@@ -561,8 +562,17 @@ def book(vt_symbol: str, depth: int = 10) -> dict[str, list[dict[str, float]]]:
 
 @router.websocket("/stream/{channel_id}")
 async def stream(ws: WebSocket, channel_id: str) -> None:
-    """Relay Redis pub/sub messages for a live subscription to the client."""
+    """Relay Redis pub/sub messages for a live subscription to the client.
+
+    Phase 3a authentication: first client frame must be
+    ``{"type":"auth","token":"<JWT>"}``. See :mod:`aqp.auth.ws`.
+    """
+    from aqp.auth.ws import ws_authenticator
+
     await ws.accept()
+    auth_result = await ws_authenticator.authenticate(ws)
+    if auth_result is None:
+        return
     with tracer.start_as_current_span("live.ws.stream") as span:
         span.set_attribute("aqp.channel_id", channel_id)
         sub = _SUBS.get(channel_id)

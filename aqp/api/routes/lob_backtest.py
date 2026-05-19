@@ -24,11 +24,12 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/backtest/lob", tags=["backtest"])
+router = secure_router(prefix="/backtest/lob", tags=["backtest"], default_scope="trade:read")
 
 
 class LobBacktestRequest(BaseModel):

@@ -18,6 +18,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.cache.client import cache_iter_categories, get_cache
 from aqp.cache.keys import (
     CACHE_CATEGORIES,
@@ -27,7 +28,7 @@ from aqp.cache.keys import (
     names_zset,
 )
 
-router = APIRouter(prefix="/cache", tags=["cache"])
+router = secure_router(prefix="/cache", tags=["cache"], default_scope="data:read")
 
 
 class CacheNamePage(BaseModel):

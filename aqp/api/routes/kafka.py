@@ -14,6 +14,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.streaming.admin import (
     KafkaAdminError,
     KafkaAdminUnavailableError,
@@ -24,7 +25,7 @@ from aqp.streaming.admin.schema_registry import SchemaRegistryError
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/streaming/kafka", tags=["streaming"])
+router = secure_router(prefix="/streaming/kafka", tags=["streaming"], default_scope="read:infrastructure")
 
 
 class TopicView(BaseModel):

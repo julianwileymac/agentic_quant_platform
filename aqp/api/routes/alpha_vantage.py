@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from aqp.api.security import secure_router
 from aqp.data.sources.alpha_vantage.catalog import function_by_id, list_functions
 from aqp.data.sources.alpha_vantage.endpoint_state import (
     get_state as get_endpoint_state,
@@ -18,7 +19,7 @@ from aqp.data.sources.alpha_vantage.endpoint_state import (
 from aqp.services.alpha_vantage_service import AlphaVantageService
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/alpha-vantage", tags=["alpha-vantage"])
+router = secure_router(prefix="/alpha-vantage", tags=["alpha-vantage"], default_scope="data:read")
 
 _SERVICE: AlphaVantageService | None = None
 

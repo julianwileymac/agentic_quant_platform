@@ -24,13 +24,14 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import CrewRunRequest, TaskAccepted
 from aqp.persistence.db import get_session
 from aqp.persistence.models import AgentRun, CrewRun
 from aqp.tasks.agent_tasks import run_research_crew
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/agents", tags=["agents"])
+router = secure_router(prefix="/agents", tags=["agents"], default_scope="agent:view")
 
 
 class CrewRunSummary(BaseModel):
@@ -137,9 +138,17 @@ async def proposal_stream(ws: WebSocket) -> None:
     deployments do not yet emit proposal events; accepting the socket and
     sending a low-frequency heartbeat avoids repeated 403 reconnect noise
     while preserving the public route for future proposal broadcasts.
+
+    Phase 3a authentication: first client frame must be
+    ``{"type":"auth","token":"<JWT>"}``. See
+    :mod:`aqp.auth.ws` for the protocol and close-code semantics.
     """
+    from aqp.auth.ws import ws_authenticator
 
     await ws.accept()
+    auth_result = await ws_authenticator.authenticate(ws)
+    if auth_result is None:
+        return
     try:
         while True:
             await asyncio.sleep(30)

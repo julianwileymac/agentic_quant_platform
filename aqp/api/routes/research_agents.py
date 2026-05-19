@@ -7,11 +7,12 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/agents/research", tags=["agents", "research"])
+router = secure_router(prefix="/agents/research", tags=["agents", "research"], default_scope="agent:view")
 
 
 class ResearchInputs(BaseModel):

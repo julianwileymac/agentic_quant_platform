@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.persistence.db import get_session
 from aqp.persistence.models import DataSource, DatasetCatalog, DatasetVersion
@@ -17,7 +18,7 @@ from aqp.persistence.models_data_control import DatasetPipelineConfigRow, Source
 from aqp.persistence.models_pipelines import PipelineManifestRow, PipelineRunRow
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/data-control", tags=["data-control"])
+router = secure_router(prefix="/data-control", tags=["data-control"], default_scope="data:read")
 
 
 MetadataTarget = Literal["airbyte", "dagster", "dbt"]

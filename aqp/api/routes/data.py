@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import (
     ActiveDailyOhlcvIngestRequest,
     DataSearchRequest,
@@ -44,7 +45,7 @@ from aqp.tasks.ingestion_tasks import (
     sync_alpha_vantage_universe,
 )
 
-router = APIRouter(prefix="/data", tags=["data"])
+router = secure_router(prefix="/data", tags=["data"], default_scope="data:read")
 
 
 def _medallion_layer(namespace: str | None) -> str | None:

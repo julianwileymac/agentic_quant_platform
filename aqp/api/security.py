@@ -226,17 +226,29 @@ def _granted_scopes_for(user: CurrentUser, request: Request | None) -> set[str]:
             # AQP-namespaced ``roles`` claim (array) -> scope expansion.
             ns_roles = _namespaced_claim(claims, "roles")
             if isinstance(ns_roles, list):
+                # Phase 1 of the AQP control-plane maturation moved the
+                # canonical scope expansion behind
+                # :func:`aqp.auth.scopes.expand_role_canonical`, which
+                # accepts BOTH the platform ``aqp-*`` flavour and the
+                # legacy tenancy ``viewer / editor / admin / owner``
+                # flavour and translates the legacy ones via
+                # :func:`legacy_role_to_aqp_role` before expanding.
+                # That closes the empty-claim drift bug where a JWT
+                # carrying only ``editor`` ended up with no scopes.
                 try:
-                    from aqp_platform_core.auth.rbac import expand_role
+                    from aqp.auth.scopes import expand_role_canonical
 
                     for role in ns_roles:
-                        role_str = str(role)
-                        expanded = expand_role(role_str)
-                        scopes.update(expanded)
+                        scopes.update(expand_role_canonical(str(role)))
                 except Exception:  # noqa: BLE001
                     pass
                 # Legacy role names continue to grant data:* / admin so
                 # existing routes don't break during the migration window.
+                # The legacy lattice mirrors the role-rank ordering in
+                # ``aqp.config.defaults`` (viewer < editor < admin <
+                # owner). The canonical expansion above is authoritative;
+                # this block remains as a belt-and-suspenders override
+                # for tokens that pre-date the rbac extension.
                 for role in ns_roles:
                     role_str = str(role).lower()
                     if role_str in ("admin", "owner"):
@@ -401,10 +413,73 @@ def secure_router(
     )
 
 
+# ---------------------------------------------------------------------------
+# Phase 4d — DPoP (RFC 9449) per-route enforcement
+# ---------------------------------------------------------------------------
+
+
+def require_dpop_token() -> Callable[..., CurrentUser]:
+    """Build a dep that requires the request to carry a ``DPoP`` proof header.
+
+    DPoP (Demonstrating Proof-of-Possession, RFC 9449) binds an access
+    token to a client-held key pair so a stolen Bearer token cannot be
+    replayed by an attacker without the matching private key. The
+    auth0-fastapi-api SDK's mixed-mode (``dpop_enabled=True``,
+    ``dpop_required=False`` — see :mod:`aqp.auth.auth0_fastapi`)
+    accepts both Bearer and DPoP-bound tokens globally; this
+    dependency is the per-route escalation that REJECTS Bearer-only
+    requests for the highest-value endpoints.
+
+    Apply on top of the standard scope check::
+
+        @router.post(
+            "/apply",
+            dependencies=[
+                Depends(require_scope("terraform:apply")),
+                Depends(require_dpop_token()),
+            ],
+        )
+        async def apply(...): ...
+
+    Feature-flagged via ``settings.dpop_enforcement_enabled``. Off by
+    default to keep the existing operator workflow functional during
+    cutover. Operators flip the flag to ``True`` once every client
+    sending requests to the gated endpoints has migrated to a DPoP
+    proof. Even when the flag is off, the dependency runs (so the
+    surrounding auth chain still resolves) — it just doesn't reject.
+    """
+
+    def _dep(
+        request: Request,
+        user: CurrentUser = Depends(require_authenticated),
+    ) -> CurrentUser:
+        enforce = bool(getattr(settings, "dpop_enforcement_enabled", False))
+        if not enforce:
+            return user
+        # The DPoP header carries the proof JWT. Presence of the
+        # header is the cheap pre-check; the auth0-fastapi-api SDK
+        # validates the proof's signature, audience, and binding
+        # against the access token's `cnf.jkt` claim earlier in the
+        # request lifecycle when the SDK is configured.
+        dpop_header = request.headers.get("DPoP") or request.headers.get("dpop")
+        if not dpop_header:
+            _violation(
+                code=status.HTTP_401_UNAUTHORIZED,
+                detail="DPoP proof required for this endpoint",
+                request=request,
+                headers={"WWW-Authenticate": 'DPoP error="invalid_request"'},
+            )
+            return user
+        return user
+
+    return _dep
+
+
 __all__ = [
     "PUBLIC_ROUTERS",
     "filter_resources_for_user",
     "require_authenticated",
+    "require_dpop_token",
     "require_membership",
     "require_scope",
     "secure_router",

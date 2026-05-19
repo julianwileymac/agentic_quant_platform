@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
+from aqp.api.security import secure_router
 from aqp.persistence.db import get_session
 from aqp.persistence.models import (
     DataLink,
@@ -21,7 +22,7 @@ from aqp.persistence.models import (
     Instrument,
 )
 
-router = APIRouter(tags=["data-links"])
+router = secure_router(tags=["data-links"], default_scope="data:read")
 
 
 class DataAvailabilityRow(BaseModel):

@@ -178,6 +178,22 @@ configure_tracing(service_name=f"{settings.otel_service_name}-api")
 instrument_httpx()
 instrument_redis()
 
+# Phase 4a of the AQP control-plane maturation — structured JSON
+# logging with auto-injected OpenTelemetry trace_id + span_id and
+# ``request_id`` from the correlation-id middleware. Routing structlog
+# through the stdlib logging chain means every existing
+# ``logging.getLogger(__name__).info(...)`` callsite picks up the JSON
+# envelope without code changes.
+try:
+    from aqp.observability.logging import configure_structured_logging
+
+    configure_structured_logging(level=settings.env != "production" and "INFO" or "INFO")
+except Exception:  # noqa: BLE001
+    logging.getLogger(__name__).warning(
+        "structured logging configuration failed; falling back to stdlib defaults",
+        exc_info=True,
+    )
+
 
 def _maybe_run_iceberg_bootstrap() -> None:
     """Run the Polaris/Iceberg bootstrap manager when ``AQP_ICEBERG_AUTO_BOOTSTRAP`` is enabled.
@@ -289,6 +305,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Phase 4a — correlation IDs + structured request logging.
+# Order matters: CorrelationIDMiddleware MUST run BEFORE
+# StructuredLoggingMiddleware so the request_id is bound to
+# structlog's contextvars before the request log line is emitted.
+# Starlette executes middleware in REVERSE registration order (LIFO),
+# so we register StructuredLoggingMiddleware first, then
+# CorrelationIDMiddleware on top.
+try:
+    from aqp.api.middleware import (
+        CorrelationIDMiddleware,
+        StructuredLoggingMiddleware,
+    )
+
+    app.add_middleware(StructuredLoggingMiddleware)
+    app.add_middleware(CorrelationIDMiddleware)
+except Exception as exc:  # noqa: BLE001
+    logging.getLogger(__name__).warning(
+        "correlation/log middleware not registered: %s", exc
+    )
 
 # --- Core platform routers -----------------------------------------------
 app.include_router(health.router)
@@ -450,6 +485,19 @@ app.include_router(terraform_routes.router)
 app.include_router(terraform_routes.ws_router)
 app.include_router(infra_routes.router)
 app.include_router(infra_routes.ws_router)
+# Phase 2b of the AQP control-plane maturation — kill-switch fan-out for
+# the WorkloadRuntime (AGENTS rule 45). Mirrors the sidecar
+# ``aqp_control_plane`` ``/manage/workloads/halt`` endpoint so the
+# frontend KillSwitch component reaches the same surface in both
+# embedded and sidecar deployment modes.
+try:
+    from aqp.api.routes import workloads as workloads_routes  # noqa: E402
+
+    app.include_router(workloads_routes.router)
+except Exception as exc:  # noqa: BLE001
+    logging.getLogger(__name__).warning(
+        "workloads router not loaded: %s", exc
+    )
 # Management Engine — Cloudflare edge (tunnels / DNS / Access apps).
 try:
     from aqp.api.routes import cloudflare as cloudflare_routes  # noqa: E402

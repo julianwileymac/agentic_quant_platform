@@ -28,9 +28,10 @@ from typing import Any, get_args, get_origin
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/registry", tags=["registry"])
+router = secure_router(prefix="/registry", tags=["registry"], default_scope="data:read")
 
 
 def _ensure_registry_populated() -> None:

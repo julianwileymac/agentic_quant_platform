@@ -350,6 +350,45 @@ def _attach_finops_headers(sender=None, headers=None, body=None, **_kwargs):
     headers[_FINOPS_HEADER_KEY] = labels
 
 
+# Phase 3b of the AQP control-plane maturation. Snapshot the active
+# :class:`RequestContext` (set by the FastAPI dep
+# :func:`aqp.auth.deps.current_context`) onto the task message headers
+# so workers running ``SecureTask`` subclasses can rebuild it without
+# every dispatch site threading ``user_id`` / ``workspace_id``
+# kwargs through. Pre-existing kwargs continue to win — this layer
+# only fills the gap where dispatch sites forgot to plumb context.
+@before_task_publish.connect
+def _attach_request_context_headers(sender=None, headers=None, body=None, **_kwargs):
+    """Stamp every dispatch with the active :class:`RequestContext` snapshot.
+
+    Reads the contextvar set by :func:`aqp.auth.contextvars.bind_context`
+    on the API thread; writes the resulting flat dict onto the task
+    message headers under the ``x-aqp-rctx`` key. Workers using the
+    :class:`aqp.tasks.secure_task.SecureTask` base class rebuild the
+    context from this header on entry. Skipped when no context is
+    bound (CLI-driven dispatch, beat tasks, externally produced
+    messages) — the worker falls back to the local-first default.
+    """
+    if headers is None:
+        return
+    try:
+        from aqp.auth.contextvars import current_request_context
+
+        ctx = current_request_context.get()
+        if ctx is None:
+            return
+        from aqp.tasks.secure_task import RCTX_HEADER_KEY, context_to_headers
+
+        snapshot = context_to_headers(ctx)
+        # Defence-in-depth — caller-supplied headers always win.
+        existing = headers.get(RCTX_HEADER_KEY)
+        if isinstance(existing, dict) and existing.get("user_id"):
+            snapshot.update(existing)
+        headers[RCTX_HEADER_KEY] = snapshot
+    except Exception:  # noqa: BLE001
+        return
+
+
 @task_prerun.connect
 def _record_finops_on_span(sender=None, task_id=None, task=None, **_kwargs):
     """Mirror the FinOps headers onto the active OTEL span and the task obj.
@@ -391,6 +430,16 @@ def _record_finops_on_span(sender=None, task_id=None, task=None, **_kwargs):
 def _configure_worker_tracing(*_args, **_kwargs):
     configure_tracing(service_name=f"{settings.otel_service_name}-worker")
     instrument_celery()
+    # Phase 4a of the AQP control-plane maturation — give the worker
+    # the same structured JSON logging envelope the API uses. Done
+    # per-subprocess so every worker has the OTel trace_id /
+    # span_id processor and the RequestContext processor wired in.
+    try:
+        from aqp.observability.logging import configure_structured_logging
+
+        configure_structured_logging()
+    except Exception:  # noqa: BLE001
+        logger.warning("worker structured logging not configured", exc_info=True)
     # MLflow autolog hooks are wired lazily to avoid a hard dependency
     # at import time (the tracking URI may not yet be reachable).
     try:

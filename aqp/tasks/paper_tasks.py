@@ -16,6 +16,7 @@ from typing import Any
 from aqp.config import settings
 from aqp.tasks._progress import emit, emit_done, emit_error
 from aqp.tasks.celery_app import celery_app
+from aqp.tasks.secure_task import SecureTask
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ async def _watch_stop_signal(task_id: str, session: Any) -> None:
         await client.close()
 
 
-@celery_app.task(bind=True, name="aqp.tasks.paper_tasks.run_paper")
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.paper_tasks.run_paper")
 def run_paper(
     self,
     cfg: dict[str, Any],

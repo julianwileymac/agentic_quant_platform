@@ -14,6 +14,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.persistence.db import get_session
 from aqp.streaming.producers import (
     ProducerError,
@@ -23,7 +24,7 @@ from aqp.streaming.producers.supervisor import _producer_summary
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/streaming/producers", tags=["streaming"])
+router = secure_router(prefix="/streaming/producers", tags=["streaming"], default_scope="read:infrastructure")
 
 
 class ProducerView(BaseModel):

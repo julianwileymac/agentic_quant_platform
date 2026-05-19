@@ -415,8 +415,17 @@ async def k8s_pod_logs(
     since_seconds: int | None = Query(default=None),
     tail_lines: int | None = Query(default=None),
 ) -> None:
-    """Stream pod logs as canonical progress frames."""
+    """Stream pod logs as canonical progress frames.
+
+    Phase 3a authentication: first client frame must be
+    ``{"type":"auth","token":"<JWT>"}``. See :mod:`aqp.auth.ws`.
+    """
+    from aqp.auth.ws import ws_authenticator
+
     await ws.accept()
+    auth_result = await ws_authenticator.authenticate(ws)
+    if auth_result is None:
+        return
     adapter = _k8s_adapter()
     if adapter is None or not adapter.is_available():
         await ws.send_json(
@@ -558,8 +567,17 @@ def update_canary_weight(
 
 @ws_router.websocket("/ws/infra/bot-status")
 async def bot_status_stream(ws: WebSocket) -> None:
-    """30s-tick fan-out of bot fleet + queue status for the dashboard."""
+    """30s-tick fan-out of bot fleet + queue status for the dashboard.
+
+    Phase 3a authentication: first client frame must be
+    ``{"type":"auth","token":"<JWT>"}``. See :mod:`aqp.auth.ws`.
+    """
+    from aqp.auth.ws import ws_authenticator
+
     await ws.accept()
+    auth_result = await ws_authenticator.authenticate(ws)
+    if auth_result is None:
+        return
     try:
         while True:
             payload: dict[str, Any] = {

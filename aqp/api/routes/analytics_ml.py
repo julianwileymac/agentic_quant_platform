@@ -18,10 +18,11 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 logger = logging.getLogger(__name__)
 
 
-router = APIRouter(prefix="/analytics/ml", tags=["analytics", "ml"])
+router = secure_router(prefix="/analytics/ml", tags=["analytics", "ml"], default_scope="data:read")
 
 
 def _safe_float(x: Any) -> float | None:

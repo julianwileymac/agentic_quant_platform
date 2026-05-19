@@ -6,12 +6,13 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from aqp.api.security import secure_router
 from aqp.config import settings
 from aqp.data.compute import LocalBackend
 from aqp.data.compute.selection import SizeHint, pick_backend
 from aqp.data.engine.manifest import ComputeBackendKind, ComputeSpec
 
-router = APIRouter(prefix="/compute", tags=["compute"])
+router = secure_router(prefix="/compute", tags=["compute"], default_scope="read:infrastructure")
 
 
 class PickRequest(BaseModel):

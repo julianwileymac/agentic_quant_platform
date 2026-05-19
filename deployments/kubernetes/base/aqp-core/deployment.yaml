@@ -65,23 +65,31 @@ spec:
             capabilities:
               drop:
                 - ALL
+          # Phase 4b control-plane maturation: split the single
+          # /health probe into Kubernetes-native /livez (no deps,
+          # used by the kubelet to decide whether to restart the pod)
+          # and /readyz (Postgres + Redis + Auth0 JWKS, used to gate
+          # Service endpoint inclusion). /health remains for external
+          # dashboards.
           readinessProbe:
             httpGet:
-              path: /health
+              path: /readyz
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
+            failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /health
+              path: /livez
               port: http
             initialDelaySeconds: 60
             periodSeconds: 30
-            timeoutSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           startupProbe:
             httpGet:
-              path: /health
+              path: /readyz
               port: http
             periodSeconds: 5
             failureThreshold: 60  # ~5 min startup window
@@ -102,3 +110,17 @@ spec:
           labelSelector:
             matchLabels:
               app: aqp-core
+      # Phase 4c control-plane maturation: prefer ARM64 nodes so
+      # workloads land on the rpi_kubernetes RPi5 edge cluster when
+      # mixed-arch nodes are available, but never refuse to schedule
+      # in a single-arch (amd64-only) test cluster. The image must be
+      # multi-arch (built via the ``build-multi-arch.yml`` workflow).
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["arm64", "amd64"]

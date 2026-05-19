@@ -23,12 +23,13 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
+from aqp.api.security import secure_router
 from aqp.config import settings
 from aqp.persistence.db import get_session
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/workflows", tags=["workflows", "orchestration"])
+router = secure_router(prefix="/workflows", tags=["workflows", "orchestration"], default_scope="agent:view")
 
 
 # ----------------------------------------------------------------------------

@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
+from aqp.api.security import secure_router
 from aqp.config import settings
 from aqp.data.sources.base import ProbeResult
 from aqp.data.sources.registry import (
@@ -36,7 +37,7 @@ from aqp.data.sources.setup_wizards import (
 from aqp.persistence.db import get_session
 from aqp.persistence.models_data_control import SourceLibraryEntry, SourceMetadataVersion
 
-router = APIRouter(prefix="/sources", tags=["sources"])
+router = secure_router(prefix="/sources", tags=["sources"], default_scope="data:read")
 
 
 class DataSourceSummary(BaseModel):

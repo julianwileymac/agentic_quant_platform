@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
 from aqp.bots.spec import BotSpec
 from aqp.persistence import async_session_dep
@@ -40,7 +41,7 @@ from aqp.persistence.models_bots import BotDeployment, BotVersion
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/bots", tags=["bots"])
+router = secure_router(prefix="/bots", tags=["bots"], default_scope="trade:read")
 
 
 # ----------------------------------------------------------------- schemas

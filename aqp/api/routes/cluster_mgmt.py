@@ -40,6 +40,7 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
+from aqp.api.security import secure_router
 from aqp.kubernetes import (
     KubernetesAdapter,
     KubernetesAdapterError,
@@ -51,8 +52,8 @@ logger = logging.getLogger(__name__)
 
 
 _routes = APIRouter(tags=["streaming", "cluster"])
-router = APIRouter(prefix="/cluster", tags=["streaming", "cluster"])
-legacy_router = APIRouter(prefix="/cluster-mgmt", tags=["streaming", "cluster"])
+router = secure_router(prefix="/cluster", tags=["streaming", "cluster"], default_scope="read:infrastructure")
+legacy_router = secure_router(prefix="/cluster-mgmt", tags=["streaming", "cluster"], default_scope="read:infrastructure")
 
 
 def _adapter() -> KubernetesAdapter:
@@ -403,7 +404,20 @@ async def _pod_logs_ws(
     tail_lines: int | None,
     follow: bool,
 ) -> None:
+    """Stream Kubernetes pod logs to the operator UI.
+
+    Phase 3a authentication: first client frame must be
+    ``{"type":"auth","token":"<JWT>"}``. See :mod:`aqp.auth.ws` for the
+    protocol and close-code semantics. The kill-switch + per-line
+    audit live downstream in
+    :class:`aqp_platform_core.runtime.workload.WorkloadRuntime`.
+    """
+    from aqp.auth.ws import ws_authenticator
+
     await ws.accept()
+    auth_result = await ws_authenticator.authenticate(ws)
+    if auth_result is None:
+        return
     try:
         from aqp.config import settings
 
