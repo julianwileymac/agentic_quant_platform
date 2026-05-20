@@ -24,7 +24,7 @@ cd agentic_quant_platform
 python -m pip install -e .
 python -m pip install -e ./aqp_platform_core[dev]
 python -m pip install -e ./aqp_control_plane[dev,all-providers]
-pnpm --dir frontend install
+pnpm --dir aqp_client install
 ```
 
 ## Step 2 — generate `.env.local`
@@ -91,6 +91,6 @@ make test-providers      # aqp_control_plane provider contract tests
 | --- | --- |
 | `make generate-config ENV=local` errors with `missing required fields` | The schema parser caught a malformed block in `.env.schema`. Open the file, look for the entry above the error line, ensure every block has `key:` / `description:` / `required:` / `targets:` / `classification:`. |
 | `docker compose up` fails with `port already in use` | The Vite dev server publishes 3001 by default; the compose stack publishes 3000. Stop whichever is running first or override via `docker-compose.override.yml`. |
-| `pnpm --dir frontend build` runs out of memory | `NODE_OPTIONS=--max-old-space-size=4096 pnpm --dir frontend build`. |
+| `pnpm --dir aqp_client build` runs out of memory | `NODE_OPTIONS=--max-old-space-size=4096 pnpm --dir aqp_client build`. |
 | `aqp deploy up` fails with `terraform binary not found` | `choco install terraform` (Windows) or set `AQP_TERRAFORM_BINARY=/path/to/terraform`. |
 | `aqp_control_plane` shows `auth_disabled=true` in `/manage/health` | Set `AQP_AUTH_OIDC_ISSUER=https://your-tenant.us.auth0.com/` in `.env.local`, restart `aqp-cp`. |

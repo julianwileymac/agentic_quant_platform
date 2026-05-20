@@ -34,10 +34,10 @@ flowchart LR
 
 | Phase | Surface | Key files | AGENTS rule | Doc |
 | --- | --- | --- | --- | --- |
-| 0 — Foundation | Kedro-style `BaseDataset`, Redis prefetch cache, `EntityPicker` | [`aqp/data/datasets/`](../aqp/data/datasets/), [`aqp/cache/`](../aqp/cache/), [`frontend/src/components/common/EntityPicker.tsx`](../frontend/src/components/common/EntityPicker.tsx), Alembic 0032 | 29 | [datasets-catalog.md](datasets-catalog.md), [metadata-cache.md](metadata-cache.md) |
-| 1 — Discovery | Unified ingested + uningested catalog browser, CRUD, lifecycle classification, promote handoff | [`aqp/data/discovery/`](../aqp/data/discovery/), [`aqp/api/routes/discovery.py`](../aqp/api/routes/discovery.py), [`/data/discovery`](../frontend/src/routes/data/discovery/page.tsx) | 30 | [data-discovery.md](data-discovery.md) |
+| 0 — Foundation | Kedro-style `BaseDataset`, Redis prefetch cache, `EntityPicker` | [`aqp/data/datasets/`](../aqp/data/datasets/), [`aqp/cache/`](../aqp/cache/), [`aqp_client/src/components/common/EntityPicker.tsx`](../aqp_client/src/components/common/EntityPicker.tsx), Alembic 0032 | 29 | [datasets-catalog.md](datasets-catalog.md), [metadata-cache.md](metadata-cache.md) |
+| 1 — Discovery | Unified ingested + uningested catalog browser, CRUD, lifecycle classification, promote handoff | [`aqp/data/discovery/`](../aqp/data/discovery/), [`aqp/api/routes/discovery.py`](../aqp/api/routes/discovery.py), [`/data/discovery`](../aqp_client/src/routes/data/discovery/page.tsx) | 30 | [data-discovery.md](data-discovery.md) |
 | 2 — Airbyte builder | Schema-driven low-code builder, AQP Fetcher codegen (no `AIRBYTE_ENABLE_UNSAFE_CODE`) | [`aqp/data/airbyte/builder/`](../aqp/data/airbyte/builder/), [`aqp/data/fetchers/userland/`](../aqp/data/fetchers/userland/), Alembic 0033 | 31 | [airbyte-builder.md](airbyte-builder.md) |
-| 3 — Sandbox | Per-session ephemeral Dagster + Airbyte sandbox, isolated Redis, env override, streaming logs | [`aqp/dagster/sandbox/`](../aqp/dagster/sandbox/), [`/data/sandbox`](../frontend/src/routes/data/sandbox/page.tsx), Alembic 0034 | 32 | [dagster-sandbox.md](dagster-sandbox.md) |
+| 3 — Sandbox | Per-session ephemeral Dagster + Airbyte sandbox, isolated Redis, env override, streaming logs | [`aqp/dagster/sandbox/`](../aqp/dagster/sandbox/), [`/data/sandbox`](../aqp_client/src/routes/data/sandbox/page.tsx), Alembic 0034 | 32 | [dagster-sandbox.md](dagster-sandbox.md) |
 
 ## How the phases compose
 
@@ -53,7 +53,7 @@ flowchart LR
    `LineageEvent(transform_kind="discovery.promoted")` and deep-
    links into `/airbyte/builder?from=discovery&entry_id=…`.
 3. **Phase 2** consumes that deep-link in
-   [`ConnectorBuilderForm`](../frontend/src/components/airbyte/builder/ConnectorBuilderForm.tsx),
+   [`ConnectorBuilderForm`](../aqp_client/src/components/airbyte/builder/ConnectorBuilderForm.tsx),
    pre-fills metadata + base URL, and produces either a low-code
    YAML manifest or an AQP-native Fetcher stub under
    `aqp/data/fetchers/userland/`. Credentials are picked through

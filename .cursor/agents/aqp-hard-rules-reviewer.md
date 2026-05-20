@@ -172,7 +172,7 @@ Common violations to flag:
   the docker-compose stack.
 - `fig.show()` anywhere in the FastAPI / Celery codebase.
 - Raw `WebSocket` listener in the frontend that bypasses the
-  throttled pipeline in `frontend/src/lib/ws/`.
+  throttled pipeline in `aqp_client/src/lib/ws/`.
 
 **Phase 5 (Agent stall watchdog) addenda**
 - New AgentRuntime constructor inside the watchdog body — the

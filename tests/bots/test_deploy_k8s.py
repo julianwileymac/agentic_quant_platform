@@ -7,12 +7,12 @@ from typing import Any
 import pytest
 import yaml
 
-from aqp.bots.deploy import (
+from aqp_bots.deploy import (
     DeploymentDispatcher,
     KubernetesTarget,
 )
-from aqp.bots.spec import BotSpec, DeploymentTargetSpec, UniverseRef
-from aqp.bots.trading_bot import TradingBot
+from aqp_bots.spec import BotSpec, DeploymentTargetSpec, UniverseRef
+from aqp_bots.trading_bot import TradingBot
 
 
 def _trading_spec(**overrides: Any) -> BotSpec:
@@ -111,8 +111,8 @@ def test_render_manifest_uses_resource_overrides() -> None:
 def test_kubernetes_target_writes_file_to_manifest_root(tmp_path: Path, monkeypatch) -> None:
     """Deploy with apply=False writes the manifest YAML next to the kustomization."""
     bot = TradingBot(spec=_trading_spec())
-    monkeypatch.setattr("aqp.bots.deploy._open_deployment_row", lambda *a, **kw: None)
-    monkeypatch.setattr("aqp.bots.deploy._finalise_deployment_row", lambda *a, **kw: None)
+    monkeypatch.setattr("aqp_bots.deploy._open_deployment_row", lambda *a, **kw: None)
+    monkeypatch.setattr("aqp_bots.deploy._finalise_deployment_row", lambda *a, **kw: None)
 
     target = KubernetesTarget(manifest_root=tmp_path, apply=False)
     result = target.deploy(bot, overrides={})
@@ -129,9 +129,9 @@ def test_kubernetes_target_writes_file_to_manifest_root(tmp_path: Path, monkeypa
 
 def test_kubernetes_target_skips_apply_without_kubectl(tmp_path: Path, monkeypatch) -> None:
     """When apply=True but kubectl isn't on PATH the target writes the manifest only."""
-    monkeypatch.setattr("aqp.bots.deploy.shutil.which", lambda name: None)
-    monkeypatch.setattr("aqp.bots.deploy._open_deployment_row", lambda *a, **kw: None)
-    monkeypatch.setattr("aqp.bots.deploy._finalise_deployment_row", lambda *a, **kw: None)
+    monkeypatch.setattr("aqp_bots.deploy.shutil.which", lambda name: None)
+    monkeypatch.setattr("aqp_bots.deploy._open_deployment_row", lambda *a, **kw: None)
+    monkeypatch.setattr("aqp_bots.deploy._finalise_deployment_row", lambda *a, **kw: None)
 
     bot = TradingBot(spec=_trading_spec())
     target = KubernetesTarget(manifest_root=tmp_path, apply=True)

@@ -139,7 +139,7 @@ resource "null_resource" "backend_image" {
 # Frontend image — Vite build wrapped in nginx.
 #
 # Build assumes the bundle has already landed under
-# ``frontend/dist/`` (the CLI's ``aqp deploy build`` runs ``pnpm
+# ``aqp_client/dist/`` (the CLI's ``aqp deploy build`` runs ``pnpm
 # build`` before terraform apply for module.aqp_images).
 # ---------------------------------------------------------------------------
 
@@ -159,19 +159,19 @@ resource "null_resource" "frontend_image" {
       set -e
       cd "${var.context_path}"
       if [ ! -d "${var.frontend_dist_path}" ]; then
-        echo "[aqp_images] frontend dist missing at ${var.frontend_dist_path}; running 'pnpm --dir frontend build' first."
-        pnpm --dir frontend build
+        echo "[aqp_images] frontend dist missing at ${var.frontend_dist_path}; running 'pnpm --dir aqp_client build' first."
+        pnpm --dir aqp_client build
       fi
-      cat > frontend/Dockerfile.tf << 'DOCKER_EOF'
+      cat > aqp_client/Dockerfile.tf << 'DOCKER_EOF'
       FROM nginx:1.27-alpine
-      COPY frontend/dist/ /usr/share/nginx/html/
+      COPY aqp_client/dist/ /usr/share/nginx/html/
       RUN printf 'server {\n  listen 80;\n  root /usr/share/nginx/html;\n  location / {\n    try_files $uri $uri/ /index.html;\n  }\n}\n' > /etc/nginx/conf.d/default.conf
       EXPOSE 80
       DOCKER_EOF
       docker build \
         -t "${self.triggers.image_tag}" \
         -t "${var.registry_host}/aqp-frontend:${var.app_version}" \
-        -f frontend/Dockerfile.tf \
+        -f aqp_client/Dockerfile.tf \
         .
       docker push "${self.triggers.image_tag}"
     EOT

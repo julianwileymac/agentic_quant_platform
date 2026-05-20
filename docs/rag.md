@@ -2,7 +2,7 @@
 
 The platform's retrieval-augmented generation layer is a faithful port
 of the four-level hierarchical RAG described in *Alpha-GPT: Human-AI
-Interactive Alpha Mining* (`inspiration/2308.00016v2.pdf`, Section 3.2,
+Interactive Alpha Mining* (`aqp_snippets/inspiration/2308.00016v2.pdf`, Section 3.2,
 Figure 3) on top of **Redis Stack / RediSearch** instead of the paper's
 Faiss store. All vectors, tag indexes, working-memory queues, and
 reflection logs share one Redis instance configured by

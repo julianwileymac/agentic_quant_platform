@@ -351,7 +351,7 @@ def halt_agents(engage_risk: bool = Query(default=True)) -> dict[str, Any]:
 
     Idempotent kill-switch fan-out target wired to the topbar
     ``KillSwitch`` component
-    (``frontend/src/components/common/KillSwitch.tsx``). Selects every
+    (``aqp_client/src/components/common/KillSwitch.tsx``). Selects every
     ``AgentRunV2`` in ``status="running"`` (or ``"pending"``) with a
     ``task_id`` and asks Celery to revoke + terminate them. Each row is
     flipped to ``status="halted"`` so the run-detail UI reflects the

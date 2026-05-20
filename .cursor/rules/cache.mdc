@@ -11,7 +11,7 @@ Phase plan: [.cursor/plans/data-self-service-phase-0.plan.md](mdc:.cursor/plans/
 1. **No free-text entity inputs.** Every frontend form that names a
    dataset, namespace, sink kind, Airbyte connector, project, or
    credential MUST use
-   [`EntityPicker`](mdc:frontend/src/components/common/EntityPicker.tsx)
+   [`EntityPicker`](mdc:aqp_client/src/components/common/EntityPicker.tsx)
    bound to the matching `CacheCategory`. Free-text inputs are
    reserved for descriptions / queries / search boxes — never for
    entity names that exist on the backend.

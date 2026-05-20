@@ -298,7 +298,7 @@ def down(
 @app.command("build")
 def build(
     skip_frontend: bool = typer.Option(
-        False, "--skip-frontend", help="Skip 'pnpm --dir frontend build'."
+        False, "--skip-frontend", help="Skip 'pnpm --dir aqp_client build'."
     ),
 ) -> None:
     """Rebuild backend + frontend images and push them to the local registry.
@@ -319,9 +319,9 @@ def build(
                 err=True,
             )
         else:
-            typer.echo("[aqp deploy] running 'pnpm --dir frontend build'")
+            typer.echo("[aqp deploy] running 'pnpm --dir aqp_client build'")
             rc = _run_subprocess(
-                [pnpm, "--dir", str(repo_root / "frontend"), "build"],
+                [pnpm, "--dir", str(repo_root / "aqp_client"), "build"],
                 label="frontend build",
             )
             if rc != 0:
@@ -435,7 +435,7 @@ def publish_rpi(
         if pnpm is None:
             typer.secho("[aqp deploy] pnpm not on PATH", fg=typer.colors.RED, err=True)
             raise typer.Exit(127)
-        rc = _run_subprocess([pnpm, "--dir", str(repo_root / "frontend"), "build"], label="frontend build")
+        rc = _run_subprocess([pnpm, "--dir", str(repo_root / "aqp_client"), "build"], label="frontend build")
         if rc != 0:
             raise typer.Exit(rc)
 
@@ -460,16 +460,16 @@ def publish_rpi(
             raise typer.Exit(rc)
 
     frontend_image = f"{registry}/aqp-frontend:{tag}"
-    frontend_dockerfile = repo_root / "frontend" / "Dockerfile.tf"
+    frontend_dockerfile = repo_root / "aqp_client" / "Dockerfile.tf"
     if not frontend_dockerfile.exists():
         frontend_dockerfile.write_text(
-            "FROM nginx:1.27-alpine\nCOPY dist/ /usr/share/nginx/html/\n"
+            "FROM nginx:1.27-alpine\nCOPY aqp_client/dist/ /usr/share/nginx/html/\n"
             "RUN printf 'server {\\n  listen 80;\\n  root /usr/share/nginx/html;\\n  location / {\\n    try_files $$uri $$uri/ /index.html;\\n  }\\n}\\n' > /etc/nginx/conf.d/default.conf\n"
             "EXPOSE 80\n",
             encoding="utf-8",
         )
     rc = _run_subprocess(
-        [docker, "build", "-t", frontend_image, "-f", str(frontend_dockerfile), str(repo_root / "frontend")],
+        [docker, "build", "-t", frontend_image, "-f", str(frontend_dockerfile), str(repo_root)],
         label="docker build frontend",
     )
     if rc != 0:

@@ -68,7 +68,7 @@ Do not violate any of these:
   - `aqp/tasks/agent_watchdog_tasks.py`
   - `aqp/agents/observability.py`
 - Kill/halt:
-  - `frontend/src/components/common/KillSwitch.tsx`
+  - `aqp_client/src/components/common/KillSwitch.tsx`
   - halt endpoints under `aqp/api/routes/`
 - Existing abstraction patterns to mirror:
   - `aqp/core/registry.py`
@@ -247,7 +247,7 @@ Touchpoints:
 
 - `aqp/api/routes/` (new workflow route module)
 - persistence models and migration(s) under `aqp/persistence/` + `alembic/versions/`
-- `frontend/src/routes/` and/or `frontend/src/components/` for workflow studio surfaces
+- `aqp_client/src/routes/` and/or `aqp_client/src/components/` for workflow studio surfaces
 - docs updates in `docs/`
 
 Acceptance criteria:
@@ -268,7 +268,7 @@ Touchpoints:
 - `aqp/api/routes/agent_specs.py`
 - `aqp/tasks/agent_watchdog_tasks.py`
 - `aqp/agents/graph/conditions.py`
-- `frontend/src/components/common/KillSwitch.tsx`
+- `aqp_client/src/components/common/KillSwitch.tsx`
 
 Acceptance criteria:
 

@@ -86,7 +86,7 @@ services:
   aqp-client:
     build:
       context: ../../
-      dockerfile: build/docker/aqp_client/Dockerfile
+      dockerfile: aqp_client/Dockerfile
     image: ghcr.io/julianwiley/aqp-client:${AQP_APP_VERSION:-dev}
     ports:
       - "3000:8080"

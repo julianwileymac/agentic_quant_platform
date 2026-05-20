@@ -2,7 +2,7 @@
 
 > Phase 2 of the self-service data fabric. The builder replaces the
 > JSON editor in
-> [`AirbyteWorkspace.tsx`](../frontend/src/components/airbyte/AirbyteWorkspace.tsx)
+> [`AirbyteWorkspace.tsx`](../aqp_client/src/components/airbyte/AirbyteWorkspace.tsx)
 > with a schema-driven form that emits either a low-code Airbyte YAML
 > manifest **or** an AQP-native
 > [`Fetcher`](../aqp/data/fetchers/base.py) stub under
@@ -62,7 +62,7 @@ the Python definition, not the React component.
 
 ## Frontend
 
-[`ConnectorBuilderForm.tsx`](../frontend/src/components/airbyte/builder/ConnectorBuilderForm.tsx):
+[`ConnectorBuilderForm.tsx`](../aqp_client/src/components/airbyte/builder/ConnectorBuilderForm.tsx):
 
 - Schema-driven form generator from `/airbyte/builder/cdk-schema`.
 - Authentication block uses `<EntityPicker kind="credentials" />` —

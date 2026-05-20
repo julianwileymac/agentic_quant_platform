@@ -39,7 +39,7 @@ without losing context.
 | `/analysis/runs/[id]` | Run detail (steps + chart previews) |
 
 The Composer reuses the existing
-[`WorkflowEditor`](../frontend/src/components/flow/WorkflowEditor.tsx) with
+[`WorkflowEditor`](../aqp_client/src/components/flow/WorkflowEditor.tsx) with
 `domain="analysis"`. The serializer turns the canvas graph into an
 `AnalysisSpec` payload, posts it to `POST /analysis/specs`, then to
 `POST /analysis/specs/{slug}/run`.
@@ -62,11 +62,11 @@ The Composer reuses the existing
 The lab does not reinvent existing surfaces — it deep-links into them
 when the user wants a richer experience:
 
-- Derivatives tab → [`/options/lab`](../frontend/src/routes/options/lab/page.tsx)
+- Derivatives tab → [`/options/lab`](../aqp_client/src/routes/options/lab/page.tsx)
   for instrument-level workflows.
-- Portfolio tab → [`/optimizer`](../frontend/src/routes/optimizer/page.tsx)
+- Portfolio tab → [`/optimizer`](../aqp_client/src/routes/optimizer/page.tsx)
   for multi-strategy parameter sweeps.
 - Factors tab wraps the existing
-  [`FactorWorkbench`](../frontend/src/components/factors/FactorWorkbench.tsx).
+  [`FactorWorkbench`](../aqp_client/src/components/factors/FactorWorkbench.tsx).
 - Visualisations of Iceberg outputs deep-link into
-  [`/visualizations`](../frontend/src/routes/visualizations/page.tsx).
+  [`/visualizations`](../aqp_client/src/routes/visualizations/page.tsx).

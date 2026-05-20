@@ -1,6 +1,6 @@
 """Graphical Airbyte connector builder REST surface (phase 2).
 
-Backs `frontend/src/components/airbyte/builder/ConnectorBuilderForm.tsx`.
+Backs `aqp_client/src/components/airbyte/builder/ConnectorBuilderForm.tsx`.
 The builder produces either a low-code YAML manifest (declarative
 only) or an AQP-native :class:`Fetcher` stub generated under
 :file:`aqp/data/fetchers/userland/<slug>.py` — the latter being the

@@ -1,0 +1,26 @@
+---
+description: Keep aqp_control_plane isolated from the AQP monolith.
+globs:
+  - "aqp_control_plane/**"
+alwaysApply: false
+---
+
+# AQP Control Plane
+
+- `aqp_control_plane/` owns `/manage/*`, workload lifecycle, provider
+  adapters, telemetry snapshots, and standalone control-plane service code.
+- It may depend on `aqp_platform_core`, but must never import `aqp.*`.
+- Routes should thin-wrap services/runtimes; provider SDK calls belong in
+  provider implementations, not route handlers.
+- Do not print or return bearer tokens, kubeconfigs, tunnel secrets, or
+  secret payloads.
+- Heavy provider dependencies belong in optional extras.
+
+Validation:
+
+```bash
+rg --type py "^from aqp(\.|$)|^import aqp(\.|$)" aqp_control_plane/src
+cd aqp_control_plane
+python -m pytest tests
+```
+

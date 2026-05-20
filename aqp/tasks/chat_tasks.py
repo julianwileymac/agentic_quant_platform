@@ -1,6 +1,6 @@
 """Async LLM chat completion as a Celery task.
 
-The Vite chat surface (``frontend/src/routes/chat/page.tsx``) posts a
+The Vite chat surface (``aqp_client/src/routes/chat/page.tsx``) posts a
 prompt to ``POST /chat/messages`` and expects a ``TaskAccepted`` with a
 ``task_id``. The frontend then opens ``/chat/stream/{task_id}`` and
 incrementally renders ``msg.delta`` chunks into the assistant bubble,
@@ -113,7 +113,7 @@ def chat_completion(
 
     Emits ``stage="start"`` on launch, multiple ``stage="delta"`` frames
     carrying ``delta=<chunk>`` strings (consumed by
-    ``frontend/src/lib/ws/useChatStream.ts``), then ``emit_done`` with
+    ``aqp_client/src/lib/ws/useChatStream.ts``), then ``emit_done`` with
     the full ``content`` and rich result envelope.
     """
     task_id = self.request.id or "local"

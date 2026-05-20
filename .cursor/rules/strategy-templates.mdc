@@ -5,7 +5,7 @@ globs:
   - "scripts/ingest_lean_templates.py"
   - "aqp/data/mcp/tools/strategies.py"
   - "aqp/api/routes/strategy_templates.py"
-  - "frontend/src/routes/strategy-development/templates/**/*.tsx"
+  - "aqp_client/src/routes/strategy-development/templates/**/*.tsx"
 ---
 
 # Strategy template catalog (LEAN + community)

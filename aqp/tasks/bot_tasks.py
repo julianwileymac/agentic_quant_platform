@@ -36,9 +36,9 @@ def _load_bot(bot_ref: str) -> Any:
     2. Postgres ``bots`` row by slug.
     3. In-memory :func:`get_bot_spec` registry by name (YAML / decorator).
     """
-    from aqp.bots.base import build_bot
-    from aqp.bots.registry import get_bot_spec
-    from aqp.bots.spec import BotSpec
+    from aqp_bots.base import build_bot
+    from aqp_bots.registry import get_bot_spec
+    from aqp_bots.spec import BotSpec
     from aqp.persistence.db import SessionLocal
     from aqp.persistence.models_bots import Bot as BotRow
 
@@ -78,7 +78,7 @@ def run_bot_backtest(
     task_id = self.request.id or "local"
     emit(task_id, "start", f"Loading bot {bot_ref!r}…")
     try:
-        from aqp.bots.runtime import BotRuntime
+        from aqp_bots.runtime import BotRuntime
 
         bot = _load_bot(bot_ref)
         runtime = BotRuntime(bot, task_id=task_id)
@@ -104,7 +104,7 @@ def run_bot_paper(
     task_id = self.request.id or "local"
     emit(task_id, "start", f"Starting paper session for bot {bot_ref!r}…")
     try:
-        from aqp.bots.runtime import BotRuntime
+        from aqp_bots.runtime import BotRuntime
 
         bot = _load_bot(bot_ref)
         runtime = BotRuntime(bot, task_id=task_id)
@@ -132,8 +132,8 @@ def chat_research_bot(
     task_id = self.request.id or "local"
     emit(task_id, "start", f"Chatting with bot {bot_ref!r}…")
     try:
-        from aqp.bots.research_bot import ResearchBot
-        from aqp.bots.runtime import BotRuntime
+        from aqp_bots.research_bot import ResearchBot
+        from aqp_bots.runtime import BotRuntime
 
         bot = _load_bot(bot_ref)
         if not isinstance(bot, ResearchBot):
@@ -165,7 +165,7 @@ def deploy_bot(
     task_id = self.request.id or "local"
     emit(task_id, "start", f"Deploying bot {bot_ref!r} (target={target or 'spec-default'})…")
     try:
-        from aqp.bots.runtime import BotRuntime
+        from aqp_bots.runtime import BotRuntime
 
         bot = _load_bot(bot_ref)
         runtime = BotRuntime(bot, task_id=task_id)

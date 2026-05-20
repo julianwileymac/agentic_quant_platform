@@ -1,0 +1,20 @@
+---
+description: Curate snippets and inspiration without creating runtime dependencies.
+globs:
+  - "aqp_snippets/**"
+  - "extractions/**"
+  - "inspiration/**"
+alwaysApply: false
+---
+
+# AQP Snippets
+
+- Snippets are reference material for agents, not production dependencies.
+- Keep provenance for curated patterns: source project, source path, license
+  context when known, and extraction rationale.
+- Prefer small annotated patterns over bulk copied files.
+- Runtime packages must not import from `aqp_snippets`, `extractions`, or
+  `inspiration`.
+- Never store credentials, private keys, token files, model weights, or local
+  warehouse data here.
+

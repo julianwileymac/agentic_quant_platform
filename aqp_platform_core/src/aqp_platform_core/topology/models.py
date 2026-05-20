@@ -46,6 +46,7 @@ class Tooling(StrictModel):
 
 class ServiceDefinition(StrictModel):
     id: str
+    aliases: list[str] = Field(default_factory=list)
     label: str
     role: str
     workload: Literal["deployment", "statefulset", "daemonset", "job", "external"]

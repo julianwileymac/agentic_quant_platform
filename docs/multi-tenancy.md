@@ -67,7 +67,7 @@ goes through `EntraTenantLink`. Don't auto-create org rows from raw
 `tid` claims.** The
 `data.tenancy.link_org_to_entra_tenant` MCP tool (REST: `POST
 /tenancy/entra-links`) is the only sanctioned ingress. The frontend
-[`EntraTenantLinkWizard`](../frontend/src/components/onboarding/EntraTenantLinkWizard.tsx)
+[`EntraTenantLinkWizard`](../aqp_client/src/components/onboarding/EntraTenantLinkWizard.tsx)
 drives this flow with a 5-step wizard.
 
 On the Auth0-federated path, the Microsoft button on the SPA login
@@ -83,7 +83,7 @@ For regulated deployments that bypass Auth0 and hit Entra directly,
 and activates when `AQP_AUTH_PROVIDER=msal_entra`. Both authentication
 paths converge on the same backend `EntraTenantLink` lookup chain, and
 super-admin promotion remains managed in
-`frontend/src/components/onboarding/EntraTenantLinkWizard.tsx`.
+`aqp_client/src/components/onboarding/EntraTenantLinkWizard.tsx`.
 
 ## App role mapping
 

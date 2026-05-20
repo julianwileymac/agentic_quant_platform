@@ -9,7 +9,7 @@
 
 The original refactor report recommended Streamlit. The AQP frontend
 cutover to Vite + React 19 + Tailwind 4 + shadcn/ui is **complete**
-(see [frontend/CUTOVER.md](../frontend/CUTOVER.md)). All new
+(see [aqp_client/CUTOVER.md](../aqp_client/CUTOVER.md)). All new
 analytics ship as Vite routes + components; no Streamlit dependency
 is introduced.
 
@@ -37,16 +37,16 @@ Three thin FastAPI routers:
 
 ## Frontend
 
-- `frontend/src/lib/api/analytics.ts` — typed client.
-- `frontend/src/components/analytics/`
+- `aqp_client/src/lib/api/analytics.ts` — typed client.
+- `aqp_client/src/components/analytics/`
   - `TearSheetGrid.tsx` — metrics dashboard (Sharpe, Sortino, CAGR…)
   - `RollingPanel.tsx` — rolling Sharpe / vol with `recharts`
   - `UnderwaterPanel.tsx` — drawdown area (`recharts`)
   - `DrawdownTable.tsx` — top-N drawdowns extracted from the
     underwater series
   - `DistributionOverlay.tsx` — actual vs predicted histograms
-- `frontend/src/routes/analytics/portfolio/[runId]/page.tsx`
-- `frontend/src/routes/analytics/ml/[runId]/page.tsx`
+- `aqp_client/src/routes/analytics/portfolio/[runId]/page.tsx`
+- `aqp_client/src/routes/analytics/ml/[runId]/page.tsx`
 
 Both routes read the underlying numeric series from
 `sessionStorage[aqp.analytics.*]`. The originating run page (backtest

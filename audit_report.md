@@ -52,11 +52,11 @@ Mode: read-only audit (no code changes), targeted grep/read validation.
 ## Rule 29 (BaseDataset + EntityPicker): **FAIL**
 
 ### Violations
-- `frontend/src/routes/metadata/aspects/page.tsx:183`
+- `aqp_client/src/routes/metadata/aspects/page.tsx:183`
   - Free-text URN field:
   - `<Input ... placeholder="urn:aqp:dataset:prod:aqp_silver_alpha_vantage.daily_bars" ... />`
   - This is an entity-selection input path implemented as free text instead of a cache-backed picker.
-- `frontend/src/routes/metadata/aspects/page.tsx:135`
+- `aqp_client/src/routes/metadata/aspects/page.tsx:135`
   - Inline TODO confirms missing picker integration:
   - `replace with EntityPicker.`
 
@@ -98,7 +98,7 @@ Blocking hard-rule findings:
 1. Rule 6: shipped migration `0046_workflow_versioning.py` edited post-commit.
 2. Rule 6: concurrent `0049_*` descendants from `0048` present (`baseline` + `metadata_seed`).
 3. Rule 26: direct `settings.datahub_token` access in `aqp/data/datahub/aspect_puller.py:228`.
-4. Rule 29: free-text URN entity selection in `frontend/src/routes/metadata/aspects/page.tsx:183`.
+4. Rule 29: free-text URN entity selection in `aqp_client/src/routes/metadata/aspects/page.tsx:183`.
 5. Rule 33: unscoped `EntityAspect` read in `aqp/data/mcp/tools/aspects.py:670-676`.
 
 ---

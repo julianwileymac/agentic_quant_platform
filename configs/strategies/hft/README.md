@@ -1,7 +1,7 @@
 # HFT (LOB) Strategies — Engine Pending
 
 The strategies in this folder require the LOB backtest engine, which is
-deferred. See `extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md` for
+deferred. See `aqp_snippets/extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md` for
 the future-work prompt.
 
 Once the LOB adapter ships, configs in this directory will follow this

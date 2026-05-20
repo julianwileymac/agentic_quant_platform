@@ -1,0 +1,28 @@
+---
+description: Route AQP changes to the correct future repository boundary.
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+# Repository Boundaries
+
+Before editing, decide which boundary owns the request:
+
+- Workload lifecycle, `/manage/*`, provider adapters, remote resource control:
+  `aqp_control_plane/`.
+- Shared value types, ABCs, auth/resource filters, topology, stable wire
+  contracts: `aqp_platform_core/`.
+- Operator UI, client API wrappers, WebSocket client behavior:
+  `aqp_client/` under the `aqp_client/` boundary.
+- Curated external-code knowledge, prompts, rules, skills:
+  `aqp_snippets/`, `extractions/`, or `.cursor/`.
+- Bot templates and samples: `aqp_bots/` and `aqp_bots/templates/`.
+- Bot runtime behavior stays in `aqp_bots/` until extraction interfaces
+  exist.
+- Quant runtime domains (agents, RL, analysis, backtests, data, persistence,
+  tasks) stay in `aqp/`.
+
+Read `docs/repository-split.md` and the nearest `AGENTS.md` before moving
+source across boundaries.
+

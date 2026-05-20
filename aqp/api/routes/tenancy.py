@@ -247,7 +247,7 @@ def promote_entra_link(
     AGENTS rule 44 keeps :class:`EntraTenantLink` rows ``pending`` until
     an AQP super-admin attaches them to an :class:`Organization`. This
     route — called by
-    :mod:`frontend/src/components/onboarding/EntraTenantLinkWizard` —
+    :mod:`aqp_client/src/components/onboarding/EntraTenantLinkWizard` —
     is the only sanctioned promotion ingress. The wizard does NOT post
     the raw Entra ``tid`` (the link row already carries it); it posts
     the chosen org plus optional role / domain whitelists.

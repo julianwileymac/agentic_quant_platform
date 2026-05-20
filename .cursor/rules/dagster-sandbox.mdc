@@ -6,7 +6,7 @@ This rule scopes
 [`aqp/tasks/dagster_sandbox_tasks.py`](mdc:aqp/tasks/dagster_sandbox_tasks.py),
 [`aqp/persistence/models_dagster_sandbox.py`](mdc:aqp/persistence/models_dagster_sandbox.py),
 and the frontend
-[`SandboxConsole`](mdc:frontend/src/components/sandbox/SandboxConsole.tsx).
+[`SandboxConsole`](mdc:aqp_client/src/components/sandbox/SandboxConsole.tsx).
 
 Narrative: [docs/dagster-sandbox.md](mdc:docs/dagster-sandbox.md).
 Phase plan:

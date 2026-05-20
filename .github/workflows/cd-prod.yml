@@ -20,7 +20,7 @@ jobs:
     strategy:
       matrix:
         image:
-          - { name: aqp-client, dockerfile: build/docker/aqp_client/Dockerfile }
+          - { name: aqp-client, dockerfile: aqp_client/Dockerfile }
           - { name: aqp-control-plane, dockerfile: build/docker/aqp_control_plane/Dockerfile }
           - { name: aqp-worker, dockerfile: build/docker/aqp_worker/Dockerfile }
           - { name: aqp-ingestion, dockerfile: build/docker/aqp_ingestion/Dockerfile }

@@ -55,7 +55,7 @@ Consolidated pytest summary: **0 passed, 0 failed, 0 executed** (infrastructure-
 
 ## Frontend typecheck
 
-- `cd frontend && pnpm exec tsc --noEmit -p .`: **FAIL** (infrastructure blocker; command did not execute)
+- `cd aqp_client && pnpm exec tsc --noEmit -p .`: **FAIL** (infrastructure blocker; command did not execute)
 - Dependency fallback (`npm install --silent`) was not reachable because command execution itself failed before process start.
 
 ## Aggregate verdict

@@ -2,7 +2,7 @@
 
 Pure pandas / numpy implementations so they slot into both the bar-based
 :mod:`aqp.backtest` engine and the future LOB engine described in
-``extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md``.
+``aqp_snippets/extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md``.
 
 Function signatures accept either scalars or array-likes (``pd.Series`` /
 ``np.ndarray``) and return the same shape. NaNs are emitted where inputs

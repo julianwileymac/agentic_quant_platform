@@ -22,7 +22,7 @@ Your scope:
   `data.vector.upsert`, `data.vector.delete`, `data.embeddings.compute`.
 - `aqp/cache/keys.py` + `aqp/cache/prefetch.py` — `vector_indexes` cache
   category.
-- `frontend/src/components/common/EntityPicker.tsx` callers — add
+- `aqp_client/src/components/common/EntityPicker.tsx` callers — add
   `kind="vector_indexes"`.
 - `tests/rag/` — dual-write parity, cosine distance correctness, HNSW
   recall sanity.

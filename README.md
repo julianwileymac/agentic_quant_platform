@@ -8,8 +8,10 @@ A **local-first, agentic quantitative research and trading platform** that fuses
 
 - **Active local setup/run**: [docs/operations/local-setup.md](docs/operations/local-setup.md)
 - **Active deployment docs**: [deployments/README.md](deployments/README.md) + [docs/operations/kubernetes-deploy.md](docs/operations/kubernetes-deploy.md)
-- **Active operator UI**: [`frontend/`](frontend/) (Vite). [`webui/`](webui/) is rollback-only.
+- **Active operator UI**: [`aqp_client/`](aqp_client/) (Vite). [`webui/`](webui/) is rollback-only.
 - **Active CLI surface**: `aqp config`, `aqp viz`, `aqp deploy` (see `aqp/cli/main.py`).
+- **Repository split map**: [docs/repository-split.md](docs/repository-split.md) defines `aqp_control_plane`, `aqp_platform_core`, `aqp_client`, `aqp_snippets`, and `aqp_bots` boundaries.
+- **Path contract** (for cross-repo links): [docs/aqp-monorepo-paths.md](docs/aqp-monorepo-paths.md).
 - **Legacy context and archived planning artifacts**: [docs/archive/README.md](docs/archive/README.md)
 
 The remainder of this README includes historical release notes. If a command in
@@ -96,7 +98,7 @@ walkthrough.
 
 ## What's new in 0.8 — Vite + Tailwind + shadcn frontend rewrite
 
-A second-generation operator UI lives under [`frontend/`](frontend/) on
+A second-generation operator UI lives under [`aqp_client/`](aqp_client/) on
 port `:3001` next to the existing Next.js webui on `:3000`. The new app
 is built on **Vite 7 + React 19 + TypeScript 5.9 strict + Tailwind CSS 4
 + shadcn/ui** and prioritises the live-trading + agent-oversight surface
@@ -111,18 +113,20 @@ per the architectural blueprint:
   subscribes to `/agents/proposals/stream`, surfaces LTL guardrail
   outcomes, cost-cap remaining, risk metrics, approves / declines via
   `AgentRuntime`.
-- **Kill-switch** in the topbar — fans out to `/agents/halt`,
-  `/paper/stop-all`, `/bots/halt-all`, `/rl/halt-all`.
+- **Kill-switch** in the topbar — fans out to the current runtime halt
+  set documented in `aqp_client/src/components/common/KillSwitch.tsx`
+  (agents, quant-agents, paper, bots, RL, workflows, assistants,
+  Terraform, and workloads).
 - **Sandbox / Paper mode** global indicator — amber outline, tab-title
   prefix, "Simulated execution" caption on tickets.
 - **CodeMirror IDE** at `/ide` — Python + JSON browser-based scratch.
 - **Semantic financial colour tokens** + tabular-figure font features
   applied across every numeric surface.
 
-The legacy Next.js webui remains the canonical UI until parity is
-reached. See [`frontend/README.md`](frontend/README.md) for the rewrite
-status and [`frontend/CUTOVER.md`](frontend/CUTOVER.md) for the cutover
-plan.
+The Vite app is now the active operator UI; the legacy Next.js webui is
+rollback-only. See [`aqp_client/README.md`](aqp_client/README.md) for the current
+client surface and [`aqp_client/`](aqp_client/) for the future client
+repository boundary.
 
 ## What's new in 0.7 — Next.js webui + visual workflow editors
 

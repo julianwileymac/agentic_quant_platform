@@ -1,9 +1,9 @@
 ---
 description: Vite + React 19 frontend rewrite vs legacy Next.js webui, throttled WebSocket pipeline, kill-switch fan-out, and sandbox indicator conventions.
 globs:
-  - frontend/**/*.{ts,tsx,js,jsx}
+  - aqp_client/**/*.{ts,tsx,js,jsx}
   - webui/**/*.{ts,tsx,js,jsx}
-  - frontend/**/*.css
+  - aqp_client/**/*.css
   - webui/**/*.css
 alwaysApply: false
 ---
@@ -11,43 +11,43 @@ alwaysApply: false
 # Frontend (Vite — active) + legacy Next.js webui (rollback only)
 
 The cutover is **complete as of phase 7** — see
-[frontend/CUTOVER.md](mdc:frontend/CUTOVER.md). The Vite app is now
+[aqp_client/CUTOVER.md](mdc:aqp_client/CUTOVER.md). The Vite app is now
 the only operator UI; the legacy Next.js webui is stopped and kept
 in `docker-compose.yml` for one-command rollback only.
 
 | App | Local dev | Compose host port | State | Source of truth |
 | --- | --- | --- | --- | --- |
-| [frontend/](mdc:frontend) | `pnpm --dir frontend dev` (`:3001`) | `:3002` | active | [frontend/CUTOVER.md](mdc:frontend/CUTOVER.md), [docs/webui.md](mdc:docs/webui.md) |
+| [aqp_client/](mdc:aqp_client) | `pnpm --dir aqp_client dev` (`:3001`) | `:3002` | active | [aqp_client/CUTOVER.md](mdc:aqp_client/CUTOVER.md), [docs/webui.md](mdc:docs/webui.md) |
 | [webui/](mdc:webui) | `pnpm --dir webui dev` (`:3000`) | `:3000` (stopped) | rollback only | — |
 
-All new routes go to `frontend/`. Do not add new pages to `webui/` —
-its only purpose now is rollback. If you need a feature `frontend/`
-doesn't have yet, add it to `frontend/`.
+All new routes go to `aqp_client/`. Do not add new pages to `webui/` —
+its only purpose now is rollback. If you need a feature `aqp_client/`
+doesn't have yet, add it to `aqp_client/`.
 
 ## Hard rules
 
 1. **WebSocket pipeline is throttled.** Use the existing
    rAF-batched, 30 FPS-capped consumer in
-   [frontend/src/lib/ws/](mdc:frontend/src/lib/ws) (`useLiveStream`,
+   [aqp_client/src/lib/ws/](mdc:aqp_client/src/lib/ws) (`useLiveStream`,
    `useChatStream`, `throttle`). The ring buffer is bounded —
    recency wins over completeness for tick / order-book streams.
    Don't add a raw `WebSocket` listener that pushes every frame to
    React state.
 2. **Kill-switch fan-out is non-negotiable.** The topbar
    `KillSwitch` component
-   ([frontend/src/components/common/KillSwitch.tsx](mdc:frontend/src/components/common/KillSwitch.tsx))
-   is the canonical halt surface. The wired backend route today is
-   `POST /portfolio/kill_switch` (in
-   [aqp/api/routes/portfolio.py](mdc:aqp/api/routes/portfolio.py)).
-   The design contract is per-runtime fan-out as new endpoints come
-   online:
+   ([aqp_client/src/components/common/KillSwitch.tsx](mdc:aqp_client/src/components/common/KillSwitch.tsx))
+   is the canonical halt surface. The current fan-out includes:
    - `/agents/halt`
+   - `/quant-agents/halt`
    - `/paper/stop-all`
    - `/bots/halt-all`
    - `/rl/halt-all`
-   When you wire a new endpoint from the design list, add it to
-   `KillSwitch` in the same PR. New runtime-bearing services must
-   be added to this list when they ship.
+   - `/workflows/halt`
+   - `/assistants/halt`
+   - `/terraform/halt`
+   - `/workloads/halt`
+   New runtime-bearing services must be added to this list when they
+   ship.
 3. **Sandbox / Paper mode is globally indicated.** Whenever the
    active session is sandbox / paper:
    - Amber outline around the app shell
@@ -65,7 +65,7 @@ doesn't have yet, add it to `frontend/`.
    so digits don't shift width.
 6. **OHLC charts use `lightweight-charts`** (WebGL renderer),
    declared once in
-   [frontend/](mdc:frontend) and re-used. Don't pull in a different
+   [aqp_client/](mdc:aqp_client) and re-used. Don't pull in a different
    charting lib without a parity migration plan.
 7. **The browser-side IDE uses CodeMirror 6.** Don't introduce
    Monaco for new surfaces — bundle size + duplicate indent /
@@ -74,13 +74,13 @@ doesn't have yet, add it to `frontend/`.
 ## API client + types
 
 - Type-safe REST client comes from `openapi-typescript` +
-  `openapi-fetch` in `frontend/`, regenerated from
+  `openapi-fetch` in `aqp_client/`, regenerated from
   `python -m scripts.export_openapi` via `make webui-gen-api`.
 - WebSocket hooks (`useChatStream`, `useLiveStream`) wrap
   `/chat/stream/{task_id}` and `/live/stream/{channel_id}` with
   reconnect + backoff. Use them; don't open raw sockets.
 - After changing FastAPI routes, regenerate types **in the same
-  PR** that touches the `frontend/` consumer. Stale types compile
+  PR** that touches the `aqp_client/` consumer. Stale types compile
   but ship runtime mismatches.
 
 ## CORS

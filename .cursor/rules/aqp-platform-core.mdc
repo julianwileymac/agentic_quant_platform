@@ -1,0 +1,26 @@
+---
+description: Keep aqp_platform_core dependency-light and contract-focused.
+globs:
+  - "aqp_platform_core/**"
+alwaysApply: false
+---
+
+# AQP Platform Core
+
+- `aqp_platform_core/` owns shared contracts: Pydantic value types, ABCs,
+  auth/resource filters, topology, and provider protocols.
+- Do not import `aqp.*`, `aqp_cp.*`, FastAPI routes, SQLAlchemy models,
+  Celery tasks, or frontend code.
+- Avoid import-time network I/O, environment mutation, and concrete cloud SDK
+  behavior.
+- Public model fields are wire contracts. Renames/removals need a migration
+  plan.
+
+Validation:
+
+```bash
+cd aqp_platform_core
+python -m pytest tests
+ruff check src tests
+```
+

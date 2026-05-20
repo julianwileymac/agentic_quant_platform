@@ -3,6 +3,8 @@
 > Companion to [docs/data-mcp.md](data-mcp.md). The Codebase MCP is a
 > sibling package to `aqp.data.mcp` that exposes the AQP repository
 > itself to agents and external IDEs as a tool catalog.
+> Repository split search rules live in
+> [code-index-governance.md](code-index-governance.md).
 
 ## Why a sibling package
 
@@ -81,3 +83,12 @@ aqp/codebase/mcp/
 - [`configs/agents/codebase_refactorer.yaml`](../configs/agents/codebase_refactorer.yaml)
   — deep-tier code reviewer; opt-in SERA via `model.provider = sera`
   once Phase 2.5 is configured (see [sera.md](sera.md)).
+
+## Split-aware indexing
+
+During the repository split, index scopes should treat
+`aqp_control_plane/`, `aqp_platform_core/`, `aqp_client/`, `aqp_snippets/`,
+and `aqp_bots/` as separate domains even while they share a git root. Agents
+should read the nearest `AGENTS.md` before broad source search and should use
+`docs/repository-split.md` to decide whether a match is an owning
+implementation or a compatibility shim.

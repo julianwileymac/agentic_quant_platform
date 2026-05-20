@@ -1,7 +1,7 @@
 """Graphical Airbyte connector builder (AQP-native, phase 2).
 
 Replaces the JSON editor in
-:file:`frontend/src/components/airbyte/AirbyteWorkspace.tsx` with a
+:file:`aqp_client/src/components/airbyte/AirbyteWorkspace.tsx` with a
 schema-driven form generator. The two production-ready outputs are:
 
 - A low-code YAML manifest compatible with Airbyte's Low-Code CDK,

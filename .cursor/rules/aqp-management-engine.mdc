@@ -19,8 +19,8 @@ The following values MUST NEVER appear in:
 - chat / agent transcripts (visible to the user OR a reviewer)
 - structured log lines (`logger.info`, `logger.warning`, …)
 - `print(...)` output from any module under `aqp/`, `scripts/`,
-  `aqp_control_plane/`, `aqp_platform_core/`, or `frontend/src/`
-- `console.log` / `console.warn` output from `frontend/src/` or
+  `aqp_control_plane/`, `aqp_platform_core/`, or `aqp_client/src/`
+- `console.log` / `console.warn` output from `aqp_client/src/` or
   any file under `theia-extensions/aqp/`
 - audit ledger rows (`workload_runs`, `security_audit_events`,
   `terraform_runs`, `agent_runs_v2`, `assistant_runs`)

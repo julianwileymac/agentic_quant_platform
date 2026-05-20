@@ -143,17 +143,17 @@ Phase D of the plan ships:
 
 ## Frontend
 
-- `frontend/src/lib/api/{workloads,cloudflare,clusterPods}.ts` —
+- `aqp_client/src/lib/api/{workloads,cloudflare,clusterPods}.ts` —
   typed clients matching the new REST surface.
-- `frontend/src/routes/manage/page.tsx` — Workload Studio.
-- `frontend/src/routes/cluster-mgmt/page.tsx` — Cluster pods
+- `aqp_client/src/routes/manage/page.tsx` — Workload Studio.
+- `aqp_client/src/routes/cluster-mgmt/page.tsx` — Cluster pods
   browser (exec + log tail land in Phase F-2).
-- `frontend/src/routes/cloudflare/page.tsx` — Cloudflare edge
+- `aqp_client/src/routes/cloudflare/page.tsx` — Cloudflare edge
   studio.
-- `frontend/src/lib/auth/MsalProvider.tsx` — new MSAL branch of
+- `aqp_client/src/lib/auth/MsalProvider.tsx` — new MSAL branch of
   `AuthProvider`; selects between `<MsalProvider>` and
   `<Auth0Provider>` based on `authConfig.provider`.
-- `frontend/public/redirect.html` — MSAL v5 redirect bridge.
+- `aqp_client/public/redirect.html` — MSAL v5 redirect bridge.
 
 ## Theia
 

@@ -55,6 +55,42 @@ If `make build-worker` or `make build-ingestion` reports a missing Dockerfile,
 pin those image tags to known-good prebuilt registry tags in the target overlay
 before applying.
 
+## Step 3b — one-shot Alembic migration (cluster)
+
+After `aqp-api` is pullable on the cluster, run:
+
+```powershell
+kubectl apply -f deployments/kubernetes/base/jobs/alembic-upgrade.yaml
+kubectl -n aqp wait --for=condition=complete job/aqp-alembic-upgrade --timeout=900s
+kubectl -n aqp logs job/aqp-alembic-upgrade
+```
+
+The Job uses the same `aqp-config` / `aqp-secrets` env as `aqp-core` and targets
+`postgresql.data-services.svc.cluster.local`. Re-apply only when you need a fresh
+`upgrade head` (delete the previous Job first: `kubectl -n aqp delete job aqp-alembic-upgrade`).
+
+`alembic/env.py` widens `alembic_version.version_num` to `VARCHAR(128)` automatically
+before migrations run (revision slugs longer than 32 characters otherwise fail at
+`0039_extended_instrument_taxonomy`).
+
+### Brownfield Postgres (pre-Alembic or partial schema)
+
+If `alembic upgrade head` fails with `DuplicateTable` / `DuplicateColumn`, the database
+was created outside Alembic tracking. From a workstation with the API image and a
+port-forward to cluster Postgres:
+
+```powershell
+kubectl -n data-services port-forward svc/postgresql 15432:5432
+$env:AQP_POSTGRES_DSN = "postgresql+psycopg2://aqp:aqp@host.docker.internal:15432/aqp"
+# Optional: stamp to the highest revision whose objects already exist, then upgrade.
+# $env:AQP_ALEMBIC_STAMP_REVISION = "0015_dbt_foundation"
+bash scripts/cluster_alembic_upgrade.sh
+```
+
+Use `AQP_POSTGRES_DSN` (maps to `settings.postgres_dsn`) — not a raw `DATABASE_URL`
+alias. Migration `0040_normalized_identifiers_backfill` can take several minutes on
+large `instruments` tables.
+
 ## Step 4 — pin the image tag in the target overlay
 
 Edit `deployments/kubernetes/overlays/<env>/kustomization.yaml`:

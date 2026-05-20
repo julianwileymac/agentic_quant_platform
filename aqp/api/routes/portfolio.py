@@ -147,9 +147,9 @@ def get_positions_flat(
     """Flat array of positions for UIs that want a list, not a `{positions, n_symbols}` envelope.
 
     Used by the Vite Live Trading Desk
-    (``frontend/src/routes/live/page.tsx``) which renders a
+    (``aqp_client/src/routes/live/page.tsx``) which renders a
     ``PositionRow[]`` directly. The ``avg_price`` alias is added so
-    ``frontend/src/components/live/PositionTable.tsx`` doesn't need to
+    ``aqp_client/src/components/live/PositionTable.tsx`` doesn't need to
     know about the legacy ``avg_cost`` field name.
     """
     raw = compute_positions(start=_parse_dt(start), end=_parse_dt(end))

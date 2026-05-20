@@ -117,7 +117,7 @@ without OPA installed still works).
 
 ## Frontend
 
-Vite/React surfaces under [`frontend/src/routes/infra/`](../frontend/src/routes/infra/):
+Vite/React surfaces under [`aqp_client/src/routes/infra/`](../aqp_client/src/routes/infra/):
 
 - `/infra` — 7 tabbed panes (overview / bots / queues / pipeline /
   secrets / k8s / canary) + a Terraform inline summary.

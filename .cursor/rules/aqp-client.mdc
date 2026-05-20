@@ -1,0 +1,26 @@
+---
+description: Client boundary rules for aqp_client and the active Vite frontend.
+globs:
+  - "aqp_client/**"
+alwaysApply: false
+---
+
+# AQP Client
+
+- `aqp_client/` is the active client package and future client repository
+  boundary.
+- HTTP access goes through `aqp_client/src/lib/api/`.
+- WebSocket access goes through `aqp_client/src/lib/ws/`.
+- Preserve generated OpenAPI types, tenancy headers, and ApiError
+  normalization.
+- Consequential actions must use typed confirmation friction.
+- Do not add backend business logic or direct persistence access to client
+  code.
+
+Validation:
+
+```bash
+pnpm --dir aqp_client typecheck
+pnpm --dir aqp_client test
+```
+

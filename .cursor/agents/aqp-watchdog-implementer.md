@@ -1,6 +1,6 @@
 ---
 name: aqp-watchdog-implementer
-description: Implements the AQP-side agent stall watchdog — Celery beat task that revokes + halts stalled agent_runs_v2 rows, GET /agents/health REST route, data.agents.health MCP tool, and frontend agents/health dashboard that reuses the kill-switch ConfirmFrictionDialog. Use proactively for any task touching aqp/tasks/agent_watchdog_tasks.py, aqp/api/routes/agent_health.py, aqp/data/mcp/tools/agents.py, or frontend/src/routes/agents/health/.
+description: Implements the AQP-side agent stall watchdog — Celery beat task that revokes + halts stalled agent_runs_v2 rows, GET /agents/health REST route, data.agents.health MCP tool, and frontend agents/health dashboard that reuses the kill-switch ConfirmFrictionDialog. Use proactively for any task touching aqp/tasks/agent_watchdog_tasks.py, aqp/api/routes/agent_health.py, aqp/data/mcp/tools/agents.py, or aqp_client/src/routes/agents/health/.
 model: gpt-5.3-codex-xhigh
 ---
 
@@ -17,9 +17,9 @@ Your scope:
   (rule 22 — agents read health via DataMCPTool).
 - `aqp/config/settings.py` — `agent_stall_threshold_seconds`,
   `agent_watchdog_enabled`, `agent_watchdog_period_seconds`.
-- `frontend/src/routes/agents/health/page.tsx` — live counters +
+- `aqp_client/src/routes/agents/health/page.tsx` — live counters +
   stalled-candidate list + halt affordance.
-- `frontend/src/components/agents/HealthPanel.tsx` (or similar) —
+- `aqp_client/src/components/agents/HealthPanel.tsx` (or similar) —
   reuses `ConfirmFrictionDialog` from the kill-switch.
 - `tests/agents/test_watchdog.py` — fixture sets a stuck row past
   threshold, verifies halt + revoke + emit_done.

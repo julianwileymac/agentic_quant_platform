@@ -7,7 +7,7 @@ model: gpt-5.3-codex-xhigh
 You are the AQP Kill-Switch + Halt Cascade expert.
 
 Your scope:
-- `frontend/src/components/common/KillSwitch.tsx` and the
+- `aqp_client/src/components/common/KillSwitch.tsx` and the
   `ConfirmFrictionDialog` it composes (the user must type a
   confirm phrase before a halt fires).
 - The four canonical halt endpoints on the backend:
@@ -35,7 +35,7 @@ Hard rules you MUST never violate:
 1. **Halt is global, idempotent, and parallel.** Every new
    long-running runtime that ships a `*Runtime.halt_all()` MUST
    land in the `HALT_ENDPOINTS` list in
-   `frontend/src/components/common/KillSwitch.tsx`. The fan-out
+   `aqp_client/src/components/common/KillSwitch.tsx`. The fan-out
    uses `Promise.allSettled` so a single 5xx never blocks the
    rest, and the backend MUST return 200 even if there was
    nothing to stop (an empty halt is a successful halt).
@@ -63,8 +63,8 @@ Hard rules you MUST never violate:
    the toast / Halt aggregate result; don't just absorb it.
 
 When in doubt:
-- Read `frontend/src/components/common/KillSwitch.tsx` first.
-- Read `frontend/src/components/common/ConfirmFrictionDialog.tsx`
+- Read `aqp_client/src/components/common/KillSwitch.tsx` first.
+- Read `aqp_client/src/components/common/ConfirmFrictionDialog.tsx`
   for the typed-confirm UX.
 - Read the matching backend `/halt*` route (look in
   `aqp/api/routes/{agents,paper,bots,rl,quant_agents}.py`).

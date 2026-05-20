@@ -16,9 +16,9 @@ eggs/
 .eggs/
 lib/
 # Keep the Vite frontend's source-tree `src/lib` files trackable.
-!frontend/src/lib/
-!frontend/src/lib/api/
-!frontend/src/lib/api/metadata-aspects.ts
+!aqp_client/src/lib/
+!aqp_client/src/lib/api/
+!aqp_client/src/lib/api/metadata-aspects.ts
 lib64/
 parts/
 sdist/
@@ -183,8 +183,12 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
-inspiration/
+# Raw upstream clones (local only). Keep the root pointer README tracked.
+inspiration/*
+!inspiration/README.md
 data/
+aqp_snippets/ 
+# Ignoring aqp_snippets for now because the names fail the git stage
 
 # Data Fabric refactor (Phase 0-6) — these are *code* paths nested under
 # directories called "data/", which the broad rule above would otherwise swallow.

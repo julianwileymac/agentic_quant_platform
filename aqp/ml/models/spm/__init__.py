@@ -2,7 +2,7 @@
 
 Architectures originally written in TF1 graph mode, ported to PyTorch
 via :mod:`aqp.ml.models.spm._torch_base`. See
-``extractions/stock_prediction_models/REFERENCE.md`` for per-model notes
+``aqp_snippets/extractions/stock_prediction_models/REFERENCE.md`` for per-model notes
 and known-issues caveats.
 """
 from __future__ import annotations

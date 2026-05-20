@@ -5,7 +5,7 @@
 > frontend. Free-text inputs that name a dataset, namespace, sink
 > kind, Airbyte connector, project, or credential are forbidden in
 > new code — every entity-name input is a
-> [`EntityPicker`](../frontend/src/components/common/EntityPicker.tsx)
+> [`EntityPicker`](../aqp_client/src/components/common/EntityPicker.tsx)
 > that reads from `/cache/<category>` which in turn reads from
 > [`MetadataCache`](../aqp/cache/client.py).
 

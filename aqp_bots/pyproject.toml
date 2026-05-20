@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aqp-bots"
+version = "0.1.0"
+description = "Bot runtime, templates, and guidance for the Agentic Quant Platform."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "AQP Platform Team" }]
+dependencies = [
+    "pydantic>=2.5",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "mypy>=1.8",
+]
+
+[project.scripts]
+aqp-bots = "aqp_bots.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "*.py",
+    "templates/**/*.yaml",
+    "README.md",
+    "AGENTS.md",
+    "INDEX.md",
+    "pyproject.toml",
+]
+

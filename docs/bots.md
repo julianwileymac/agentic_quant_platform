@@ -122,8 +122,8 @@ deployment:
   dry_run: true
 ```
 
-Drop the file under [configs/bots/trading/](../configs/bots/trading/)
-or [configs/bots/research/](../configs/bots/research/) — the registry
+Drop the file under [aqp_bots/templates/trading/](../aqp_bots/templates/trading/)
+or [aqp_bots/templates/research/](../aqp_bots/templates/research/) — the registry
 lazy-scans both directories on first lookup.
 
 ## Persistence
@@ -188,7 +188,7 @@ specs.
 
 `POST /bots/{id}/deploy` dispatches `deploy_bot`, which delegates to
 the configured target via
-[`DeploymentDispatcher`](../aqp/bots/deploy.py):
+[`DeploymentDispatcher`](../aqp_bots/deploy.py):
 
 | Target | Behaviour |
 | --- | --- |
@@ -197,8 +197,8 @@ the configured target via
 | `kubernetes` | Renders `Deployment` + `ConfigMap` YAML to `deploy/k8s/bots/<slug>.yaml`. Optionally `kubectl apply`s when `apply=True` and `kubectl` is on PATH. |
 
 The Kubernetes manifest's pod entrypoint is
-`python -m aqp.bots.cli run <slug>` (see
-[aqp/bots/cli.py](../aqp/bots/cli.py)).
+`python -m aqp_bots.cli run <slug>` (compat: `python -m aqp.bots.cli`; see
+[aqp_bots/cli.py](../aqp_bots/cli.py)).
 
 ## REST surface
 
@@ -283,18 +283,18 @@ The detail page ships tabs:
 
 | Need | Path |
 | --- | --- |
-| BotSpec | [aqp/bots/spec.py](../aqp/bots/spec.py) |
-| BaseBot ABC | [aqp/bots/base.py](../aqp/bots/base.py) |
-| TradingBot | [aqp/bots/trading_bot.py](../aqp/bots/trading_bot.py) |
-| ResearchBot | [aqp/bots/research_bot.py](../aqp/bots/research_bot.py) |
-| BotRuntime | [aqp/bots/runtime.py](../aqp/bots/runtime.py) |
-| Registry / persist_spec | [aqp/bots/registry.py](../aqp/bots/registry.py) |
-| Deploy targets | [aqp/bots/deploy.py](../aqp/bots/deploy.py) |
-| CLI | [aqp/bots/cli.py](../aqp/bots/cli.py) |
+| BotSpec | [aqp_bots/spec.py](../aqp_bots/spec.py) |
+| BaseBot ABC | [aqp_bots/base.py](../aqp_bots/base.py) |
+| TradingBot | [aqp_bots/trading_bot.py](../aqp_bots/trading_bot.py) |
+| ResearchBot | [aqp_bots/research_bot.py](../aqp_bots/research_bot.py) |
+| BotRuntime | [aqp_bots/runtime.py](../aqp_bots/runtime.py) |
+| Registry / persist_spec | [aqp_bots/registry.py](../aqp_bots/registry.py) |
+| Deploy targets | [aqp_bots/deploy.py](../aqp_bots/deploy.py) |
+| CLI | [aqp_bots/cli.py](../aqp_bots/cli.py) |
 | ORM models | [aqp/persistence/models_bots.py](../aqp/persistence/models_bots.py) |
 | Alembic migration | [alembic/versions/0020_bots.py](../alembic/versions/0020_bots.py) |
 | Celery tasks | [aqp/tasks/bot_tasks.py](../aqp/tasks/bot_tasks.py) |
 | REST routes | [aqp/api/routes/bots.py](../aqp/api/routes/bots.py) |
-| Example specs | [configs/bots/](../configs/bots/) |
+| Example specs | [aqp_bots/templates/](../aqp_bots/templates/) |
 | UI builder | [webui/components/bots/](../webui/components/bots/) |
 | Argo template | `rpi_kubernetes/kubernetes/mlops/bots/workflowtemplate-bot-deploy.yaml` |

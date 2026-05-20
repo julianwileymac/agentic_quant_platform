@@ -107,7 +107,7 @@ def chat(req: ChatRequest) -> ChatResponse:
 def messages_async(req: ChatRequest) -> TaskAccepted:
     """Async chat completion — returns a ``task_id`` to subscribe to.
 
-    Used by the Vite chat surface (``frontend/src/routes/chat/page.tsx``)
+    Used by the Vite chat surface (``aqp_client/src/routes/chat/page.tsx``)
     which opens ``/chat/stream/{task_id}`` and renders the worker's
     ``delta`` / ``done`` frames into the assistant bubble.
 

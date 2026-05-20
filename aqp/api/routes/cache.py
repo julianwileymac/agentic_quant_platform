@@ -1,6 +1,6 @@
 """Read-only metadata cache endpoints.
 
-Backs the :file:`frontend/src/components/common/EntityPicker.tsx`
+Backs the :file:`aqp_client/src/components/common/EntityPicker.tsx`
 component. Whitelist-only entity dropdowns read from these endpoints
 and are guaranteed sub-millisecond when Redis is reachable; the
 in-memory fallback keeps unit tests + the local dev loop honest.

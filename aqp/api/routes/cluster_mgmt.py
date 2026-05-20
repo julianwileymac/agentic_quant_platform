@@ -388,7 +388,7 @@ legacy_router.include_router(_routes)
 # WebSocket: pod log streaming.
 #
 # Lives on the prefixed routers directly (not on ``_routes``) because
-# the throttling pipeline is shared with ``frontend/src/lib/ws/`` and
+# the throttling pipeline is shared with ``aqp_client/src/lib/ws/`` and
 # the legacy ``/cluster-mgmt`` alias also needs it. Frames are shaped
 # ``{task_id, stage, message, timestamp, **extras}`` per AGENTS rule 4.
 # ---------------------------------------------------------------------------

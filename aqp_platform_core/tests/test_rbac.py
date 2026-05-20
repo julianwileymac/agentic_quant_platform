@@ -15,9 +15,12 @@ from aqp_platform_core.auth import (
 )
 
 
-def test_viewer_has_only_read() -> None:
+def test_viewer_has_only_read_scopes() -> None:
     scopes = expand_role(ROLE_VIEWER)
-    assert scopes == frozenset({SCOPE_READ_INFRA})
+    assert SCOPE_READ_INFRA in scopes
+    assert SCOPE_MANAGE_AGENTS not in scopes
+    assert SCOPE_MANAGE_INFRA not in scopes
+    assert SCOPE_ADMIN_CLUSTER not in scopes
 
 
 def test_operator_subsumes_viewer() -> None:

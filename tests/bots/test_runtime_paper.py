@@ -5,18 +5,18 @@ from typing import Any
 
 import pytest
 
-from aqp.bots.deploy import (
+from aqp_bots.deploy import (
     BacktestOnlyTarget,
     BotDeploymentResult,
     DeploymentDispatcher,
     PaperSessionTarget,
 )
-from aqp.bots.spec import (
+from aqp_bots.spec import (
     BotSpec,
     DeploymentTargetSpec,
     UniverseRef,
 )
-from aqp.bots.trading_bot import TradingBot
+from aqp_bots.trading_bot import TradingBot
 
 
 def _trading_spec(**overrides: Any) -> BotSpec:
@@ -114,7 +114,7 @@ def test_dispatcher_unknown_target_raises() -> None:
 
 def test_dispatcher_paper_invokes_target_deploy(monkeypatch) -> None:
     """Verify the dispatcher delegates without spinning up a real session."""
-    import aqp.bots.deploy as deploy_mod
+    import aqp_bots.deploy as deploy_mod
 
     captured: dict[str, Any] = {}
 
@@ -147,7 +147,7 @@ def test_dispatcher_paper_invokes_target_deploy(monkeypatch) -> None:
 
 def test_runtime_paper_calls_session_run(monkeypatch) -> None:
     """Verify BotRuntime.paper() builds a session and awaits its run()."""
-    from aqp.bots.runtime import BotRuntime
+    from aqp_bots.runtime import BotRuntime
 
     class FakeSession:
         def __init__(self) -> None:
@@ -170,7 +170,7 @@ def test_runtime_paper_calls_session_run(monkeypatch) -> None:
     bot = TradingBot(spec=_trading_spec())
     fake = FakeSession()
     monkeypatch.setattr(bot, "paper", lambda **kw: fake)
-    monkeypatch.setattr("aqp.bots.registry.persist_spec", lambda *a, **kw: None)
+    monkeypatch.setattr("aqp_bots.registry.persist_spec", lambda *a, **kw: None)
 
     runtime = BotRuntime(bot, task_id=None)
     result = runtime.paper(run_name="rt-paper")

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from aqp.bots.spec import (
+from aqp_bots.spec import (
     BotAgentRef,
     BotSpec,
     DeploymentTargetSpec,
@@ -176,9 +176,9 @@ def test_load_specs_from_dir_recurses(tmp_path: Path) -> None:
 
 def test_repository_yaml_examples_load() -> None:
     repo_root = Path(__file__).resolve().parents[2]
-    examples_dir = repo_root / "configs" / "bots"
+    examples_dir = repo_root / "aqp_bots" / "templates"
     if not examples_dir.exists():
-        pytest.skip("configs/bots/ not present in this checkout")
+        pytest.skip("aqp_bots/templates not present in this checkout")
     specs = list(load_specs_from_dir(str(examples_dir)))
     assert specs, "expected at least one example bot spec"
     by_kind = {s.kind for s in specs}

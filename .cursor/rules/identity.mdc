@@ -5,10 +5,10 @@ globs:
   - "aqp/api/routes/auth0_sync.py"
   - "aqp/auth/**/*.py"
   - "aqp/api/routes/auth.py"
-  - "frontend/src/lib/auth/**/*.{ts,tsx}"
-  - "frontend/src/routes/auth/**/*.{ts,tsx}"
-  - "frontend/src/components/shell/IdentityChip.tsx"
-  - "frontend/src/components/shell/ContextBar.tsx"
+  - "aqp_client/src/lib/auth/**/*.{ts,tsx}"
+  - "aqp_client/src/routes/auth/**/*.{ts,tsx}"
+  - "aqp_client/src/components/shell/IdentityChip.tsx"
+  - "aqp_client/src/components/shell/ContextBar.tsx"
 ---
 
 # Identity + auth enforcement
@@ -56,12 +56,12 @@ Phase 4 + Phase 6 of the multi-tenant rollout. Hard rules 27 + 31
 
 ## Frontend
 
-- ``useAuth`` ([`frontend/src/lib/auth/useAuth.ts`](mdc:frontend/src/lib/auth/useAuth.ts))
+- ``useAuth`` ([`aqp_client/src/lib/auth/useAuth.ts`](mdc:aqp_client/src/lib/auth/useAuth.ts))
   returns the user + ``claims`` (orgId / teamId / workspaceId /
   roles[]) derived from the access token.
 - ``useClaimsToTenancy`` hydrates the Zustand tenancy store from
   those claims on the first render after login.
-- The Phase 6 ``ContextBar`` ([`frontend/src/components/shell/ContextBar.tsx`](mdc:frontend/src/components/shell/ContextBar.tsx))
+- The Phase 6 ``ContextBar`` ([`aqp_client/src/components/shell/ContextBar.tsx`](mdc:aqp_client/src/components/shell/ContextBar.tsx))
   exposes EntityPickers for org / team / workspace / project / lab
   so users can pin context manually.
 

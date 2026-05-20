@@ -195,21 +195,21 @@ webui-gen-api: webui-export-openapi
 
 # ---------------------------------------------------------------------------
 # Vite frontend (canonical post-rewrite). Built bundle lands in
-# frontend/dist and is consumed by the aqp-frontend image during
+# aqp_client/dist and is consumed by the aqp-frontend image during
 # 'aqp deploy build'.
 # ---------------------------------------------------------------------------
 
 frontend-install:
-	pnpm --dir frontend install
+	pnpm --dir aqp_client install
 
 frontend-dev:
-	pnpm --dir frontend dev
+	pnpm --dir aqp_client dev
 
 frontend-build:
-	pnpm --dir frontend build
+	pnpm --dir aqp_client build
 
 frontend-typecheck:
-	pnpm --dir frontend typecheck
+	pnpm --dir aqp_client typecheck
 
 # ---------------------------------------------------------------------------
 # Refactor — /build/ + /deployments/ + aqp_platform_core + aqp_control_plane
@@ -283,7 +283,7 @@ build: build-client build-cp build-worker build-ingestion
 
 build-client:
 	docker buildx build --platform $(PLATFORMS) --load \
-		-f build/docker/aqp_client/Dockerfile \
+		-f aqp_client/Dockerfile \
 		-t $(REGISTRY)/aqp-client:$(IMAGE_TAG) .
 
 build-cp:

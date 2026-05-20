@@ -104,7 +104,7 @@ auth = [
 ]
 # MSAL / Microsoft Entra ID identity provider (multi-tenant). Pure-Python;
 # enables MsalEntraProvider auto-registration. The SPA-side counterpart is
-# ``@azure/msal-react`` in frontend/package.json. See docs/msal-entra-setup.md.
+# ``@azure/msal-react`` in aqp_client/package.json. See docs/msal-entra-setup.md.
 auth-msal = [
     "msal>=1.36",
     "python-jose[cryptography]>=3.3",
@@ -403,6 +403,7 @@ aqp-index = "scripts.index_metadata:main"
 aqp-train = "scripts.train_agent:main"
 aqp-backtest = "scripts.run_backtest:main"
 aqp-stream-ingest = "aqp.streaming.cli:main"
+aqp-bots = "aqp_bots.cli:main"
 aqp-data-mcp = "aqp.data.mcp.server:run_stdio"
 aqp-codebase-mcp = "aqp.codebase.mcp.server:run_stdio"
 aqp-export-schemas = "aqp.metadata.schema_export:cli"
@@ -410,6 +411,9 @@ aqp-export-schemas = "aqp.metadata.schema_export:cli"
 [tool.setuptools.packages.find]
 include = ["aqp*"]
 exclude = ["tests*", "notebooks*", "data*"]
+
+[tool.setuptools.package-data]
+aqp_bots = ["templates/**/*.yaml"]
 
 [tool.ruff]
 line-length = 100

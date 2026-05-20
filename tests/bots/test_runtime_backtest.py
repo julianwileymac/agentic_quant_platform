@@ -5,17 +5,17 @@ from typing import Any
 
 import pytest
 
-from aqp.bots.base import BotMethodNotSupported
-from aqp.bots.research_bot import ResearchBot
-from aqp.bots.runtime import BotRuntime
-from aqp.bots.spec import (
+from aqp_bots.base import BotMethodNotSupported
+from aqp_bots.research_bot import ResearchBot
+from aqp_bots.runtime import BotRuntime
+from aqp_bots.spec import (
     BotAgentRef,
     BotSpec,
     DeploymentTargetSpec,
     MLDeploymentRef,
     UniverseRef,
 )
-from aqp.bots.trading_bot import TradingBot
+from aqp_bots.trading_bot import TradingBot
 
 
 def _trading_spec(**overrides: Any) -> BotSpec:
@@ -187,7 +187,7 @@ def test_runtime_backtest_calls_run_backtest_from_config(monkeypatch) -> None:
     import aqp.backtest.runner as runner_mod
 
     monkeypatch.setattr(runner_mod, "run_backtest_from_config", fake_run)
-    monkeypatch.setattr("aqp.bots.registry.persist_spec", lambda *a, **kw: None)
+    monkeypatch.setattr("aqp_bots.registry.persist_spec", lambda *a, **kw: None)
 
     bot = TradingBot(spec=_trading_spec())
     runtime = BotRuntime(bot, task_id=None)

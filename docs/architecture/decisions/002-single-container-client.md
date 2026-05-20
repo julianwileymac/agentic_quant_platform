@@ -19,7 +19,7 @@ Three packaging options were considered:
 
 `aqp_client` is **one image built from a three-stage Dockerfile** that ships:
 
-- Stage 1 (`ui-builder`, `node:20-alpine`) — runs `pnpm --dir frontend build`, output to `/app/out/`. Node is dropped after this stage.
+- Stage 1 (`ui-builder`, `node:20-alpine`) — runs `pnpm --dir aqp_client build`, output to `/app/out/`. Node is dropped after this stage.
 - Stage 2 (`solara-builder`, `python:3.11-slim`) — installs Solara + legacy UI deps, pre-warms component caches, verifies `legacy_ui.app` is importable.
 - Stage 3 (`production`, `python:3.11-slim`) — installs FastAPI + uvicorn + httpx + websockets + python-jose + `aqp_platform_core`. Copies Vite assets from Stage 1 and Solara from Stage 2. Exposes port `8080`. No Node, no npm.
 

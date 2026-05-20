@@ -1,0 +1,20 @@
+# Monorepo docker build context — keep host OS node_modules out of images.
+aqp_client/node_modules
+aqp_client/.pnpm-store
+aqp_client/dist
+aqp_client/coverage
+aqp_client/playwright-report
+aqp_client/test-results
+aqp_client/.vitest
+
+webui/node_modules
+webui/.next
+
+.git
+.cursor
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info

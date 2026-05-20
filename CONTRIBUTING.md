@@ -344,10 +344,25 @@ docs/
 ├── operations/local-setup.md ← canonical local setup/runbook
 ├── operations/kubernetes-deploy.md ← canonical Kubernetes rollout runbook
 ├── webui.md             ← legacy Next.js webui reference (rollback only)
-└── ../frontend/README.md ← active Vite frontend operator UI
+└── ../aqp_client/README.md ← active Vite frontend operator UI
 AGENTS.md                ← AI agent rule-set (root)
 CONTRIBUTING.md          ← this file (root)
 ```
+
+## Split packages (monorepo boundaries)
+
+When working on extracted boundaries, install them editable alongside the
+monolith:
+
+```bash
+pip install -e aqp_platform_core
+pip install -e aqp_control_plane
+pip install -e aqp_bots
+pip install -e ".[dev]"
+pnpm --dir aqp_client install
+```
+
+Canonical paths: [docs/aqp-monorepo-paths.md](docs/aqp-monorepo-paths.md).
 
 ## Help / questions
 

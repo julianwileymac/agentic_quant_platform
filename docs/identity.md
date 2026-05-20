@@ -7,7 +7,7 @@ service-to-service auth (M2M tokens that downstream services like
 Polaris / Trino consume via the credential resolver).
 
 The pieces port (with attribution) from
-`inspiration/auth0-server-python-main` (MIT, Copyright Auth0, Inc.)
+`aqp_snippets/inspiration/auth0-server-python-main` (MIT, Copyright Auth0, Inc.)
 into AQP-native modules.
 
 ## Architecture

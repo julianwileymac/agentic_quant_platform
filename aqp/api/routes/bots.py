@@ -1,6 +1,6 @@
 """``/bots`` — first-class Bot CRUD + lifecycle endpoints.
 
-A :class:`aqp.bots.spec.BotSpec` is the smallest self-contained,
+A :class:`aqp_bots.spec.BotSpec` is the smallest self-contained,
 deployable unit on AQP. Each row in the ``bots`` table corresponds to
 one named spec inside a project; ``bot_versions`` carries an immutable
 hash-locked snapshot per change; ``bot_deployments`` ledgers every run
@@ -34,7 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aqp.api.security import secure_router
 from aqp.api.schemas import TaskAccepted
-from aqp.bots.spec import BotSpec
+from aqp_bots.spec import BotSpec
 from aqp.persistence import async_session_dep
 from aqp.persistence.models_bots import Bot as BotRow
 from aqp.persistence.models_bots import BotDeployment, BotVersion
@@ -545,7 +545,7 @@ async def halt_bot(
     """Halt every active deployment for a single bot.
 
     Wired to the per-bot ``BotsApi.halt`` button in
-    ``frontend/src/lib/api/bots.ts``. Mirrors :func:`halt_all_bots`
+    ``aqp_client/src/lib/api/bots.ts``. Mirrors :func:`halt_all_bots`
     but scopes the revoke fan-out to one bot's deployments.
     """
     from aqp.tasks.celery_app import celery_app as _celery

@@ -35,7 +35,7 @@ The doc has three sections:
 | Spec | Runtime | Versions table | Canonical doc |
 | --- | --- | --- | --- |
 | [`AgentSpec`](../aqp/agents/spec.py) | [`AgentRuntime`](../aqp/agents/runtime.py) | `agent_spec_versions` | [agents.md](agents.md) |
-| [`BotSpec`](../aqp/bots/spec.py) | [`BotRuntime`](../aqp/bots/runtime.py) | `bot_versions` | [bots.md](bots.md) |
+| [`BotSpec`](../aqp_bots/spec.py) | [`BotRuntime`](../aqp_bots/runtime.py) | `bot_versions` | [bots.md](bots.md) |
 | [`RLExperimentSpec`](../aqp/rl/spec.py) | [`RLRuntime`](../aqp/rl/runtime.py) | `rl_experiment_versions` | [rl-framework.md](rl-framework.md) |
 | [`AnalysisSpec`](../aqp/analysis/spec.py) | [`AnalysisRuntime`](../aqp/analysis/runtime.py) | `analysis_spec_versions` | [analysis-framework.md](analysis-framework.md) |
 | [`WorkflowSpec`](../aqp/agents/orchestration/spec.py) | [`WorkflowRuntime`](../aqp/agents/orchestration/runtime.py) | `workflow_spec_versions` | [workflow-studio.md](workflow-studio.md) |
@@ -195,7 +195,7 @@ in one place so you can audit the surface in one read.
 - Wired endpoint today: `POST /portfolio/kill_switch` in
   [aqp/api/routes/portfolio.py](../aqp/api/routes/portfolio.py)
 - Frontend topbar component:
-  [frontend/src/components/common/KillSwitch.tsx](../frontend/src/components/common/KillSwitch.tsx)
+  [aqp_client/src/components/common/KillSwitch.tsx](../aqp_client/src/components/common/KillSwitch.tsx)
 - Design contract for per-runtime fan-out — `/agents/halt`,
   `/paper/stop-all`, `/bots/halt-all`, `/rl/halt-all` — see
   [frontend.mdc](../.cursor/rules/frontend.mdc) (wire as the

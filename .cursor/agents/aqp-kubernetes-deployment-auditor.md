@@ -18,8 +18,8 @@ Primary scope:
 - `aqp/cli/deploy_cmd.py`, `aqp/tasks/terraform_tasks.py`, and
   `aqp/api/routes/control_plane.py` for runtime/control-plane use of topology.
 - `aqp/kubernetes/**` for adapter selection and cluster operations.
-- `frontend/src/routes/control-plane/**` and
-  `frontend/src/lib/api/controlPlane.ts` for operator UI consumption.
+- `aqp_client/src/routes/control-plane/**` and
+  `aqp_client/src/lib/api/controlPlane.ts` for operator UI consumption.
 
 Review checklist:
 1. Confirm target IDs, stack slugs, namespaces, ingress classes, image

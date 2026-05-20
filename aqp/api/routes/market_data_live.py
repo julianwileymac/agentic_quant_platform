@@ -59,7 +59,7 @@ class SubscribeRequest(BaseModel):
 
     Accepts both the legacy ``{venue, symbols}`` shape used by the
     Next.js webui and the simplified ``{vt_symbols}`` shape used by the
-    Vite Live Trading Desk (``frontend/src/routes/live/page.tsx``).
+    Vite Live Trading Desk (``aqp_client/src/routes/live/page.tsx``).
     When the simplified shape is used, ``venue`` defaults to
     ``"simulated"`` so the desk works against the deterministic replay
     feed without forcing operators to choose a venue up front.
@@ -440,9 +440,9 @@ def list_subscriptions() -> list[dict[str, Any]]:
 def history(vt_symbol: str, limit: int = 240, interval: str = "1d") -> list[dict[str, Any]]:
     """Return the most recent OHLC seed for a symbol.
 
-    Used by ``frontend/src/routes/live/page.tsx`` to seed the WebGL OHLC
+    Used by ``aqp_client/src/routes/live/page.tsx`` to seed the WebGL OHLC
     chart before the live WebSocket starts emitting bars. The shape
-    matches ``OhlcSeed`` in ``frontend/src/components/charts/OhlcChart.tsx``:
+    matches ``OhlcSeed`` in ``aqp_client/src/components/charts/OhlcChart.tsx``:
     ``{ time, open, high, low, close, volume? }`` with ``time`` as a unix
     second integer.
     """
@@ -521,7 +521,7 @@ def book(vt_symbol: str, depth: int = 10) -> dict[str, list[dict[str, float]]]:
     gracefully.
 
     Returned shape matches ``OrderBookLevel`` in
-    ``frontend/src/components/live/OrderBook.tsx``:
+    ``aqp_client/src/components/live/OrderBook.tsx``:
     ``{ bids: [{ price, size, cumulative }], asks: [...] }``.
     """
     if depth <= 0:

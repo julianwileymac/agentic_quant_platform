@@ -269,12 +269,12 @@ mismatch between this glossary and the code, file an issue.
 - **LobStrategy** — ABC for limit-order-book strategies; subclasses
   emit `OrderIntent` lists in response to `LobState` updates. Engine
   integration is deferred — see
-  [extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md](../extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md).
+  [aqp_snippets/extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md](../aqp_snippets/extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md).
 - **Dataset preset** — Curated declarative spec for a one-click
   ingestion (e.g. `intraday_momentum_etf`, `crypto_majors_intraday`).
   See [aqp/data/dataset_presets.py](../aqp/data/dataset_presets.py).
 - **Inspiration source** — One of seven external repos under
-  `inspiration/` from which strategies / models / agents were
+  `aqp_snippets/inspiration/` from which strategies / models / agents were
   rehydrated. Tracked via the `source` kwarg on
   `aqp.core.registry.register` and surfaced as the `source:*` tag.
 

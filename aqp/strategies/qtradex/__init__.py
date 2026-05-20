@@ -3,7 +3,7 @@
 28 rule-based crypto bots originally written against the proprietary
 ``qtradex`` SDK. Re-implemented here as ``IAlphaModel`` subclasses
 consuming AQP's bar interface. See
-``extractions/qtradex/REFERENCE.md`` for per-strategy notes.
+``aqp_snippets/extractions/qtradex/REFERENCE.md`` for per-strategy notes.
 """
 from __future__ import annotations
 

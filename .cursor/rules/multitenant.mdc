@@ -7,10 +7,10 @@ globs:
   - "aqp/api/routes/tenancy.py"
   - "aqp/data/mcp/tools/tenancy.py"
   - "configs/tenants/*.yaml"
-  - "frontend/src/components/onboarding/*.tsx"
-  - "frontend/src/routes/admin/onboarding/**/*.tsx"
-  - "frontend/src/lib/api/tenancy.ts"
-  - "frontend/src/lib/auth/config.ts"
+  - "aqp_client/src/components/onboarding/*.tsx"
+  - "aqp_client/src/routes/admin/onboarding/**/*.tsx"
+  - "aqp_client/src/lib/api/tenancy.ts"
+  - "aqp_client/src/lib/auth/config.ts"
 alwaysApply: false
 ---
 
@@ -32,7 +32,7 @@ Phase 7 of the multi-tenant rollout. Hard rule 44 in
    [`aqp/auth/user.py::_apply_entra_tenant_link`](mdc:aqp/auth/user.py).**
    Unknown `tid` + `auth_msal_b2b_enabled=True` creates a `pending`
    link; an AQP super-admin promotes via the
-   [`EntraTenantLinkWizard`](mdc:frontend/src/components/onboarding/EntraTenantLinkWizard.tsx).
+   [`EntraTenantLinkWizard`](mdc:aqp_client/src/components/onboarding/EntraTenantLinkWizard.tsx).
 3. **The MSAL provider is registered by
    [`IdentityProviderMeta`](mdc:aqp/auth/providers/protocol.py).**
    Set `provider_kind = "msal_entra"` and the metaclass auto-
@@ -47,10 +47,10 @@ Phase 7 of the multi-tenant rollout. Hard rule 44 in
 5. **Frontend wiring:** SPA env vars are `VITE_MSAL_TENANT_ID` /
    `VITE_MSAL_CLIENT_ID` / `VITE_MSAL_AUTHORITY` /
    `VITE_MSAL_REDIRECT_URI` / `VITE_MSAL_SCOPES`. The
-   [`AuthProvider`](mdc:frontend/src/lib/auth/AuthProvider.tsx)
+   [`AuthProvider`](mdc:aqp_client/src/lib/auth/AuthProvider.tsx)
    picks `@azure/msal-react` when MSAL is configured, else falls
    back to `@auth0/auth0-react`. The
-   [`useAuth`](mdc:frontend/src/lib/auth/useAuth.ts) contract is
+   [`useAuth`](mdc:aqp_client/src/lib/auth/useAuth.ts) contract is
    unchanged so consumers don't branch.
 6. **The Entra `oid` claim is the canonical user identifier**, not
    `sub`. `provision_user_from_claims` writes `oid` into

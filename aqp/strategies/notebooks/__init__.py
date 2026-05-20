@@ -2,7 +2,7 @@
 
 Academic systematic strategies originally built on the proprietary
 ``vivace`` library. We re-implement signal math against AQP bars.
-See ``extractions/notebooks/REFERENCE.md``.
+See ``aqp_snippets/extractions/notebooks/REFERENCE.md``.
 """
 from __future__ import annotations
 

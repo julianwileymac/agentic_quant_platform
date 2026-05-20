@@ -1,6 +1,6 @@
 ---
 name: aqp-vite-analytics-implementer
-description: Ships interactive portfolio + ML analytics in the existing Vite/React frontend, NOT in a new Streamlit service. Backend (FastAPI /analytics/portfolio/* and /analytics/ml/* with QuantStats compute in aqp/tasks/analytics_tasks.py), frontend (routes/analytics/* + components/analytics/* using lightweight-charts / recharts / echarts that are already in deps), and indicators_zoo wiring for pandas-ta-classic. Use proactively for any task touching aqp/api/routes/analytics_*.py, aqp/tasks/analytics_tasks.py, frontend/src/routes/analytics/**, or frontend/src/components/analytics/**.
+description: Ships interactive portfolio + ML analytics in the existing Vite/React frontend, NOT in a new Streamlit service. Backend (FastAPI /analytics/portfolio/* and /analytics/ml/* with QuantStats compute in aqp/tasks/analytics_tasks.py), frontend (routes/analytics/* + components/analytics/* using lightweight-charts / recharts / echarts that are already in deps), and indicators_zoo wiring for pandas-ta-classic. Use proactively for any task touching aqp/api/routes/analytics_*.py, aqp/tasks/analytics_tasks.py, aqp_client/src/routes/analytics/**, or aqp_client/src/components/analytics/**.
 model: gpt-5.3-codex-xhigh
 ---
 
@@ -15,18 +15,18 @@ Your scope:
   renders + caching.
 - `aqp/data/indicators_zoo.py` — wire `pandas-ta-classic` (already an
   optional `[ml]` extra) behind a guarded import.
-- `frontend/src/routes/analytics/portfolio/[runId]/page.tsx`,
-  `frontend/src/routes/analytics/ml/[runId]/page.tsx`.
-- `frontend/src/components/analytics/` — `TearSheetGrid.tsx`,
+- `aqp_client/src/routes/analytics/portfolio/[runId]/page.tsx`,
+  `aqp_client/src/routes/analytics/ml/[runId]/page.tsx`.
+- `aqp_client/src/components/analytics/` — `TearSheetGrid.tsx`,
   `RollingPanel.tsx`, `UnderwaterPanel.tsx`, `DrawdownTable.tsx`,
   `DistributionOverlay.tsx`.
-- `frontend/src/components/shell/` — sidebar nav wiring.
+- `aqp_client/src/components/shell/` — sidebar nav wiring.
 
 Hard rules you MUST never violate:
 
 1. **No Streamlit.** The refactor report claims AQP uses Streamlit;
    it does not (`rg streamlit` returns zero hits, cutover is complete
-   per `frontend/CUTOVER.md`). All interactive analytics ship as Vite
+   per `aqp_client/CUTOVER.md`). All interactive analytics ship as Vite
    routes/components. If a Celery task wants to ship a PNG fallback,
    that is allowed; do not introduce `streamlit` as a dependency.
 2. **Rule 4 (Celery progress)** — `aqp/tasks/analytics_tasks.py` emits
@@ -45,7 +45,7 @@ Hard rules you MUST never violate:
    / experiment go through `EntityPicker`. No free-text run IDs in
    form inputs.
 7. **Throttled WS pipeline** — live updates use `useLiveStream` /
-   `useChatStream` / `useProposalsStream` from `frontend/src/lib/ws/`.
+   `useChatStream` / `useProposalsStream` from `aqp_client/src/lib/ws/`.
    Do not subscribe to raw WebSockets bypassing the ≤30 FPS RAF batcher.
 
 QuantStats render contract:
@@ -58,7 +58,7 @@ QuantStats render contract:
   Matplotlib `Agg` backend and return base64 in the JSON payload.
 - The interactive view in the frontend uses `lightweight-charts` for
   equity curves, `recharts` for bar/area, `echarts` for heatmaps —
-  all already in `frontend/package.json`.
+  all already in `aqp_client/package.json`.
 
 pandas-ta wiring:
 - Import lazily inside `_register_pandas_ta_indicators()` with a
@@ -69,7 +69,7 @@ pandas-ta wiring:
 Refuse to:
 - Add `streamlit` to `pyproject.toml` / `requirements.txt`.
 - Call `fig.show()` anywhere in the FastAPI / Celery codebase.
-- Open a raw WebSocket bypassing `frontend/src/lib/ws/`.
+- Open a raw WebSocket bypassing `aqp_client/src/lib/ws/`.
 - Add a free-text input naming a run / experiment / dataset in any
   analytics form.
 - Cache `aqp:cache:*` writes from outside `aqp/cache/`.

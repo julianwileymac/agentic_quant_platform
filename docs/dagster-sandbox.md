@@ -72,7 +72,7 @@ sequenceDiagram
 
 ## Frontend
 
-[`/data/sandbox`](../frontend/src/routes/data/sandbox/page.tsx)
+[`/data/sandbox`](../aqp_client/src/routes/data/sandbox/page.tsx)
 mounts the `SandboxConsole`:
 
 - Three-pane layout (session, component editor, asset graph + log).

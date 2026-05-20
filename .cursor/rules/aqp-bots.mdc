@@ -1,0 +1,20 @@
+---
+description: Bot template and runtime boundary rules.
+globs:
+  - "aqp_bots/**"
+  - "aqp/bots/**"
+  - "tests/bots/**"
+alwaysApply: false
+---
+
+# AQP Bots
+
+- `aqp_bots/` owns runtime primitives, templates, samples, validation notes,
+  and agent guidance.
+- `aqp/bots/` is compatibility shims only.
+- All bot lifecycle actions go through `BotRuntime`.
+- `bot_versions` are immutable, hash-locked snapshots.
+- Templates compose existing strategy, engine, ML, RAG, and agent references;
+  do not reimplement those subsystems inside a bot.
+- Sample specs must use placeholders or credential references, not secrets.
+

@@ -33,7 +33,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY pyproject.toml ./
 COPY README.md ./
+COPY aqp_platform_core ./aqp_platform_core
 COPY aqp ./aqp
+COPY aqp_bots ./aqp_bots
 COPY scripts ./scripts
 COPY alembic ./alembic
 COPY alembic.ini ./
@@ -45,7 +47,9 @@ COPY alembic.ini ./
 ###############################################################################
 FROM base AS paper
 
-RUN pip install --upgrade pip && pip install -e ".[alpaca,ibkr,tradier,otel,cli,paper,streaming]"
+RUN pip install --upgrade pip \
+    && pip install -e ./aqp_platform_core \
+    && pip install -e ".[alpaca,ibkr,tradier,otel,cli,paper,streaming]"
 
 RUN useradd --system --uid 1001 aqp \
     && mkdir -p /app/data \
@@ -64,7 +68,9 @@ CMD ["aqp", "paper", "run", "--config", "/etc/aqp/paper.yaml"]
 ###############################################################################
 FROM base AS ingester
 
-RUN pip install --upgrade pip && pip install -e ".[alpaca,ibkr,streaming,otel]"
+RUN pip install --upgrade pip \
+    && pip install -e ./aqp_platform_core \
+    && pip install -e ".[alpaca,ibkr,streaming,otel]"
 
 RUN useradd --system --uid 1001 aqp \
     && chown -R aqp:aqp /app
@@ -88,7 +94,9 @@ FROM base AS api
 # (for MinIO uploads) comes in transitively via [iceberg] -> s3fs ->
 # botocore; the DatasetManager has a local-fs fallback when neither
 # boto3 nor MinIO endpoints are configured.
-RUN pip install --upgrade pip && pip install -e ".[auth,dev,otel,cli,iceberg,visualization,entity-graph,dagster-aqp,compute-dask,compute-ray]"
+RUN pip install --upgrade pip \
+    && pip install -e ./aqp_platform_core \
+    && pip install -e ".[auth,dev,otel,cli,iceberg,visualization,entity-graph,dagster-aqp,compute-dask,compute-ray]"
 
 EXPOSE 8000 8765
 

@@ -5,15 +5,15 @@ from pathlib import Path
 
 import pytest
 
-from aqp.bots import registry as bot_registry
-from aqp.bots.registry import (
+from aqp_bots import registry as bot_registry
+from aqp_bots.registry import (
     add_spec,
     get_bot_spec,
     list_bot_specs,
     register_bot_spec,
     reload_yaml_dir,
 )
-from aqp.bots.spec import BotSpec, UniverseRef
+from aqp_bots.spec import BotSpec, UniverseRef
 
 
 @pytest.fixture(autouse=True)

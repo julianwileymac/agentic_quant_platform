@@ -45,7 +45,7 @@ flowchart TB
 
 ## Cross-route state
 
-`frontend/src/components/strategy-dev/StrategyDevContext.tsx` holds
+`aqp_client/src/components/strategy-dev/StrategyDevContext.tsx` holds
 the shared selection (`deploymentId`, `deploymentIdB`, `symbols`,
 `start`, `end`, `featureRowText`, `perturbations`, `lastTaskId`,
 `lastRunSummary`, `composerYaml`, `strategyId`). The context is
@@ -80,13 +80,13 @@ launched in the current session so the surface stays calm.
 
 ## How to add a sub-route
 
-1. Create `frontend/src/routes/strategy-development/<slug>/page.tsx`
+1. Create `aqp_client/src/routes/strategy-development/<slug>/page.tsx`
    wrapping the new component.
-2. Add the new component under `frontend/src/components/strategy-dev/`.
-3. Register the route in `frontend/src/routes.tsx`'s
+2. Add the new component under `aqp_client/src/components/strategy-dev/`.
+3. Register the route in `aqp_client/src/routes.tsx`'s
    `DYNAMIC_ROUTES` entry for `strategy-development`.
 4. Add a `StrategyDevSubRoute` entry to
-   `frontend/src/components/strategy-dev/SubNav.tsx` so the new
+   `aqp_client/src/components/strategy-dev/SubNav.tsx` so the new
    route appears in the persistent left nav.
 
 ## Legacy

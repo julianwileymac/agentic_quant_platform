@@ -14,6 +14,12 @@ glob-scoped sibling rules under [.cursor/rules/](mdc:.cursor/rules):
 
 | Scope (glob) | Rule file | What it covers |
 | --- | --- | --- |
+| `**/*` | [repository-boundaries.mdc](mdc:.cursor/rules/repository-boundaries.mdc) | Future repository split routing across `aqp_control_plane`, `aqp_platform_core`, `aqp_client`, `aqp_snippets`, `aqp_bots`, and `aqp` |
+| `aqp_control_plane/**` | [aqp-control-plane.mdc](mdc:.cursor/rules/aqp-control-plane.mdc) | Standalone `/manage/*` control plane, provider adapters, no `aqp.*` imports |
+| `aqp_platform_core/**` | [aqp-platform-core.mdc](mdc:.cursor/rules/aqp-platform-core.mdc) | Shared value types, ABCs, auth/resource filters, dependency-light contracts |
+| `aqp_client/**` | [aqp-client.mdc](mdc:.cursor/rules/aqp-client.mdc) | Active Vite client boundary rules |
+| `aqp_snippets/**`, `extractions/**`, `inspiration/**` | [aqp-snippets.mdc](mdc:.cursor/rules/aqp-snippets.mdc) | Curated code knowledge, provenance, no runtime imports |
+| `aqp_bots/**`, `aqp_bots/**`, `aqp_bots/templates/**`, `tests/bots/**` | [aqp-bots.mdc](mdc:.cursor/rules/aqp-bots.mdc) | Bot templates, `BotRuntime`, immutable bot versions |
 | `aqp/{agents,bots,rl,analysis}/**/*.py` + matching configs/tests | [runtimes.mdc](mdc:.cursor/rules/runtimes.mdc) | `AgentRuntime` / `BotRuntime` / `RLRuntime` / `AnalysisRuntime` lifecycle, hash-locked spec versions, `RLComponent` metaclass, agent-body bans |
 | `aqp/data/**/*.py`, `tests/data/**/*.py`, `scripts/iceberg_*.py`, `scripts/ingest_*.py` | [iceberg.mdc](mdc:.cursor/rules/iceberg.mdc) | `iceberg_catalog.append_arrow`, medallion layers, `BusinessMetadata`, namespace-prefix validation |
 | `aqp/data/pipelines/**/*.py` + ingestion scripts | [data-pipelines.mdc](mdc:.cursor/rules/data-pipelines.mdc) | Discover → Director → Materialise → Verify → Annotate (existing) |
@@ -23,13 +29,13 @@ glob-scoped sibling rules under [.cursor/rules/](mdc:.cursor/rules):
 | `aqp/data/datasets/**/*.py` + bundled kinds | [datasets.mdc](mdc:.cursor/rules/datasets.mdc) | `BaseDataset` ABC, `DatasetSpec` hashing, kind registry, single Iceberg write entry-point per kind |
 | `aqp/cache/**/*.py`, `aqp/api/routes/cache.py`, mutation routes that call `cache_write_through` | [cache.mdc](mdc:.cursor/rules/cache.mdc) | Whitelist-only entity dropdowns, key namespace, write-through, TTL strategy |
 | `aqp/data/discovery/**/*.py`, `aqp/api/routes/discovery.py`, `aqp/data/mcp/tools/discovery.py` | [discovery.mdc](mdc:.cursor/rules/discovery.mdc) | Unified ingested + uningested catalog browser, lifecycle classification, virtual ids are read-only |
-| `aqp/data/airbyte/builder/**/*.py`, `aqp/api/routes/airbyte_builder.py`, `aqp/data/fetchers/userland/**/*.py`, `frontend/src/components/airbyte/builder/**/*.tsx` | [airbyte-builder.mdc](mdc:.cursor/rules/airbyte-builder.mdc) | No `AIRBYTE_ENABLE_UNSAFE_CODE`; CredentialResolver-only; userland tree is generated, not hand-authored |
-| `aqp/dagster/sandbox/**/*.py`, `aqp/api/routes/dagster_sandbox.py`, `aqp/tasks/dagster_sandbox_tasks.py`, `frontend/src/components/sandbox/**/*.tsx` | [dagster-sandbox.mdc](mdc:.cursor/rules/dagster-sandbox.mdc) | Per-session isolation, `aqp:sandbox:*` Redis prefix, ContextVar env override, canonical progress frame |
-| `frontend/**/*.{ts,tsx}`, `webui/**/*.{ts,tsx}` | [frontend.mdc](mdc:.cursor/rules/frontend.mdc) | Vite vs Next.js boundary, throttled WS, kill-switch, sandbox indicator |
+| `aqp/data/airbyte/builder/**/*.py`, `aqp/api/routes/airbyte_builder.py`, `aqp/data/fetchers/userland/**/*.py`, `aqp_client/src/components/airbyte/builder/**/*.tsx` | [airbyte-builder.mdc](mdc:.cursor/rules/airbyte-builder.mdc) | No `AIRBYTE_ENABLE_UNSAFE_CODE`; CredentialResolver-only; userland tree is generated, not hand-authored |
+| `aqp/dagster/sandbox/**/*.py`, `aqp/api/routes/dagster_sandbox.py`, `aqp/tasks/dagster_sandbox_tasks.py`, `aqp_client/src/components/sandbox/**/*.tsx` | [dagster-sandbox.mdc](mdc:.cursor/rules/dagster-sandbox.mdc) | Per-session isolation, `aqp:sandbox:*` Redis prefix, ContextVar env override, canonical progress frame |
+| `aqp_client/**/*.{ts,tsx}`, `webui/**/*.{ts,tsx}` | [frontend.mdc](mdc:.cursor/rules/frontend.mdc) | Vite vs Next.js boundary, throttled WS, kill-switch, sandbox indicator |
 | `aqp/optimal_control/**/*.py`, `aqp/options/portfolio_mm.py`, `aqp/options/greeks_jax.py`, `aqp/backtest/hft.py`, `aqp/strategies/{lob,hft}/**/*.py`, `aqp/analysis/flows/optimal_control.py`, `aqp/data/mcp/tools/{optimal_control,strategy_config}.py`, `aqp/rl/envs/{market_making_env,lucic_tse_options_env,optimal_execution_env,mbtgym_adapter}.py` | [optimal-control.mdc](mdc:.cursor/rules/optimal-control.mdc) | JAX-pure HJB solvers (Avellaneda-Stoikov, Cartea-Jaimungal, Lucic-Tse), hftbacktest LOB engine, ``data.optimal_control.*`` MCP tools, whitelisted strategy YAML mutations |
 | `aqp/graph/**/*.py`, `aqp/persistence/models_{experiments,resources,tenancy}.py`, `aqp/data/mcp/tools/{ownership,experiments,tests}.py`, `aqp/tasks/ownership_tasks.py` | [ownership-graph.mdc](mdc:.cursor/rules/ownership-graph.mdc) | `OwnershipGraphStore`, after_flush_postexec hooks, Neo4j projection, `experiments`/`tests`/`resources` umbrella, hard rules 33-34 |
-| `aqp/api/security.py`, `aqp/api/routes/auth0_sync.py`, `aqp/auth/**/*.py`, `frontend/src/lib/auth/**/*.{ts,tsx}` | [identity.mdc](mdc:.cursor/rules/identity.mdc) | Auth0 enforcement modes, `require_scope` / `require_membership`, claim namespace, Action sync endpoint |
-| `aqp/strategies/lean/**/*.py`, `scripts/ingest_lean_templates.py`, `aqp/data/mcp/tools/strategies.py`, `aqp/api/routes/strategy_templates.py`, `frontend/src/routes/strategy-development/templates/**/*.tsx` | [strategy-templates.mdc](mdc:.cursor/rules/strategy-templates.mdc) | LEAN ingester, AST translator, polymorphic Resource catalog, hard rule 35 |
+| `aqp/api/security.py`, `aqp/api/routes/auth0_sync.py`, `aqp/auth/**/*.py`, `aqp_client/src/lib/auth/**/*.{ts,tsx}` | [identity.mdc](mdc:.cursor/rules/identity.mdc) | Auth0 enforcement modes, `require_scope` / `require_membership`, claim namespace, Action sync endpoint |
+| `aqp/strategies/lean/**/*.py`, `scripts/ingest_lean_templates.py`, `aqp/data/mcp/tools/strategies.py`, `aqp/api/routes/strategy_templates.py`, `aqp_client/src/routes/strategy-development/templates/**/*.tsx` | [strategy-templates.mdc](mdc:.cursor/rules/strategy-templates.mdc) | LEAN ingester, AST translator, polymorphic Resource catalog, hard rule 35 |
 
 Workflow + collaboration cadence: [WORKFLOW.md](mdc:WORKFLOW.md).
 Cross-session state template: [.agents/state-template.md](mdc:.agents/state-template.md).
@@ -99,7 +105,7 @@ file references.
 ## When in doubt
 
 1. Read the relevant **scoped** rule above.
-2. Read [AGENTS.md](mdc:AGENTS.md) for the full hard-rule list (25
+2. Read [AGENTS.md](mdc:AGENTS.md) for the full hard-rule list (45
    rules + Don'ts).
 3. Read the canonical doc from [docs/index.md](mdc:docs/index.md).
 4. Search the code: `rg "<symbol>" aqp/`.

@@ -95,7 +95,7 @@ All rollbacks are flag-flips (no migrations, no data loss):
   Celery `include` list; cold installs without the module fail
   loudly at worker boot rather than silently dropping tasks.
 - The Vite studio bundle is code-split: routes under
-  `frontend/src/routes/workflows/*` lazy-load only when the user
+  `aqp_client/src/routes/workflows/*` lazy-load only when the user
   navigates there, so disabling the flag also disables the
   bundle download path.
 
@@ -122,5 +122,5 @@ Run before flipping any flag in production:
 - Celery task: `aqp/tasks/orchestration_tasks.py` (Phase 3).
 - Persistence: `aqp/persistence/models_workflows.py` + alembic `0046_workflow_versioning.py` (Phase 5).
 - API: `aqp/api/routes/workflows.py` (Phase 5).
-- Studio UI: `frontend/src/routes/workflows/*` (Phase 5).
-- Halt + watchdog hardening: `aqp/tasks/agent_watchdog_tasks.py`, `frontend/src/components/common/KillSwitch.tsx` (Phase 6).
+- Studio UI: `aqp_client/src/routes/workflows/*` (Phase 5).
+- Halt + watchdog hardening: `aqp/tasks/agent_watchdog_tasks.py`, `aqp_client/src/components/common/KillSwitch.tsx` (Phase 6).

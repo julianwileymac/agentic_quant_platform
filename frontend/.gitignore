@@ -1,22 +1,5 @@
-node_modules
-dist
-dist-ssr
-*.local
-.DS_Store
-*.log
-.vite
-
-# Editor / OS
-.idea
-.vscode/*
-!.vscode/extensions.json
-
-# Test artefacts
-playwright-report
-test-results
-coverage
-
-# Env
-.env
+# Legacy stub — active client lives in ../aqp_client
+node_modules/
+dist/
 .env.local
-.env.*.local
+*.tsbuildinfo

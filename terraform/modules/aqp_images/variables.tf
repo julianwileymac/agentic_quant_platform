@@ -30,8 +30,8 @@ variable "app_version" {
 
 variable "frontend_dist_path" {
   type        = string
-  default     = "frontend/dist"
-  description = "Relative path (under context_path) to the built Vite bundle. The frontend Dockerfile expects this directory."
+  default     = "aqp_client/dist"
+  description = "Relative path (under context_path) to the built Vite bundle. Kept under the legacy variable name for Terraform compatibility."
 }
 
 variable "ready_marker" {

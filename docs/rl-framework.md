@@ -94,12 +94,12 @@ flowchart LR
 
 ## Inspiration sources
 
-- **FinRL** (`inspiration/FinRL-master`) — env taxonomy
+- **FinRL** (`aqp_snippets/inspiration/FinRL-master`) — env taxonomy
   (StockTrading, StockPortfolio, multi-crypto), `DataProcessor` /
   `FeatureEngineer` / `df_to_array`, `DRLAgent` / `DRLEnsembleAgent`,
   composite reward. Ported as registered presets in
   `aqp.rl.envs.finrl_*`, `aqp.rl.data_pipelines.*`, and the
   `WalkForwardEnsembler`.
-- **FinRobot** (`inspiration/FinRobot-master`) — multi-agent LLM
+- **FinRobot** (`aqp_snippets/inspiration/FinRobot-master`) — multi-agent LLM
   workflow + tool-augmented analysis. Bridged via `LLMHybridAgent`
   (LLM proposes, RL refines) and `FundamentalBuilder`.

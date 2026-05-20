@@ -3,11 +3,11 @@
 Next.js 15 + TypeScript frontend for the Agentic Quant Platform.
 
 > **Migration note.** A Vite 7 + Tailwind 4 + shadcn/ui rewrite lives at
-> [`../frontend/`](../frontend/) and runs on `:3001` next to this app on
+> [`../aqp_client/`](../aqp_client/) and runs on `:3001` next to this app on
 > `:3000`. Phase 0 + Phase 1 of the rewrite ships the priority surface
 > (Live Trading Desk, Action Center, kill-switch, sandbox banner). The
 > remaining ~120 routes are progressively ported in phases 2-6 — see
-> [`../frontend/README.md`](../frontend/README.md) for status. Until
+> [`../aqp_client/README.md`](../aqp_client/README.md) for status. Until
 > parity is reached, this app remains the canonical operator UI.
 
 Replaces the legacy Solara UI on `:8765`. Talks to the FastAPI backend on `:8000`

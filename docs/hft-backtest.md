@@ -153,7 +153,7 @@ so the registry index lights up.
 
 ## See also
 
-- [extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md](../extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md) —
+- [aqp_snippets/extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md](../aqp_snippets/extractions/_FUTURE_PROMPTS/lob_adapter_prompt.md) —
   the original spec this implementation closes out.
 - [docs/optimal-control.md](optimal-control.md) — the JAX HJB closed
   forms that ``GLFTMM`` and ``AvellanedaStoikovMM`` consume.

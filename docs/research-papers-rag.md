@@ -47,7 +47,7 @@ sequenceDiagram
 | API | `aqp.api.routes.rag` (`/rag/papers/*`) | upload, list, detail, synthesize, hybrid-query |
 | Tasks | `aqp.tasks.research_paper_tasks.{ingest_research_paper,synthesize_strategy_from_paper}` | progress-emitting Celery wrappers |
 | MCP | `aqp.data.mcp.tools.research_papers.{Browse,Search,Synthesize}ResearchPapersTool` | `data.research_papers.*` for agents (AGENTS rule 22) |
-| Frontend | `frontend/src/components/strategy-dev/{DocumentLibrary,PaperUpload,PaperDetail,PaperSynthesisDrawer}.tsx` | upload + browse + detail (KaTeX) + synthesise |
+| Frontend | `aqp_client/src/components/strategy-dev/{DocumentLibrary,PaperUpload,PaperDetail,PaperSynthesisDrawer}.tsx` | upload + browse + detail (KaTeX) + synthesise |
 
 ## Parser selector chain
 

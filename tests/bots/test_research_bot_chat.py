@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from aqp.bots.research_bot import ResearchBot
-from aqp.bots.spec import BotAgentRef, BotSpec, RAGRef
+from aqp_bots.research_bot import ResearchBot
+from aqp_bots.spec import BotAgentRef, BotSpec, RAGRef
 
 
 def _research_spec(**overrides: Any) -> BotSpec:

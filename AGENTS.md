@@ -10,8 +10,8 @@
 > (Plan → Act → Reflect, FAST vs SLOW modes, intervention nodes,
 > FREEMODE).
 > [.cursor/rules/](.cursor/rules) — glob-scoped Cursor rules
-> derived from this file (a slim always-on `aqp.mdc` plus seven
-> domain-scoped rules). The 45 hard rules below remain canonical
+> derived from this file (a slim always-on `aqp.mdc` plus focused
+> domain-scoped sibling rules). The 45 hard rules below remain canonical
 > (rules 40-45 cover the additive `WorkflowRuntime` +
 > `workflow_spec_versions` shipped by the orchestration refactor —
 > see [docs/workflow-studio.md](docs/workflow-studio.md) for the
@@ -27,9 +27,29 @@
 > [docs/multi-agent-patterns.md](docs/multi-agent-patterns.md) —
 > Sequential / Parallel / Debate / Coordinator / ReAct topologies
 > mapped to [aqp/agents/graph/](aqp/agents/graph/).
+> [docs/repository-split.md](docs/repository-split.md) — current
+> `aqp_control_plane` / `aqp_platform_core` / `aqp_client` /
+> `aqp_snippets` / `aqp_bots` boundary map for the repo split.
+> [docs/aqp-monorepo-paths.md](docs/aqp-monorepo-paths.md) — canonical
+> path contract mirrored in sibling repos.
+> [docs/code-index-governance.md](docs/code-index-governance.md) —
+> agent search and code-index workflow across those boundaries.
 > [.agents/state-template.md](.agents/state-template.md) —
 > cross-session state schema (use only when work spans multiple
 > sessions; prefer Cursor's plan mode + chat todos otherwise).
+
+## Repository split routing
+
+The repository is being decomposed by responsibility before future
+standalone repo extraction:
+
+| Path | Role | Agent guidance |
+| --- | --- | --- |
+| [aqp_control_plane/](aqp_control_plane/) | Standalone workload control plane and `/manage/*` API | Read [aqp_control_plane/AGENTS.md](aqp_control_plane/AGENTS.md); never import `aqp.*` |
+| [aqp_platform_core/](aqp_platform_core/) | Shared value types, ABCs, auth/resource filters, topology, workload contracts | Read [aqp_platform_core/AGENTS.md](aqp_platform_core/AGENTS.md); keep dependency-light |
+| [aqp_client/](aqp_client/) + [aqp_client/](aqp_client/) | Future client repo boundary + active Vite implementation | Read [aqp_client/AGENTS.md](aqp_client/AGENTS.md) and [aqp_client/AGENTS.md](aqp_client/AGENTS.md) |
+| [aqp_snippets/](aqp_snippets/) + [aqp_snippets/extractions/](aqp_snippets/extractions/) + [aqp_snippets/inspiration/](aqp_snippets/inspiration/) | Curated code knowledge and prompt/rule/skill material | Read [aqp_snippets/AGENTS.md](aqp_snippets/AGENTS.md); runtime code must not import it |
+| [aqp_bots/](aqp_bots/) + [aqp_bots/](aqp_bots/) + [aqp_bots/templates/](aqp_bots/templates/) | Bot templates now, runtime extraction later | Read [aqp_bots/AGENTS.md](aqp_bots/AGENTS.md); preserve `BotRuntime` |
 
 ## Project map
 
@@ -44,7 +64,7 @@ Use this as your first lookup when answering "where does X live?".
 | [aqp/agents/orchestration/](aqp/agents/orchestration/) | Additive orchestration control plane — hash-locked `WorkflowSpec` + `WorkflowRuntime` + metaclass-registered `OrchestrationAdapter` registry + seven concrete adapters (graph / crew / debate / fusion / execution / schedule / studio). Composes the existing `AgentRuntime`, graph builders, DataMCP catalog, and halt safety. | [docs/workflow-studio.md](docs/workflow-studio.md) |
 | [aqp/api/](aqp/api/) | FastAPI app + 30+ route modules under `routes/` | [docs/architecture.md](docs/architecture.md) |
 | [aqp/backtest/](aqp/backtest/) | Backtest engines (vbt-pro primary, event-driven, OSS vectorbt, backtesting.py, ZVT, AAT, fallback cascade); shared `BaseBacktestEngine` ABC + `EngineCapabilities` | [docs/backtest-engines.md](docs/backtest-engines.md) |
-| [aqp/bots/](aqp/bots/) | **Bot entity** — smallest deployable unit (TradingBot / ResearchBot). Aggregates universe + strategy + engine + ML + agents + RAG + metrics; drives backtest / paper / chat / k8s deploy via `BotRuntime` | [docs/bots.md](docs/bots.md) |
+| [aqp_bots/](aqp_bots/) | **Bot entity** — smallest deployable unit (TradingBot / ResearchBot). Aggregates universe + strategy + engine + ML + agents + RAG + metrics; drives backtest / paper / chat / k8s deploy via `BotRuntime` | [docs/bots.md](docs/bots.md) |
 | [aqp/backtest/vbtpro/](aqp/backtest/vbtpro/) | Deep vectorbt-pro integration (signals/orders/optimizer/holding/random modes, WFO via `Splitter`, `Param` sweeps, `IndicatorFactory` bridge) | [docs/vbtpro-integration.md](docs/vbtpro-integration.md) |
 | [aqp/strategies/vbtpro/](aqp/strategies/vbtpro/) | vbt-pro-tuned alpha + order-model components (`AgenticVbtAlpha`, `MLVbtAlpha`, `AgenticOrderModel`) | [docs/vbtpro-integration.md](docs/vbtpro-integration.md) |
 | [aqp/cli/](aqp/cli/) | `aqp` CLI commands | – |
@@ -95,9 +115,12 @@ External code:
 | Path | Purpose |
 | --- | --- |
 | [webui/](webui/) | Legacy Next.js 15 webui on `:3000`, retained for rollback/reference only. |
-| [frontend/](frontend/) | Active operator UI (Vite 7 + React 19 + Tailwind 4 + shadcn/ui) on `:3001` in dev. Cutover completed; see [frontend/CUTOVER.md](frontend/CUTOVER.md) for rollback notes. |
+| [aqp_client/](aqp_client/) | Active operator UI (Vite 7 + React 19 + Tailwind 4 + shadcn/ui) on `:3001` in dev. Cutover completed; see [aqp_client/CUTOVER.md](aqp_client/CUTOVER.md) for rollback notes. |
+| [aqp_client/](aqp_client/) | Future client repository boundary and index; live code remains in `aqp_client/` until build/deploy paths move. |
+| [aqp_snippets/](aqp_snippets/) | Future snippets repository boundary; curated knowledge currently also lives in `aqp_snippets/extractions/` and `aqp_snippets/inspiration/`. |
+| [aqp_bots/](aqp_bots/) | Future bot template/sample repository boundary; runtime remains in `aqp_bots/` for now. |
 | [alembic/versions/](alembic/versions/) | DB migrations (immutable once shipped) |
-| [deploy/k8s/](deploy/k8s/) | Kubernetes manifests for the rpi_kubernetes cluster |
+| [deploy/k8s/](deploy/k8s/) | Legacy Kubernetes manifests for the rpi_kubernetes cluster; new rollouts use [deployments/](deployments/) |
 | [scripts/](scripts/) | Operational scripts (`iceberg_smoke.py`, `ingest_regulatory.py`, …) |
 | [configs/](configs/) | YAML configs (strategies, agents, ML models, LLM profiles, RAG taxonomies) |
 | [tests/](tests/) | pytest suite |
@@ -133,7 +156,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
    `from aqp.config import settings`.** Don't construct
    `Settings()` directly — there's an `lru_cache(maxsize=1)` backing
    it. Add new knobs as fields on `Settings` in
-   [aqp/config.py](aqp/config.py); they pick up `AQP_*` env vars
+   [aqp/config/settings.py](aqp/config/settings.py); they pick up `AQP_*` env vars
    automatically.
 8. **Strategies use the `class` / `module_path` / `kwargs` factory
    pattern** (Qlib-style) for instantiation from YAML. The registry
@@ -161,13 +184,13 @@ These hold across the codebase. Any PR that violates one will be sent back.
     version row automatically via
     [aqp/agents/registry.py::persist_spec](aqp/agents/registry.py).
 14. **All bot lifecycle actions go through
-    [aqp/bots/runtime.py::BotRuntime](aqp/bots/runtime.py).** Telemetry,
+    [aqp_bots/runtime.py::BotRuntime](aqp_bots/runtime.py).** Telemetry,
     `bot_versions` snapshots, and `bot_deployments` rows depend on it.
     Don't call `run_backtest_from_config` / `build_session_from_config`
     / `AgentRuntime` directly from a bot subclass — derive the cfg in
     `BaseBot._derive_*_cfg` and let the runtime drive the call.
 15. **`bot_versions` rows are immutable, hash-locked.** Snapshotting via
- [aqp/bots/registry.py::persist_spec](aqp/bots/registry.py) creates a
+ [aqp_bots/registry.py::persist_spec](aqp_bots/registry.py) creates a
  new version row automatically when the spec hash changes.
 16. **All RL training / evaluation / paper-trading / replay /
  walk-forward goes through
@@ -281,7 +304,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  `dataset_catalogs` (Alembic 0032) carry the discriminator.
  Frontend forms that name a dataset / namespace / sink kind /
  Airbyte connector / project / credential MUST use
- [`EntityPicker`](frontend/src/components/common/EntityPicker.tsx)
+ [`EntityPicker`](aqp_client/src/components/common/EntityPicker.tsx)
  against the matching cache category. Mutation routes call
  [`cache_write_through`](aqp/cache/invalidation.py) after commit;
  the `aqp:cache:*` Redis prefix is reserved for
@@ -303,7 +326,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  graphical builder lives under
  [`aqp/data/fetchers/userland/`](aqp/data/fetchers/userland/).**
  The visual builder
- ([`ConnectorBuilderForm`](frontend/src/components/airbyte/builder/ConnectorBuilderForm.tsx))
+ ([`ConnectorBuilderForm`](aqp_client/src/components/airbyte/builder/ConnectorBuilderForm.tsx))
  emits either a low-code Airbyte YAML manifest or an AQP-native
  [`Fetcher`](aqp/data/fetchers/base.py) stub via
  [`state_to_fetcher_stub`](aqp/data/airbyte/builder/codegen_fetcher.py).
@@ -494,7 +517,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  creates a ``pending`` link when an unknown tid arrives and
  ``settings.auth_msal_b2b_enabled`` is True; an AQP super-admin
  promotes via the
- [`EntraTenantLinkWizard`](frontend/src/components/onboarding/EntraTenantLinkWizard.tsx).
+ [`EntraTenantLinkWizard`](aqp_client/src/components/onboarding/EntraTenantLinkWizard.tsx).
  New identity providers (Auth0 / generic OIDC / mock / MSAL Entra)
  register through the
  [`IdentityProviderMeta`](aqp/auth/providers/protocol.py) metaclass —
@@ -586,8 +609,8 @@ docker exec aqp-api alembic upgrade head
 | Author / test a strategy interactively | Land on `/strategy-development/composer` in the Vite frontend. Twelve sibling sub-routes share a persistent KPI strip + cross-route state — composer, simulation, ideation, single / batch / compare / scenario / historical / live / run-comparator / document-library / library. Canonical doc: [docs/strategy-development.md](docs/strategy-development.md) |
 | Add a research-paper RAG corpus entry | Upload via `POST /rag/papers/upload` (math-aware Marker / Nougat / MathPix / PyPDF chain in [aqp/rag/parsers/](aqp/rag/parsers/)); the ingest task feeds chunks through [`HierarchicalRAG.index_chunks`](aqp/rag/hierarchy.py). Hybrid retrieval via `HierarchicalRAG.query_hybrid`. Agents use `data.research_papers.*` DataMCPTools. Canonical doc: [docs/research-papers-rag.md](docs/research-papers-rag.md) |
 | Add a backtest engine | Subclass [aqp/backtest/base.py::BaseBacktestEngine](aqp/backtest/base.py); declare an `EngineCapabilities` class attribute; decorate with `@register("Name")`; add a shortcut to [aqp/backtest/runner.py::_ENGINE_SHORTCUTS](aqp/backtest/runner.py) and document in [docs/backtest-engines.md](docs/backtest-engines.md) |
-| Add a bot | Drop a YAML under [configs/bots/trading/](configs/bots/trading/) or [configs/bots/research/](configs/bots/research/); the registry auto-loads on first lookup. Programmatic: `BotSpec(...)` + `add_spec(spec)`. CRUD via `POST /bots`; lifecycle via `/bots/{id}/{backtest|paper|chat|deploy}`. |
-| Add a bot deployment target | Subclass [aqp/bots/deploy.py::DeploymentTarget](aqp/bots/deploy.py); register on `DeploymentDispatcher.register(target)`; add the kind to the `BOT_PALETTE` Deploy section in [webui/components/bots/botPalette.ts](webui/components/bots/botPalette.ts). |
+| Add a bot | Drop a YAML under [aqp_bots/templates/trading/](aqp_bots/templates/trading/) or [aqp_bots/templates/research/](aqp_bots/templates/research/); the registry auto-loads on first lookup. Programmatic: `BotSpec(...)` + `add_spec(spec)`. CRUD via `POST /bots`; lifecycle via `/bots/{id}/{backtest|paper|chat|deploy}`. |
+| Add a bot deployment target | Subclass [aqp_bots/deploy.py::DeploymentTarget](aqp_bots/deploy.py); register on `DeploymentDispatcher.register(target)`; add the kind to the `BOT_PALETTE` Deploy section in [webui/components/bots/botPalette.ts](webui/components/bots/botPalette.ts). |
 | Add an RL component (env / reward / observation / action / termination / policy / agent / data / ensembler / experiment / trajectory_store) | Subclass the matching base in [aqp/rl/core/](aqp/rl/core/) and set `rl_kind` + `rl_alias`. The [`RLComponent`](aqp/rl/core/base.py) metaclass auto-registers via `@register`. Add a palette tile in [webui/components/rl/palette.ts](webui/components/rl/palette.ts) and a serialiser entry in [webui/components/rl/serialize.ts](webui/components/rl/serialize.ts). |
 | Add an RL reward term | Subclass [`RewardTerm`](aqp/rl/core/reward.py) in [aqp/rl/rewards/](aqp/rl/rewards/); add to [aqp/rl/rewards/__init__.py](aqp/rl/rewards/__init__.py); ship a sample composite YAML under [configs/rl/rewards/](configs/rl/rewards/) |
 | Add an RL framework adapter | Subclass [`BaseRLAgent`](aqp/rl/core/policy.py) in [aqp/rl/agents/](aqp/rl/agents/); set `rl_alias`/`rl_source`; expose via the agents `__init__.py` (suppress import errors so the dep stays optional). |
@@ -604,8 +627,8 @@ docker exec aqp-api alembic upgrade head
 | Add a test | Mirror the source path under [tests/](tests/); use the existing fixtures |
 | Inspect Iceberg catalog | `from pyiceberg.catalog import load_catalog; load_catalog("aqp", type="sql", uri="sqlite:///C:/aqp-warehouse/iceberg/catalog.db", warehouse="file:///C:/aqp-warehouse/iceberg")` |
 | Find every place a task is dispatched | `rg "<task_module>\.<task_name>\.delay\(" aqp/` |
-| Find every config knob | [aqp/config.py](aqp/config.py) (single source of truth) |
-| Add an inspiration-rehydrated asset | Decorate with `@register("Name", source="<repo>", category="<bucket>")` from [aqp/core/registry.py](aqp/core/registry.py); add a per-asset note to `extractions/<source>/REFERENCE.md`; ship a YAML under `configs/<kind>/<source>/<name>.yaml` |
+| Find every config knob | [aqp/config/settings.py](aqp/config/settings.py) (single source of truth) |
+| Add an inspiration-rehydrated asset | Decorate with `@register("Name", source="<repo>", category="<bucket>")` from [aqp/core/registry.py](aqp/core/registry.py); add a per-asset note to `aqp_snippets/extractions/<source>/REFERENCE.md`; ship a YAML under `configs/<kind>/<source>/<name>.yaml` |
 | Choose a medallion layer | Use `aqp_bronze_<source>` for raw, `aqp_silver_<source>` for normalised, `aqp_gold_<entity>` for products. Validate with `medallion_layer="bronze\|silver\|gold"` on [`iceberg_catalog.append_arrow`](aqp/data/iceberg_catalog.py). Read [docs/data-layer-unification.md](docs/data-layer-unification.md) |
 | Add a normalization strategy | Subclass [`BaseNormalizationStrategy`](aqp/data/normalization/base.py) in [aqp/data/normalization/strategies.py](aqp/data/normalization/strategies.py); decorate with `@register_normalization_strategy("alias")`; reference in `Silver` transform nodes |
 | Add a DataMCP tool | Subclass [`DataMCPTool`](aqp/data/mcp/base.py) under [aqp/data/mcp/tools/](aqp/data/mcp/tools/), decorate with `@register_data_mcp_tool`. The bridge auto-installs into [`TOOL_REGISTRY`](aqp/agents/tools/__init__.py); the FastAPI router and stdio binary expose it externally. Read [docs/data-mcp.md](docs/data-mcp.md) |
@@ -623,7 +646,7 @@ docker exec aqp-api alembic upgrade head
 | Add a sink kind | One [`SinkKindDescriptor`](aqp/data/fetchers/sinks/__init__.py) entry, one `SinkNode` subclass under [aqp/data/fetchers/sinks/](aqp/data/fetchers/sinks/) decorated with `@register_node("sink.<kind>")`, document in [docs/data-pipelines-hub.md](docs/data-pipelines-hub.md) |
 | Add a `BaseDataset` kind | Subclass [`BaseDataset`](aqp/data/datasets/base.py) under [aqp/data/datasets/kinds/](aqp/data/datasets/kinds/), set `kind`, implement `_load` / `_save`. Re-export from [`aqp/data/datasets/kinds/__init__.py`](aqp/data/datasets/kinds/__init__.py) so the metaclass auto-registration fires on import. Add a smoke test under `tests/data/datasets/`; document in [docs/datasets-catalog.md](docs/datasets-catalog.md). |
 | Add a cached entity dropdown | Add a category to [`aqp.cache.keys.CACHE_CATEGORIES`](aqp/cache/keys.py), add a populator on [`MetadataPrefetcher`](aqp/cache/prefetch.py), expose `<EntityPicker kind="…" />` in the frontend bound to the matching `/cache/<category>` endpoint. Mutation routes call [`cache_write_through`](aqp/cache/invalidation.py) after commit. |
-| Surface a new external-source kind in the discovery browser | Extend [`aqp.data.discovery.service.DiscoveryService`](aqp/data/discovery/service.py) with a new `_*_entries` collator + dedupe key, add a literal to [`DiscoveryLifecycleState`](aqp/data/discovery/types.py) only if the existing four (ingested / pending / orphan / external_only) don't fit, and update the lifecycle filter chips in [`DiscoveryBrowser`](frontend/src/components/data/DiscoveryBrowser.tsx). |
+| Surface a new external-source kind in the discovery browser | Extend [`aqp.data.discovery.service.DiscoveryService`](aqp/data/discovery/service.py) with a new `_*_entries` collator + dedupe key, add a literal to [`DiscoveryLifecycleState`](aqp/data/discovery/types.py) only if the existing four (ingested / pending / orphan / external_only) don't fit, and update the lifecycle filter chips in [`DiscoveryBrowser`](aqp_client/src/components/data/DiscoveryBrowser.tsx). |
 | Promote an external entry into ingestion | Frontend calls `POST /discovery/entries/{id}/promote` and follows the returned `redirect_url`. Backend emits `LineageEvent(transform_kind="discovery.promoted")` via [`LineageWriter`](aqp/data/catalog/lineage.py). |
 | Add a builder field to the Airbyte builder | Edit [`aqp/data/airbyte/builder/schema.py`](aqp/data/airbyte/builder/schema.py); React form generator picks it up via `/airbyte/builder/cdk-schema`. If the new field needs YAML emit / Fetcher codegen, extend [`codegen_yaml.py`](aqp/data/airbyte/builder/codegen_yaml.py) + [`codegen_fetcher.py`](aqp/data/airbyte/builder/codegen_fetcher.py). |
 | Generate an AQP Fetcher from the builder | Frontend calls `POST /airbyte/builder/codegen/fetcher` with `commit=false` for a diff preview; toggling `commit=true` writes to `aqp/data/fetchers/userland/<slug>.py` and persists `aqp_fetcher_path` on the connector row. |
@@ -669,7 +692,7 @@ docker exec aqp-api alembic upgrade head
 | Search a pgvector-backed table | `data.vector.search` MCP tool (free-text or pre-computed embedding). For programmatic access, use the `PgVectorDataset` kind in [aqp/data/datasets/kinds/pgvector.py](aqp/data/datasets/kinds/pgvector.py) or `aqp.rag.pgvector_store.PgVectorStore` directly. (Phase 3 refactor) |
 | Render a portfolio tearsheet | `POST /analytics/portfolio/tearsheet` (enqueues the heavy quantstats render through Celery and returns a `task_id`). For the synchronous metrics fast path, use `POST /analytics/portfolio/metrics`. UI: `/analytics/portfolio/:runId`. See [docs/analytics-frontend.md](docs/analytics-frontend.md) (Phase 4 refactor) |
 | Inspect agent run health / stalled candidates | `GET /agents/health` REST route or `data.agents.health` MCP tool. Watchdog cleanup runs as the `aqp.tasks.agent_watchdog_tasks.scan_for_stalled_agent_runs` Celery beat task (interval = `AQP_AGENT_WATCHDOG_PERIOD_SECONDS`). See [docs/agent-watchdog.md](docs/agent-watchdog.md) (Phase 5 refactor) |
-| Wire account management for a new IdP feature | Extend `aqp/auth/management_api.py` + add a `/me/*` route in `aqp/api/routes/me.py` + a typed wrapper in `frontend/src/lib/api/me.ts` + a tab section in `frontend/src/components/account/` |
+| Wire account management for a new IdP feature | Extend `aqp/auth/management_api.py` + add a `/me/*` route in `aqp/api/routes/me.py` + a typed wrapper in `aqp_client/src/lib/api/me.ts` + a tab section in `aqp_client/src/components/account/` |
 | Audit a security event | Call `emit_audit_event(event_type, user_id=..., event_category=..., severity=..., source=..., request=request, details={...})` from `aqp.auth.audit`. Never raises |
 | Invite a user to an org / workspace | `POST /tenancy/invites` admin-only; user accepts via public `POST /tenancy/invites/{token}/accept`; tokens are HMAC-hashed in `tenancy_invites` |
 
@@ -721,7 +744,7 @@ Things that look like they should work but actively break the system.
   the model choice via `AgentSpec.model` and let the runtime drive it.
 - **Don't write decision/episode/reflection rows to Redis from agent
   code.** Use [aqp/llm/memory.py::RedisHybridMemory](aqp/llm/memory.py).
-- **Don't bypass [aqp/bots/runtime.py::BotRuntime](aqp/bots/runtime.py)
+- **Don't bypass [aqp_bots/runtime.py::BotRuntime](aqp_bots/runtime.py)
   for bot lifecycle actions.** Telemetry / `bot_versions` snapshots /
   `bot_deployments` rows depend on it.
 - **Don't mutate `bot_versions` rows.** They are immutable, hash-locked
@@ -796,7 +819,7 @@ Things that look like they should work but actively break the system.
 - **Don't introduce a free-text input that names an entity in the
  cache.** Datasets / namespaces / sink kinds / Airbyte connectors /
  projects / credentials must use
- [`EntityPicker`](frontend/src/components/common/EntityPicker.tsx).
+ [`EntityPicker`](aqp_client/src/components/common/EntityPicker.tsx).
  Free-text inputs are reserved for descriptions, queries, and
  search boxes — never for names that exist on the backend.
 - **Don't write to the `aqp:cache:*` Redis namespace from outside
@@ -858,32 +881,32 @@ Things that look like they should work but actively break the system.
 | `register("Name")` | Strategy / model factory decorator | [aqp/core/registry.py](aqp/core/registry.py) |
 | `emit / emit_done / emit_error` | Task progress publish | [aqp/tasks/_progress.py](aqp/tasks/_progress.py) |
 | `subscribe(task_id)` | Subscribe to task progress | [aqp/ws/broker.py](aqp/ws/broker.py) |
-| `settings.<knob>` | Read any config | [aqp/config.py](aqp/config.py) |
+| `settings.<knob>` | Read any config | [aqp/config/settings.py](aqp/config/settings.py) |
 | `HierarchicalRAG.query / walk` | Hierarchical RAG entry point | [aqp/rag/hierarchy.py](aqp/rag/hierarchy.py) |
 | `BaseDataset` + `DatasetSpec` + `build_dataset` | Kedro-style typed catalog primitive (data fabric phase 0) | [aqp/data/datasets/base.py](aqp/data/datasets/base.py), [aqp/data/datasets/spec.py](aqp/data/datasets/spec.py), [aqp/data/datasets/registry.py](aqp/data/datasets/registry.py) |
 | `MetadataCache` + `cache_write_through` + `MetadataPrefetcher` | Redis prefetch layer backing every entity dropdown (data fabric phase 0) | [aqp/cache/client.py](aqp/cache/client.py), [aqp/cache/invalidation.py](aqp/cache/invalidation.py), [aqp/cache/prefetch.py](aqp/cache/prefetch.py) |
-| `EntityPicker` | Whitelist-only entity dropdown bound to the metadata cache | [frontend/src/components/common/EntityPicker.tsx](frontend/src/components/common/EntityPicker.tsx) |
+| `EntityPicker` | Whitelist-only entity dropdown bound to the metadata cache | [aqp_client/src/components/common/EntityPicker.tsx](aqp_client/src/components/common/EntityPicker.tsx) |
 | `DiscoveryService` + `DiscoveryEntry` | Unified ingested / pending / orphan / external_only catalog browser (data fabric phase 1) | [aqp/data/discovery/service.py](aqp/data/discovery/service.py), [aqp/data/discovery/types.py](aqp/data/discovery/types.py) |
 | `data.discovery.{browse,describe,promote}` | DataMCPTools wrapping the discovery surface | [aqp/data/mcp/tools/discovery.py](aqp/data/mcp/tools/discovery.py) |
 | `BUILDER_SCHEMA` + `state_to_yaml` + `state_to_fetcher_stub` | Schema-driven Airbyte builder + AQP Fetcher codegen (data fabric phase 2) | [aqp/data/airbyte/builder/schema.py](aqp/data/airbyte/builder/schema.py), [aqp/data/airbyte/builder/codegen_yaml.py](aqp/data/airbyte/builder/codegen_yaml.py), [aqp/data/airbyte/builder/codegen_fetcher.py](aqp/data/airbyte/builder/codegen_fetcher.py) |
-| `ConnectorBuilderForm` | Frontend schema-driven Airbyte builder, replaces the JSON editor | [frontend/src/components/airbyte/builder/ConnectorBuilderForm.tsx](frontend/src/components/airbyte/builder/ConnectorBuilderForm.tsx) |
+| `ConnectorBuilderForm` | Frontend schema-driven Airbyte builder, replaces the JSON editor | [aqp_client/src/components/airbyte/builder/ConnectorBuilderForm.tsx](aqp_client/src/components/airbyte/builder/ConnectorBuilderForm.tsx) |
 | `SandboxRuntime` + `SandboxRedisNamespace` + `SandboxEnvResolver` | Per-session ephemeral Dagster sandbox (data fabric phase 3) | [aqp/dagster/sandbox/runtime.py](aqp/dagster/sandbox/runtime.py), [aqp/dagster/sandbox/redis_isolation.py](aqp/dagster/sandbox/redis_isolation.py), [aqp/dagster/sandbox/env_resolver.py](aqp/dagster/sandbox/env_resolver.py) |
 | `execute_sandbox_session` | Celery task streaming sandbox events through `_progress.emit` | [aqp/tasks/dagster_sandbox_tasks.py](aqp/tasks/dagster_sandbox_tasks.py) |
-| `SandboxConsole` | Frontend three-pane sandbox UI with `[SANDBOX]` indicator | [frontend/src/components/sandbox/SandboxConsole.tsx](frontend/src/components/sandbox/SandboxConsole.tsx) |
+| `SandboxConsole` | Frontend three-pane sandbox UI with `[SANDBOX]` indicator | [aqp_client/src/components/sandbox/SandboxConsole.tsx](aqp_client/src/components/sandbox/SandboxConsole.tsx) |
 | `AgentSpec` + `AgentRuntime` | Spec-driven agent contract + executor | [aqp/agents/spec.py](aqp/agents/spec.py), [aqp/agents/runtime.py](aqp/agents/runtime.py) |
 | `RedisHybridMemory` | Working / episodic / reflection memory layer | [aqp/llm/memory.py](aqp/llm/memory.py) |
 | `build_full_pipeline_graph` | Alpha-GPT three-stage agentic loop | [aqp/agents/graph/builder.py](aqp/agents/graph/builder.py) |
 | Author / run a workflow | Author a [`WorkflowSpec`](aqp/agents/orchestration/spec.py) (or drop YAML under [configs/workflows/](configs/workflows/)); call [`WorkflowRuntime(spec).run(...)`](aqp/agents/orchestration/runtime.py) or POST `/workflows/{name}/run`. Replay via `/workflows/runs/{run_id}/replay`. UI at `/workflows`. See [docs/workflow-studio.md](docs/workflow-studio.md). |
 | Add an OrchestrationAdapter | Subclass [`OrchestrationAdapter`](aqp/agents/orchestration/base.py) under [aqp/agents/orchestration/adapters/](aqp/agents/orchestration/adapters/); set `adapter_kind` (one of the seven in [`ADAPTER_KINDS`](aqp/agents/orchestration/registry.py)) + `adapter_alias`. The [`OrchestrationAdapterMeta`](aqp/agents/orchestration/base.py) metaclass auto-registers via `@register("alias", kind="orchestration_adapter")`. |
-| Halt every running workflow | `POST /workflows/halt` (mirrors `/agents/halt`, `/paper/stop-all`, `/bots/halt-all`, `/rl/halt-all`, `/quant-agents/halt`). The topbar [`KillSwitch`](frontend/src/components/common/KillSwitch.tsx) component fans out to all six in parallel. |
+| Halt every running workflow | `POST /workflows/halt` (mirrors `/agents/halt`, `/paper/stop-all`, `/bots/halt-all`, `/rl/halt-all`, `/quant-agents/halt`). The topbar [`KillSwitch`](aqp_client/src/components/common/KillSwitch.tsx) component fans out to all six in parallel. |
 | Inspect workflow stall candidates | `data.orchestration.health` MCP tool, or `GET /workflows/runs?status=running`. The [`scan_for_stalled_workflow_runs`](aqp/tasks/agent_watchdog_tasks.py) Celery beat task halts rows past `AQP_AGENT_STALL_THRESHOLD_SECONDS`. |
-| `BotSpec` + `BotRuntime` | Bot blueprint + executor (backtest / paper / chat / deploy) | [aqp/bots/spec.py](aqp/bots/spec.py), [aqp/bots/runtime.py](aqp/bots/runtime.py) |
+| `BotSpec` + `BotRuntime` | Bot blueprint + executor (backtest / paper / chat / deploy) | [aqp_bots/spec.py](aqp_bots/spec.py), [aqp_bots/runtime.py](aqp_bots/runtime.py) |
 | `AlphaBacktestExperiment` | Train + register + deploy + backtest in one experiment, combined ML + trading metrics | [aqp/ml/alpha_backtest_experiment.py](aqp/ml/alpha_backtest_experiment.py), [aqp/ml/alpha_metrics.py](aqp/ml/alpha_metrics.py) |
 | `aqp.ml.flows.run_flow` | Sync workbench flow dispatch (linear / decomposition / forecast / GARCH / ACF / ...) | [aqp/ml/flows.py](aqp/ml/flows.py) |
 | `aqp.ml.adhoc.quick_*` | Notebook-friendly one-liners (ridge, ARIMA, iforest, FinBERT, ...) | [aqp/ml/adhoc/](aqp/ml/adhoc/) |
 | `transform.ml_preprocessing` + `sink.ml_feature_snapshot` | ML preprocessing as data-engine nodes; feature-snapshot Iceberg sink | [aqp/data/fetchers/transforms/ml_preprocessing.py](aqp/data/fetchers/transforms/ml_preprocessing.py), [aqp/data/fetchers/sinks/ml_feature_snapshot_sink.py](aqp/data/fetchers/sinks/ml_feature_snapshot_sink.py) |
-| `TradingBot` / `ResearchBot` | Bot subclasses (`build_bot(spec)` picks the right one) | [aqp/bots/trading_bot.py](aqp/bots/trading_bot.py), [aqp/bots/research_bot.py](aqp/bots/research_bot.py) |
-| `DeploymentDispatcher` | Bot deploy target dispatch (paper / k8s / backtest_only) | [aqp/bots/deploy.py](aqp/bots/deploy.py) |
+| `TradingBot` / `ResearchBot` | Bot subclasses (`build_bot(spec)` picks the right one) | [aqp_bots/trading_bot.py](aqp_bots/trading_bot.py), [aqp_bots/research_bot.py](aqp_bots/research_bot.py) |
+| `DeploymentDispatcher` | Bot deploy target dispatch (paper / k8s / backtest_only) | [aqp_bots/deploy.py](aqp_bots/deploy.py) |
 | `SinkRow` + `materialise_node_spec` | Project-scoped sink registry resolved into manifest `NodeSpec` | [aqp/persistence/models_sinks.py](aqp/persistence/models_sinks.py), [aqp/data/sinks/service.py](aqp/data/sinks/service.py) |
 | `MarketDataProducerRow` + `ProducerSupervisor` | Producer registry + start/stop/scale lifecycle | [aqp/persistence/models_producers.py](aqp/persistence/models_producers.py), [aqp/streaming/producers/supervisor.py](aqp/streaming/producers/supervisor.py) |
 | `StreamingDatasetLink` | Dataset ↔ topic / job / connector linkage graph | [aqp/persistence/models_streaming_links.py](aqp/persistence/models_streaming_links.py) |

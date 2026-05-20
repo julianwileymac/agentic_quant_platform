@@ -23,8 +23,8 @@ single replayable workflow concept.
 | Celery tasks | [aqp/tasks/orchestration_tasks.py](../aqp/tasks/orchestration_tasks.py) |
 | DataMCP tools | [aqp/data/mcp/tools/orchestration.py](../aqp/data/mcp/tools/orchestration.py), [aqp/data/mcp/tools/automation.py](../aqp/data/mcp/tools/automation.py) |
 | Cache entry | `workflows` category in [aqp/cache/keys.py](../aqp/cache/keys.py) |
-| Frontend routes | [frontend/src/routes/workflows/](../frontend/src/routes/workflows/) |
-| Frontend components | [frontend/src/components/workflows/](../frontend/src/components/workflows/) |
+| Frontend routes | [aqp_client/src/routes/workflows/](../aqp_client/src/routes/workflows/) |
+| Frontend components | [aqp_client/src/components/workflows/](../aqp_client/src/components/workflows/) |
 
 ## Spec shape
 

@@ -11,7 +11,7 @@ dependency on the proprietary ``qx.ti`` / ``qx.qi`` modules). Where an
 existing AQP indicator class fits cleanly, we delegate to
 :mod:`aqp.core.indicators` via :class:`aqp.data.indicators_zoo.IndicatorZoo`.
 
-See ``extractions/qtradex/REFERENCE.md`` for the original logic
+See ``aqp_snippets/extractions/qtradex/REFERENCE.md`` for the original logic
 references and rationale per strategy.
 """
 from __future__ import annotations

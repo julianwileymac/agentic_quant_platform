@@ -31,7 +31,7 @@ modules, and breaking the SSE / WebSocket frame shape.
    `{task_id, stage, message, timestamp, **extras}`. Adding new
    fields to `extras` is fine. Renaming `task_id` / `stage` /
    `message` / `timestamp` is **not** — UI code in
-   [frontend/](mdc:frontend) and [webui/](mdc:webui) depends on the
+   [aqp_client/](mdc:aqp_client) and [webui/](mdc:webui) depends on the
    shape, and so do
    [`subscribe`](mdc:aqp/ws/broker.py) consumers.
 3. **Tasks are idempotent.** Re-runnable on transient failure. Pass

@@ -9,9 +9,9 @@ globs:
   - "aqp/persistence/models_terraform.py"
   - "terraform/**/*.tf"
   - "terraform/**/*.tf.j2"
-  - "frontend/src/routes/infra/**/*.tsx"
-  - "frontend/src/lib/api/terraform.ts"
-  - "frontend/src/lib/api/infra.ts"
+  - "aqp_client/src/routes/infra/**/*.tsx"
+  - "aqp_client/src/lib/api/terraform.ts"
+  - "aqp_client/src/lib/api/infra.ts"
 alwaysApply: false
 ---
 
@@ -55,7 +55,7 @@ for the narrative walkthrough. AGENTS rules 42 + 43 in
 7. **Frontend Terraform pages live under `/infra/terraform/*`**
    (Vite, not legacy webui). Plan / apply / destroy actions are
    friction-gated via
-   [`ConfirmFrictionDialog`](mdc:frontend/src/components/common/ConfirmFrictionDialog.tsx).
+   [`ConfirmFrictionDialog`](mdc:aqp_client/src/components/common/ConfirmFrictionDialog.tsx).
 
 ## Don't
 

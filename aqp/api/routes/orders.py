@@ -1,6 +1,6 @@
 """Flat ``/orders`` surface used by the Vite Live Trading Desk.
 
-The Live Desk in ``frontend/src/routes/live/page.tsx`` posts to a flat
+The Live Desk in ``aqp_client/src/routes/live/page.tsx`` posts to a flat
 ``/orders`` REST surface (``POST /orders``, ``DELETE /orders/{id}``,
 ``GET /orders/working``) instead of the venue-scoped
 ``/brokers/{venue}/orders`` playground or the long-running ``/paper/*``
@@ -53,7 +53,7 @@ class CreateOrderRequest(BaseModel):
     """Frontend payload from ``OrderTicket``.
 
     Mirrors the ``SubmitPayload`` shape in
-    ``frontend/src/components/live/OrderTicket.tsx``.
+    ``aqp_client/src/components/live/OrderTicket.tsx``.
     """
 
     vt_symbol: str
@@ -86,7 +86,7 @@ class CreateOrderResponse(BaseModel):
 
 
 class WorkingOrderRow(BaseModel):
-    """Matches ``frontend/src/components/live/WorkingOrders.tsx``."""
+    """Matches ``aqp_client/src/components/live/WorkingOrders.tsx``."""
 
     id: str
     vt_symbol: str

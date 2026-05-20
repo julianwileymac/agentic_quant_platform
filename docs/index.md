@@ -16,7 +16,10 @@ Triple-axis table of contents for the AQP docs.
 | Local setup + run | [operations/local-setup.md](operations/local-setup.md) | active | Default entry point for local development |
 | Kubernetes rollout | [operations/kubernetes-deploy.md](operations/kubernetes-deploy.md) | active | Production-oriented deployment path |
 | Deployment artifacts | [../deployments/README.md](../deployments/README.md) | active | Compose + Kubernetes manifests for current architecture |
-| Operator UI | [../frontend/README.md](../frontend/README.md) | active | Vite frontend is the primary UI |
+| Operator UI | [../aqp_client/README.md](../aqp_client/README.md) | active | Vite frontend is the primary UI |
+| Repository split map | [repository-split.md](repository-split.md) | migration | Domain boundaries for future standalone repositories |
+| Monorepo path contract | [aqp-monorepo-paths.md](aqp-monorepo-paths.md) | active | Canonical paths for cross-repo references |
+| Code index governance | [code-index-governance.md](code-index-governance.md) | active | Agent search/index workflow across split boundaries |
 | Legacy Next.js UI | [webui.md](webui.md) | rollback | Keep only for emergency rollback context |
 | Legacy Solara UI | [../aqp/ui/](../aqp/ui/) | rollback | Deprecated runtime surface |
 | Legacy k8s manifests | [../deploy/k8s/README.md](../deploy/k8s/README.md) | legacy | Historical manifests; do not use for new rollouts |
@@ -61,8 +64,9 @@ make deploy-k8s ENV=dev
 5. [glossary.md](glossary.md) — definitions.
 6. [erd.md](erd.md) + [class-diagram.md](class-diagram.md) — structural maps.
 7. [flows.md](flows.md) — end-to-end sequences.
-8. The relevant subsystem doc (table below).
-9. (Cross-session work) [../.agents/state-template.md](../.agents/state-template.md).
+8. [repository-split.md](repository-split.md) + [code-index-governance.md](code-index-governance.md) — current repo boundary map.
+9. The relevant subsystem doc (table below).
+10. (Cross-session work) [../.agents/state-template.md](../.agents/state-template.md).
 
 ## By lifecycle stage
 
@@ -82,7 +86,7 @@ flowchart LR
 | **Agentic** | [agentic-pipeline.md](agentic-pipeline.md), [providers.md](providers.md) |
 | **Bots** | [bots.md](bots.md) (smallest deployable unit; aggregates universe + strategy + engine + ML + agents + RAG + metrics) |
 | **Paper / Live** | [paper-trading.md](paper-trading.md), [live-market.md](live-market.md), [streaming.md](streaming.md), [streaming-admin.md](streaming-admin.md) |
-| **Cross-cutting** | [observability.md](observability.md), [../frontend/README.md](../frontend/README.md), [webui.md](webui.md) _(legacy)_, [core-types.md](core-types.md), [domain-model.md](domain-model.md), [alpha-vantage.md](alpha-vantage.md), [credentials.md](credentials.md), [cloud-credentials.md](cloud-credentials.md), [identity.md](identity.md), [scim-provisioning.md](scim-provisioning.md), [msal-entra-setup.md](msal-entra-setup.md), [multi-tenancy.md](multi-tenancy.md), [kubernetes-adapter.md](kubernetes-adapter.md), [kubernetes-rpi-deployment.md](kubernetes-rpi-deployment.md), [local-platform.md](local-platform.md), [terraform-control-plane.md](terraform-control-plane.md), [iac-runbook.md](iac-runbook.md) |
+| **Cross-cutting** | [observability.md](observability.md), [../aqp_client/README.md](../aqp_client/README.md), [webui.md](webui.md) _(legacy)_, [core-types.md](core-types.md), [domain-model.md](domain-model.md), [alpha-vantage.md](alpha-vantage.md), [credentials.md](credentials.md), [cloud-credentials.md](cloud-credentials.md), [identity.md](identity.md), [scim-provisioning.md](scim-provisioning.md), [msal-entra-setup.md](msal-entra-setup.md), [multi-tenancy.md](multi-tenancy.md), [kubernetes-adapter.md](kubernetes-adapter.md), [kubernetes-rpi-deployment.md](kubernetes-rpi-deployment.md), [local-platform.md](local-platform.md), [terraform-control-plane.md](terraform-control-plane.md), [iac-runbook.md](iac-runbook.md) |
 
 ## By subsystem
 
@@ -98,6 +102,8 @@ flowchart LR
 | [glossary.md](glossary.md) | Project-specific terminology |
 | [domain-model.md](domain-model.md) | Narrative on the domain types |
 | [core-types.md](core-types.md) | `Symbol`, enums, dataclasses |
+| [repository-split.md](repository-split.md) | Future repository/domain boundary map |
+| [code-index-governance.md](code-index-governance.md) | Agent search and code-index rules |
 
 ### Data plane
 
@@ -151,7 +157,7 @@ flowchart LR
 | --- | --- |
 | [agentic-development.md](agentic-development.md) | AQP's spec-pattern as the agentic-coder skill-artifact equivalent + consolidated ADLC security manifesto |
 | [multi-agent-patterns.md](multi-agent-patterns.md) | Sequential / Parallel / Debate / Coordinator / ReAct topologies mapped to [aqp/agents/graph/](../aqp/agents/graph/) + the seven orchestration adapter topologies |
-| [workflow-studio.md](workflow-studio.md) | Additive orchestration control plane — `WorkflowSpec` + `WorkflowRuntime` + 5 adapters + replayable runs |
+| [workflow-studio.md](workflow-studio.md) | Additive orchestration control plane — `WorkflowSpec` + `WorkflowRuntime` + seven adapters + replayable runs |
 | [orchestration-refactor-rollout.md](orchestration-refactor-rollout.md) | Operator rollout / rollback runbook for every `AQP_ORCHESTRATION_*` flag |
 | [agentic-pipeline.md](agentic-pipeline.md) | Crew control plane |
 | [providers.md](providers.md) | LLM provider registry + tier routing |
@@ -164,7 +170,7 @@ flowchart LR
 | [paper-metadata-gate.md](paper-metadata-gate.md) | Strict startup metadata validation + operator runbook |
 | [bots.md](bots.md) | Bot entity (TradingBot / ResearchBot), graphical builder, deployment |
 | [observability.md](observability.md) | OTEL → Jaeger + structured logs |
-| [../frontend/README.md](../frontend/README.md) | Active Vite frontend route/model overview |
+| [../aqp_client/README.md](../aqp_client/README.md) | Active Vite frontend route/model overview |
 | [webui.md](webui.md) | Legacy Next.js page tree (rollback only) |
 
 ## Latest changes

@@ -214,7 +214,7 @@ class Settings(BaseSettings):
     # close the socket with code 4001 if the first frame is not a
     # valid ``{"type":"auth","token":"..."}`` payload. Flip to True
     # in production once the frontend has cut over to the new
-    # protocol (see ``frontend/src/lib/ws/client.ts``).
+    # protocol (see ``aqp_client/src/lib/ws/client.ts``).
     ws_auth_required: bool = Field(default=False)
     # Phase 4d of the AQP control-plane maturation gates per-route
     # DPoP (RFC 9449) proof-of-possession enforcement. When True, the

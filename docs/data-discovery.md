@@ -77,13 +77,13 @@ rule 22 (no direct Postgres / Iceberg from agent code) keeps holding.
 
 ## Frontend
 
-[`/data/discovery`](../frontend/src/routes/data/discovery/page.tsx)
-mounts [`DiscoveryBrowser`](../frontend/src/components/data/DiscoveryBrowser.tsx).
+[`/data/discovery`](../aqp_client/src/routes/data/discovery/page.tsx)
+mounts [`DiscoveryBrowser`](../aqp_client/src/components/data/DiscoveryBrowser.tsx).
 The component is built on the Phase 0 primitives:
 
 - Filter chips for `lifecycle` driven by counts from the cache.
 - Provider / kind dropdowns are
-  [`<EntityPicker kind="datasets" />`](../frontend/src/components/common/EntityPicker.tsx)
+  [`<EntityPicker kind="datasets" />`](../aqp_client/src/components/common/EntityPicker.tsx)
   / `<EntityPicker kind="dataset_kinds" />` — never free-text.
 - Detail drawer surfaces description, tags, suggested connector, and
   the two promote buttons. The "Promote to Airbyte builder" path

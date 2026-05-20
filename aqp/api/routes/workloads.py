@@ -4,7 +4,7 @@ Phase 2b of the AQP control-plane maturation. Mirrors the sidecar
 ``aqp_control_plane/src/aqp_cp/api/routers/workloads.py`` so that the
 frontend ``KillSwitch`` UI component (which fans out to nine halt
 endpoints in parallel — see
-``frontend/src/components/common/KillSwitch.tsx``) gets the same
+``aqp_client/src/components/common/KillSwitch.tsx``) gets the same
 ``POST /workloads/halt`` surface whether the operator is running AQP
 in ``embedded`` mode (single monolith, default for local dev and most
 deployments) or ``sidecar`` mode (separate ``aqp_cp`` process).

@@ -4,7 +4,7 @@ This rule scopes
 [`aqp/data/airbyte/builder/`](mdc:aqp/data/airbyte/builder),
 [`aqp/api/routes/airbyte_builder.py`](mdc:aqp/api/routes/airbyte_builder.py),
 and the frontend
-[`ConnectorBuilderForm`](mdc:frontend/src/components/airbyte/builder/ConnectorBuilderForm.tsx).
+[`ConnectorBuilderForm`](mdc:aqp_client/src/components/airbyte/builder/ConnectorBuilderForm.tsx).
 
 Narrative: [docs/airbyte-builder.md](mdc:docs/airbyte-builder.md).
 Phase plan:
