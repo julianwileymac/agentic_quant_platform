@@ -121,7 +121,7 @@ class TerraformExecutor:
         )
         # When set, ``prepare()`` is a no-op and ``workspace_dir()``
         # returns this path. Used for hand-authored compositions
-        # (terraform/environments/<env>/) that already ship a main.tf
+        # (aqp_platform/terraform/environments/<env>/) that already ship a main.tf
         # — the local AQP stack is the canonical example. Falsy
         # values leave the codegen path intact.
         self._prerendered_workspace_dir = (

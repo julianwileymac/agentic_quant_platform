@@ -19,7 +19,7 @@ The Management Engine is the single direct-control surface for:
   is the canonical surface for SPA + Theia clients.
 - **Cloudflare edge** — tunnels, DNS records, Access apps. Runtime
   CRUD via `aqp.cloudflare.CloudflareEdgeAdapter`; IaC via the
-  `terraform/modules/cloudflare_edge` module (provider
+  `aqp_platform/terraform/modules/cloudflare_edge` module (provider
   `cloudflare/cloudflare ~> 5.6`).
 - **Entra tenant onboarding** — `pending` -> `active` via
   `POST /tenancy/entra-links/{id}/promote` (Phase E of the plan).
@@ -133,11 +133,11 @@ Phase D of the plan ships:
 - `aqp/auth/providers/cloudflare_access.py` — new
   `CloudflareAccessProvider` that validates `Cf-Access-Jwt-Assertion`
   headers and merges claims into the active `RequestContext`.
-- `terraform/modules/cloudflare_edge` + Jinja codegen template
+- `aqp_platform/terraform/modules/cloudflare_edge` + Jinja codegen template
   (`aqp/terraform/codegen/templates/cloudflare_edge.tf.j2`) +
-  `cloudflare = "~> 5.6"` in `terraform/versions.tf`.
+  `cloudflare = "~> 5.6"` in `aqp_platform/terraform/versions.tf`.
 - Optional `cloudflare_enabled` block in
-  `terraform/environments/rpi/main.tf` — replaces the manual
+  `aqp_platform/terraform/environments/rpi/main.tf` — replaces the manual
   cloudflared deployment under
   `rpi_kubernetes/kubernetes/base-services/cloudflared/`.
 

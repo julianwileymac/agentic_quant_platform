@@ -14,7 +14,7 @@ Phoenix sits NEXT TO the existing OTel pipeline:
   call paths (OpenAI, LiteLLM, Anthropic, LangChain, LlamaIndex,
   CrewAI, DSPy) emit spans with ``openinference.span.kind`` set.
 - The OTel gateway routes those AI-tagged spans to Phoenix, the rest
-  to Tempo (see ``deployments/kubernetes/observability/opentelemetry-collector-gateway/collector-gateway.yaml``).
+  to Tempo (see ``aqp_platform/deployments/kubernetes/observability/opentelemetry-collector-gateway/collector-gateway.yaml``).
 
 Idempotent and safe to call repeatedly. Soft-fails when the
 ``arize-phoenix-otel`` package is missing (Phoenix observability is

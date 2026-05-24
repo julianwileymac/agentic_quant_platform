@@ -11,7 +11,7 @@ Two backends ship in tree:
   process.
 - :class:`KubernetesTarget` — Phase 5: render a Kubernetes manifest
   (Deployment + ConfigMap; optional Argo ``WorkflowTemplate``) into
-  ``deploy/k8s/bots/<slug>.yaml`` and (optionally) apply it. Stubbed
+  ``aqp_platform/deploy/k8s/bots/<slug>.yaml`` and (optionally) apply it. Stubbed
   until Phase 5 lands — the renderer is functional, the apply is
   best-effort and skipped when ``kubectl`` isn't on PATH.
 
@@ -159,7 +159,7 @@ class KubernetesTarget(DeploymentTarget):
 
     ::
 
-        deploy/k8s/bots/<slug>.yaml
+        aqp_platform/deploy/k8s/bots/<slug>.yaml
 
     The manifest is best-effort applied with ``kubectl apply -f`` when
     that binary is on PATH. Otherwise the manifest is simply persisted

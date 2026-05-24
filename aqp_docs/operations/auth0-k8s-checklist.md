@@ -52,8 +52,8 @@ control-plane scope grid:
 
 Terraform source of truth:
 
-- [`terraform/modules/auth0_identity/main.tf`](../../terraform/modules/auth0_identity/main.tf)
-- [`terraform/modules/auth0_identity/variables.tf`](../../terraform/modules/auth0_identity/variables.tf)
+- [`aqp_platform/terraform/modules/auth0_identity/main.tf`](../../aqp_platform/terraform/modules/auth0_identity/main.tf)
+- [`aqp_platform/terraform/modules/auth0_identity/variables.tf`](../../aqp_platform/terraform/modules/auth0_identity/variables.tf)
 
 ## 2. SPA Application (`aqp-client`)
 
@@ -110,7 +110,7 @@ empty/placeholder until you create the app.
 
 The Action template lives at:
 
-[`terraform/modules/auth0_identity/post_login_action.js.tftpl`](../../terraform/modules/auth0_identity/post_login_action.js.tftpl)
+[`aqp_platform/terraform/modules/auth0_identity/post_login_action.js.tftpl`](../../aqp_platform/terraform/modules/auth0_identity/post_login_action.js.tftpl)
 
 Configure the deployed Action with:
 
@@ -153,11 +153,11 @@ The safe apply order is:
 
 ```powershell
 # 1. Apply tracked, non-secret manifests and placeholder Secret templates.
-kubectl apply -k deployments/kubernetes/overlays/dev
+kubectl apply -k aqp_platform/deployments/kubernetes/overlays/dev
 
 # 2. Apply locally generated real Secret manifests (git-ignored).
-kubectl apply -f deployments/kubernetes/generated/aqp-secrets.local.yaml
-kubectl apply -f deployments/kubernetes/generated/aqp-admin-secrets.local.yaml
+kubectl apply -f aqp_platform/deployments/kubernetes/generated/aqp-secrets.local.yaml
+kubectl apply -f aqp_platform/deployments/kubernetes/generated/aqp-admin-secrets.local.yaml
 
 # 3. Restart workloads so env vars are re-read.
 kubectl -n aqp rollout restart deployment/aqp-core deployment/aqp-client deployment/aqp-worker

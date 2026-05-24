@@ -69,7 +69,7 @@ During the migration both UIs run in parallel:
 
 When the Next.js app reaches feature parity:
 
-1. Drop the `ui` service from `docker-compose.yml`.
+1. Drop the `ui` service from `aqp_platform/compose/docker-compose.yml`.
 2. Delete `aqp/ui/pages/` and `aqp/ui/app.py` (keep the Dash factory).
 3. Optionally relax `fastapi<0.116` and `starlette<0.46` pins in
    `pyproject.toml` (they exist solely to satisfy Solara).

@@ -10,7 +10,7 @@ the graph backend when `AQP_GRAPH_STORE=neo4j`.
 Start the local stack with the visualization overlay:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.viz.yml --profile visualization up -d
+docker compose -f aqp_platform/compose/docker-compose.yml -f aqp_platform/compose/docker-compose.viz.yml --profile visualization up -d
 ```
 
 Neo4j is part of the base compose file and is exposed on:

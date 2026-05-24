@@ -4,7 +4,7 @@ End-to-end walkthrough for shipping AQP to any Kubernetes cluster (EKS,
 AKS, GKE, vanilla k3s, or the Raspberry Pi k3s cluster owned by
 `rpi_kubernetes`). AQP is fully self-contained: every shared service it
 depends on (Postgres, Redis, Kafka, MinIO, MLflow, observability stack,
-etc.) ships in `deployments/kubernetes/`. There is no implicit
+etc.) ships in `aqp_platform/deployments/kubernetes/`. There is no implicit
 dependency on `rpi_kubernetes` or any other repository.
 
 ## Prerequisites
@@ -18,7 +18,7 @@ dependency on `rpi_kubernetes` or any other repository.
   [aqp_docs/architecture/decisions/003-auth0-zero-trust.md](../architecture/decisions/003-auth0-zero-trust.md)
   (default tenant `aqp-fund.us.auth0.com`).
 - Cluster operators / CRDs installed via
-  [scripts/cluster_install/](../../scripts/cluster_install/) (Strimzi,
+  [aqp_platform/scripts/cluster_install/](../../scripts/cluster_install/) (Strimzi,
   Spark Operator, OpenTelemetry Operator, Phoenix, Redpanda, etc.) - run
   the relevant installer before applying the AQP base kustomization.
 
@@ -35,8 +35,8 @@ $env:AUTH0_M2M_CLIENT_ID = "..."
 $env:AUTH0_M2M_CLIENT_SECRET = "..."
 $env:AQP_SYNC_URL = "https://api.aqp.enterprise.com/_internal/auth0/sync"
 
-python build/scripts/provision_auth0.py --dry-run    # preview
-python build/scripts/provision_auth0.py              # apply
+python aqp_platform/build/scripts/provision_auth0.py --dry-run    # preview
+python aqp_platform/build/scripts/provision_auth0.py              # apply
 ```
 
 This idempotently creates the API resource server, the four roles, and the post-login Action.
@@ -48,8 +48,8 @@ make generate-config ENV=k8s
 ```
 
 Produces:
-- `deployments/kubernetes/base/configmaps/aqp-config.yaml` (commit this)
-- `deployments/kubernetes/base/secrets/aqp-secrets.yaml.template` (DO NOT commit values — CI/CD or external-secrets-operator patches real values)
+- `aqp_platform/deployments/kubernetes/base/configmaps/aqp-config.yaml` (commit this)
+- `aqp_platform/deployments/kubernetes/base/secrets/aqp-secrets.yaml.template` (DO NOT commit values — CI/CD or external-secrets-operator patches real values)
 
 ## Step 3 — build + push images
 
@@ -58,7 +58,7 @@ $env:IMAGE_TAG = "rc-$(git rev-parse --short HEAD)-$(Get-Date -Format yyyy-MM-dd
 make build-client IMAGE_TAG=$env:IMAGE_TAG
 make build-cp IMAGE_TAG=$env:IMAGE_TAG
 
-# Optional (only if the Dockerfiles exist in build/docker/*)
+# Optional (only if the Dockerfiles exist in aqp_platform/build/docker/*)
 make build-worker IMAGE_TAG=$env:IMAGE_TAG
 make build-ingestion IMAGE_TAG=$env:IMAGE_TAG
 
@@ -78,7 +78,7 @@ before applying.
 After `aqp-api` is pullable on the cluster, run:
 
 ```powershell
-kubectl apply -f deployments/kubernetes/base/jobs/alembic-upgrade.yaml
+kubectl apply -f aqp_platform/deployments/kubernetes/base/jobs/alembic-upgrade.yaml
 kubectl -n aqp wait --for=condition=complete job/aqp-alembic-upgrade --timeout=900s
 kubectl -n aqp logs job/aqp-alembic-upgrade
 ```
@@ -121,13 +121,13 @@ kubectl -n aqp-data-services exec deploy/postgresql -- \
   psql -U postgres -d aqp -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
-Fresh installs use the AQP-owned `deployments/kubernetes/base-services/postgres-shared/`
+Fresh installs use the AQP-owned `aqp_platform/deployments/kubernetes/base-services/postgres-shared/`
 manifests, whose init SQL creates the `aqp` role/database and enables
 `vector` there.
 
 ## Step 4 — pin the image tag in the target overlay
 
-Edit `deployments/kubernetes/overlays/<env>/kustomization.yaml`:
+Edit `aqp_platform/deployments/kubernetes/overlays/<env>/kustomization.yaml`:
 
 ```yaml
 images:
@@ -165,10 +165,10 @@ the deployment manifests.
 
 ```powershell
 # Dry-run first
-kubectl apply -k deployments/kubernetes/overlays/tower-dev --dry-run=server
+kubectl apply -k aqp_platform/deployments/kubernetes/overlays/tower-dev --dry-run=server
 
 # Apply
-kubectl apply -k deployments/kubernetes/overlays/tower-dev
+kubectl apply -k aqp_platform/deployments/kubernetes/overlays/tower-dev
 
 # Verify
 kubectl -n aqp get pods,svc,hpa,pdb
@@ -218,7 +218,7 @@ bash scripts/verify_tower_cluster.sh
 
 ```powershell
 # Re-apply the previous overlay with the previous image tag.
-git checkout HEAD~1 -- deployments/kubernetes/overlays/dev/kustomization.yaml
+git checkout HEAD~1 -- aqp_platform/deployments/kubernetes/overlays/dev/kustomization.yaml
 make deploy-k8s ENV=dev
 ```
 

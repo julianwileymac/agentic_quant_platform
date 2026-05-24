@@ -12,7 +12,7 @@ Three endpoints, three different audiences:
   Kubernetes liveness probe. Returns 200 the moment the FastAPI
   process is up; performs zero downstream calls. Intended for
   ``livenessProbe`` in the manifests under
-  ``deployments/kubernetes/base/`` so transient dependency outages
+  ``aqp_platform/deployments/kubernetes/base/`` so transient dependency outages
   don't kill an otherwise-healthy pod.
 - ``GET /readyz`` — Phase 4b. Strict readiness probe. Returns 200 only
   when every critical dependency (Postgres, Redis, Auth0 JWKS when

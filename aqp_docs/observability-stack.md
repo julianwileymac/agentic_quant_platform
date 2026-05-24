@@ -34,15 +34,15 @@ flowchart LR
 
 | Component | Folder | Replaces |
 |---|---|---|
-| kube-prometheus-stack | [observability/kube-prometheus-stack/](../deployments/kubernetes/observability/kube-prometheus-stack/) | rpi `observability/prometheus/` |
-| OpenTelemetry Operator | [observability/opentelemetry-operator/](../deployments/kubernetes/observability/opentelemetry-operator/) | new |
-| OTel Collector (gateway + agent) | [observability/opentelemetry-collector-gateway/](../deployments/kubernetes/observability/opentelemetry-collector-gateway/) | rpi `observability/otel-collector/` |
-| Phoenix | [observability/phoenix/](../deployments/kubernetes/observability/phoenix/) | new |
+| kube-prometheus-stack | [observability/kube-prometheus-stack/](../aqp_platform/deployments/kubernetes/observability/kube-prometheus-stack/) | rpi `observability/prometheus/` |
+| OpenTelemetry Operator | [observability/opentelemetry-operator/](../aqp_platform/deployments/kubernetes/observability/opentelemetry-operator/) | new |
+| OTel Collector (gateway + agent) | [observability/opentelemetry-collector-gateway/](../aqp_platform/deployments/kubernetes/observability/opentelemetry-collector-gateway/) | rpi `observability/otel-collector/` |
+| Phoenix | [observability/phoenix/](../aqp_platform/deployments/kubernetes/observability/phoenix/) | new |
 
 ## Routing rule (gateway)
 
 The `transform/ai_route` processor in
-[`collector-gateway.yaml`](../deployments/kubernetes/observability/opentelemetry-collector-gateway/collector-gateway.yaml)
+[`collector-gateway.yaml`](../aqp_platform/deployments/kubernetes/observability/opentelemetry-collector-gateway/collector-gateway.yaml)
 inspects every span and tags it with `aqp.ai_trace=true` when:
 
 - `attributes["openinference.span.kind"] != nil`, or

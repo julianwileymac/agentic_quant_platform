@@ -2,8 +2,8 @@
 
 AQP deploys to the `rpi_kubernetes` cluster through the sanctioned
 Terraform runtime path. The source-of-truth HCL lives in
-`terraform/environments/rpi`, and the stack spec is
-`configs/terraform/rpi.yaml`.
+`aqp_platform/terraform/environments/rpi`, and the stack spec is
+`aqp_platform/configs/terraform/rpi.yaml`.
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ aqp deploy publish-rpi --registry docker.io/<org> --tag <immutable-tag>
 
 ## Configure
 
-Edit or override `terraform/environments/rpi/terraform.tfvars`:
+Edit or override `aqp_platform/terraform/environments/rpi/terraform.tfvars`:
 
 ```hcl
 rpi_kubeconfig_path = "~/.kube/config"
@@ -36,9 +36,9 @@ auth0_client_id     = "<spa-client-id>"
 Use the AQP control plane or Terraform directly:
 
 ```bash
-terraform -chdir=terraform/environments/rpi init
-terraform -chdir=terraform/environments/rpi plan
-terraform -chdir=terraform/environments/rpi apply
+terraform -chdir=aqp_platform/terraform/environments/rpi init
+terraform -chdir=aqp_platform/terraform/environments/rpi plan
+terraform -chdir=aqp_platform/terraform/environments/rpi apply
 ```
 
 The backend control-plane routes dispatch the same stack through
@@ -51,7 +51,7 @@ For first-time bootstrap on a new machine, run in this order so each
 dependency exists before the next one:
 
 1. Build and push immutable AQP images (`aqp deploy publish-rpi ...`).
-2. Set image tags and Auth0 values in `terraform/environments/rpi/terraform.tfvars`.
+2. Set image tags and Auth0 values in `aqp_platform/terraform/environments/rpi/terraform.tfvars`.
 3. Run Terraform from CLI (`init`, `plan`, `apply`) until the core stack
    is healthy.
 4. Start/verify API + Celery + Redis + Postgres.
@@ -101,7 +101,7 @@ failures with bounded exponential backoff. Tune with:
 Re-apply the previous immutable image tag or run:
 
 ```bash
-terraform -chdir=terraform/environments/rpi destroy
+terraform -chdir=aqp_platform/terraform/environments/rpi destroy
 ```
 
 Long-running Terraform jobs remain halt-able through `/terraform/halt`

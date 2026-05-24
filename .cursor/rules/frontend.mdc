@@ -13,7 +13,7 @@ alwaysApply: false
 The cutover is **complete as of phase 7** — see
 [aqp_client/CUTOVER.md](mdc:aqp_client/CUTOVER.md). The Vite app is now
 the only operator UI; the legacy Next.js webui is stopped and kept
-in `docker-compose.yml` for one-command rollback only.
+in `aqp_platform/compose/docker-compose.yml` for one-command rollback only.
 
 | App | Local dev | Compose host port | State | Source of truth |
 | --- | --- | --- | --- | --- |

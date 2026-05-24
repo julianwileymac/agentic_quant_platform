@@ -118,7 +118,7 @@ class TerraformRuntime:
         self._workspace_org_id: str | None = None
         # When set, the executor skips ``render_spec`` codegen and
         # operates on the supplied directory directly. The local AQP
-        # stack uses this to point at terraform/environments/local/.
+        # stack uses this to point at aqp_platform/terraform/environments/local/.
         self._prerendered_workspace_dir = prerendered_workspace_dir
 
     # ------------------------------------------------------------------

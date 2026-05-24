@@ -18,7 +18,7 @@ sub-second latency.
 | `data.timeseries.questdb.partition_info` | MCP tool. |
 | `data.timeseries.questdb.sample_by` | MCP tool (rolling VWAP / 1m / 5m bars). |
 | `data.timeseries.questdb.ilp_send` | Developer-only MCP tool. |
-| [`scripts/cluster_install/install-questdb.sh`](../scripts/cluster_install/) | Bootstrap. |
+| [`aqp_platform/scripts/cluster_install/install-questdb.sh`](../scripts/cluster_install/) | Bootstrap. |
 
 ## Production ingest path
 
@@ -34,7 +34,7 @@ producers -> Redpanda (market.l1.*, market.l2.*, execution.orders.*)
 
 The hand-rolled `QuestDBIngester` is the developer / smoke-test
 fallback only. See
-[`deployments/kubernetes/base-services/redpanda-connect/configmap.yaml`](../deployments/kubernetes/base-services/redpanda-connect/configmap.yaml).
+[`aqp_platform/deployments/kubernetes/base-services/redpanda-connect/configmap.yaml`](../aqp_platform/deployments/kubernetes/base-services/redpanda-connect/configmap.yaml).
 
 ## Allow-list
 

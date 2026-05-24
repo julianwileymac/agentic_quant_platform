@@ -71,7 +71,7 @@ uvicorn aqp_cp.main:app --host 0.0.0.0 --port 9000
 ```bash
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  --file build/docker/aqp_control_plane/Dockerfile \
+  --file aqp_platform/build/docker/aqp_control_plane/Dockerfile \
   --tag ghcr.io/julianwiley/aqp-control-plane:dev \
   .
 

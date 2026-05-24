@@ -55,7 +55,7 @@ The Stage 3 runtime mounts:
 
 ## Implementation references
 
-- Multi-stage Dockerfile: `build/docker/aqp_client/Dockerfile`
+- Multi-stage Dockerfile: `aqp_platform/build/docker/aqp_client/Dockerfile`
 - FastAPI proxy: `aqp/api/proxy.py`
 - WebSocket proxy with reconnect: `aqp/api/ws/proxy.py`
 - ConnectivityConfig: `aqp_platform_core/connectivity/config.py`

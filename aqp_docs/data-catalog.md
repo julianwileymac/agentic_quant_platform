@@ -126,7 +126,7 @@ without scanning Parquet files.
 AQP defaults to a **PyIceberg SQL catalog** rooted at a host-bind-
 mounted directory, so the catalog (sqlite metadata + Parquet data
 files) survives any container teardown. The bind is wired in
-[`docker-compose.yml`](../docker-compose.yml):
+[`aqp_platform/compose/docker-compose.yml`](../docker-compose.yml):
 
 ```yaml
 volumes:
@@ -231,7 +231,7 @@ flowchart LR
 The four regulatory corpora dropped under
 `C:/Users/Julian Wiley/Downloads/{cfpb,uspto,fda,sec}` are exposed to
 the api/worker containers via the `:/host-downloads:ro` bind mount in
-[`docker-compose.yml`](../docker-compose.yml). The end-to-end driver
+[`aqp_platform/compose/docker-compose.yml`](../docker-compose.yml). The end-to-end driver
 is [`scripts/ingest_regulatory.py`](../scripts/ingest_regulatory.py):
 
 ```bash

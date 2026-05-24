@@ -4,7 +4,7 @@ Zero-downtime credential rotation for the AQP control plane + workloads.
 
 ## What's a secret here?
 
-Every entry in [`deployments/compose/.env.schema`](../../deployments/compose/.env.schema) with `classification: secret` or `classification: rotation-required`. The rotation-required ones (e.g. `AUTH0_M2M_CLIENT_SECRET`) should be rotated on a fixed schedule (typically 90 days).
+Every entry in [`aqp_platform/deployments/compose/.env.schema`](../../aqp_platform/deployments/compose/.env.schema) with `classification: secret` or `classification: rotation-required`. The rotation-required ones (e.g. `AUTH0_M2M_CLIENT_SECRET`) should be rotated on a fixed schedule (typically 90 days).
 
 ## Pre-flight
 

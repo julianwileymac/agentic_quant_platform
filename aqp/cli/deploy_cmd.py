@@ -138,7 +138,7 @@ def _build_runtime(spec: Any) -> Any:
 
     The ``prerendered_workspace_dir`` opt-out makes the executor
     skip codegen so the hand-authored composition under
-    terraform/environments/local/ runs as-is.
+    aqp_platform/terraform/environments/local/ runs as-is.
     """
     from aqp.terraform.runtime import TerraformRuntime
 

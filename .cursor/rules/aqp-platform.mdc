@@ -1,0 +1,96 @@
+---
+description: Boundary rule for the hosted-platform deployment/build/IaC tree at aqp_platform/. No aqp.* imports, TerraformRuntime-only, CredentialResolver-only, multi-arch images, domain isolation.
+globs:
+  - "aqp_platform/**"
+alwaysApply: false
+---
+
+# AQP Platform
+
+`aqp_platform/` is the single home for hosted-platform deployment, build,
+IaC, and cluster-setup assets. It is build tooling + manifests + scripts,
+NOT a Python runtime package.
+
+## Hard rules
+
+1. **No `import aqp.*`** in this tree. Consumed by the Makefile, by
+   [.github/workflows/](mdc:.github/workflows), and by
+   [`TerraformRuntime`](mdc:aqp/terraform/runtime.py) +
+   [`WorkloadRuntime`](mdc:aqp_platform_core/src/aqp_platform_core/runtime/workload.py).
+2. **`TerraformRuntime` is the only sanctioned `terraform apply` path**
+   (AQP rule 42). Nothing calls `subprocess.run(["terraform", ...])`
+   directly outside
+   [`aqp/terraform/runner.py::TerraformExecutor`](mdc:aqp/terraform/runner.py).
+   CI workflows use the `aqp deploy` CLI; never raw `terraform apply`.
+3. **`CredentialResolver` is the only credential surface** (AQP rule 26).
+   No secrets in `aqp_platform/compose/*.yml` env, Helm values, or
+   `aqp_platform/terraform/**/*.tf`. Every secret flows through
+   `ExternalSecret` -> `ClusterSecretStore` -> Vault / cloud secret
+   manager. Hand-pasting a token into a manifest is review-blocking.
+4. **Multi-arch image invariant.** Every Dockerfile in this tree builds
+   `linux/amd64 + linux/arm64`. Use `ARG BUILDPLATFORM` /
+   `ARG TARGETPLATFORM`. See
+   [aqp_platform/Dockerfile](mdc:aqp_platform/Dockerfile) for the
+   reference template.
+5. **Domain isolation.** AQP-only hostnames here: `aqp.fund`,
+   `api.aqp.fund`, `manage.aqp.fund`. Never co-mingle with the portal's
+   `julianwiley.com` (sibling `rpi_kubernetes` repo).
+6. **Hash-locked spec versions.** `TerraformStackSpec` ->
+   `terraform_stack_spec_versions` (rule 43); `WorkflowSpec` ->
+   `workflow_spec_versions` (rule 41). Resnapshot on hash change creates
+   a NEW row; never update in place.
+
+## Where new files go
+
+| Change | Location |
+| --- | --- |
+| Kubernetes manifest | `aqp_platform/deployments/kubernetes/base/` (+ overlay) |
+| Helm chart | `aqp_platform/deployments/kubernetes/helm/<chart>/` |
+| Canonical compose service | `aqp_platform/deployments/compose/docker-compose.<env>.yml` |
+| Legacy bypass compose | `aqp_platform/compose/docker-compose*.yml` |
+| Terraform module | `aqp_platform/terraform/modules/<module>/` |
+| Terraform env | `aqp_platform/terraform/environments/<env>/` |
+| Terraform module template (Jinja2) | `aqp/terraform/codegen/templates/<kind>.tf.j2` (rule 42 - not in this tree) |
+| Per-service Dockerfile | `aqp_platform/build/docker/<service>/Dockerfile` |
+| Config generator | `aqp_platform/build/scripts/generate_config.py` |
+| Deployment topology YAML | `aqp_platform/configs/deployment/topology.yaml` |
+| Terraform stack YAML | `aqp_platform/configs/terraform/<env>.yaml` |
+| Cluster install script | `aqp_platform/scripts/cluster_install/install-<component>.sh` |
+| Observability backend config | `aqp_platform/deploy/<component>/...` (legacy/edge) |
+
+## Validation
+
+```bash
+# Compose lint:
+docker compose -f aqp_platform/compose/docker-compose.yml config > /dev/null
+docker compose -f aqp_platform/compose/docker-compose.platform.yml config > /dev/null
+docker compose -f aqp_platform/compose/docker-compose.viz.yml config > /dev/null
+
+# Kustomize for every overlay:
+for env in dev staging prod; do
+  kubectl kustomize aqp_platform/deployments/kubernetes/overlays/$env > /tmp/$env.yaml
+  kubectl apply --dry-run=client -f /tmp/$env.yaml
+done
+
+# Terraform validate (NEVER apply directly):
+cd aqp_platform/terraform
+terraform fmt -check -recursive
+
+# No-aqp-import guard for build/scripts:
+rg --type py "^(from|import)\s+aqp(\.|\s|$)" aqp_platform/build/scripts \
+  | grep -vE 'aqp_platform_core' && exit 1 || true
+```
+
+## Don't
+
+- Don't write secrets inline. Use the `ExternalSecret` -> Vault chain.
+- Don't shell out to `terraform` from Python outside the runner. Use
+  the [`TerraformRuntime`](mdc:aqp/terraform/runtime.py) wrapper.
+- Don't author module HCL as Python `f"..."` strings. Use the Jinja2
+  templates at [aqp/terraform/codegen/templates/](mdc:aqp/terraform/codegen/templates).
+- Don't bypass the `/terraform/halt` and `/workloads/halt` fan-out
+  targets in the topbar `KillSwitch`. Every long-running runtime is in
+  the halt list.
+- Don't add a single-arch Dockerfile.
+- Don't mix `aqp.fund` and `julianwiley.com` (different cert chains,
+  different IdPs, different Cloudflare tunnels).

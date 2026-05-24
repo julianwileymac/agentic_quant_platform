@@ -24,7 +24,7 @@ wrappers, visualization routes, and operator workflows.
 | Docker image | `Dockerfile` |
 | API wrappers | `src/lib/api/` |
 | WebSocket wrappers | `src/lib/ws/` |
-| Deployment manifests | `../deployments/kubernetes/base/aqp-client` |
+| Deployment manifests | `../aqp_platform/deployments/kubernetes/base/aqp-client` |
 | Legacy rollback UI | `../webui` |
 
 ## Quick Start

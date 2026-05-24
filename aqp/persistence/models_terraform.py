@@ -60,8 +60,8 @@ def _uuid() -> str:
 
 
 # Canonical stack module kinds. Mirrors the 9 native HCL modules under
-# ``terraform/modules/``. ``composite`` covers a root composition that
-# wires several module kinds together (e.g. ``terraform/environments/wiley-tech``).
+# ``aqp_platform/terraform/modules/``. ``composite`` covers a root composition that
+# wires several module kinds together (e.g. ``aqp_platform/terraform/environments/wiley-tech``).
 TERRAFORM_MODULE_KINDS: tuple[str, ...] = (
     "storage",
     "pipeline",

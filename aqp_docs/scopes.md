@@ -4,7 +4,7 @@ Single source of truth for every authorization scope used by the AQP
 control plane. The canonical Python module is
 [aqp/auth/scopes.py](../aqp/auth/scopes.py) (`AQPScope`); the canonical
 Terraform Auth0 provisioning lives in
-[terraform/modules/auth0_identity/main.tf](../terraform/modules/auth0_identity/main.tf)
+[aqp_platform/terraform/modules/auth0_identity/main.tf](../aqp_platform/terraform/modules/auth0_identity/main.tf)
 (`local.scopes` + `local.role_permissions`); the canonical role lattice
 is in
 [aqp_platform_core/src/aqp_platform_core/auth/rbac.py](../aqp_platform_core/src/aqp_platform_core/auth/rbac.py)
@@ -205,7 +205,7 @@ no scopes in the token.
    role frozenset in `aqp_platform_core/auth/rbac.py::_ROLE_LATTICE`
    (cumulative — viewer subset of operator subset of admin subset of
    superadmin).
-3. Add the scope to `terraform/modules/auth0_identity/main.tf`'s
+3. Add the scope to `aqp_platform/terraform/modules/auth0_identity/main.tf`'s
    `local.scopes` AND to every role in `local.role_permissions` that
    should hold it.
 4. Add a row to this catalogue (`aqp_docs/scopes.md`).

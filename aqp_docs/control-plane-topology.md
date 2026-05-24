@@ -2,7 +2,7 @@
 
 Phase 0 of the AQP infra-expansion plan. The single source of truth
 for "what services exist, where do they live, what URLs do they
-expose" is [`configs/deployment/topology.yaml`](../configs/deployment/topology.yaml).
+expose" is [`aqp_platform/configs/deployment/topology.yaml`](../configs/deployment/topology.yaml).
 Both the AQP monolith (`aqp/`) and the standalone control plane
 (`aqp_control_plane/`) read from the same YAML through the shared
 loader at
@@ -12,7 +12,7 @@ loader at
 
 1. Hardcoded default in `Settings`.
 2. `AQP_*` environment variable.
-3. `configs/deployment/topology.yaml` fallback (this layer).
+3. `aqp_platform/configs/deployment/topology.yaml` fallback (this layer).
 
 The Phase 0 fallback ONLY fires when an `AQP_*` env var is unset
 (checked via `Settings.model_fields_set`). Operators who explicitly
@@ -48,7 +48,7 @@ per service.
 ## Adding a new shared service
 
 1. Append a `services:` entry to
-   [`configs/deployment/topology.yaml`](../configs/deployment/topology.yaml)
+   [`aqp_platform/configs/deployment/topology.yaml`](../configs/deployment/topology.yaml)
    with `cluster`, `namespace`, `protocols`, and `endpoints`
    populated.
 2. Add the new `Settings` field in

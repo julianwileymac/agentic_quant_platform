@@ -9,6 +9,10 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+# Keep the moved hosted-platform build/ folder (source Dockerfiles +
+# generate_config.py + provision_auth0.py + sync_auth0_env_to_k8s.py).
+!aqp_platform/build/
+!aqp_platform/build/**
 develop-eggs/
 dist/
 downloads/

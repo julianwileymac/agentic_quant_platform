@@ -497,9 +497,9 @@ def _ray_dashboard_url(address: str) -> str:
 def _compose(args: list[str]) -> dict[str, Any]:
     compose_args = [
         "-f",
-        "docker-compose.yml",
+        "aqp_platform/compose/docker-compose.yml",
         "-f",
-        "docker-compose.viz.yml",
+        "aqp_platform/compose/docker-compose.viz.yml",
         "--profile",
         "visualization",
         *args,

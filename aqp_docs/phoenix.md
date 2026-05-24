@@ -33,7 +33,7 @@ emits the right spans automatically.
 
 ## Kubernetes manifests
 
-[`deployments/kubernetes/observability/phoenix/`](../deployments/kubernetes/observability/phoenix/):
+[`aqp_platform/deployments/kubernetes/observability/phoenix/`](../aqp_platform/deployments/kubernetes/observability/phoenix/):
 
 - `postgres.yaml` — dedicated Postgres backend
   (`phoenix-postgresql.aqp-observability.svc.cluster.local:5432`).

@@ -1,4 +1,4 @@
-"""Path-driven loader for ``configs/deployment/topology.yaml``.
+"""Path-driven loader for ``aqp_platform/configs/deployment/topology.yaml``.
 
 The loader is path-only — it intentionally avoids importing
 :mod:`aqp.config.settings` so :mod:`aqp_control_plane` can read the
@@ -9,7 +9,7 @@ Resolution order:
 
 1. Explicit ``path`` argument.
 2. ``AQP_DEPLOYMENT_TOPOLOGY_PATH`` environment variable.
-3. ``configs/deployment/topology.yaml`` relative to ``cwd``.
+3. ``aqp_platform/configs/deployment/topology.yaml`` relative to ``cwd``.
 
 Failures raise :class:`TopologyLoadError` with the resolved path and
 the underlying YAML/validation error so the control-plane readyz
@@ -25,7 +25,7 @@ import yaml
 
 from aqp_platform_core.topology.models import DeploymentTopology
 
-_DEFAULT_RELATIVE_PATH = "configs/deployment/topology.yaml"
+_DEFAULT_RELATIVE_PATH = "aqp_platform/configs/deployment/topology.yaml"
 _ENV_VAR = "AQP_DEPLOYMENT_TOPOLOGY_PATH"
 
 _LOCK = threading.RLock()

@@ -5,7 +5,7 @@
 - Vite app: `src/`
 - Client API wrappers: `src/lib/api`
 - WebSocket wrappers: `src/lib/ws`
-- Client deployment: `../deployments/kubernetes/base/aqp-client`
+- Client deployment: `../aqp_platform/deployments/kubernetes/base/aqp-client`
 - Client Dockerfile: `../aqp_client/Dockerfile`
 - Legacy rollback UI: `../webui`
 

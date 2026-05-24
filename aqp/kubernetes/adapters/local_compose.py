@@ -1,6 +1,6 @@
 """Local ``docker compose`` adapter.
 
-Backs the new ``docker-compose.platform.yml`` overlay (Milestone 5):
+Backs the new ``aqp_platform/compose/docker-compose.platform.yml`` overlay (Milestone 5):
 the AQP "cluster" is the local Docker daemon, and operations like
 ``scale_deployment`` and ``pod_logs`` shell out to ``docker compose``
 commands.

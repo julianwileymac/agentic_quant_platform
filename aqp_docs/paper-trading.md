@@ -124,7 +124,7 @@ behaviour (not recommended).
 
 The `paper-trader` Docker image (`--target paper`) runs `aqp paper run`
 as a single-replica k8s `Deployment`. See
-[`deploy/k8s/base/paper-trader.yaml`](../deploy/k8s/base/paper-trader.yaml).
+[`aqp_platform/deploy/k8s/base/paper-trader.yaml`](../aqp_platform/deploy/k8s/base/paper-trader.yaml).
 
 To run on a remote host over SSH:
 

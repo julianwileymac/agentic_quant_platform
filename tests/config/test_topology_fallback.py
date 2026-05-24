@@ -71,8 +71,8 @@ def topology_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             adapter_preference: [in_cluster]
             terraform:
               stack_slug: aqp-unit
-              spec_path: configs/terraform/local.yaml
-              environment_dir: terraform/environments/local
+              spec_path: aqp_platform/configs/terraform/local.yaml
+              environment_dir: aqp_platform/terraform/environments/local
             cluster:
               name: aqp-unit
             services: [redpanda, questdb]

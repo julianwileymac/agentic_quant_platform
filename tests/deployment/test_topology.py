@@ -60,7 +60,7 @@ def test_topology_terraform_env_overrides_are_authoritative():
 def test_topology_rejects_inline_secret_refs(tmp_path: Path):
     from aqp.deployment.topology import get_deployment_topology, reload_deployment_topology
 
-    source = Path("configs/deployment/topology.yaml")
+    source = Path("aqp_platform/configs/deployment/topology.yaml")
     copied = tmp_path / "topology.yaml"
     text = source.read_text(encoding="utf-8").replace(
         "client_secret: auth0-client-secret",
@@ -76,7 +76,7 @@ def test_topology_rejects_inline_secret_refs(tmp_path: Path):
 def test_topology_path_can_load_explicit_file(tmp_path: Path):
     from aqp.deployment.topology import get_deployment_topology, reload_deployment_topology
 
-    source = Path("configs/deployment/topology.yaml")
+    source = Path("aqp_platform/configs/deployment/topology.yaml")
     copied = tmp_path / "topology.yaml"
     copied.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
 

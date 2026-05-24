@@ -1,6 +1,6 @@
 ---
-description: Cloudflare edge rule — runtime adapter, REST routes, MCP tools, Terraform module, CloudflareAccessProvider. Applies to aqp/cloudflare/, aqp/api/routes/cloudflare.py, aqp/data/mcp/tools/cloudflare.py, aqp/auth/providers/cloudflare_access.py, terraform/modules/cloudflare_edge/, aqp/terraform/codegen/templates/cloudflare_edge.tf.j2.
-globs: aqp/cloudflare/**/*.py,aqp/api/routes/cloudflare.py,aqp/data/mcp/tools/cloudflare.py,aqp/auth/providers/cloudflare_access.py,terraform/modules/cloudflare_edge/**,aqp/terraform/codegen/templates/cloudflare_edge.tf.j2
+description: Cloudflare edge rule — runtime adapter, REST routes, MCP tools, Terraform module, CloudflareAccessProvider. Applies to aqp/cloudflare/, aqp/api/routes/cloudflare.py, aqp/data/mcp/tools/cloudflare.py, aqp/auth/providers/cloudflare_access.py, aqp_platform/terraform/modules/cloudflare_edge/, aqp/terraform/codegen/templates/cloudflare_edge.tf.j2.
+globs: aqp/cloudflare/**/*.py,aqp/api/routes/cloudflare.py,aqp/data/mcp/tools/cloudflare.py,aqp/auth/providers/cloudflare_access.py,aqp_platform/terraform/modules/cloudflare_edge/**,aqp/terraform/codegen/templates/cloudflare_edge.tf.j2
 alwaysApply: false
 ---
 
@@ -47,12 +47,12 @@ Management Engine (Phase D of the `aqp_management_engine` plan).
    above 24h (stale-key window).
 6. **Terraform module is the durable path.** For new public
    endpoints, prefer
-   [`terraform/modules/cloudflare_edge`](mdc:terraform/modules/cloudflare_edge/main.tf)
+   [`aqp_platform/terraform/modules/cloudflare_edge`](mdc:aqp_platform/terraform/modules/cloudflare_edge/main.tf)
    over the runtime adapter so the change lands in an immutable
    `terraform_stack_spec_versions` row (AGENTS rule 43). Adapter
    verbs are for hot-fixes and one-off operator ops.
 7. **Provider pin.** `cloudflare = "~> 5.6"` in
-   [`terraform/versions.tf`](mdc:terraform/versions.tf). Bumping
+   [`aqp_platform/terraform/versions.tf`](mdc:aqp_platform/terraform/versions.tf). Bumping
    the major version requires updating the codegen template +
    testing against the existing rpi tunnel before the merge.
 

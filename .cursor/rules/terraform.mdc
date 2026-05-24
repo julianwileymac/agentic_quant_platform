@@ -7,8 +7,8 @@ globs:
   - "aqp/tasks/terraform_tasks.py"
   - "aqp/data/mcp/tools/terraform.py"
   - "aqp/persistence/models_terraform.py"
-  - "terraform/**/*.tf"
-  - "terraform/**/*.tf.j2"
+  - "aqp_platform/terraform/**/*.tf"
+  - "aqp_platform/terraform/**/*.tf.j2"
   - "aqp_client/src/routes/infra/**/*.tsx"
   - "aqp_client/src/lib/api/terraform.ts"
   - "aqp_client/src/lib/api/infra.ts"
@@ -74,4 +74,4 @@ for the narrative walkthrough. AGENTS rules 42 + 43 in
   secret manager.
 
 Canonical doc: [aqp_docs/terraform-control-plane.md](mdc:aqp_docs/terraform-control-plane.md).
-Module roster: [terraform/DISCOVERY.md](mdc:terraform/DISCOVERY.md).
+Module roster: [aqp_platform/terraform/DISCOVERY.md](mdc:aqp_platform/terraform/DISCOVERY.md).

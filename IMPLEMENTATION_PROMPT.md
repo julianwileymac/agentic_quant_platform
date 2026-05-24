@@ -49,7 +49,7 @@
 *   **D.O.D**: An agent run only progresses to a `SignalEvent` if the Risk Simulator agent approves the Monte Carlo outcome.
 
 ### Phase 5: FinOps Governance Enforcement (Action Item 4.1)
-*   **Target Files**: `aqp/config.py`, `deploy/k8s/`.
+*   **Target Files**: `aqp/config.py`, `aqp_platform/deploy/k8s/`.
 *   **Task**: Enforce mandatory tagging for all cloud resources.
 *   **Implementation Details**:
     - Ensure every Celery task dispatch and Kubernetes pod creation injects labels: `project`, `cost_center`, `owner`, `data_classification` (sourced from `aqp.config.settings`).

@@ -33,7 +33,7 @@ pnpm --dir aqp_client install
 make generate-config ENV=local
 ```
 
-This reads [`deployments/compose/.env.schema`](../../deployments/compose/.env.schema) and writes `deployments/compose/.env.local`. Open the file and fill in the `<set-via-secret-store>` placeholders for any service you plan to use.
+This reads [`aqp_platform/deployments/compose/.env.schema`](../../aqp_platform/deployments/compose/.env.schema) and writes `aqp_platform/deployments/compose/.env.local`. Open the file and fill in the `<set-via-secret-store>` placeholders for any service you plan to use.
 
 ## Step 3 — bring up the stack (two options)
 

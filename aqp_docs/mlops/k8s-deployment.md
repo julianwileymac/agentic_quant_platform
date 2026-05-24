@@ -1,6 +1,6 @@
 # Kubernetes deployment
 
-AQP ships Kustomize manifests under [`deploy/k8s/base/`](../../deploy/k8s/base/)
+AQP ships Kustomize manifests under [`aqp_platform/deploy/k8s/base/`](../../aqp_platform/deploy/k8s/base/)
 that can be applied to any cluster. The manifests under `base/serving/`
 add three model-serving backends on top of the existing `api`, `worker`,
 `paper-trader`, and streaming-ingester Deployments.
@@ -28,7 +28,7 @@ done
 
 ## Deploying to a Kubernetes cluster
 
-AQP is cluster-agnostic. The `deployments/kubernetes/` tree provisions
+AQP is cluster-agnostic. The `aqp_platform/deployments/kubernetes/` tree provisions
 every shared dependency (MLflow in `aqp-mlops`, MinIO + Postgres + Redis
 + ChromaDB in `aqp-data-services`, Kafka + Schema Registry + Flink in
 `aqp-streaming`, kube-prometheus-stack + Tempo + Loki + OTel + Phoenix
@@ -37,15 +37,15 @@ in `aqp-observability`, and so on). To deploy AQP:
 ```bash
 # From the agentic_quant_platform root
 # 1. Install the operators / Helm releases that AQP CRDs depend on.
-bash scripts/cluster_install/install-redpanda.sh
-bash scripts/cluster_install/install-kube-prometheus-stack.sh
-bash scripts/cluster_install/install-opentelemetry-operator.sh
-bash scripts/cluster_install/install-spark-operator.sh
-bash scripts/cluster_install/install-flink.sh
+bash aqp_platform/scripts/cluster_install/install-redpanda.sh
+bash aqp_platform/scripts/cluster_install/install-kube-prometheus-stack.sh
+bash aqp_platform/scripts/cluster_install/install-opentelemetry-operator.sh
+bash aqp_platform/scripts/cluster_install/install-spark-operator.sh
+bash aqp_platform/scripts/cluster_install/install-flink.sh
 
 # 2. Apply the AQP base kustomization (creates aqp-* namespaces and
 #    the workload manifests).
-kubectl apply -k deployments/kubernetes/base/
+kubectl apply -k aqp_platform/deployments/kubernetes/base/
 ```
 
 ## Selecting which model to serve
@@ -67,7 +67,7 @@ kubectl -n aqp rollout restart deploy mlflow-serve ray-serve torchserve
 - Every Deployment exports traces to `http://otel-collector:4317`
   (OTLP gRPC), matching the `rpi_kubernetes` collector conventions.
 - Prometheus picks up metrics via the `ServiceMonitor` resources in
-  [`deploy/k8s/base/serving/servicemonitor.yaml`](../../deploy/k8s/base/serving/servicemonitor.yaml).
+  [`aqp_platform/deploy/k8s/base/serving/servicemonitor.yaml`](../../aqp_platform/deploy/k8s/base/serving/servicemonitor.yaml).
 - AQP's own metric surface is defined in
   [`aqp/mlops/metrics.py`](../../aqp/mlops/metrics.py):
   `aqp_train_duration_seconds`, `aqp_backtest_sharpe`, `aqp_paper_pnl`,

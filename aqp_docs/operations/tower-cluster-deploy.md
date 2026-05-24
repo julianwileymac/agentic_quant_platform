@@ -12,7 +12,7 @@ Deploy AQP to the dedicated two-node cluster (`aqp-tower` control plane +
 
 - Two-node cluster already online and `kubectl get nodes` shows both `Ready`.
 - Context points to the tower cluster.
-- Auth0 tenant + client values set in `deployments/kubernetes/base/configmaps`.
+- Auth0 tenant + client values set in `aqp_platform/deployments/kubernetes/base/configmaps`.
 - Secrets rendered for:
   - `aqp-secrets` (`aqp` namespace)
   - `aqp-admin-secrets` (`aqp-admin` namespace)
@@ -20,9 +20,9 @@ Deploy AQP to the dedicated two-node cluster (`aqp-tower` control plane +
 ## 1) Install cluster dependencies
 
 ```bash
-bash scripts/cluster_install/install-redpanda.sh
-bash scripts/cluster_install/install-questdb.sh
-bash scripts/cluster_install/install-redpanda-connect.sh
+bash aqp_platform/scripts/cluster_install/install-redpanda.sh
+bash aqp_platform/scripts/cluster_install/install-questdb.sh
+bash aqp_platform/scripts/cluster_install/install-redpanda-connect.sh
 ```
 
 Optional (if your target slice needs them): OpenTelemetry, kube-prometheus-stack,
@@ -31,7 +31,7 @@ Phoenix, Spark Operator.
 ## 2) Apply the thin tower overlay
 
 ```bash
-kubectl apply -k deployments/kubernetes/overlays/tower-dev/
+kubectl apply -k aqp_platform/deployments/kubernetes/overlays/tower-dev/
 ```
 
 This slice includes:
@@ -60,7 +60,7 @@ python -m aqp.cli.main deploy --target tower --action apply
 ## Rollback
 
 ```bash
-kubectl delete -k deployments/kubernetes/overlays/tower-dev/
+kubectl delete -k aqp_platform/deployments/kubernetes/overlays/tower-dev/
 ```
 
 Then restore the previous known-good overlay or Terraform state.

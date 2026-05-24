@@ -1,7 +1,7 @@
 """Topology service — single source of truth for service URLs.
 
 Phase 0 of the AQP infra-expansion plan. The topology YAML at
-``configs/deployment/topology.yaml`` is the canonical map of service
+``aqp_platform/configs/deployment/topology.yaml`` is the canonical map of service
 metadata (workload kind, ports, namespaces, endpoints) for every
 target environment. AQP-side ``aqp.config.settings`` falls back to
 this map when a URL field has not been overridden by an

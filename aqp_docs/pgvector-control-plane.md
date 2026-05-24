@@ -36,7 +36,7 @@ to relational rows that need ACID joins:
 
 ## Infrastructure
 
-- `docker-compose.yml` postgres image: `pgvector/pgvector:pg16` (a
+- `aqp_platform/compose/docker-compose.yml` postgres image: `pgvector/pgvector:pg16` (a
   drop-in superset of `postgres:16-alpine`).
 - Alembic migration `0045_pgvector_foundation` issues
   `CREATE EXTENSION IF NOT EXISTS vector`, adds the `embedding`

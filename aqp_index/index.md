@@ -1,6 +1,7 @@
 # AQP project index
 
-> Last refreshed: 2026-05-23 (seed) by plan execution; refresh owned by
+> Last refreshed: 2026-05-23 (aqp_platform extraction) by plan execution;
+> refresh owned by
 > [aqp-index-curator](../.cursor/agents/aqp-index-curator.md).
 
 ## Top-level packages
@@ -10,6 +11,7 @@
 | [aqp/](../aqp/) | Quant runtime (agents, RL, analysis, backtests, data, persistence, tasks) | [../AGENTS.md](../AGENTS.md) project map |
 | [aqp_client/](../aqp_client/) | Active operator UI (Vite + React + Tailwind + shadcn) | [../aqp_client/AGENTS.md](../aqp_client/AGENTS.md) |
 | [aqp_control_plane/](../aqp_control_plane/) | Standalone control plane (`/manage/*`, workload lifecycle) | [../aqp_control_plane/AGENTS.md](../aqp_control_plane/AGENTS.md) |
+| [aqp_platform/](../aqp_platform/) | Hosted-platform deployment, build, IaC, cluster setup (single home) | [../aqp_platform/AGENTS.md](../aqp_platform/AGENTS.md) |
 | [aqp_platform_core/](../aqp_platform_core/) | Shared value types, ABCs, auth + resource filters, topology | [../aqp_platform_core/AGENTS.md](../aqp_platform_core/AGENTS.md) |
 | [aqp_bots/](../aqp_bots/) | Bot templates + BotRuntime | [../aqp_bots/AGENTS.md](../aqp_bots/AGENTS.md) |
 | [aqp_snippets/](../aqp_snippets/) | Curated external-code knowledge | [../aqp_snippets/AGENTS.md](../aqp_snippets/AGENTS.md) |

@@ -41,12 +41,12 @@ catalog rooted at `/warehouse`; the visualization overlay points api / worker
 (and Trino) at **Polaris + MinIO** so they share the same Iceberg metadata and
 table snapshots. Configure PyIceberg with `AQP_ICEBERG_REST_URI` and
 `AQP_ICEBERG_REST_EXTRA_PROPERTIES_JSON` (Polaris realm header) as set in
-[`docker-compose.viz.yml`](../docker-compose.viz.yml).
+[`aqp_platform/compose/docker-compose.viz.yml`](../docker-compose.viz.yml).
 
 ## Local Startup
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.viz.yml --profile visualization up -d
+docker compose -f aqp_platform/compose/docker-compose.yml -f aqp_platform/compose/docker-compose.viz.yml --profile visualization up -d
 ```
 
 Default local endpoints:
@@ -58,7 +58,7 @@ Default local endpoints:
 
 Change `SUPERSET_SECRET_KEY`, `SUPERSET_GUEST_TOKEN_JWT_SECRET`, and
 `AQP_SUPERSET_PASSWORD` outside local development. The Superset image is
-pinned to `apache/superset:4.1.1` (see [deploy/superset/Dockerfile](../deploy/superset/Dockerfile));
+pinned to `apache/superset:4.1.1` (see [aqp_platform/deploy/superset/Dockerfile](../aqp_platform/deploy/superset/Dockerfile));
 bump together with the Superset Postgres schema migration.
 
 ## Provisioning Superset
@@ -128,15 +128,15 @@ zipped together). AQP wraps it through:
 - Two Celery tasks `export_superset_bundle_task` / `import_superset_bundle_task`
   in [aqp.tasks.visualization_tasks](../aqp/tasks/visualization_tasks.py).
 - Two FastAPI routes `POST /visualizations/superset/bundle/{export,import}`.
-- A curated repo bundle at [deploy/superset/bundles/aqp_market_data/](../deploy/superset/bundles/aqp_market_data/)
+- A curated repo bundle at [aqp_platform/deploy/superset/bundles/aqp_market_data/](../aqp_platform/deploy/superset/bundles/aqp_market_data/)
   that gets populated by a first export.
 
 The `aqp viz` CLI exposes the same operations:
 
 ```bash
 aqp viz sync                                                              # provision via REST
-aqp viz export --out deploy/superset/bundles/aqp_market_data              # write YAML directory
-aqp viz import deploy/superset/bundles/aqp_market_data --overwrite        # replay into Superset
+aqp viz export --out aqp_platform/deploy/superset/bundles/aqp_market_data              # write YAML directory
+aqp viz import aqp_platform/deploy/superset/bundles/aqp_market_data --overwrite        # replay into Superset
 aqp viz render --dataset aqp_equity.sp500_daily --kind line --out chart.json
 aqp viz cache-clear --older-than-hours 24
 aqp viz datahub                                                           # push to DataHub (no-op when off)
@@ -148,7 +148,7 @@ Two layers cooperate:
 
 1. **Superset → Redis.** Superset's metadata, chart-data, filter-state,
    explore-form, and SQL Lab caches are configured against the AQP Redis
-   instance in [deploy/superset/superset_config.py](../deploy/superset/superset_config.py)
+   instance in [aqp_platform/deploy/superset/superset_config.py](../aqp_platform/deploy/superset/superset_config.py)
    (`aqp_superset_meta_*`, `aqp_superset_data_*`, `aqp_superset_filter_*`,
    `aqp_superset_explore_*`, `aqp_superset_results_*`).
 2. **AQP Bokeh renderer → two-tier cache.** [aqp.visualization.bokeh_renderer](../aqp/visualization/bokeh_renderer.py)

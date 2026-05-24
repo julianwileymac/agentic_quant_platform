@@ -46,6 +46,6 @@ Concretely:
 ## Implementation references
 
 - Frontend build target: `aqp_client/package.json` `"build": "vite build"`
-- Production Dockerfile: `build/docker/aqp_client/Dockerfile`
+- Production Dockerfile: `aqp_platform/build/docker/aqp_client/Dockerfile`
 - SPA fallback handler: `aqp/api/main.py::serve_spa`
 - Cutover history: [`aqp_client/CUTOVER.md`](../../../aqp_client/CUTOVER.md)

@@ -40,6 +40,8 @@ glob-scoped sibling rules under [.cursor/rules/](mdc:.cursor/rules):
 | `aqp_cli/**` | [aqp-cli.mdc](mdc:.cursor/rules/aqp-cli.mdc) | Standalone operator CLI; HTTP-only; never imports `aqp.*` or `aqp_control_plane.*`; identity through `IdentityProvider`; redacted token output |
 | `aqp_admin/**` | [aqp-admin.mdc](mdc:.cursor/rules/aqp-admin.mdc) | Internal admin (managed services + company accounts); audit-first; never imports `aqp.*`; mirrors `aqp_control_plane` boundary |
 | `aqp_index/**` | [aqp-index.mdc](mdc:.cursor/rules/aqp-index.mdc) | Sole-writer boundary: only `aqp-index-curator` subagent writes; pointers + signatures + summaries, never copied prose |
+| `aqp_platform/**` | [aqp-platform.mdc](mdc:.cursor/rules/aqp-platform.mdc) | Hosted-platform deployment + build + IaC + cluster setup; no `import aqp.*`; `TerraformRuntime`-only; `CredentialResolver`-only; multi-arch images; domain isolation |
+| `**/*` (always-on) | [aqp-index-reflect.mdc](mdc:.cursor/rules/aqp-index-reflect.mdc) | Every qualifying change MUST invoke `aqp-index-curator` OR open a `.cursor/plans/aqp-index-debt-<slug>.md` note in the same commit |
 
 Workflow + collaboration cadence: [WORKFLOW.md](mdc:WORKFLOW.md).
 Cross-session state template: [.agents/state-template.md](mdc:.agents/state-template.md).

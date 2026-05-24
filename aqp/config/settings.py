@@ -172,7 +172,7 @@ class Settings(BaseSettings):
     # Canonical deployment topology manifest consumed by Terraform entrypoints,
     # control-plane routes, and the frontend deployment views.
     deployment_topology_path: str = Field(
-        default="./configs/deployment/topology.yaml"
+        default="./aqp_platform/configs/deployment/topology.yaml"
     )
     # --- Default cloud provider (multi-cloud + tenant onboarding) ---
     # Empty means "local" — every Terraform / KubernetesAdapter /
@@ -738,7 +738,7 @@ class Settings(BaseSettings):
     terraform_runner_image: str = Field(default="aqp-terraform-runner:latest")
     terraform_runner_namespace: str = Field(default="aqp-system")
     terraform_codegen_dir: Path = Field(default=Path("./data/terraform/codegen"))
-    terraform_module_registry_dir: Path = Field(default=Path("./terraform/modules"))
+    terraform_module_registry_dir: Path = Field(default=Path("./aqp_platform/terraform/modules"))
     terraform_drift_scan_period_seconds: int = Field(default=3600)
     terraform_artifact_bucket: str = Field(default="aqp-terraform")
 

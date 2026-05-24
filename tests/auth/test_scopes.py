@@ -13,7 +13,7 @@ Asserts that:
   :mod:`aqp_platform_core.auth.rbac` is **strictly cumulative** —
   viewer subset of operator subset of admin subset of superadmin.
 - The Python lattice (``_ROLE_LATTICE``) and the Terraform lattice
-  (``terraform/modules/auth0_identity/main.tf::local.role_permissions``)
+  (``aqp_platform/terraform/modules/auth0_identity/main.tf::local.role_permissions``)
   contain the same scope set per role. This is the regression test
   for the empty-claim drift bug fixed in Phase 1.
 - The closure of the lattice over ``aqp-superadmin`` is a strict
@@ -246,7 +246,7 @@ class TestRoleLattice:
 
 
 def _parse_terraform_role_permissions() -> dict[str, frozenset[str]]:
-    """Best-effort parser of ``terraform/modules/auth0_identity/main.tf``.
+    """Best-effort parser of ``aqp_platform/terraform/modules/auth0_identity/main.tf``.
 
     Reads the ``local.role_permissions`` block and returns a dict mapping
     role name ('viewer', 'operator', 'admin', 'superadmin') to the

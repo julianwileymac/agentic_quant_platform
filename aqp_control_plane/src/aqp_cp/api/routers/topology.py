@@ -2,7 +2,7 @@
 
 Phase 0 of the AQP infra-expansion plan. The single source of truth
 for "what services exist, where do they live, what URLs do they
-expose" is ``configs/deployment/topology.yaml``. This router exposes
+expose" is ``aqp_platform/configs/deployment/topology.yaml``. This router exposes
 that map over HTTP so:
 
 - AQP-side processes can fall back to topology values for URL fields
@@ -32,7 +32,7 @@ router = APIRouter(tags=["topology"], prefix="/topology")
     "",
     summary="Full topology snapshot.",
     description=(
-        "Returns the entire ``configs/deployment/topology.yaml`` content "
+        "Returns the entire ``aqp_platform/configs/deployment/topology.yaml`` content "
         "validated through the shared ``DeploymentTopology`` Pydantic model. "
         "AQP-side processes hit this endpoint to back-fill URL settings "
         "without an active env override. Required scope: "
@@ -199,7 +199,7 @@ async def get_target(
     "/reload",
     summary="Drop the topology cache and reload from disk.",
     description=(
-        "Reloads ``configs/deployment/topology.yaml`` from disk. Useful "
+        "Reloads ``aqp_platform/configs/deployment/topology.yaml`` from disk. Useful "
         "after editing the file in-place during development. Production "
         "deployments should restart the control-plane pod instead. "
         "Required scope: ``admin:cluster``."

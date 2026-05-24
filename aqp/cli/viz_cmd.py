@@ -8,8 +8,8 @@ Examples:
     aqp viz sync
 
     # Round-trip a Superset bundle as a directory of YAML
-    aqp viz export --out deploy/superset/bundles/aqp_market_data
-    aqp viz import deploy/superset/bundles/aqp_market_data
+    aqp viz export --out aqp_platform/deploy/superset/bundles/aqp_market_data
+    aqp viz import aqp_platform/deploy/superset/bundles/aqp_market_data
 
     # Render a Bokeh chart and dump the json_item
     aqp viz render --dataset aqp_equity.sp500_daily --kind line \

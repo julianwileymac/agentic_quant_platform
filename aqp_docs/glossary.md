@@ -215,7 +215,7 @@ mismatch between this glossary and the code, file an issue.
   `AQP_` prefix. Bools accept `true`/`false`/`1`/`0`. Paths are
   resolved by `_coerce_path`.
 - **`host-downloads`** — `/host-downloads:ro` bind mount in
-  `docker-compose.yml` exposing the user's local `Downloads/`
+  `aqp_platform/compose/docker-compose.yml` exposing the user's local `Downloads/`
   directory for CLI ingest jobs.
 
 ## Inspiration rehydration (Phase 2026-04-29)
@@ -292,4 +292,4 @@ mismatch between this glossary and the code, file an issue.
 - **`agentic_assistants`** — Sibling repo providing the cross-system
   lineage API (`AQP_AGENTIC_ASSISTANTS_API`).
 - **`rpi_kubernetes`** — Sibling repo with the k8s deployment
-  manifests under [deploy/k8s/](../deploy/k8s/).
+  manifests under [aqp_platform/deploy/k8s/](../aqp_platform/deploy/k8s/).

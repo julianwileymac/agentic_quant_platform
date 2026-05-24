@@ -34,7 +34,7 @@ visualization profile, so the compose-managed frontend is published on
    ```
 
 2. *(Optional — pending)* Promote `frontend` to host `:3000`. The
-   webui service is left in `docker-compose.yml` so it can be brought
+   webui service is left in `aqp_platform/compose/docker-compose.yml` so it can be brought
    back with `docker compose start webui` for a one-command rollback.
    When you're ready to free `:3000`, swap the port mapping:
    ```yaml
@@ -73,7 +73,7 @@ If a critical regression is found post-cutover:
    ```bash
    docker compose start webui
    ```
-   The legacy service is left in `docker-compose.yml` precisely for this.
+   The legacy service is left in `aqp_platform/compose/docker-compose.yml` precisely for this.
 2. `docker compose up -d webui frontend`.
 3. File a bug, restore the relevant stub in
    `aqp_client/src/routes/<route>/page.tsx` so the legacy app handles

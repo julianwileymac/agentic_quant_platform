@@ -55,6 +55,7 @@ standalone repo extraction:
 | [aqp_admin/](aqp_admin/) | Internal admin (managed services + company accounts), FastAPI backend + Vite frontend | Read [aqp_admin/AGENTS.md](aqp_admin/AGENTS.md); never import `aqp.*`; audit-first; mirrors `aqp_control_plane` boundary |
 | [aqp_index/](aqp_index/) | Curator-owned single source of truth (project index, SSoT architecture pointers, consolidated configs, code indices, skills + subagent registries) | Read [aqp_index/AGENTS.md](aqp_index/AGENTS.md); only the `aqp-index-curator` subagent writes here |
 | [aqp_docs/](aqp_docs/) | Canonical AQP documentation (renamed from legacy `docs/`) | Index at [aqp_docs/index.md](aqp_docs/index.md); pointer hub for every subsystem |
+| [aqp_platform/](aqp_platform/) | Hosted-platform deployment + build + IaC + cluster-setup (single home: `deployments/`, `build/`, `deploy/`, `terraform/`, `compose/`, `configs/{deployment,terraform}/`, `scripts/cluster_install/`, root `Dockerfile`, `.dockerignore`) | Read [aqp_platform/AGENTS.md](aqp_platform/AGENTS.md); no `import aqp.*`; `TerraformRuntime`-only; `CredentialResolver`-only; multi-arch images |
 
 ## Project map
 
@@ -125,7 +126,7 @@ External code:
 | [aqp_snippets/](aqp_snippets/) | Future snippets repository boundary; curated knowledge currently also lives in `aqp_snippets/extractions/` and `aqp_snippets/inspiration/`. |
 | [aqp_bots/](aqp_bots/) | Future bot template/sample repository boundary; runtime remains in `aqp_bots/` for now. |
 | [alembic/versions/](alembic/versions/) | DB migrations (immutable once shipped) |
-| [deploy/k8s/](deploy/k8s/) | Legacy Kubernetes manifests for the rpi_kubernetes cluster; new rollouts use [deployments/](deployments/) |
+| [aqp_platform/deploy/k8s/](aqp_platform/deploy/k8s/) | Legacy Kubernetes manifests for the rpi_kubernetes cluster; new rollouts use [aqp_platform/deployments/](aqp_platform/deployments/) |
 | [scripts/](scripts/) | Operational scripts (`iceberg_smoke.py`, `ingest_regulatory.py`, …) |
 | [configs/](configs/) | YAML configs (strategies, agents, ML models, LLM profiles, RAG taxonomies) |
 | [tests/](tests/) | pytest suite |
@@ -578,7 +579,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  AKS, GKE, vanilla k3s) inside its own `aqp-*` namespaces with no
  inbound dependency on `rpi_kubernetes`. The fallback in
  [aqp/config/topology_fallback.py](aqp/config/topology_fallback.py)
- reads `configs/deployment/topology.yaml` and back-fills URL-typed
+ reads `aqp_platform/configs/deployment/topology.yaml` and back-fills URL-typed
  `Settings` fields when no `AQP_*` env override is set; the
  control-plane equivalent is
  [`aqp_cp.services.topology`](aqp_control_plane/src/aqp_cp/services/topology.py)

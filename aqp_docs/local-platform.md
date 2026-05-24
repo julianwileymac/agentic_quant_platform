@@ -2,7 +2,7 @@
 
 Audience: a developer who wants to run AQP **standalone**, without
 attaching to the rpi_kubernetes cluster. The platform overlay
-(`docker-compose.platform.yml`) brings the data + observability
+(`aqp_platform/compose/docker-compose.platform.yml`) brings the data + observability
 services AQP code expects into the local compose stack.
 
 The rpi `kubernetes/` tree stays untouched — these are *copies*, not
@@ -14,8 +14,8 @@ through the [`KubernetesAdapter`](kubernetes-adapter.md) abstraction.
 | Goal | Command |
 | --- | --- |
 | Just the AQP API + workers | `docker compose up -d` |
-| AQP + visualization stack (Trino, Polaris, Superset, Dagster, Dask, Ray) | `docker compose -f docker-compose.yml -f docker-compose.viz.yml --profile visualization up -d` |
-| Full local platform parity (adds Apicurio + real Airbyte + DataHub + Loki + Vector + VictoriaMetrics) | `docker compose -f docker-compose.yml -f docker-compose.viz.yml -f docker-compose.platform.yml --profile visualization --profile platform up -d` |
+| AQP + visualization stack (Trino, Polaris, Superset, Dagster, Dask, Ray) | `docker compose -f aqp_platform/compose/docker-compose.yml -f aqp_platform/compose/docker-compose.viz.yml --profile visualization up -d` |
+| Full local platform parity (adds Apicurio + real Airbyte + DataHub + Loki + Vector + VictoriaMetrics) | `docker compose -f aqp_platform/compose/docker-compose.yml -f aqp_platform/compose/docker-compose.viz.yml -f aqp_platform/compose/docker-compose.platform.yml --profile visualization --profile platform up -d` |
 
 The platform overlay also activates the `visualization` profile's
 services it depends on (Polaris, Trino, Dagster). Don't pass `--profile
@@ -44,12 +44,12 @@ opted out of "full parity":
 - `platform-rag` — RAGFlow + Milvus stack (heavy; pulls a vector DB).
 - `platform-jh` — JupyterHub.
 
-Add them yourself if needed by extending `docker-compose.platform.yml`
+Add them yourself if needed by extending `aqp_platform/compose/docker-compose.platform.yml`
 or shipping an alongside `docker-compose.platform.<profile>.yml`.
 
 ## Smoke test sequence
 
-1. `docker compose -f docker-compose.yml -f docker-compose.viz.yml -f docker-compose.platform.yml --profile visualization --profile platform up -d`
+1. `docker compose -f aqp_platform/compose/docker-compose.yml -f aqp_platform/compose/docker-compose.viz.yml -f aqp_platform/compose/docker-compose.platform.yml --profile visualization --profile platform up -d`
 2. `curl http://localhost:8428/-/ready` — VictoriaMetrics
 3. `curl http://localhost:3100/ready` — Loki
 4. `curl http://localhost:8081/health` — DataHub GMS
@@ -69,7 +69,7 @@ adapter says.
 ## Cleanup
 
 ```
-docker compose -f docker-compose.yml -f docker-compose.viz.yml -f docker-compose.platform.yml --profile visualization --profile platform down
+docker compose -f aqp_platform/compose/docker-compose.yml -f aqp_platform/compose/docker-compose.viz.yml -f aqp_platform/compose/docker-compose.platform.yml --profile visualization --profile platform down
 ```
 
 Volumes are preserved; pass `-v` to wipe them.

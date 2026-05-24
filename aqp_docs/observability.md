@@ -98,7 +98,7 @@ kubectl -n aqp-dev port-forward svc/jaeger 16686:16686
 
 ## Metrics (optional)
 
-The OTel Collector config in `deploy/otel/otel-collector-config.yaml`
+The OTel Collector config in `aqp_platform/deploy/otel/otel-collector-config.yaml`
 also exports metrics on port 8889 via the Prometheus exporter, so you
 can point a Prometheus scraper at the collector for JVM-style
 service-level dashboards. The AQP code doesn't emit custom metrics

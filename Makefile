@@ -95,13 +95,13 @@ bootstrap:
 # ---------------------------------------------------------------------------
 
 up-compose-legacy:
-	docker compose up -d
+	docker compose -f aqp_platform/compose/docker-compose.yml up -d
 
 down-compose-legacy:
-	docker compose down
+	docker compose -f aqp_platform/compose/docker-compose.yml down
 
 logs-compose-legacy:
-	docker compose logs -f --tail=200
+	docker compose -f aqp_platform/compose/docker-compose.yml logs -f --tail=200
 
 ingest:
 	python -m scripts.download_data
@@ -217,7 +217,7 @@ frontend-typecheck:
 # `aqp deploy` (TerraformRuntime) workflow. See aqp_docs/architecture/decisions/.
 # ---------------------------------------------------------------------------
 
-COMPOSE_DIR := deployments/compose
+COMPOSE_DIR := aqp_platform/deployments/compose
 ENV ?= local
 COMPOSE := docker compose \
 	-f $(COMPOSE_DIR)/docker-compose.base.yml \
@@ -229,24 +229,24 @@ COMPOSE := docker compose \
 
 generate-config:
 	@if [ "$(ENV)" = "local" ]; then \
-		python build/scripts/generate_config.py --env local --out $(COMPOSE_DIR)/.env.local; \
+		python aqp_platform/build/scripts/generate_config.py --env local --out $(COMPOSE_DIR)/.env.local; \
 	elif [ "$(ENV)" = "cloud" ]; then \
-		python build/scripts/generate_config.py --env cloud --out $(COMPOSE_DIR)/.env.cloud; \
+		python aqp_platform/build/scripts/generate_config.py --env cloud --out $(COMPOSE_DIR)/.env.cloud; \
 	elif [ "$(ENV)" = "k8s" ]; then \
-		python build/scripts/generate_config.py --env k8s --kind configmap; \
-		python build/scripts/generate_config.py --env k8s --kind secret; \
+		python aqp_platform/build/scripts/generate_config.py --env k8s --kind configmap; \
+		python aqp_platform/build/scripts/generate_config.py --env k8s --kind secret; \
 	else \
 		echo "Usage: make generate-config ENV=local|cloud|k8s"; exit 2; \
 	fi
 
 validate-config:
-	python build/scripts/generate_config.py --env local --diff
-	python build/scripts/generate_config.py --env cloud --diff
-	python build/scripts/generate_config.py --env k8s --kind configmap --diff
-	python build/scripts/generate_config.py --env k8s --kind secret --diff
+	python aqp_platform/build/scripts/generate_config.py --env local --diff
+	python aqp_platform/build/scripts/generate_config.py --env cloud --diff
+	python aqp_platform/build/scripts/generate_config.py --env k8s --kind configmap --diff
+	python aqp_platform/build/scripts/generate_config.py --env k8s --kind secret --diff
 
 sync-auth0-k8s:
-	python build/scripts/sync_auth0_env_to_k8s.py
+	python aqp_platform/build/scripts/sync_auth0_env_to_k8s.py
 
 # ---- Local dev (compose) -------------------------------------------------
 
@@ -288,25 +288,25 @@ build-client:
 
 build-cp:
 	docker buildx build --platform $(PLATFORMS) --load \
-		-f build/docker/aqp_control_plane/Dockerfile \
+		-f aqp_platform/build/docker/aqp_control_plane/Dockerfile \
 		-t $(REGISTRY)/aqp-control-plane:$(IMAGE_TAG) .
 
 build-worker:
-	@if [ ! -f build/docker/aqp_worker/Dockerfile ]; then \
-		echo "[build-worker] build/docker/aqp_worker/Dockerfile missing; skipping worker image build."; \
+	@if [ ! -f aqp_platform/build/docker/aqp_worker/Dockerfile ]; then \
+		echo "[build-worker] aqp_platform/build/docker/aqp_worker/Dockerfile missing; skipping worker image build."; \
 		exit 0; \
 	fi
 	docker buildx build --platform $(PLATFORMS) --load \
-		-f build/docker/aqp_worker/Dockerfile \
+		-f aqp_platform/build/docker/aqp_worker/Dockerfile \
 		-t $(REGISTRY)/aqp-worker:$(IMAGE_TAG) .
 
 build-ingestion:
-	@if [ ! -f build/docker/aqp_ingestion/Dockerfile ]; then \
-		echo "[build-ingestion] build/docker/aqp_ingestion/Dockerfile missing; skipping ingestion image build."; \
+	@if [ ! -f aqp_platform/build/docker/aqp_ingestion/Dockerfile ]; then \
+		echo "[build-ingestion] aqp_platform/build/docker/aqp_ingestion/Dockerfile missing; skipping ingestion image build."; \
 		exit 0; \
 	fi
 	docker buildx build --platform $(PLATFORMS) --load \
-		-f build/docker/aqp_ingestion/Dockerfile \
+		-f aqp_platform/build/docker/aqp_ingestion/Dockerfile \
 		-t $(REGISTRY)/aqp-ingestion:$(IMAGE_TAG) .
 
 # ---- Test (compose + provider contract tests) ----------------------------
@@ -325,14 +325,14 @@ test-providers:
 
 deploy-k8s:
 	@if [ -z "$(ENV)" ]; then echo "Usage: make deploy-k8s ENV=dev|staging|prod"; exit 2; fi
-	kubectl apply -k deployments/kubernetes/overlays/$(ENV)
+	kubectl apply -k aqp_platform/deployments/kubernetes/overlays/$(ENV)
 
 deploy-helm:
 	@if [ -z "$(CHART)" ] || [ -z "$(ENV)" ]; then \
 		echo "Usage: make deploy-helm CHART=aqp-backend ENV=dev"; exit 2; \
 	fi
-	helm upgrade --install $(CHART) deployments/kubernetes/helm/$(CHART) \
-		-f deployments/kubernetes/helm/$(CHART)/values.$(ENV).yaml
+	helm upgrade --install $(CHART) aqp_platform/deployments/kubernetes/helm/$(CHART) \
+		-f aqp_platform/deployments/kubernetes/helm/$(CHART)/values.$(ENV).yaml
 
 # ---- Docs (OpenAPI + markdown) -------------------------------------------
 

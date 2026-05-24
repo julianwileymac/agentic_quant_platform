@@ -58,7 +58,7 @@ class DockerComposeProvider(InfrastructureProvider):
     ) -> None:
         self.compose_file = compose_file or os.environ.get(
             "AQP_CP_COMPOSE_FILE",
-            "deployments/compose/docker-compose.local.yml",
+            "aqp_platform/deployments/compose/docker-compose.local.yml",
         )
         self.project_name = project_name or os.environ.get(
             "AQP_CP_COMPOSE_PROJECT_NAME", "aqp"

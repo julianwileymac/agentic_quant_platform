@@ -295,7 +295,7 @@ def cancel_terraform_run(self, *, run_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Local-stack convenience task — drives the canonical topology-defined spec
 # against the hand-authored composition under
-# terraform/environments/local/. The CLI / REST sugar routes call this
+# aqp_platform/terraform/environments/local/. The CLI / REST sugar routes call this
 # instead of run_terraform_plan/apply/destroy because:
 #   1. The local stack predates a TerraformWorkspace row (the Postgres
 #      that owns workspaces is the very thing being booted).

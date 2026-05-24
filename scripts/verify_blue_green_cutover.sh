@@ -46,5 +46,5 @@ if [[ "${CHECK_EXTERNAL}" == "true" ]]; then
 fi
 
 echo "[verify] green lane checks passed."
-echo "[rollback] kubectl apply -k deployments/kubernetes/overlays/tower-dev/"
-echo "[rollback] kubectl delete -k deployments/kubernetes/edge/cloudflared-aqp-green/"
+echo "[rollback] kubectl apply -k aqp_platform/deployments/kubernetes/overlays/tower-dev/"
+echo "[rollback] kubectl delete -k aqp_platform/deployments/kubernetes/edge/cloudflared-aqp-green/"

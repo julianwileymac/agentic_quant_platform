@@ -1,4 +1,4 @@
-"""Typed deployment topology loaded from ``configs/deployment/topology.yaml``."""
+"""Typed deployment topology loaded from ``aqp_platform/configs/deployment/topology.yaml``."""
 from __future__ import annotations
 
 import json

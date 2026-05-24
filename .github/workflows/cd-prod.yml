@@ -21,9 +21,9 @@ jobs:
       matrix:
         image:
           - { name: aqp-client, dockerfile: aqp_client/Dockerfile }
-          - { name: aqp-control-plane, dockerfile: build/docker/aqp_control_plane/Dockerfile }
-          - { name: aqp-worker, dockerfile: build/docker/aqp_worker/Dockerfile }
-          - { name: aqp-ingestion, dockerfile: build/docker/aqp_ingestion/Dockerfile }
+          - { name: aqp-control-plane, dockerfile: aqp_platform/build/docker/aqp_control_plane/Dockerfile }
+          - { name: aqp-worker, dockerfile: aqp_platform/build/docker/aqp_worker/Dockerfile }
+          - { name: aqp-ingestion, dockerfile: aqp_platform/build/docker/aqp_ingestion/Dockerfile }
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -63,7 +63,7 @@ jobs:
       - name: Update image tags
         run: |
           TAG="${{ github.event.release.tag_name }}"
-          cd deployments/kubernetes/overlays/prod
+          cd aqp_platform/deployments/kubernetes/overlays/prod
           kubectl kustomize . | sed -E "s|newTag: latest-stable|newTag: ${TAG}|g" > /tmp/prod.yaml
       - name: Apply
         run: kubectl apply -f /tmp/prod.yaml

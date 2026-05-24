@@ -30,7 +30,7 @@ class ControlPlaneSettings(BaseSettings):
         alias="AQP_CP_TOPOLOGY_TARGET_ID",
         description=(
             "Optional explicit deployment target id from "
-            "configs/deployment/topology.yaml. When set, this overrides "
+            "aqp_platform/configs/deployment/topology.yaml. When set, this overrides "
             "provider-based target inference."
         ),
     )
@@ -77,7 +77,7 @@ class ControlPlaneSettings(BaseSettings):
 
     # --- docker_compose provider ----------------------------------------
     compose_file: str = Field(
-        default="deployments/compose/docker-compose.local.yml",
+        default="aqp_platform/deployments/compose/docker-compose.local.yml",
         alias="AQP_CP_COMPOSE_FILE",
     )
     compose_project_name: str = Field(

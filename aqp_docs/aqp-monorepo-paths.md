@@ -19,7 +19,16 @@ Canonical path contract for this repository. Sibling repos (`rpi_kubernetes`,
 | Vendored Theia IDE workspace | `aqp_ide/` |
 | Curator-owned project index (SSoT) | `aqp_index/` |
 | Canonical documentation | `aqp_docs/` |
-| Kubernetes workloads | `deployments/kubernetes/` |
+| Hosted-platform single home | `aqp_platform/` |
+| Kubernetes workloads | `aqp_platform/deployments/kubernetes/` |
+| Terraform modules + environments | `aqp_platform/terraform/` |
+| Multi-arch Dockerfiles + config gen | `aqp_platform/build/` |
+| Legacy / edge component configs | `aqp_platform/deploy/` |
+| Root-level compose files | `aqp_platform/compose/` |
+| Multi-stage root Dockerfile | `aqp_platform/Dockerfile` |
+| Deployment topology YAML | `aqp_platform/configs/deployment/topology.yaml` |
+| Terraform stack YAMLs | `aqp_platform/configs/terraform/` |
+| Cluster install scripts | `aqp_platform/scripts/cluster_install/` |
 
 Compatibility stubs and historical paths (do not add active source here):
 
@@ -30,3 +39,15 @@ Compatibility stubs and historical paths (do not add active source here):
 | `inspiration/` | `aqp_snippets/inspiration/` (ignored raw repos) |
 | `aqp/bots/` | `aqp_bots/` (import shim) |
 | `docs/` | `aqp_docs/` (renamed; all references updated) |
+| root `deployments/` | `aqp_platform/deployments/` |
+| root `build/` | `aqp_platform/build/` |
+| root `deploy/` | `aqp_platform/deploy/` |
+| root `terraform/` | `aqp_platform/terraform/` |
+| root `Dockerfile` | `aqp_platform/Dockerfile` |
+| root `.dockerignore` | `aqp_platform/.dockerignore` |
+| root `docker-compose.yml` | `aqp_platform/compose/docker-compose.yml` |
+| root `docker-compose.platform.yml` | `aqp_platform/compose/docker-compose.platform.yml` |
+| root `docker-compose.viz.yml` | `aqp_platform/compose/docker-compose.viz.yml` |
+| `configs/deployment/` | `aqp_platform/configs/deployment/` |
+| `configs/terraform/` | `aqp_platform/configs/terraform/` |
+| `scripts/cluster_install/` | `aqp_platform/scripts/cluster_install/` |

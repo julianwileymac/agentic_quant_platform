@@ -194,7 +194,7 @@ the configured target via
 | --- | --- |
 | `paper_session` | Launches a paper session in the Celery worker. |
 | `backtest_only` | Runs a single backtest + persists result on the deployment row. |
-| `kubernetes` | Renders `Deployment` + `ConfigMap` YAML to `deploy/k8s/bots/<slug>.yaml`. Optionally `kubectl apply`s when `apply=True` and `kubectl` is on PATH. |
+| `kubernetes` | Renders `Deployment` + `ConfigMap` YAML to `aqp_platform/deploy/k8s/bots/<slug>.yaml`. Optionally `kubectl apply`s when `apply=True` and `kubectl` is on PATH. |
 
 The Kubernetes manifest's pod entrypoint is
 `python -m aqp_bots.cli run <slug>` (compat: `python -m aqp.bots.cli`; see

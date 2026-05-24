@@ -20,7 +20,7 @@
 ## Local environment
 
 ```bash
-cd terraform/environments/local
+cd aqp_platform/terraform/environments/local
 terraform init
 terraform plan
 terraform apply
@@ -39,15 +39,15 @@ What this provisions:
   NetworkPolicy on the agent container).
 - Local Docker registry on `:5000`.
 
-State is local (`terraform/environments/local/terraform.tfstate`).
+State is local (`aqp_platform/terraform/environments/local/terraform.tfstate`).
 
 ## rpi Kubernetes environment
 
 ```bash
 aqp deploy publish-rpi --registry ghcr.io/<org> --tag <immutable-tag>
-terraform -chdir=terraform/environments/rpi init
-terraform -chdir=terraform/environments/rpi plan
-terraform -chdir=terraform/environments/rpi apply
+terraform -chdir=aqp_platform/terraform/environments/rpi init
+terraform -chdir=aqp_platform/terraform/environments/rpi plan
+terraform -chdir=aqp_platform/terraform/environments/rpi apply
 ```
 
 Recommended bootstrap sequence for first-time bring-up:
@@ -77,7 +77,7 @@ failures and reuses `AQP_TERRAFORM_PLUGIN_CACHE_DIR` between runs.
 ## Paper environment
 
 ```bash
-cd terraform/environments/paper
+cd aqp_platform/terraform/environments/paper
 export TF_VAR_gcp_project_id=<your-gcp-project>
 export TF_VAR_primary_domain=paper.aqp.example
 terraform init -backend-config="bucket=aqp-terraform-state-paper"
@@ -97,7 +97,7 @@ What this provisions:
 ## Live environment
 
 ```bash
-cd terraform/environments/live
+cd aqp_platform/terraform/environments/live
 export TF_VAR_aws_subnet_ids='["subnet-aaaa", "subnet-bbbb", "subnet-cccc"]'
 export TF_VAR_primary_domain=app.wiley.tech
 terraform init  # picks up backend.tf with S3 + DynamoDB locking
@@ -122,7 +122,7 @@ This is the seeded production home for the org provisioned by
 Alembic 0051. Pinned to the Wiley Tech Entra tenant.
 
 ```bash
-cd terraform/environments/wiley-tech
+cd aqp_platform/terraform/environments/wiley-tech
 export TF_VAR_azure_tenant_id=<wiley tenant id>
 export TF_VAR_azure_subscription_id=<sub id>
 export TF_VAR_azure_resource_group=aqp-wiley-tech
@@ -150,7 +150,7 @@ What this provisions:
    `aqp/terraform/codegen/templates/<kind>_<cloud>.tf.j2` (and a
    `_local` fallback).
 3. (Optional) Mirror as a native HCL module under
-   `terraform/modules/<kind>/`.
+   `aqp_platform/terraform/modules/<kind>/`.
 4. Operators create a stack via `POST /terraform/stacks` with
    `module_kind: "<kind>"`.
 

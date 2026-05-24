@@ -32,8 +32,8 @@ the same kwarg.
 
 ## Kubernetes deployment
 
-[`deployments/kubernetes/base-services/redpanda/`](../deployments/kubernetes/base-services/redpanda/).
-Installed via [`scripts/cluster_install/install-redpanda.sh`](../scripts/cluster_install/install-redpanda.sh):
+[`aqp_platform/deployments/kubernetes/base-services/redpanda/`](../aqp_platform/deployments/kubernetes/base-services/redpanda/).
+Installed via [`aqp_platform/scripts/cluster_install/install-redpanda.sh`](../scripts/cluster_install/install-redpanda.sh):
 
 ```bash
 ./scripts/cluster_install/install-redpanda.sh

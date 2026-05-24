@@ -21,9 +21,9 @@ jobs:
       matrix:
         image:
           - { name: aqp-client, dockerfile: aqp_client/Dockerfile }
-          - { name: aqp-control-plane, dockerfile: build/docker/aqp_control_plane/Dockerfile }
-          - { name: aqp-worker, dockerfile: build/docker/aqp_worker/Dockerfile }
-          - { name: aqp-ingestion, dockerfile: build/docker/aqp_ingestion/Dockerfile }
+          - { name: aqp-control-plane, dockerfile: aqp_platform/build/docker/aqp_control_plane/Dockerfile }
+          - { name: aqp-worker, dockerfile: aqp_platform/build/docker/aqp_worker/Dockerfile }
+          - { name: aqp-ingestion, dockerfile: aqp_platform/build/docker/aqp_ingestion/Dockerfile }
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -71,7 +71,7 @@ jobs:
           SHORT_SHA=$(git rev-parse --short HEAD)
           DATE=$(date +%Y-%m-%d)
           TAG="staging-${SHORT_SHA}-${DATE}"
-          cd deployments/kubernetes/overlays/staging
+          cd aqp_platform/deployments/kubernetes/overlays/staging
           kubectl kustomize . | sed -E "s|newTag: .*|newTag: ${TAG}|g" > /tmp/staging.yaml
       - name: Apply
         run: kubectl apply -f /tmp/staging.yaml

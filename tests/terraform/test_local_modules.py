@@ -86,7 +86,7 @@ def test_aqp_local_spec_loads_from_registry():
 
     yaml_dir = _repo_root() / "configs" / "terraform"
     if not yaml_dir.exists():
-        pytest.skip("configs/terraform/ not present")
+        pytest.skip("aqp_platform/configs/terraform/ not present")
     reload_yaml_dir(yaml_dir)
     spec = get_terraform_spec("aqp-local")
     assert spec.cloud_provider == "local"

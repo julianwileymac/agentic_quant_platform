@@ -1,0 +1,73 @@
+---
+description: Every commit that touches a qualifying surface MUST invoke the aqp-index-curator subagent OR open a .cursor/plans/aqp-index-debt-<slug>.md note so aqp_index/ stays in sync.
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+# aqp_index reflection rule (always on)
+
+[aqp_index/](mdc:aqp_index) is the single source of truth for project
+orientation: the centralized project index, SSoT architecture pointers,
+the consolidated configuration sets, token-saving code indices, the
+project skills registry, and the subagent registry.
+
+Its only value is that it **stays in sync with reality**. This rule is
+how that invariant survives day-to-day churn.
+
+## Qualifying surfaces
+
+Every commit / PR that touches one of these surfaces MUST also reflect
+in `aqp_index/`:
+
+- repo-root [AGENTS.md](mdc:AGENTS.md), [README.md](mdc:README.md),
+  [WORKFLOW.md](mdc:WORKFLOW.md), [CONTRIBUTING.md](mdc:CONTRIBUTING.md)
+- any file under [.cursor/rules/](mdc:.cursor/rules) or
+  [.cursor/agents/](mdc:.cursor/agents)
+- any file under [aqp_docs/](mdc:aqp_docs)
+- any file under [configs/](mdc:configs)
+- any file under [aqp_platform/](mdc:aqp_platform)
+- the public surface of any `aqp_*` package
+  (top-level `__init__.py`, `AGENTS.md`, `README.md`,
+  `api/routers/*.py`, `tools/*.py`, console-script entry points)
+- any new or removed top-level folder
+
+## Two ways to comply
+
+1. **Invoke the curator** (preferred). In the same PR / commit, invoke
+   the [aqp-index-curator](mdc:.cursor/agents/aqp-index-curator.md)
+   subagent and include its `aqp_index/` refresh in the diff. The
+   curator runs Plan -> Scan -> Diff -> Refresh -> Validate per
+   [aqp_index/skills/aqp-index-curator-skill.md](mdc:aqp_index/skills/aqp-index-curator-skill.md).
+2. **Open a debt note.** If you cannot run the curator now (urgent fix,
+   the change is too small to justify a full pass, etc.), drop a note
+   at `.cursor/plans/aqp-index-debt-<slug>.md` that:
+   - names the changed surface
+   - lists the `aqp_index/*` files that need refreshing
+   - includes a one-line summary the curator can read on its next
+     scheduled pass
+
+## Sole-writer guardrail
+
+You MUST NOT edit files under `aqp_index/` directly UNLESS you ARE the
+[aqp-index-curator](mdc:.cursor/agents/aqp-index-curator.md) subagent.
+See [aqp_index/AGENTS.md](mdc:aqp_index/AGENTS.md) for the contract.
+
+The one documented exception is a single one-liner pointer in repo-root
+README.md or AGENTS.md that orients readers into `aqp_index/`.
+
+## Review checklist
+
+A reviewer SHOULD reject a PR that:
+
+- touches a qualifying surface listed above, AND
+- contains neither a curator-driven `aqp_index/` refresh NOR an
+  `aqp-index-debt-*.md` note in the same diff.
+
+## Why this is always on
+
+The cost of letting `aqp_index/` drift is hidden: agents start citing
+stale signatures, token budgets become wrong, and the SSoT pointers
+quietly become lies. The reflection rule is cheap (one extra subagent
+invocation or one short markdown note); the drift it prevents is
+expensive.

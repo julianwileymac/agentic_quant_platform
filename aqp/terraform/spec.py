@@ -22,7 +22,7 @@ API parity notes:
   the templates render a full HCL document, not just a single
   module block.
 - :meth:`to_yaml` / :meth:`from_yaml_str` provide a round-trippable
-  serialisation for `configs/terraform/*.yaml` operator stacks.
+  serialisation for `aqp_platform/configs/terraform/*.yaml` operator stacks.
 - :meth:`spec_hash` is preserved as an alias for
   :meth:`snapshot_hash` so existing callers don't break.
 """
@@ -260,7 +260,7 @@ def load_specs_from_dir(dir_path: str) -> list[TerraformStackSpec]:
 
     Skips files that don't decode to a mapping or fail validation.
     Used by :mod:`aqp.terraform.registry` for the
-    ``configs/terraform/`` auto-load path. Mirrors
+    ``aqp_platform/configs/terraform/`` auto-load path. Mirrors
     :func:`aqp.assistants.spec.load_specs_from_dir` and the matching
     helpers in the agent / bot / workflow packages.
     """

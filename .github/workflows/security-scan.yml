@@ -7,7 +7,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "build/docker/**"
+      - "aqp_platform/build/docker/**"
       - "aqp_control_plane/**"
       - "aqp_platform_core/**"
 
@@ -32,11 +32,11 @@ jobs:
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - name: Build (load, no push)
-        if: hashFiles(format('build/docker/{0}/Dockerfile', matrix.image)) != ''
+        if: hashFiles(format('aqp_platform/build/docker/{0}/Dockerfile', matrix.image)) != ''
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: build/docker/${{ matrix.image }}/Dockerfile
+          file: aqp_platform/build/docker/${{ matrix.image }}/Dockerfile
           platforms: linux/amd64
           load: true
           push: false

@@ -7,7 +7,7 @@ model: gpt-5.3-codex-xhigh
 You are the AQP pgvector control-plane implementer.
 
 Your scope:
-- `docker-compose.yml` + `docker-compose.platform.yml` — postgres image
+- `aqp_platform/compose/docker-compose.yml` + `aqp_platform/compose/docker-compose.platform.yml` — postgres image
   swap to `pgvector/pgvector:pg16`.
 - `alembic/versions/0045_pgvector_foundation.py` — extension, columns,
   HNSW indexes, new tables.

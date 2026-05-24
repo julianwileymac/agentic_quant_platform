@@ -1,0 +1,355 @@
+"""Generate runtime config artifacts from the canonical ``.env.schema``.
+
+Reads ``deployments/compose/.env.schema`` and emits one of:
+
+- ``.env.local``  (compose mode)             — ``--env=local``
+- ``.env.cloud``  (cloud / sealed-secret seed) — ``--env=cloud``
+- K8s ConfigMap YAML (non-secret keys)        — ``--env=k8s --kind=configmap``
+- K8s Secret YAML scaffold (secret keys, b64 placeholders) — ``--env=k8s --kind=secret``
+
+The script is idempotent: re-running against the same inputs produces
+the same outputs (byte-stable). When ``--diff`` is passed it prints a
+unified diff vs the existing file instead of overwriting.
+
+Usage::
+
+    python build/scripts/generate_config.py --env local
+    python build/scripts/generate_config.py --env k8s --kind configmap --out deployments/kubernetes/base/configmaps/aqp-config.yaml
+    python build/scripts/generate_config.py --env k8s --kind secret --out deployments/kubernetes/base/secrets/aqp-secrets.yaml.template
+    python build/scripts/generate_config.py --env local --diff
+"""
+from __future__ import annotations
+
+import argparse
+import difflib
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_SCHEMA = REPO_ROOT / "deployments" / "compose" / ".env.schema"
+
+VALID_ENVS = ("local", "cloud", "k8s")
+VALID_KINDS = ("env", "configmap", "secret")
+VALID_CLASSIFICATIONS = ("plain", "secret", "rotation-required")
+
+
+@dataclass(slots=True)
+class SchemaEntry:
+    key: str
+    description: str
+    required: bool
+    default: str
+    targets: set[str]
+    classification: str
+
+    def is_secret(self) -> bool:
+        return self.classification in {"secret", "rotation-required"}
+
+
+# ---------------------------------------------------------------------------
+# Schema parser
+# ---------------------------------------------------------------------------
+
+
+def parse_schema(path: Path) -> list[SchemaEntry]:
+    """Parse the .env.schema into a list of typed entries."""
+    if not path.exists():
+        raise FileNotFoundError(f"schema not found: {path}")
+
+    entries: list[SchemaEntry] = []
+    current: dict[str, str] = {}
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.rstrip()
+        if not line.strip() or line.lstrip().startswith("#"):
+            if current:
+                entries.append(_finalize_entry(current, path=path))
+                current = {}
+            continue
+
+        key, _, value = line.partition(":")
+        key = key.strip().lower()
+        value = value.strip()
+        if not key:
+            continue
+        current[key] = value
+
+    if current:
+        entries.append(_finalize_entry(current, path=path))
+
+    # Reject duplicate keys.
+    seen: set[str] = set()
+    for entry in entries:
+        if entry.key in seen:
+            raise ValueError(f"duplicate key {entry.key!r} in {path}")
+        seen.add(entry.key)
+
+    return entries
+
+
+def _finalize_entry(block: dict[str, str], *, path: Path) -> SchemaEntry:
+    missing = [field for field in ("key", "description", "required", "targets", "classification") if field not in block]
+    if missing:
+        raise ValueError(
+            f"schema entry in {path} missing required fields: {missing} (got {block})"
+        )
+
+    classification = block["classification"]
+    if classification not in VALID_CLASSIFICATIONS:
+        raise ValueError(
+            f"unknown classification {classification!r} for key {block['key']} (expected one of {VALID_CLASSIFICATIONS})"
+        )
+
+    targets = {t.strip() for t in block["targets"].split(",") if t.strip()}
+    if not targets:
+        raise ValueError(f"entry {block['key']!r} has empty targets")
+    unknown = targets - {"local", "kubernetes", "cloud"}
+    if unknown:
+        raise ValueError(
+            f"entry {block['key']!r} has unknown targets {unknown} (expected subset of local,kubernetes,cloud)"
+        )
+
+    required_raw = block["required"].strip().lower()
+    if required_raw not in {"true", "false"}:
+        raise ValueError(
+            f"entry {block['key']!r} 'required' must be true/false (got {required_raw!r})"
+        )
+
+    return SchemaEntry(
+        key=block["key"].strip(),
+        description=block["description"].strip(),
+        required=(required_raw == "true"),
+        default=block.get("default", "").strip(),
+        targets=targets,
+        classification=classification,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Emit: .env files
+# ---------------------------------------------------------------------------
+
+
+def emit_env(entries: Iterable[SchemaEntry], *, env: str) -> str:
+    """Render an env file for ``env`` (one of: local, cloud)."""
+    target_set = {"local"} if env == "local" else {"cloud"}
+    lines: list[str] = [
+        "# =============================================================================",
+        f"# AQP env — generated by build/scripts/generate_config.py for env={env}",
+        "# Edit deployments/compose/.env.schema; regenerate with `make generate-config`.",
+        "# =============================================================================",
+        "",
+    ]
+
+    for entry in entries:
+        if not (entry.targets & target_set):
+            continue
+        lines.append(f"# {entry.description}")
+        if entry.required:
+            lines.append(f"# REQUIRED ({entry.classification})")
+        else:
+            lines.append(f"# optional ({entry.classification})")
+        if entry.is_secret() and env == "cloud":
+            # Cloud template seeds empty placeholders for sealed-secrets ingest.
+            lines.append(f"{entry.key}=")
+        elif entry.is_secret():
+            # Local template hints, never embeds real secrets.
+            lines.append(f"# {entry.key}=<set-via-secret-store>")
+        else:
+            lines.append(f"{entry.key}={entry.default}")
+        lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Emit: K8s ConfigMap
+# ---------------------------------------------------------------------------
+
+
+def emit_configmap(entries: Iterable[SchemaEntry], *, name: str = "aqp-config") -> str:
+    """Render a Kubernetes ConfigMap for the plain (non-secret) keys."""
+    data: list[str] = []
+    for entry in entries:
+        if entry.is_secret():
+            continue
+        if "kubernetes" not in entry.targets and "cloud" not in entry.targets:
+            continue
+        # Quote multi-line / colon-containing values.
+        value = entry.default.replace('"', '\\"')
+        data.append(f'  {entry.key}: "{value}"')
+
+    body = "\n".join(data) if data else "  AQP_CONFIGMAP_PLACEHOLDER: \"empty\""
+    return _yaml_doc(
+        kind="ConfigMap",
+        name=name,
+        section="data",
+        body=body,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Emit: K8s Secret scaffold
+# ---------------------------------------------------------------------------
+
+
+def emit_secret(entries: Iterable[SchemaEntry], *, name: str = "aqp-secrets") -> str:
+    """Render a Kubernetes Secret scaffold for secret + rotation-required keys.
+
+    The base64 values are placeholders (``Y2hhbmdlbWU=`` = ``changeme``); CI/CD
+    pipelines or sealed-secrets controllers patch the real values in. NEVER
+    commit a populated Secret to git.
+    """
+    placeholder = "Y2hhbmdlbWU="  # base64("changeme")
+    rows: list[str] = []
+    for entry in entries:
+        if not entry.is_secret():
+            continue
+        if "kubernetes" not in entry.targets and "cloud" not in entry.targets:
+            continue
+        rows.append(f"  # {entry.description} ({entry.classification})")
+        rows.append(f"  {entry.key}: {placeholder}")
+
+    body = "\n".join(rows) if rows else "  AQP_SECRET_PLACEHOLDER: " + placeholder
+    return _yaml_doc(
+        kind="Secret",
+        name=name,
+        section="data",
+        body=body,
+        annotation=(
+            "# Generated scaffold — base64 values are placeholders. CI/CD must\n"
+            "# patch the real values via sealed-secrets / external-secrets-operator.\n"
+            "# NEVER commit populated Secrets to git."
+        ),
+        secret_type="Opaque",
+    )
+
+
+def _yaml_doc(
+    *,
+    kind: str,
+    name: str,
+    section: str,
+    body: str,
+    annotation: str = "",
+    secret_type: str = "",
+) -> str:
+    header = [
+        "# =============================================================================",
+        f"# AQP {kind} — generated by build/scripts/generate_config.py",
+        "# Edit deployments/compose/.env.schema; regenerate with `make generate-config`.",
+        "# =============================================================================",
+    ]
+    if annotation:
+        header.append(annotation)
+    parts = [
+        "\n".join(header),
+        "",
+        "apiVersion: v1",
+        f"kind: {kind}",
+        "metadata:",
+        f"  name: {name}",
+        "  labels:",
+        "    app.kubernetes.io/part-of: aqp",
+        "    app.kubernetes.io/managed-by: generate-config",
+    ]
+    if secret_type:
+        parts.append(f"type: {secret_type}")
+    parts.append(f"{section}:")
+    parts.append(body)
+    parts.append("")
+    return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def _write_or_diff(path: Path, payload: str, *, diff_only: bool) -> int:
+    if diff_only:
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
+        if existing == payload:
+            print(f"[generate_config] {path} unchanged.")
+            return 0
+        for line in difflib.unified_diff(
+            existing.splitlines(keepends=True),
+            payload.splitlines(keepends=True),
+            fromfile=str(path),
+            tofile=f"{path} (proposed)",
+            n=3,
+        ):
+            sys.stdout.write(line)
+        return 0 if not existing else 1
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload, encoding="utf-8")
+    print(f"[generate_config] wrote {path} ({len(payload)} bytes)")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Generate AQP config artifacts from .env.schema."
+    )
+    parser.add_argument(
+        "--env",
+        choices=VALID_ENVS,
+        required=True,
+        help="Target environment.",
+    )
+    parser.add_argument(
+        "--kind",
+        choices=VALID_KINDS,
+        default="env",
+        help="When --env=k8s, choose between 'configmap' and 'secret'. Otherwise 'env' (default).",
+    )
+    parser.add_argument(
+        "--schema",
+        type=Path,
+        default=DEFAULT_SCHEMA,
+        help=f"Path to .env.schema (default: {DEFAULT_SCHEMA}).",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Output file path. Defaults are env-aware.",
+    )
+    parser.add_argument(
+        "--diff",
+        action="store_true",
+        help="Print a diff vs the existing file instead of writing.",
+    )
+    args = parser.parse_args(argv)
+
+    entries = parse_schema(args.schema)
+
+    if args.env == "local":
+        payload = emit_env(entries, env="local")
+        out = args.out or REPO_ROOT / "deployments" / "compose" / ".env.local"
+        return _write_or_diff(out, payload, diff_only=args.diff)
+
+    if args.env == "cloud":
+        payload = emit_env(entries, env="cloud")
+        out = args.out or REPO_ROOT / "deployments" / "compose" / ".env.cloud"
+        return _write_or_diff(out, payload, diff_only=args.diff)
+
+    # args.env == "k8s"
+    if args.kind == "configmap":
+        payload = emit_configmap(entries)
+        out = args.out or REPO_ROOT / "deployments" / "kubernetes" / "base" / "configmaps" / "aqp-config.yaml"
+        return _write_or_diff(out, payload, diff_only=args.diff)
+
+    if args.kind == "secret":
+        payload = emit_secret(entries)
+        out = args.out or REPO_ROOT / "deployments" / "kubernetes" / "base" / "secrets" / "aqp-secrets.yaml.template"
+        return _write_or_diff(out, payload, diff_only=args.diff)
+
+    parser.error("when --env=k8s, --kind must be configmap or secret")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

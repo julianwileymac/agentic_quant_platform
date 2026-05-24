@@ -153,5 +153,5 @@ pointing at whichever backend matches `vault_backend`. The
 `(k8s_secret_name, vault_path)` pair so AQP pods consume secrets via
 mounted Secrets — never raw env vars.
 
-See [`terraform/modules/secrets/main.tf`](../terraform/modules/secrets/main.tf)
+See [`aqp_platform/terraform/modules/secrets/main.tf`](../aqp_platform/terraform/modules/secrets/main.tf)
 for the full mapping table.

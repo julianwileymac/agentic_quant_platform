@@ -27,7 +27,7 @@ For sites with a single VM but where you want production-style observability + P
 
 ```bash
 curl -sfL https://get.k3s.io | sh -
-kubectl apply -k deployments/kubernetes/overlays/dev
+kubectl apply -k aqp_platform/deployments/kubernetes/overlays/dev
 ```
 
 k3s ships with Traefik (substitute for the NGINX Ingress) and a built-in service load balancer (Klipper). You can install NGINX Ingress on top if you want to keep the same Ingress manifests as production.
@@ -44,7 +44,7 @@ The reference home/edge cluster shape per `rpi_kubernetes/README.md`:
 # In the rpi_kubernetes repo
 kubectl apply -k kubernetes/                           # base platform
 # Then in the agentic_quant_platform repo
-kubectl apply -k deployments/kubernetes/overlays/dev   # AQP workloads
+kubectl apply -k aqp_platform/deployments/kubernetes/overlays/dev   # AQP workloads
 ```
 
 The AQP namespace + ConfigMap scaffold lands via [`kubernetes/base-services/aqp/`](../../../rpi_kubernetes/kubernetes/base-services/aqp/) (Phase 7 absorption).
@@ -64,7 +64,7 @@ docker push mirror.local:5000/aqp-client:latest-stable
 Then override the image tags in your overlay:
 
 ```yaml
-# deployments/kubernetes/overlays/edge-site-a/kustomization.yaml
+# aqp_platform/deployments/kubernetes/overlays/edge-site-a/kustomization.yaml
 images:
   - name: ghcr.io/julianwiley/aqp-client
     newName: mirror.local:5000/aqp-client

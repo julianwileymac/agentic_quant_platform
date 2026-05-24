@@ -5,8 +5,8 @@ controlled DNS/tunnel switch and immediate rollback path.
 
 ## Green lane artifacts
 
-- Overlay: `deployments/kubernetes/overlays/tower-green/`
-- Tunnel lane: `deployments/kubernetes/edge/cloudflared-aqp-green/`
+- Overlay: `aqp_platform/deployments/kubernetes/overlays/tower-green/`
+- Tunnel lane: `aqp_platform/deployments/kubernetes/edge/cloudflared-aqp-green/`
 - Verification: `scripts/verify_blue_green_cutover.sh`
 
 Green hostnames:
@@ -24,7 +24,7 @@ Green hostnames:
    ```
 
 2. Update Auth0 app allow-lists so both blue and green URLs are valid during transition.
-   Use `terraform/modules/auth0_identity` inputs:
+   Use `aqp_platform/terraform/modules/auth0_identity` inputs:
    - `callback_urls` + `cutover_callback_urls`
    - `logout_urls` + `cutover_logout_urls`
    - `web_origins` + `cutover_web_origins`
@@ -41,8 +41,8 @@ Green hostnames:
 ## 2) Deploy green lane
 
 ```bash
-kubectl apply -k deployments/kubernetes/edge/cloudflared-aqp-green/
-kubectl apply -k deployments/kubernetes/overlays/tower-green/
+kubectl apply -k aqp_platform/deployments/kubernetes/edge/cloudflared-aqp-green/
+kubectl apply -k aqp_platform/deployments/kubernetes/overlays/tower-green/
 ```
 
 ## 3) Validate before switch
@@ -70,8 +70,8 @@ Once stable, update canonical host routing (`aqp.fund`, `api.aqp.fund`,
 Immediate rollback commands:
 
 ```bash
-kubectl apply -k deployments/kubernetes/overlays/tower-dev/
-kubectl delete -k deployments/kubernetes/edge/cloudflared-aqp-green/
+kubectl apply -k aqp_platform/deployments/kubernetes/overlays/tower-dev/
+kubectl delete -k aqp_platform/deployments/kubernetes/edge/cloudflared-aqp-green/
 ```
 
 Then restore blue DNS/tunnel routing and rerun baseline checks.

@@ -13,7 +13,7 @@ operations while keeping infrastructure and data under operator control.
 
 - **Primary operator UI**: [aqp_client/](aqp_client/) (Vite 7 + React 19)
 - **Primary runtime package**: [aqp/](aqp/) (agents, data, backtests, RL, tasks, APIs)
-- **Primary deployment assets**: [deployments/](deployments/) and [terraform/](terraform/)
+- **Primary deployment assets**: [aqp_platform/deployments/](aqp_platform/deployments/) and [aqp_platform/terraform/](aqp_platform/terraform/)
 - **Primary local setup runbook**: [aqp_docs/operations/local-setup.md](aqp_docs/operations/local-setup.md)
 - **Primary Kubernetes runbook**: [aqp_docs/operations/kubernetes-deploy.md](aqp_docs/operations/kubernetes-deploy.md)
 
@@ -32,10 +32,13 @@ operations while keeping infrastructure and data under operator control.
 | Vendored Theia IDE workspace | [aqp_ide/](aqp_ide/) | active |
 | Curator-owned project index (SSoT) | [aqp_index/](aqp_index/) | active |
 | Canonical documentation | [aqp_docs/](aqp_docs/) | active |
-| Compose + Kubernetes artifacts | [deployments/](deployments/) | active |
-| Infrastructure as code | [terraform/](terraform/) | active |
+| Hosted-platform deployment + build + IaC + cluster setup | [aqp_platform/](aqp_platform/) | active |
+| Compose + Kubernetes artifacts | [aqp_platform/deployments/](aqp_platform/deployments/) | active |
+| Infrastructure as code | [aqp_platform/terraform/](aqp_platform/terraform/) | active |
 | Legacy Next.js UI | [webui/](webui/) | rollback-only |
-| Legacy Kubernetes tree | [deploy/k8s/](deploy/k8s/) | legacy |
+| Legacy Kubernetes tree | [aqp_platform/deploy/k8s/](aqp_platform/deploy/k8s/) | legacy |
+
+> The former root-level `deployments/`, `terraform/`, `build/`, and `deploy/` folders, plus root `Dockerfile`, `.dockerignore`, and `docker-compose*.yml`, now live under [aqp_platform/](aqp_platform/). The former `configs/deployment/` and `configs/terraform/` subfolders moved to `aqp_platform/configs/`. `scripts/cluster_install/` moved to `aqp_platform/scripts/cluster_install/`.
 
 For canonical boundary ownership, see [aqp_docs/repository-split.md](aqp_docs/repository-split.md)
 and [aqp_docs/aqp-monorepo-paths.md](aqp_docs/aqp-monorepo-paths.md).
@@ -52,7 +55,7 @@ make dev
 ```
 
 - Runbook: [aqp_docs/operations/local-setup.md](aqp_docs/operations/local-setup.md)
-- Compose artifact map: [deployments/README.md](deployments/README.md)
+- Compose artifact map: [aqp_platform/deployments/README.md](aqp_platform/deployments/README.md)
 
 ### 2) Terraform-managed local k3d (ledgered control-plane path)
 
@@ -66,10 +69,10 @@ aqp deploy status
 
 ### 3) Kubernetes target deployment (cluster)
 
-Use Kustomize overlays under [deployments/kubernetes/](deployments/kubernetes/):
+Use Kustomize overlays under [aqp_platform/deployments/kubernetes/](aqp_platform/deployments/kubernetes/):
 
 ```bash
-kubectl apply -k deployments/kubernetes/overlays/dev
+kubectl apply -k aqp_platform/deployments/kubernetes/overlays/dev
 ```
 
 - Canonical cluster rollout: [aqp_docs/operations/kubernetes-deploy.md](aqp_docs/operations/kubernetes-deploy.md)
@@ -79,8 +82,8 @@ kubectl apply -k deployments/kubernetes/overlays/dev
 - Tower target rollout: [aqp_docs/operations/tower-cluster-deploy.md](aqp_docs/operations/tower-cluster-deploy.md)
 - Blue/green cutover for `aqp.fund`: [aqp_docs/operations/aqp-fund-blue-green-cutover.md](aqp_docs/operations/aqp-fund-blue-green-cutover.md)
 - Cloudflare tunnel manifests:
-  - primary lane: [deployments/kubernetes/edge/cloudflared-aqp/](deployments/kubernetes/edge/cloudflared-aqp/)
-  - green lane: [deployments/kubernetes/edge/cloudflared-aqp-green/](deployments/kubernetes/edge/cloudflared-aqp-green/)
+  - primary lane: [aqp_platform/deployments/kubernetes/edge/cloudflared-aqp/](aqp_platform/deployments/kubernetes/edge/cloudflared-aqp/)
+  - green lane: [aqp_platform/deployments/kubernetes/edge/cloudflared-aqp-green/](aqp_platform/deployments/kubernetes/edge/cloudflared-aqp-green/)
 
 ## Architecture Diagrams
 
@@ -176,11 +179,11 @@ flowchart LR
 | Kubernetes rollout | [aqp_docs/operations/kubernetes-deploy.md](aqp_docs/operations/kubernetes-deploy.md) | active |
 | Tower two-node rollout | [aqp_docs/operations/tower-cluster-deploy.md](aqp_docs/operations/tower-cluster-deploy.md) | active |
 | Blue/green cutover | [aqp_docs/operations/aqp-fund-blue-green-cutover.md](aqp_docs/operations/aqp-fund-blue-green-cutover.md) | active |
-| Deployment asset map | [deployments/README.md](deployments/README.md) | active |
+| Deployment asset map | [aqp_platform/deployments/README.md](aqp_platform/deployments/README.md) | active |
 | Repository boundary map | [aqp_docs/repository-split.md](aqp_docs/repository-split.md) | migration |
 | Monorepo path contract | [aqp_docs/aqp-monorepo-paths.md](aqp_docs/aqp-monorepo-paths.md) | active |
 | Legacy Next.js docs | [aqp_docs/webui.md](aqp_docs/webui.md) | rollback-only |
-| Legacy k8s tree | [deploy/k8s/README.md](deploy/k8s/README.md) | legacy |
+| Legacy k8s tree | [aqp_platform/deploy/k8s/README.md](aqp_platform/deploy/k8s/README.md) | legacy |
 | Historical context | [aqp_docs/archive/README.md](aqp_docs/archive/README.md) | archive |
 
 ## Useful Links
@@ -190,16 +193,16 @@ flowchart LR
 - Workflow governance: [WORKFLOW.md](WORKFLOW.md)
 - Code index governance: [aqp_docs/code-index-governance.md](aqp_docs/code-index-governance.md)
 - Active frontend package: [aqp_client/README.md](aqp_client/README.md)
-- Deployment artifacts: [deployments/README.md](deployments/README.md)
-- Kubernetes manifests: [deployments/kubernetes/](deployments/kubernetes/)
-- Terraform environments: [terraform/environments/](terraform/environments/)
+- Deployment artifacts: [aqp_platform/deployments/README.md](aqp_platform/deployments/README.md)
+- Kubernetes manifests: [aqp_platform/deployments/kubernetes/](aqp_platform/deployments/kubernetes/)
+- Terraform environments: [aqp_platform/terraform/environments/](aqp_platform/terraform/environments/)
 
 ## Changelog (concise)
 
 ### 2026-05-23
 
 - Modernized this README to align with current active surfaces and runbooks.
-- Replaced stale legacy deployment references with `deployments/kubernetes` and
+- Replaced stale legacy deployment references with `aqp_platform/deployments/kubernetes` and
   current operations docs.
 - Added canonical repository structure and deployment topology sections.
 - Added architecture diagrams for runtime and edge deployment paths.

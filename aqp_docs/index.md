@@ -17,14 +17,14 @@ Triple-axis table of contents for the AQP docs.
 | Kubernetes rollout | [operations/kubernetes-deploy.md](operations/kubernetes-deploy.md) | active | Production-oriented deployment path |
 | Tower 2-node rollout | [operations/tower-cluster-deploy.md](operations/tower-cluster-deploy.md) | active | Dedicated tower+laptop target bootstrap path |
 | AQP blue/green cutover | [operations/aqp-fund-blue-green-cutover.md](operations/aqp-fund-blue-green-cutover.md) | active | `aqp.fund` green-lane validation + switch + rollback |
-| Deployment artifacts | [../deployments/README.md](../deployments/README.md) | active | Compose + Kubernetes manifests for current architecture |
+| Deployment artifacts | [../aqp_platform/deployments/README.md](../aqp_platform/deployments/README.md) | active | Compose + Kubernetes manifests for current architecture |
 | Operator UI | [../aqp_client/README.md](../aqp_client/README.md) | active | Vite frontend is the primary UI |
 | Repository split map | [repository-split.md](repository-split.md) | migration | Domain boundaries for future standalone repositories |
 | Monorepo path contract | [aqp-monorepo-paths.md](aqp-monorepo-paths.md) | active | Canonical paths for cross-repo references |
 | Code index governance | [code-index-governance.md](code-index-governance.md) | active | Agent search/index workflow across split boundaries |
 | Legacy Next.js UI | [webui.md](webui.md) | rollback | Keep only for emergency rollback context |
 | Legacy Solara UI | [../aqp/ui/](../aqp/ui/) | rollback | Deprecated runtime surface |
-| Legacy k8s manifests | [../deploy/k8s/README.md](../deploy/k8s/README.md) | legacy | Historical manifests; do not use for new rollouts |
+| Legacy k8s manifests | [../aqp_platform/deploy/k8s/README.md](../aqp_platform/deploy/k8s/README.md) | legacy | Historical manifests; do not use for new rollouts |
 | Archived planning/audit docs | [archive/README.md](archive/README.md) | archive | Historical context only; not operational guidance |
 
 ## Operational snippet catalog

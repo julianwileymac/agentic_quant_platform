@@ -1,5 +1,5 @@
 """Lightweight controller for the vLLM service profiles defined in
-``docker-compose.yml``.
+``aqp_platform/compose/docker-compose.yml``.
 
 Two operating modes are supported transparently:
 

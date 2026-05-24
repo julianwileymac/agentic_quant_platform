@@ -228,8 +228,8 @@ The catalog falls back to a local `./data/iceberg/` SQL catalog. See
 ### Kubernetes
 
 Primary manifests live under
-[deployments/kubernetes/](../deployments/kubernetes/). The older
-[deploy/k8s/](../deploy/k8s/) tree is legacy and retained for rollback
+[aqp_platform/deployments/kubernetes/](../aqp_platform/deployments/kubernetes/). The older
+[aqp_platform/deploy/k8s/](../aqp_platform/deploy/k8s/) tree is legacy and retained for rollback
 compatibility.
 
 ## Where to start

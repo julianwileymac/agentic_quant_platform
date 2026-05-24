@@ -24,9 +24,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install ruff mypy
       - name: ruff (root)
-        run: ruff check aqp aqp_platform_core/src aqp_control_plane/src build/scripts || true
+        run: ruff check aqp aqp_platform_core/src aqp_control_plane/src aqp_platform/build/scripts || true
       - name: ruff (format check)
-        run: ruff format --check aqp_platform_core/src aqp_control_plane/src build/scripts || true
+        run: ruff format --check aqp_platform_core/src aqp_control_plane/src aqp_platform/build/scripts || true
 
   test-platform-core:
     name: aqp_platform_core tests
@@ -80,10 +80,10 @@ jobs:
           python-version: "3.11"
       - name: Generate + diff
         run: |
-          python build/scripts/generate_config.py --env local --diff
-          python build/scripts/generate_config.py --env cloud --diff
-          python build/scripts/generate_config.py --env k8s --kind configmap --diff
-          python build/scripts/generate_config.py --env k8s --kind secret --diff
+          python aqp_platform/build/scripts/generate_config.py --env local --diff
+          python aqp_platform/build/scripts/generate_config.py --env cloud --diff
+          python aqp_platform/build/scripts/generate_config.py --env k8s --kind configmap --diff
+          python aqp_platform/build/scripts/generate_config.py --env k8s --kind secret --diff
 
   validate-k8s-manifests:
     name: kubectl validate
@@ -96,7 +96,7 @@ jobs:
           set -e
           for env in dev staging prod; do
             echo "=== Validating overlay: $env ==="
-            kubectl kustomize deployments/kubernetes/overlays/$env > /tmp/$env.yaml
+            kubectl kustomize aqp_platform/deployments/kubernetes/overlays/$env > /tmp/$env.yaml
             kubectl apply --dry-run=client -f /tmp/$env.yaml
           done
 

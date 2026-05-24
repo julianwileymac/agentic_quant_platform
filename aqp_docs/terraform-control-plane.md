@@ -64,7 +64,7 @@ generation uses **Jinja2 templates** under
 - `secrets_local.tf.j2` (ESO + ClusterSecretStore + ExternalSecret per `secret_mappings`)
 - `generic.tf.j2` (fallback for `module_source` references)
 
-Operator-authored stacks live under [`terraform/modules/`](../terraform/modules/)
+Operator-authored stacks live under [`aqp_platform/terraform/modules/`](../aqp_platform/terraform/modules/)
 and are reachable via `spec.module_source = "../../modules/storage"`.
 
 ## State backends
@@ -137,6 +137,6 @@ Vite/React surfaces under [`aqp_client/src/routes/infra/`](../aqp_client/src/rou
 | Add an MCP tool | [`aqp/data/mcp/tools/terraform.py`](../aqp/data/mcp/tools/terraform.py) |
 | Add a REST route | [`aqp/api/routes/terraform.py`](../aqp/api/routes/terraform.py) |
 | Add a Celery task | [`aqp/tasks/terraform_tasks.py`](../aqp/tasks/terraform_tasks.py) |
-| Edit the runner pod | [`terraform/modules/terraform_runner/main.tf`](../terraform/modules/terraform_runner/main.tf) |
+| Edit the runner pod | [`aqp_platform/terraform/modules/terraform_runner/main.tf`](../aqp_platform/terraform/modules/terraform_runner/main.tf) |
 | Add a state backend | [`aqp/terraform/codegen/wrapper.py`](../aqp/terraform/codegen/wrapper.py) |
 | Add an OPA policy | Reference the file URI via `TerraformPolicyAttachment.policy_set_uri` |

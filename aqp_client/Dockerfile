@@ -13,7 +13,7 @@
 # Build:
 #   docker buildx build \
 #     --platform linux/amd64,linux/arm64 \
-#     --file build/docker/aqp_client/Dockerfile \
+#     --file aqp_platform/build/docker/aqp_client/Dockerfile \
 #     --tag ghcr.io/julianwiley/aqp-client:dev \
 #     .
 # Build context is the AQP repo root so we can COPY from aqp_client/, aqp/, etc.
@@ -44,7 +44,7 @@ RUN rm -rf node_modules \
     && if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile; \
     else pnpm install --no-frozen-lockfile; fi
 
-# Vite reads VITE_* at build time (must match deployments/kubernetes ConfigMap).
+# Vite reads VITE_* at build time (must match aqp_platform/deployments/kubernetes ConfigMap).
 ARG VITE_API_URL=https://api.aqp.fund
 ARG VITE_WS_URL=wss://api.aqp.fund
 ARG VITE_AUTH0_DOMAIN=aqp-fund.us.auth0.com

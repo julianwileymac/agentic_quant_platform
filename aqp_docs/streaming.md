@@ -77,7 +77,7 @@ pip install -e ".[alpaca,ibkr,streaming,otel]"
 aqp-stream-ingest --venue all
 ```
 
-Or in Kubernetes: `kubectl apply -k deploy/k8s/base/` (see below).
+Or in Kubernetes: `kubectl apply -k aqp_platform/deploy/k8s/base/` (see below).
 
 ### Schemas
 
@@ -109,7 +109,7 @@ share byte-for-byte identical contracts.
 ### Kafka cluster (rpi_kubernetes)
 
 - Deployed by Strimzi in the ``aqp-streaming`` namespace
-  (`deployments/kubernetes/base-services/kafka-strimzi/`).
+  (`aqp_platform/deployments/kubernetes/base-services/kafka-strimzi/`).
 - Topics managed by `KafkaTopic` CRs in
   [rpi_kubernetes/kubernetes/base-services/kafka/topics.yaml](../../rpi_kubernetes/kubernetes/base-services/kafka/topics.yaml).
 - Partitioning + retention tuned per topic (tick streams 1d, bars 7d,
@@ -195,7 +195,7 @@ Bringing the pipeline up from a clean state:
      --from-literal=AQP_ALPACA_SECRET_KEY=... \
      --from-literal=TWS_USERID=... \
      --from-literal=TWS_PASSWORD=...
-   kubectl apply -k deploy/k8s/base/
+   kubectl apply -k aqp_platform/deploy/k8s/base/
    ```
 6. Run `alembic upgrade head` against your PostgreSQL so the
    `flink_trading.*` tables exist before the `normalize_sink` job

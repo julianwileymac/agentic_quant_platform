@@ -1,7 +1,7 @@
 """Pydantic v2 models for AQP deployment topology.
 
 These models live here so both ``aqp/`` and ``aqp_control_plane/``
-agree on the wire format of ``configs/deployment/topology.yaml``.
+agree on the wire format of ``aqp_platform/configs/deployment/topology.yaml``.
 The YAML loader (:func:`get_deployment_topology`) stays in
 ``aqp/deployment/topology.py`` because it depends on
 ``aqp.config.settings`` for the path lookup.

@@ -21,7 +21,7 @@ Adopt the **two-layer Auth0 model** with the following invariants:
 
 1. The Vite SPA in `aqp_client` performs Authorization Code + PKCE against the Auth0 tenant. Access tokens are short-lived (1 h) JWTs with `aud` = `https://api.aqp.internal/manage`.
 2. Every backend service — `aqp` (FastAPI API), `aqp_control_plane` (micro-project), and the `rpi_kubernetes` `management/backend` shim — re-validates JWTs against the Auth0 JWKS independently using the shared validator in `aqp_platform_core/auth/`. **No service trusts a header set by another service.**
-3. Auth0 Post-Login Action (template in `terraform/modules/auth0_identity/post_login_action.js.tftpl`) calls `POST /_internal/auth0/sync` to fetch user-specific custom claims and injects them into the access token under the **`https://aqp.internal/`** namespace:
+3. Auth0 Post-Login Action (template in `aqp_platform/terraform/modules/auth0_identity/post_login_action.js.tftpl`) calls `POST /_internal/auth0/sync` to fetch user-specific custom claims and injects them into the access token under the **`https://aqp.internal/`** namespace:
    - `https://aqp.internal/org_id` — tenancy boundary
    - `https://aqp.internal/roles` — coarse role list (`aqp-viewer`, `aqp-admin`, `aqp-operator`)
    - `https://aqp.internal/resources` — explicit resource ID allowlist (org-scoped)
@@ -53,7 +53,7 @@ Adopt the **two-layer Auth0 model** with the following invariants:
 
 ## Alternatives considered
 
-- **Self-hosted Keycloak** — rejected. Adds operational burden without business value. Auth0 plays well with Terraform (already in `terraform/modules/auth0_identity/`).
+- **Self-hosted Keycloak** — rejected. Adds operational burden without business value. Auth0 plays well with Terraform (already in `aqp_platform/terraform/modules/auth0_identity/`).
 - **Cookie-only sessions** — rejected. Backend services would have to trust whatever set the cookie; doesn't compose with the cross-service M2M case.
 - **Opaque tokens with introspection** — rejected. Adds a round trip per request against Auth0's `/oauth/token/introspect`, and Auth0's free tier rate-limits it.
 
@@ -62,7 +62,7 @@ Adopt the **two-layer Auth0 model** with the following invariants:
 - JWT validator: `aqp_platform_core/auth/validator.py` (extracted from `aqp/auth/providers/auth0.py`)
 - Resource filter: `aqp_platform_core/auth/resource_filter.py`
 - Claims namespace setting: `aqp/config/settings.py::auth_claims_namespace`, `auth_claims_namespace_aliases`
-- Auth0 Action template: `terraform/modules/auth0_identity/post_login_action.js.tftpl`
+- Auth0 Action template: `aqp_platform/terraform/modules/auth0_identity/post_login_action.js.tftpl`
 - Sync endpoint: `aqp/api/routes/auth0_sync.py`
-- Terraform Auth0 module: `terraform/modules/auth0_identity/main.tf`
-- Provisioning script: `build/scripts/provision_auth0.py`
+- Terraform Auth0 module: `aqp_platform/terraform/modules/auth0_identity/main.tf`
+- Provisioning script: `aqp_platform/build/scripts/provision_auth0.py`

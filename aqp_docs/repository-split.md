@@ -30,7 +30,7 @@ workflows.
 | Snippets | `aqp_snippets/` | Curated code knowledge, annotations, prompts, provenance indexes | Runtime imports or production package dependencies |
 | Bots | `aqp_bots/`, `aqp_bots/templates/` | Bot runtime, templates, examples, sample specs | Direct bypass of `BotRuntime` or immutable versioning |
 | Monolith runtime | `aqp/` | Agents, RL, analysis, backtests, data plane, persistence, tasks, API gateway | New workload control-plane providers |
-| Deployment | `deployments/`, `terraform/`, `build/` | Compose, Kubernetes, Terraform, image build contracts | Cluster bootstrap owned by `rpi_kubernetes` |
+| Deployment | `aqp_platform/deployments/`, `aqp_platform/terraform/`, `build/` | Compose, Kubernetes, Terraform, image build contracts | Cluster bootstrap owned by `rpi_kubernetes` |
 
 ## Allowed Dependencies
 

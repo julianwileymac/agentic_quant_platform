@@ -33,7 +33,7 @@ security audit events through `aqp.auth.audit.emit_audit_event`.
 
 ## Auth0 Integration
 
-The `terraform/modules/auth0_identity` module creates:
+The `aqp_platform/terraform/modules/auth0_identity` module creates:
 
 - the AQP SPA application,
 - the AQP API audience and scopes,

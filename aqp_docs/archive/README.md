@@ -11,7 +11,7 @@ kept for historical context, auditability, or rollback analysis.
 
 ## Active vs archive rule
 
-- **Active** docs live under `aqp_docs/`, `deployments/`, and root onboarding
+- **Active** docs live under `aqp_docs/`, `aqp_platform/deployments/`, and root onboarding
   files (`README.md`, `CONTRIBUTING.md`, `AGENTS.md`, `WORKFLOW.md`).
 - **Archive** docs are historical and should never be treated as current setup
   or deployment instructions.

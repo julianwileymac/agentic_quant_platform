@@ -5,7 +5,7 @@ name: Build multi-arch images
 # linux/arm64 (the rpi_kubernetes Raspberry Pi 5 edge cluster) on every
 # push to ``main`` and on every ``v*`` tag, then pushes to
 # ``docker.io/julianwiley/aqp-*`` (Docker Hub). The Kubernetes deployments under
-# ``deployments/kubernetes/base/`` carry a soft ``kubernetes.io/arch``
+# ``aqp_platform/deployments/kubernetes/base/`` carry a soft ``kubernetes.io/arch``
 # nodeAffinity so a pod scheduled onto either arch will pull the
 # matching layer automatically.
 #
@@ -37,7 +37,7 @@ on:
       - "aqp_bots/**"
       - "aqp/auth/**"
       - "aqp/tasks/celery_app.py"
-      - "deployments/kubernetes/base/**"
+      - "aqp_platform/deployments/kubernetes/base/**"
   workflow_dispatch:
 
 permissions:

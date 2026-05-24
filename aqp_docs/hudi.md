@@ -28,9 +28,9 @@ NEVER written through `append_arrow`.
 
 ## Kubernetes deployment
 
-- [`deployments/kubernetes/mlops/spark-operator/`](../deployments/kubernetes/mlops/spark-operator/)
+- [`aqp_platform/deployments/kubernetes/mlops/spark-operator/`](../aqp_platform/deployments/kubernetes/mlops/spark-operator/)
   — Kubeflow Spark Operator (Helm).
-- [`deployments/kubernetes/mlops/hudi/`](../deployments/kubernetes/mlops/hudi/)
+- [`aqp_platform/deployments/kubernetes/mlops/hudi/`](../aqp_platform/deployments/kubernetes/mlops/hudi/)
   — `aqp-hudi-streamer-properties` ConfigMap + warehouse bootstrap
   Job (creates `s3://aqp-lakehouse/hudi/`).
 

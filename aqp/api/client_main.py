@@ -16,7 +16,7 @@ from aqp.api.client_routes import install_client_surfaces
 
 logger = logging.getLogger(__name__)
 
-# Client pods always run in gateway mode (see deployments/kubernetes base).
+# Client pods always run in gateway mode (see aqp_platform/deployments/kubernetes base).
 os.environ.setdefault("AQP_CLIENT_MODE", "true")
 
 app = FastAPI(title="aqp-client", version="0.3.0", docs_url=None, redoc_url=None)

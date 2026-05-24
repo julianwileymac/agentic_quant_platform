@@ -4,7 +4,7 @@ Mirrors :mod:`aqp.bots.registry` and :mod:`aqp.agents.registry`:
 
 - ``@register_terraform_spec("dual-region-eks")(TerraformStackSpec(...))``
   decorates code-loaded specs.
-- YAML specs under ``configs/terraform/`` auto-load on first lookup.
+- YAML specs under ``aqp_platform/configs/terraform/`` auto-load on first lookup.
 - :func:`persist_spec` writes a new immutable
   :class:`TerraformStackSpecVersion` row whenever the SHA-256 hash
   changes (AGENTS rule 43).

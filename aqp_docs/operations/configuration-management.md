@@ -4,7 +4,7 @@ How env vars, ConfigMaps, and Secrets flow through the AQP stack.
 
 ## The single source of truth
 
-[`deployments/compose/.env.schema`](../../deployments/compose/.env.schema) is the source of truth. Every variable declared anywhere (compose, K8s ConfigMap, K8s Secret, application code, frontend) MUST appear in the schema.
+[`aqp_platform/deployments/compose/.env.schema`](../../aqp_platform/deployments/compose/.env.schema) is the source of truth. Every variable declared anywhere (compose, K8s ConfigMap, K8s Secret, application code, frontend) MUST appear in the schema.
 
 Each entry carries metadata:
 
@@ -33,9 +33,9 @@ make generate-config ENV=k8s
 Or directly:
 
 ```powershell
-python build/scripts/generate_config.py --env local --out deployments/compose/.env.local
-python build/scripts/generate_config.py --env k8s --kind configmap
-python build/scripts/generate_config.py --env k8s --kind secret
+python aqp_platform/build/scripts/generate_config.py --env local --out aqp_platform/deployments/compose/.env.local
+python aqp_platform/build/scripts/generate_config.py --env k8s --kind configmap
+python aqp_platform/build/scripts/generate_config.py --env k8s --kind secret
 ```
 
 ## Validation

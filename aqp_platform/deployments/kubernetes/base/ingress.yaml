@@ -1,0 +1,120 @@
+# NGINX Ingress with Auth0 external-auth integration.
+#
+# Routes:
+#   https://aqp.fund/        -> aqp-client (Vite SPA)
+#   https://api.aqp.fund/    -> aqp-core (FastAPI API + WebSocket)
+#   https://manage.aqp.fund/ -> aqp-cp (control plane)
+#
+# Blue/green note:
+# - ``aqp_platform/deployments/kubernetes/overlays/tower-green`` patches these hosts to
+#   ``aqp-green.aqp.fund`` / ``api-green.aqp.fund`` /
+#   ``manage-green.aqp.fund`` for cutover validation.
+#
+# The control-plane Ingress carries an EXTRA annotation enforcing the
+# admin:cluster or manage:infrastructure scope via a Lua snippet that
+# inspects the JWT permissions claim emitted by Auth0.
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aqp-client
+  namespace: aqp
+  labels:
+    app.kubernetes.io/part-of: aqp
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    # Authentication via the Auth0 OAuth2 Proxy is delegated to the
+    # aqp-client gateway itself (it validates JWTs in process per
+    # ADR 003). Operators that prefer an Ingress-layer external-auth
+    # subrequest (e.g. oauth2-proxy) replace this comment with the
+    # standard nginx.ingress.kubernetes.io/auth-url annotation.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - aqp.fund
+      secretName: aqp-client-tls
+  rules:
+    - host: aqp.fund
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aqp-client
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aqp-core
+  namespace: aqp
+  labels:
+    app.kubernetes.io/part-of: aqp
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.aqp.fund
+      secretName: aqp-core-tls
+  rules:
+    - host: api.aqp.fund
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aqp-core
+                port:
+                  number: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aqp-cp
+  namespace: aqp-admin
+  labels:
+    app.kubernetes.io/part-of: aqp
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    # Authorization is enforced in aqp_control_plane via Auth0/JWT
+    # validation. Avoid nginx configuration-snippet annotations because
+    # many managed ingress-nginx installs (incl. rpi_kubernetes) disable
+    # them; rely on in-process JWT scope checks instead.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - manage.aqp.fund
+      secretName: aqp-cp-tls
+  rules:
+    - host: manage.aqp.fund
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aqp-cp
+                port:
+                  number: 80

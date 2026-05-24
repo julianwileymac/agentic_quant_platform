@@ -214,7 +214,7 @@ class DeploymentTargetSpec(BaseModel):
     ``target=paper_session`` (Phase 1) launches the existing
     :class:`aqp.trading.session.PaperTradingSession` via the
     ``run_bot_paper`` Celery task. ``target=kubernetes`` (Phase 5)
-    renders a manifest under ``deploy/k8s/bots/`` that the cluster
+    renders a manifest under ``aqp_platform/deploy/k8s/bots/`` that the cluster
     operator (Argo / KServe) consumes.
     """
 
