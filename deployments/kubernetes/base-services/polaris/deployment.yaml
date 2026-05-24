@@ -1,0 +1,74 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: polaris
+  namespace: aqp-lakehouse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: polaris
+  template:
+    metadata:
+      labels:
+        app: polaris
+    spec:
+      containers:
+        - name: polaris
+          image: apache/polaris:1.3.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: AWS_REGION
+              value: "us-east-1"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-secrets
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-secrets
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: POLARIS_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-secrets
+                  key: POLARIS_CLIENT_ID
+            - name: POLARIS_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-secrets
+                  key: POLARIS_CLIENT_SECRET
+            - name: POLARIS_BOOTSTRAP_CREDENTIALS
+              value: "POLARIS,$(POLARIS_CLIENT_ID),$(POLARIS_CLIENT_SECRET)"
+          ports:
+            - name: api
+              containerPort: 8181
+            - name: management
+              containerPort: 8182
+          readinessProbe:
+            tcpSocket:
+              port: api
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: api
+            initialDelaySeconds: 45
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: config
+              mountPath: /deployment/config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: polaris-config

@@ -1,0 +1,184 @@
+﻿# =============================================================================
+# RAGFlow Deployment
+# =============================================================================
+# RAGFlow is an open-source RAG engine that handles document parsing,
+# chunking, retrieval, and generation.  This deployment wires it to the
+# cluster's existing PostgreSQL, MinIO, Elasticsearch, and Redis.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ragflow
+  namespace: aqp-elt
+  labels:
+    app: ragflow
+    app.kubernetes.io/name: ragflow
+    app.kubernetes.io/component: rag-engine
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ragflow
+  template:
+    metadata:
+      labels:
+        app: ragflow
+    spec:
+      containers:
+        - name: ragflow
+          image: infiniflow/ragflow:v0.24.0
+          args: ["--enable-adminserver"]
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: api
+              containerPort: 9380
+              protocol: TCP
+            - name: admin
+              containerPort: 9381
+              protocol: TCP
+          env:
+            - name: DB_TYPE
+              value: "postgres"
+            - name: DOC_ENGINE
+              value: "elasticsearch"
+            - name: STACK_VERSION
+              value: "8.11.3"
+            - name: TZ
+              value: "America/Chicago"
+            - name: DOC_BULK_SIZE
+              value: "4"
+            - name: EMBEDDING_BATCH_SIZE
+              value: "16"
+            - name: REGISTER_ENABLED
+              value: "true"
+            # PostgreSQL
+            - name: MYSQL_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: pg-host
+            - name: MYSQL_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: pg-port
+            - name: MYSQL_DBNAME
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: pg-database
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: pg-user
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: pg-password
+            # MinIO
+            - name: MINIO_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: minio-host
+            - name: MINIO_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: minio-port
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: minio-user
+            - name: MINIO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: minio-password
+            # Redis
+            - name: REDIS_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: redis-host
+            - name: REDIS_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: redis-port
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: redis-password
+            # Elasticsearch
+            - name: ES_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: es-host
+            - name: ELASTIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: es-password
+            # Encryption
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ragflow-secrets
+                  key: secret-key
+          volumeMounts:
+            - name: service-conf
+              mountPath: /ragflow/conf/local.service_conf.yaml
+              subPath: local.service_conf.yaml
+              readOnly: true
+            - name: data
+              mountPath: /ragflow/data
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: 4000m
+              memory: 8Gi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 10
+      volumes:
+        - name: service-conf
+          configMap:
+            name: ragflow-service-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: ragflow-data
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.kubernetes.io/role
+                    operator: In
+                    values:
+                      - control-plane

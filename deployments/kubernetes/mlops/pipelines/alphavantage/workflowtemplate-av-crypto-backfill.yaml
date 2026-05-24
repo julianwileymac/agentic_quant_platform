@@ -1,0 +1,42 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: av-crypto-backfill
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: alphavantage-crypto-backfill
+    data-provider: alphavantage
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: run
+  arguments:
+    parameters:
+      - name: symbols
+        value: "BTC,ETH,SOL"
+      - name: market
+        value: "USD"
+      - name: target_bucket
+        value: av-raw
+  templates:
+    - name: run
+      inputs:
+        parameters:
+          - name: symbols
+          - name: market
+          - name: target_bucket
+      steps:
+        - - name: load
+            templateRef:
+              name: av-bulk
+              template: run
+            arguments:
+              parameters:
+                - name: category
+                  value: crypto
+                - name: symbols
+                  value: "{{inputs.parameters.symbols}}"
+                - name: target_bucket
+                  value: "{{inputs.parameters.target_bucket}}"
+                - name: extra_params
+                  value: |
+                    {"market":"{{inputs.parameters.market}}"}

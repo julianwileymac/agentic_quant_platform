@@ -1,0 +1,36 @@
+﻿# =============================================================================
+# Kustomization - Kafka (Strimzi)
+# =============================================================================
+# Kafka cluster, topics, users, Connect cluster, HTTP bridge, MirrorMaker 2
+# (suspended), and rebalance CR (paused) are all reconciled by the Strimzi
+# operator. The operator itself is installed via Helm by install-flink.sh.
+#
+# Note: connect.yaml, bridge.yaml, and mirrormaker2.yaml reference
+# Secret resources created by the User Operator (SCRAM passwords). Apply
+# users.yaml and wait for the secrets to be materialized before applying
+# the workload resources (install-flink.sh handles this ordering).
+#
+# Usage: kubectl apply -k kubernetes/base-services/kafka/
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-streaming
+
+resources:
+  - kafka-cluster.yaml
+  - topics.yaml
+  - users.yaml
+  - connect.yaml
+  - connectors/
+  - bridge.yaml
+  - mirrormaker2.yaml
+  - rebalance.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: kafka
+      app.kubernetes.io/component: message-broker
+      app.kubernetes.io/part-of: rpi-k8s-platform

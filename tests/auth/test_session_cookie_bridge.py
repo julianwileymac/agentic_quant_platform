@@ -1,6 +1,6 @@
 """Tests for the Phase 0 cookie -> current_user bridge.
 
-Covers the path documented in ``docs/identity.md`` lines 73-74 where the
+Covers the path documented in ``aqp_docs/identity.md`` lines 73-74 where the
 ``aqp_session`` cookie set by ``/auth/callback`` is decrypted on
 subsequent requests so server-rendered pages don't have to repeat the
 Bearer flow.

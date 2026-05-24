@@ -1,21 +1,32 @@
-"""HTTP client for the rpi_kubernetes management API.
+"""HTTP client for the deprecated rpi-k8s-management API (rollback only).
 
-The rpi_kubernetes management backend exposes ``/api/kafka/**``,
-``/api/flink/**``, and ``/api/alphavantage/**`` as the cluster-level
-single source of truth (see
-``rpi_kubernetes/management/backend/src/api/__init__.py``). This
-client is the AQP-side proxy: every call hits the cluster API with
-the ``AQP_CLUSTER_MGMT_TOKEN`` bearer header and is wrapped with
-retry + tenant-aware logging.
+DEPRECATED. The canonical admin surface is
+:class:`aqp.services.control_plane_client.AQPControlPlaneClient`
+talking to ``aqp_control_plane`` (``/manage/streaming/*``,
+``/manage/observability/*``, ``/manage/lakehouse/*``,
+``/manage/timeseries/*``, ``/manage/data-plane/*``).
 
-The native Kafka / Flink admin in :mod:`aqp.streaming.admin` is the
-preferred path; this client is the *fallback* and the source of
-cluster-only operations (Strimzi user management, AV producer
-deployment scale, Argo workflow submissions).
+After the rpi <-> AQP decoupling this client is **rollback-only**:
+
+- The matching cluster Deployment (``rpi-k8s-management``) is pinned
+  to a ``:v1-final`` image under
+  ``rpi_kubernetes/kubernetes/legacy-management/`` and is **not**
+  applied by the default cluster bootstrap.
+- ``settings.control_plane_legacy_fallback`` defaults to ``False``;
+  constructing a :class:`ClusterMgmtClient` while the flag is False
+  raises :class:`ClusterMgmtError`. To re-enable the legacy path
+  during an emergency rollback, set
+  ``AQP_CONTROL_PLANE_LEGACY_FALLBACK=true`` on the API / worker
+  ConfigMap and re-apply the legacy-management kustomization.
+
+The native Kafka / Flink admin in :mod:`aqp.streaming.admin` and the
+``/manage/streaming/*`` routes in ``aqp_control_plane`` are the
+preferred paths.
 """
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import Any
 
 import httpx
@@ -29,7 +40,27 @@ class ClusterMgmtError(RuntimeError):
     """Raised when the cluster management API responds with an error."""
 
 
+def _emit_deprecation_warning_once() -> None:
+    """Soft deprecation warning. Logged once per process."""
+    if getattr(_emit_deprecation_warning_once, "_emitted", False):
+        return
+    _emit_deprecation_warning_once._emitted = True  # type: ignore[attr-defined]
+    warnings.warn(
+        "aqp.services.cluster_mgmt_client.ClusterMgmtClient is "
+        "deprecated and rollback-only. Route every new call through "
+        "aqp.services.control_plane_client.AQPControlPlaneClient.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
+
 class ClusterMgmtClient:
+    """Legacy HTTP client for the deprecated rpi-k8s-management API.
+
+    Rollback-only. Refuses to instantiate unless
+    ``settings.control_plane_legacy_fallback`` is True.
+    """
+
     def __init__(
         self,
         *,
@@ -37,6 +68,15 @@ class ClusterMgmtClient:
         token: str | None = None,
         timeout_s: float = 15.0,
     ) -> None:
+        if not getattr(settings, "control_plane_legacy_fallback", False):
+            raise ClusterMgmtError(
+                "ClusterMgmtClient is rollback-only and the legacy "
+                "fallback is disabled. Either set "
+                "AQP_CONTROL_PLANE_LEGACY_FALLBACK=true (emergency "
+                "rollback) or migrate the call site to "
+                "aqp.services.control_plane_client.AQPControlPlaneClient."
+            )
+        _emit_deprecation_warning_once()
         url = base_url or getattr(settings, "cluster_mgmt_url", "") or ""
         self._base = url.rstrip("/")
         self._token = token or getattr(settings, "cluster_mgmt_token", None) or ""

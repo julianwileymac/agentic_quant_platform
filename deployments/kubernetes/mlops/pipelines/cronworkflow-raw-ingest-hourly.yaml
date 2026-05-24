@@ -1,0 +1,37 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: pipeline-raw-ingest-hourly
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: pipeline-raw-ingest-hourly
+    app.kubernetes.io/component: orchestration
+spec:
+  schedule: "0 * * * *"
+  timezone: UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  suspend: false
+  workflowSpec:
+    workflowTemplateRef:
+      name: pipeline-raw-ingest
+    arguments:
+      parameters:
+        - name: pipeline_image
+          value: ghcr.io/julianwiley/rpi-k8s-pipelines:latest
+        - name: source_type
+          value: http
+        - name: source_name
+          value: sample-http-hourly
+        - name: source_uri
+          value: https://example.com/data.json
+        - name: output_prefix
+          value: raw/hourly
+        - name: target_bucket
+          value: dagster-artifacts
+        - name: rest_method
+          value: GET
+        - name: rest_body_json
+          value: ""
+

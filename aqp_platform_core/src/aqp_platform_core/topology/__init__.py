@@ -8,6 +8,13 @@ unchanged into the control plane.
 """
 from __future__ import annotations
 
+from aqp_platform_core.topology.loader import (
+    TopologyLoadError,
+    load_topology,
+    reload_topology,
+    reset_topology_cache,
+    resolve_topology_path,
+)
 from aqp_platform_core.topology.models import (
     AuthDefinition,
     ClusterDefinition,
@@ -36,4 +43,9 @@ __all__ = [
     "TerraformTooling",
     "Tooling",
     "TopologyDefaults",
+    "TopologyLoadError",
+    "load_topology",
+    "reload_topology",
+    "reset_topology_cache",
+    "resolve_topology_path",
 ]

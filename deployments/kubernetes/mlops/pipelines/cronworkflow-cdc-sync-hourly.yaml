@@ -1,0 +1,37 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: pipeline-cdc-sync-hourly
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: pipeline-cdc-sync-hourly
+    app.kubernetes.io/component: orchestration
+spec:
+  schedule: "15 * * * *"
+  timezone: UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  suspend: false
+  workflowSpec:
+    workflowTemplateRef:
+      name: pipeline-cdc-sync
+    arguments:
+      parameters:
+        - name: pipeline_image
+          value: ghcr.io/julianwiley/rpi-k8s-pipelines:latest
+        - name: pipeline_name
+          value: cdc-source-events
+        - name: source_table
+          value: source_events
+        - name: primary_key
+          value: id
+        - name: updated_at_column
+          value: updated_at
+        - name: batch_size
+          value: "500"
+        - name: output_prefix
+          value: cdc/hourly
+        - name: output_bucket
+          value: dagster-artifacts
+

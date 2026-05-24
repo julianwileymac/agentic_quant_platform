@@ -1,7 +1,7 @@
 # AGENTS.md
 
 > **Agentic entry point** for the Agentic Quant Platform (AQP). Humans
-> should start at [docs/architecture.md](docs/architecture.md). This
+> should start at [aqp_docs/architecture.md](aqp_docs/architecture.md). This
 > file is a terse, deterministic rule-set — read it top-to-bottom
 > before you make changes.
 >
@@ -14,25 +14,25 @@
 > domain-scoped sibling rules). The 45 hard rules below remain canonical
 > (rules 40-45 cover the additive `WorkflowRuntime` +
 > `workflow_spec_versions` shipped by the orchestration refactor —
-> see [docs/workflow-studio.md](docs/workflow-studio.md) for the
+> see [aqp_docs/workflow-studio.md](aqp_docs/workflow-studio.md) for the
 > operator-facing walkthrough and
-> [docs/orchestration-refactor-rollout.md](docs/orchestration-refactor-rollout.md)
+> [aqp_docs/orchestration-refactor-rollout.md](aqp_docs/orchestration-refactor-rollout.md)
 > for the rollback runbook, plus TerraformRuntime, Entra tenant links,
 > and hosted deployment controls).
-> [docs/agentic-development.md](docs/agentic-development.md) — how
+> [aqp_docs/agentic-development.md](aqp_docs/agentic-development.md) — how
 > AQP's spec-pattern (`AgentSpec` / `BotSpec` / `RLExperimentSpec` /
 > `AnalysisSpec`) maps to the broader agentic-coder vocabulary
 > ("skill artifacts", "Memento-skills", "MCP control plane") plus
 > the consolidated ADLC security manifesto.
-> [docs/multi-agent-patterns.md](docs/multi-agent-patterns.md) —
+> [aqp_docs/multi-agent-patterns.md](aqp_docs/multi-agent-patterns.md) —
 > Sequential / Parallel / Debate / Coordinator / ReAct topologies
 > mapped to [aqp/agents/graph/](aqp/agents/graph/).
-> [docs/repository-split.md](docs/repository-split.md) — current
+> [aqp_docs/repository-split.md](aqp_docs/repository-split.md) — current
 > `aqp_control_plane` / `aqp_platform_core` / `aqp_client` /
 > `aqp_snippets` / `aqp_bots` boundary map for the repo split.
-> [docs/aqp-monorepo-paths.md](docs/aqp-monorepo-paths.md) — canonical
+> [aqp_docs/aqp-monorepo-paths.md](aqp_docs/aqp-monorepo-paths.md) — canonical
 > path contract mirrored in sibling repos.
-> [docs/code-index-governance.md](docs/code-index-governance.md) —
+> [aqp_docs/code-index-governance.md](aqp_docs/code-index-governance.md) —
 > agent search and code-index workflow across those boundaries.
 > [.agents/state-template.md](.agents/state-template.md) —
 > cross-session state schema (use only when work spans multiple
@@ -50,6 +50,11 @@ standalone repo extraction:
 | [aqp_client/](aqp_client/) + [aqp_client/](aqp_client/) | Future client repo boundary + active Vite implementation | Read [aqp_client/AGENTS.md](aqp_client/AGENTS.md) and [aqp_client/AGENTS.md](aqp_client/AGENTS.md) |
 | [aqp_snippets/](aqp_snippets/) + [aqp_snippets/extractions/](aqp_snippets/extractions/) + [aqp_snippets/inspiration/](aqp_snippets/inspiration/) | Curated code knowledge and prompt/rule/skill material | Read [aqp_snippets/AGENTS.md](aqp_snippets/AGENTS.md); runtime code must not import it |
 | [aqp_bots/](aqp_bots/) + [aqp_bots/](aqp_bots/) + [aqp_bots/templates/](aqp_bots/templates/) | Bot templates now, runtime extraction later | Read [aqp_bots/AGENTS.md](aqp_bots/AGENTS.md); preserve `BotRuntime` |
+| [aqp_ide/](aqp_ide/) | Vendored Theia IDE workspace + AQP extension | Read [aqp_ide/AGENTS.md](aqp_ide/AGENTS.md); keep AQP code inside `theia-extensions/aqp/`; never import `agentic_quant_platform` source into Theia extension code |
+| [aqp_cli/](aqp_cli/) | Standalone operator CLI (`aqp-cli`) — bootstrap setup, detect services, fetch updates, authenticate | Read [aqp_cli/AGENTS.md](aqp_cli/AGENTS.md); never import `aqp.*` or `aqp_control_plane.*`; HTTP-only |
+| [aqp_admin/](aqp_admin/) | Internal admin (managed services + company accounts), FastAPI backend + Vite frontend | Read [aqp_admin/AGENTS.md](aqp_admin/AGENTS.md); never import `aqp.*`; audit-first; mirrors `aqp_control_plane` boundary |
+| [aqp_index/](aqp_index/) | Curator-owned single source of truth (project index, SSoT architecture pointers, consolidated configs, code indices, skills + subagent registries) | Read [aqp_index/AGENTS.md](aqp_index/AGENTS.md); only the `aqp-index-curator` subagent writes here |
+| [aqp_docs/](aqp_docs/) | Canonical AQP documentation (renamed from legacy `docs/`) | Index at [aqp_docs/index.md](aqp_docs/index.md); pointer hub for every subsystem |
 
 ## Project map
 
@@ -58,57 +63,57 @@ Use this as your first lookup when answering "where does X live?".
 
 | Path | What lives here | Canonical doc |
 | --- | --- | --- |
-| [aqp/agents/](aqp/agents/) | CrewAI crews + spec-driven runtime + Research/Selection/Trader/Analysis teams | [docs/agents.md](docs/agents.md), [docs/agentic-pipeline.md](docs/agentic-pipeline.md) |
-| [aqp/analysis/](aqp/analysis/) | Hash-locked `AnalysisSpec` + `AnalysisRuntime` + 55-flow catalog (distribution / outlier / imputation / regression / time_series / derivatives / portfolio / factors / microstructure / profiling) | [docs/analysis-framework.md](docs/analysis-framework.md), [docs/analysis-lab.md](docs/analysis-lab.md), [docs/analysis-flows.md](docs/analysis-flows.md) |
-| [aqp/agents/graph/](aqp/agents/graph/) | LangGraph orchestration (state, builder, conditions, Redis checkpointer, decision log) | [docs/agents.md](docs/agents.md) |
-| [aqp/agents/orchestration/](aqp/agents/orchestration/) | Additive orchestration control plane — hash-locked `WorkflowSpec` + `WorkflowRuntime` + metaclass-registered `OrchestrationAdapter` registry + seven concrete adapters (graph / crew / debate / fusion / execution / schedule / studio). Composes the existing `AgentRuntime`, graph builders, DataMCP catalog, and halt safety. | [docs/workflow-studio.md](docs/workflow-studio.md) |
-| [aqp/api/](aqp/api/) | FastAPI app + 30+ route modules under `routes/` | [docs/architecture.md](docs/architecture.md) |
-| [aqp/backtest/](aqp/backtest/) | Backtest engines (vbt-pro primary, event-driven, OSS vectorbt, backtesting.py, ZVT, AAT, fallback cascade); shared `BaseBacktestEngine` ABC + `EngineCapabilities` | [docs/backtest-engines.md](docs/backtest-engines.md) |
-| [aqp_bots/](aqp_bots/) | **Bot entity** — smallest deployable unit (TradingBot / ResearchBot). Aggregates universe + strategy + engine + ML + agents + RAG + metrics; drives backtest / paper / chat / k8s deploy via `BotRuntime` | [docs/bots.md](docs/bots.md) |
-| [aqp/backtest/vbtpro/](aqp/backtest/vbtpro/) | Deep vectorbt-pro integration (signals/orders/optimizer/holding/random modes, WFO via `Splitter`, `Param` sweeps, `IndicatorFactory` bridge) | [docs/vbtpro-integration.md](docs/vbtpro-integration.md) |
-| [aqp/strategies/vbtpro/](aqp/strategies/vbtpro/) | vbt-pro-tuned alpha + order-model components (`AgenticVbtAlpha`, `MLVbtAlpha`, `AgenticOrderModel`) | [docs/vbtpro-integration.md](docs/vbtpro-integration.md) |
+| [aqp/agents/](aqp/agents/) | CrewAI crews + spec-driven runtime + Research/Selection/Trader/Analysis teams | [aqp_docs/agents.md](aqp_docs/agents.md), [aqp_docs/agentic-pipeline.md](aqp_docs/agentic-pipeline.md) |
+| [aqp/analysis/](aqp/analysis/) | Hash-locked `AnalysisSpec` + `AnalysisRuntime` + 55-flow catalog (distribution / outlier / imputation / regression / time_series / derivatives / portfolio / factors / microstructure / profiling) | [aqp_docs/analysis-framework.md](aqp_docs/analysis-framework.md), [aqp_docs/analysis-lab.md](aqp_docs/analysis-lab.md), [aqp_docs/analysis-flows.md](aqp_docs/analysis-flows.md) |
+| [aqp/agents/graph/](aqp/agents/graph/) | LangGraph orchestration (state, builder, conditions, Redis checkpointer, decision log) | [aqp_docs/agents.md](aqp_docs/agents.md) |
+| [aqp/agents/orchestration/](aqp/agents/orchestration/) | Additive orchestration control plane — hash-locked `WorkflowSpec` + `WorkflowRuntime` + metaclass-registered `OrchestrationAdapter` registry + seven concrete adapters (graph / crew / debate / fusion / execution / schedule / studio). Composes the existing `AgentRuntime`, graph builders, DataMCP catalog, and halt safety. | [aqp_docs/workflow-studio.md](aqp_docs/workflow-studio.md) |
+| [aqp/api/](aqp/api/) | FastAPI app + 30+ route modules under `routes/` | [aqp_docs/architecture.md](aqp_docs/architecture.md) |
+| [aqp/backtest/](aqp/backtest/) | Backtest engines (vbt-pro primary, event-driven, OSS vectorbt, backtesting.py, ZVT, AAT, fallback cascade); shared `BaseBacktestEngine` ABC + `EngineCapabilities` | [aqp_docs/backtest-engines.md](aqp_docs/backtest-engines.md) |
+| [aqp_bots/](aqp_bots/) | **Bot entity** — smallest deployable unit (TradingBot / ResearchBot). Aggregates universe + strategy + engine + ML + agents + RAG + metrics; drives backtest / paper / chat / k8s deploy via `BotRuntime` | [aqp_docs/bots.md](aqp_docs/bots.md) |
+| [aqp/backtest/vbtpro/](aqp/backtest/vbtpro/) | Deep vectorbt-pro integration (signals/orders/optimizer/holding/random modes, WFO via `Splitter`, `Param` sweeps, `IndicatorFactory` bridge) | [aqp_docs/vbtpro-integration.md](aqp_docs/vbtpro-integration.md) |
+| [aqp/strategies/vbtpro/](aqp/strategies/vbtpro/) | vbt-pro-tuned alpha + order-model components (`AgenticVbtAlpha`, `MLVbtAlpha`, `AgenticOrderModel`) | [aqp_docs/vbtpro-integration.md](aqp_docs/vbtpro-integration.md) |
 | [aqp/cli/](aqp/cli/) | `aqp` CLI commands | – |
-| [aqp/core/](aqp/core/) | `Symbol`, enums, dataclasses, interfaces | [docs/core-types.md](docs/core-types.md) |
-| [aqp/data/](aqp/data/) | Iceberg catalog wrapper, generic ingestion pipeline, indicator zoo | [docs/data-catalog.md](docs/data-catalog.md), [docs/data-plane.md](docs/data-plane.md) |
-| [aqp/data/datasets/](aqp/data/datasets/) | Kedro-style `BaseDataset` abstraction — typed `_load` / `_save` over Iceberg / parquet / API / partitioned / SQL / Redis / external (data fabric phase 0) | [docs/datasets-catalog.md](docs/datasets-catalog.md) |
-| [aqp/cache/](aqp/cache/) | Redis metadata prefetch cache + write-through helpers — single read path for entity dropdowns (data fabric phase 0) | [docs/metadata-cache.md](docs/metadata-cache.md) |
-| [aqp/data/discovery/](aqp/data/discovery/) | Active discovery service — unifies `DatasetCatalog` + `SourceLibraryEntry` + Iceberg orphans + Airbyte connections (data fabric phase 1) | [docs/data-discovery.md](docs/data-discovery.md) |
-| [aqp/data/airbyte/builder/](aqp/data/airbyte/builder/) | Schema-driven Airbyte connector builder (Low-Code CDK YAML emit + AQP Fetcher stub codegen, data fabric phase 2) | [docs/airbyte-builder.md](docs/airbyte-builder.md) |
-| [aqp/data/fetchers/userland/](aqp/data/fetchers/userland/) | Auto-generated `Fetcher` stubs from the visual builder | [docs/airbyte-builder.md](docs/airbyte-builder.md) |
-| [aqp/dagster/sandbox/](aqp/dagster/sandbox/) | Ephemeral interactive Dagster + Airbyte sandbox (per-session folder, isolated Redis namespace, ContextVar env override, data fabric phase 3) | [docs/dagster-sandbox.md](docs/dagster-sandbox.md) |
-| [aqp/data/sources/{cfpb,fda,uspto}/](aqp/data/sources/) | Third-order regulatory adapters | [docs/regulatory-data.md](docs/regulatory-data.md) |
-| [aqp/llm/](aqp/llm/) | Provider registry, LiteLLM router, Ollama client, BM25 + Redis hybrid memory | [docs/providers.md](docs/providers.md) |
-| [aqp/ml/](aqp/ml/) | ML model factory, feature engineering, deployments, AlphaBacktestExperiment, lightweight workbench flows, adhoc helpers | [docs/ml-framework.md](docs/ml-framework.md), [docs/ml-libraries.md](docs/ml-libraries.md), [docs/ml-alpha-backtest.md](docs/ml-alpha-backtest.md), [docs/ml-flows.md](docs/ml-flows.md) |
-| [aqp/mlops/](aqp/mlops/) | MLflow autolog hooks, lineage helpers | [docs/observability.md](docs/observability.md) |
-| [aqp/observability/](aqp/observability/) | OTEL setup, tracers | [docs/observability.md](docs/observability.md) |
-| [aqp/optimal_control/](aqp/optimal_control/) | JAX-compiled HJB solvers — Avellaneda-Stoikov, Cartea-Jaimungal-Penalva | [docs/optimal-control.md](docs/optimal-control.md) |
-| [aqp/options/portfolio_mm.py](aqp/options/portfolio_mm.py) + [aqp/options/greeks_jax.py](aqp/options/greeks_jax.py) | Lucic-Tse Riccati portfolio quoting + JAX/vmap Greek surface | [docs/portfolio-options-mm.md](docs/portfolio-options-mm.md) |
-| [aqp/backtest/hft.py](aqp/backtest/hft.py) | hftbacktest LOB backtest engine driving the 5 strategies under `aqp/strategies/hft/` | [docs/hft-backtest.md](docs/hft-backtest.md) |
-| [aqp/persistence/](aqp/persistence/) | SQLAlchemy ORM (15+ model files) + `LedgerWriter` | [docs/erd.md](docs/erd.md), [docs/data-dictionary.md](docs/data-dictionary.md) |
-| [aqp/providers/](aqp/providers/) | Data-feed adapters (yfinance, AV, IBKR, …) | [docs/data-plane.md](docs/data-plane.md) |
-| [aqp/rag/](aqp/rag/) | Hierarchical Redis RAG (Alpha-GPT levels × first/second/third-order corpora) plus pgvector backend (Phase 3 refactor) | [docs/rag.md](docs/rag.md), [docs/pgvector-control-plane.md](docs/pgvector-control-plane.md) |
-| [aqp/codebase/](aqp/codebase/) | Codebase MCP — agent-readable view of the AQP source tree (`codebase.*` tools, `/mcp/codebase/*` router, `aqp-codebase-mcp` stdio binary) | [docs/codebase-mcp.md](docs/codebase-mcp.md) |
-| [aqp/risk/](aqp/risk/) | Position-, daily-, drawdown-loss limits | [docs/paper-trading.md](docs/paper-trading.md) |
-| [aqp/rl/](aqp/rl/) | Metaclass-driven RL stack: core abstractions + envs (FinRL ports) + composable rewards / observations / actions / terminations + multi-framework agents (SB3 / ElegantRL / RLlib / CleanRL / LLM-hybrid) + data pipelines + ensemblers + experiments + Iceberg-backed trajectory store | [docs/rl-framework.md](docs/rl-framework.md), [docs/rl-lab.md](docs/rl-lab.md), [docs/rl-components.md](docs/rl-components.md), [docs/rl-iceberg.md](docs/rl-iceberg.md) |
-| [aqp/rl/core/](aqp/rl/core/) | `RLComponent` metaclass + abstract bases (env, observation, action, reward, termination, policy, agent, data, ensembler, experiment, trajectory store) + JSON schema introspection | [docs/rl-framework.md](docs/rl-framework.md) |
-| [aqp/rl/spec.py](aqp/rl/spec.py) + [aqp/rl/runtime.py](aqp/rl/runtime.py) | Hash-locked `RLExperimentSpec` + `RLRuntime` single sanctioned executor (mirrors `BotRuntime` / `AgentRuntime`) | [docs/rl-framework.md](docs/rl-framework.md) |
-| [aqp/rl/trajectories/](aqp/rl/trajectories/) | Iceberg-backed trajectory persistence (`rl.trajectories`, `rl.equity_curves`, `rl.action_logs`, `rl.reward_decomposition`) + DuckDB views | [docs/rl-iceberg.md](docs/rl-iceberg.md) |
-| [aqp/runtime/](aqp/runtime/) | Control-plane state (provider overrides, kill switches) | [docs/providers.md](docs/providers.md) |
-| [aqp/services/](aqp/services/) | Higher-level domain services (Alpha Vantage, Tradier, …) | [docs/alpha-vantage.md](docs/alpha-vantage.md) |
-| [aqp/strategies/](aqp/strategies/) | `BaseStrategy` + concrete alphas + framework | [docs/factor-research.md](docs/factor-research.md) |
-| [aqp/streaming/](aqp/streaming/) | Kafka producers/consumers, IBKR + Alpaca ingesters | [docs/streaming.md](docs/streaming.md) |
-| [aqp/streaming/admin/](aqp/streaming/admin/) | Native Kafka + Flink admin (AdminClient, FlinkSessionJob CRUD, Apicurio) | [docs/streaming-admin.md](docs/streaming-admin.md) |
-| [aqp/streaming/producers/](aqp/streaming/producers/) | ProducerSupervisor + curated catalog | [docs/streaming-admin.md](docs/streaming-admin.md) |
-| [aqp/streaming/templates/](aqp/streaming/templates/) | FlinkSessionJob manifest renderers (factor export) | [docs/streaming-admin.md](docs/streaming-admin.md) |
-| [aqp/data/sinks/](aqp/data/sinks/) | Sink registry CRUD + version snapshots | [docs/data-pipelines-hub.md](docs/data-pipelines-hub.md) |
+| [aqp/core/](aqp/core/) | `Symbol`, enums, dataclasses, interfaces | [aqp_docs/core-types.md](aqp_docs/core-types.md) |
+| [aqp/data/](aqp/data/) | Iceberg catalog wrapper, generic ingestion pipeline, indicator zoo | [aqp_docs/data-catalog.md](aqp_docs/data-catalog.md), [aqp_docs/data-plane.md](aqp_docs/data-plane.md) |
+| [aqp/data/datasets/](aqp/data/datasets/) | Kedro-style `BaseDataset` abstraction — typed `_load` / `_save` over Iceberg / parquet / API / partitioned / SQL / Redis / external (data fabric phase 0) | [aqp_docs/datasets-catalog.md](aqp_docs/datasets-catalog.md) |
+| [aqp/cache/](aqp/cache/) | Redis metadata prefetch cache + write-through helpers — single read path for entity dropdowns (data fabric phase 0) | [aqp_docs/metadata-cache.md](aqp_docs/metadata-cache.md) |
+| [aqp/data/discovery/](aqp/data/discovery/) | Active discovery service — unifies `DatasetCatalog` + `SourceLibraryEntry` + Iceberg orphans + Airbyte connections (data fabric phase 1) | [aqp_docs/data-discovery.md](aqp_docs/data-discovery.md) |
+| [aqp/data/airbyte/builder/](aqp/data/airbyte/builder/) | Schema-driven Airbyte connector builder (Low-Code CDK YAML emit + AQP Fetcher stub codegen, data fabric phase 2) | [aqp_docs/airbyte-builder.md](aqp_docs/airbyte-builder.md) |
+| [aqp/data/fetchers/userland/](aqp/data/fetchers/userland/) | Auto-generated `Fetcher` stubs from the visual builder | [aqp_docs/airbyte-builder.md](aqp_docs/airbyte-builder.md) |
+| [aqp/dagster/sandbox/](aqp/dagster/sandbox/) | Ephemeral interactive Dagster + Airbyte sandbox (per-session folder, isolated Redis namespace, ContextVar env override, data fabric phase 3) | [aqp_docs/dagster-sandbox.md](aqp_docs/dagster-sandbox.md) |
+| [aqp/data/sources/{cfpb,fda,uspto}/](aqp/data/sources/) | Third-order regulatory adapters | [aqp_docs/regulatory-data.md](aqp_docs/regulatory-data.md) |
+| [aqp/llm/](aqp/llm/) | Provider registry, LiteLLM router, Ollama client, BM25 + Redis hybrid memory | [aqp_docs/providers.md](aqp_docs/providers.md) |
+| [aqp/ml/](aqp/ml/) | ML model factory, feature engineering, deployments, AlphaBacktestExperiment, lightweight workbench flows, adhoc helpers | [aqp_docs/ml-framework.md](aqp_docs/ml-framework.md), [aqp_docs/ml-libraries.md](aqp_docs/ml-libraries.md), [aqp_docs/ml-alpha-backtest.md](aqp_docs/ml-alpha-backtest.md), [aqp_docs/ml-flows.md](aqp_docs/ml-flows.md) |
+| [aqp/mlops/](aqp/mlops/) | MLflow autolog hooks, lineage helpers | [aqp_docs/observability.md](aqp_docs/observability.md) |
+| [aqp/observability/](aqp/observability/) | OTEL setup, tracers | [aqp_docs/observability.md](aqp_docs/observability.md) |
+| [aqp/optimal_control/](aqp/optimal_control/) | JAX-compiled HJB solvers — Avellaneda-Stoikov, Cartea-Jaimungal-Penalva | [aqp_docs/optimal-control.md](aqp_docs/optimal-control.md) |
+| [aqp/options/portfolio_mm.py](aqp/options/portfolio_mm.py) + [aqp/options/greeks_jax.py](aqp/options/greeks_jax.py) | Lucic-Tse Riccati portfolio quoting + JAX/vmap Greek surface | [aqp_docs/portfolio-options-mm.md](aqp_docs/portfolio-options-mm.md) |
+| [aqp/backtest/hft.py](aqp/backtest/hft.py) | hftbacktest LOB backtest engine driving the 5 strategies under `aqp/strategies/hft/` | [aqp_docs/hft-backtest.md](aqp_docs/hft-backtest.md) |
+| [aqp/persistence/](aqp/persistence/) | SQLAlchemy ORM (15+ model files) + `LedgerWriter` | [aqp_docs/erd.md](aqp_docs/erd.md), [aqp_docs/data-dictionary.md](aqp_docs/data-dictionary.md) |
+| [aqp/providers/](aqp/providers/) | Data-feed adapters (yfinance, AV, IBKR, …) | [aqp_docs/data-plane.md](aqp_docs/data-plane.md) |
+| [aqp/rag/](aqp/rag/) | Hierarchical Redis RAG (Alpha-GPT levels × first/second/third-order corpora) plus pgvector backend (Phase 3 refactor) | [aqp_docs/rag.md](aqp_docs/rag.md), [aqp_docs/pgvector-control-plane.md](aqp_docs/pgvector-control-plane.md) |
+| [aqp/codebase/](aqp/codebase/) | Codebase MCP — agent-readable view of the AQP source tree (`codebase.*` tools, `/mcp/codebase/*` router, `aqp-codebase-mcp` stdio binary) | [aqp_docs/codebase-mcp.md](aqp_docs/codebase-mcp.md) |
+| [aqp/risk/](aqp/risk/) | Position-, daily-, drawdown-loss limits | [aqp_docs/paper-trading.md](aqp_docs/paper-trading.md) |
+| [aqp/rl/](aqp/rl/) | Metaclass-driven RL stack: core abstractions + envs (FinRL ports) + composable rewards / observations / actions / terminations + multi-framework agents (SB3 / ElegantRL / RLlib / CleanRL / LLM-hybrid) + data pipelines + ensemblers + experiments + Iceberg-backed trajectory store | [aqp_docs/rl-framework.md](aqp_docs/rl-framework.md), [aqp_docs/rl-lab.md](aqp_docs/rl-lab.md), [aqp_docs/rl-components.md](aqp_docs/rl-components.md), [aqp_docs/rl-iceberg.md](aqp_docs/rl-iceberg.md) |
+| [aqp/rl/core/](aqp/rl/core/) | `RLComponent` metaclass + abstract bases (env, observation, action, reward, termination, policy, agent, data, ensembler, experiment, trajectory store) + JSON schema introspection | [aqp_docs/rl-framework.md](aqp_docs/rl-framework.md) |
+| [aqp/rl/spec.py](aqp/rl/spec.py) + [aqp/rl/runtime.py](aqp/rl/runtime.py) | Hash-locked `RLExperimentSpec` + `RLRuntime` single sanctioned executor (mirrors `BotRuntime` / `AgentRuntime`) | [aqp_docs/rl-framework.md](aqp_docs/rl-framework.md) |
+| [aqp/rl/trajectories/](aqp/rl/trajectories/) | Iceberg-backed trajectory persistence (`rl.trajectories`, `rl.equity_curves`, `rl.action_logs`, `rl.reward_decomposition`) + DuckDB views | [aqp_docs/rl-iceberg.md](aqp_docs/rl-iceberg.md) |
+| [aqp/runtime/](aqp/runtime/) | Control-plane state (provider overrides, kill switches) | [aqp_docs/providers.md](aqp_docs/providers.md) |
+| [aqp/services/](aqp/services/) | Higher-level domain services (Alpha Vantage, Tradier, …) | [aqp_docs/alpha-vantage.md](aqp_docs/alpha-vantage.md) |
+| [aqp/strategies/](aqp/strategies/) | `BaseStrategy` + concrete alphas + framework | [aqp_docs/factor-research.md](aqp_docs/factor-research.md) |
+| [aqp/streaming/](aqp/streaming/) | Kafka producers/consumers, IBKR + Alpaca ingesters | [aqp_docs/streaming.md](aqp_docs/streaming.md) |
+| [aqp/streaming/admin/](aqp/streaming/admin/) | Native Kafka + Flink admin (AdminClient, FlinkSessionJob CRUD, Apicurio) | [aqp_docs/streaming-admin.md](aqp_docs/streaming-admin.md) |
+| [aqp/streaming/producers/](aqp/streaming/producers/) | ProducerSupervisor + curated catalog | [aqp_docs/streaming-admin.md](aqp_docs/streaming-admin.md) |
+| [aqp/streaming/templates/](aqp/streaming/templates/) | FlinkSessionJob manifest renderers (factor export) | [aqp_docs/streaming-admin.md](aqp_docs/streaming-admin.md) |
+| [aqp/data/sinks/](aqp/data/sinks/) | Sink registry CRUD + version snapshots | [aqp_docs/data-pipelines-hub.md](aqp_docs/data-pipelines-hub.md) |
 | [aqp/tasks/](aqp/tasks/) | Celery tasks (backtest / ingest / agents / paper / ml / rag / regulatory / etc) | (per consumer doc) |
-| [aqp/trading/](aqp/trading/) | Paper trading session loop, broker abstractions | [docs/paper-trading.md](docs/paper-trading.md) |
+| [aqp/trading/](aqp/trading/) | Paper trading session loop, broker abstractions | [aqp_docs/paper-trading.md](aqp_docs/paper-trading.md) |
 | [aqp/ui/](aqp/ui/) | **Legacy Solara UI** — under `legacy` profile only | – |
 | [aqp/utils/](aqp/utils/) | Cross-cutting helpers (key derivation, etc) | – |
 | [aqp/ws/](aqp/ws/) | Redis pub/sub bridge + WebSocket helpers | – |
-| `aqp/auth/management_api.py` | Auth0 Management API client (M2M-auth via CredentialResolver, rate-limit retries, dataclass-typed responses for sessions / factors / tickets / logs) | [docs/account-management.md](docs/account-management.md) |
-| `aqp/auth/audit.py` | Single emit helper for `security_audit_events`. Never raises. Called from login + every /me/* mutation + Auth0 Action sync + kill-switch | [docs/identity.md](docs/identity.md) |
-| `aqp/persistence/models_audit.py` | `SecurityAuditEvent` (append-only) + `TenancyInvite` (HMAC-hashed token, partial-unique on pending) | [docs/account-management.md](docs/account-management.md) |
+| `aqp/auth/management_api.py` | Auth0 Management API client (M2M-auth via CredentialResolver, rate-limit retries, dataclass-typed responses for sessions / factors / tickets / logs) | [aqp_docs/account-management.md](aqp_docs/account-management.md) |
+| `aqp/auth/audit.py` | Single emit helper for `security_audit_events`. Never raises. Called from login + every /me/* mutation + Auth0 Action sync + kill-switch | [aqp_docs/identity.md](aqp_docs/identity.md) |
+| `aqp/persistence/models_audit.py` | `SecurityAuditEvent` (append-only) + `TenancyInvite` (HMAC-hashed token, partial-unique on pending) | [aqp_docs/account-management.md](aqp_docs/account-management.md) |
 
 External code:
 
@@ -225,7 +230,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  Bronze namespaces are `aqp_bronze_*`, Silver `aqp_silver_*`, Gold
  `aqp_gold_*`. The wrapper validates that the namespace prefix
  matches the declared layer. Read
- [docs/data-layer-unification.md](docs/data-layer-unification.md).
+ [aqp_docs/data-layer-unification.md](aqp_docs/data-layer-unification.md).
 22. **Agents MUST NOT read Postgres / Iceberg directly.** Every
  catalog / dataset / entity / pipeline read from agent code goes
  through a registered
@@ -236,7 +241,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  `DataMCPTool` into [`TOOL_REGISTRY`](aqp/agents/tools/__init__.py)
  and the same catalog is exposed externally via the FastAPI router
  at `/mcp/data` and the `aqp-data-mcp` stdio binary. Read
- [docs/data-mcp.md](docs/data-mcp.md).
+ [aqp_docs/data-mcp.md](aqp_docs/data-mcp.md).
 23. **All analysis-spec lifecycle actions go through
  [aqp/analysis/runtime.py::AnalysisRuntime](aqp/analysis/runtime.py).**
  Telemetry, `analysis_runs` ledger rows, `analysis_step_results`
@@ -257,7 +262,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  the descriptor + JSON-schema-driven form generation are wired
  automatically. Flows MUST not call `litellm.completion` /
  `OllamaClient` / vendor SDKs directly — interpretation lives in
- the analysis-AGENTS stack ([docs/analysis-agents.md](docs/analysis-agents.md)).
+ the analysis-AGENTS stack ([aqp_docs/analysis-agents.md](aqp_docs/analysis-agents.md)).
 26. **All cross-service credentials resolve through
  [`aqp.credentials.CredentialResolver`](aqp/credentials/resolver.py).**
  Concrete stores (env / file / m2m) self-register through the
@@ -265,7 +270,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  read `settings.<service>_client_*` / `_credential` / `_token`
  directly inside service code — the resolver chain is what closes
  the bootstrap-not-applied class of bug. See
- [docs/credentials.md](docs/credentials.md).
+ [aqp_docs/credentials.md](aqp_docs/credentials.md).
 27. **All identity / token operations go through
  [`aqp.auth.providers.IdentityProvider`](aqp/auth/providers/protocol.py).**
  Concrete providers (Auth0 / generic OIDC / mock / MSAL Entra /
@@ -284,8 +289,8 @@ These hold across the codebase. Any PR that violates one will be sent back.
  JWKS at `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`
  and merges its claims into the active `RequestContext` (handled
  inside [`aqp/api/security.py`](aqp/api/security.py)). See
- [docs/identity.md](docs/identity.md) and
- [docs/management-engine.md](docs/management-engine.md).
+ [aqp_docs/identity.md](aqp_docs/identity.md) and
+ [aqp_docs/management-engine.md](aqp_docs/management-engine.md).
 28. **All cluster-side ops go through
  [`aqp.kubernetes.KubernetesAdapter`](aqp/kubernetes/protocol.py).**
  Concrete adapters (none / rpi_cluster / in_cluster / local_compose)
@@ -294,7 +299,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  [`ClusterMgmtClient`](aqp/services/cluster_mgmt_client.py) outside
  [`aqp/kubernetes/adapters/rpi_cluster.py`](aqp/kubernetes/adapters/rpi_cluster.py).
  The rpi attach is optional; `NoneAdapter` keeps AQP standalone. See
- [docs/kubernetes-adapter.md](docs/kubernetes-adapter.md).
+ [aqp_docs/kubernetes-adapter.md](aqp_docs/kubernetes-adapter.md).
 29. **Catalog entries are typed `BaseDataset` specs and entity
  dropdowns read from the metadata cache.** Every readable / writable
  catalog entry maps to a
@@ -309,8 +314,8 @@ These hold across the codebase. Any PR that violates one will be sent back.
  [`cache_write_through`](aqp/cache/invalidation.py) after commit;
  the `aqp:cache:*` Redis prefix is reserved for
  [`aqp/cache/`](aqp/cache/). See
- [docs/datasets-catalog.md](docs/datasets-catalog.md) and
- [docs/metadata-cache.md](docs/metadata-cache.md).
+ [aqp_docs/datasets-catalog.md](aqp_docs/datasets-catalog.md) and
+ [aqp_docs/metadata-cache.md](aqp_docs/metadata-cache.md).
 30. **Uningested catalog entries flow through the discovery
  service.** Create / read / update / delete on
  `is_ingested=False` rows goes through
@@ -321,7 +326,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  `LineageEvent(transform_kind="discovery.promoted")` and return a
  deep-link the frontend follows into the Airbyte builder. Ingested
  rows stay under [`/metadata-catalog/datasets`](aqp/api/routes/metadata_catalog.py).
- See [docs/data-discovery.md](docs/data-discovery.md).
+ See [aqp_docs/data-discovery.md](aqp_docs/data-discovery.md).
 31. **No `AIRBYTE_ENABLE_UNSAFE_CODE`. Custom Python from the
  graphical builder lives under
  [`aqp/data/fetchers/userland/`](aqp/data/fetchers/userland/).**
@@ -335,7 +340,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  [`CredentialResolver`](aqp/credentials/resolver.py) (AGENTS rule 26).
  The builder NEVER renders a free-text password / API-key field;
  secrets are picked through `<EntityPicker kind="credentials" />`.
- See [docs/airbyte-builder.md](docs/airbyte-builder.md).
+ See [aqp_docs/airbyte-builder.md](aqp_docs/airbyte-builder.md).
 32. **The interactive Dagster sandbox is fully isolated.** Every
  session created via
  [`SandboxRuntime.create_session`](aqp/dagster/sandbox/runtime.py)
@@ -350,7 +355,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  Sessions auto-expire and the
  [`SandboxRuntime.janitor`](aqp/dagster/sandbox/runtime.py) tears
  down expired folders + Redis namespaces.
- See [docs/dagster-sandbox.md](docs/dagster-sandbox.md).
+ See [aqp_docs/dagster-sandbox.md](aqp_docs/dagster-sandbox.md).
 33. **All ownership / membership queries that traverse more than
  one hop go through
  [`aqp.graph.OwnershipGraphStore`](aqp/graph/protocol.py).** Postgres
@@ -367,7 +372,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  joins over the canonical tables — they will diverge from the
  graph projection and the MCP catalog will return stale results.
  New ownership-graph readers register through `data.ownership.*`
- DataMCPTools. See [docs/ownership-graph.md](docs/ownership-graph.md).
+ DataMCPTools. See [aqp_docs/ownership-graph.md](aqp_docs/ownership-graph.md).
 34. **Every new run-producing flow MUST populate `experiment_id`
  (and `test_id` where applicable) on its run row.** The Phase 1
  umbrella tables [`experiments`](aqp/persistence/models_experiments.py)
@@ -381,7 +386,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  [`LedgerWriter`](aqp/persistence/ledger.py) `_stamp` chain copies
  `RequestContext.experiment_id` / `.test_id` onto the row when set
  — most new flows just need a populated `RequestContext` to opt in.
- See [docs/experiments-tests.md](docs/experiments-tests.md).
+ See [aqp_docs/experiments-tests.md](aqp_docs/experiments-tests.md).
 35. **Read-only strategy templates (LEAN, community, internal
  references) are loaded as
  [`resources`](aqp/persistence/models_resources.py) rows with
@@ -396,7 +401,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  The cloned strategy carries a
  `resource_relations.relation='translated_from'` edge back to the
  source template so the ownership graph can audit provenance. See
- [docs/strategy-templates.md](docs/strategy-templates.md).
+ [aqp_docs/strategy-templates.md](aqp_docs/strategy-templates.md).
 36. **All RL advantage estimation goes through
  [`BaseAdvantageEstimator`](aqp/rl/advantage/base.py)
  (`rl_kind='rl_advantage_estimator'`).** The native
@@ -550,10 +555,62 @@ These hold across the codebase. Any PR that violates one will be sent back.
  The micro-project never imports `aqp.*` — only
  `aqp_platform_core.*`. The frontend KillSwitch fans out to
  `POST /workloads/halt` alongside every other halt endpoint. See
- [docs/management-engine.md](docs/management-engine.md),
- [docs/architecture/decisions/004-provider-abstraction.md](docs/architecture/decisions/004-provider-abstraction.md),
+ [aqp_docs/management-engine.md](aqp_docs/management-engine.md),
+ [aqp_docs/architecture/decisions/004-provider-abstraction.md](aqp_docs/architecture/decisions/004-provider-abstraction.md),
  and
- [docs/architecture/decisions/005-separated-control-plane.md](docs/architecture/decisions/005-separated-control-plane.md).
+ [aqp_docs/architecture/decisions/005-separated-control-plane.md](aqp_docs/architecture/decisions/005-separated-control-plane.md).
+46. **Apache Hudi is additive to Apache Iceberg, never a replacement.**
+ Iceberg remains the single canonical lakehouse write path through
+ [`iceberg_catalog.append_arrow`](aqp/data/iceberg_catalog.py) (rule 3).
+ Hudi tables live under their own `aqp_hudi_*` namespace prefix per
+ [aqp/data/lakehouse/hudi/namespaces.py](aqp/data/lakehouse/hudi/namespaces.py),
+ served by [`HudiWriter`](aqp/data/lakehouse/hudi/hudi_writer.py) for
+ in-process upserts and
+ [`HudiStreamerLauncher`](aqp/data/lakehouse/hudi/hudi_streamer.py)
+ for HoodieStreamer SparkApplications. The
+ [`assert_not_iceberg`](aqp/data/lakehouse/hudi/namespaces.py)
+ guard rejects Hudi writes against `aqp_bronze_*`/`aqp_silver_*`/
+ `aqp_gold_*` namespaces at runtime. New upsert-heavy market-data
+ partitions go to Hudi; everything else (append-only history, broad
+ analytics, gold-tier products) stays on Iceberg. See plan section D.
+47. **Service URL resolution goes through the topology service; AQP is
+ cluster-agnostic.** AQP runs on any Kubernetes cluster (rpi k3s, EKS,
+ AKS, GKE, vanilla k3s) inside its own `aqp-*` namespaces with no
+ inbound dependency on `rpi_kubernetes`. The fallback in
+ [aqp/config/topology_fallback.py](aqp/config/topology_fallback.py)
+ reads `configs/deployment/topology.yaml` and back-fills URL-typed
+ `Settings` fields when no `AQP_*` env override is set; the
+ control-plane equivalent is
+ [`aqp_cp.services.topology`](aqp_control_plane/src/aqp_cp/services/topology.py)
+ + the `/manage/topology/*` route group.
+
+ New shared infrastructure services (Redpanda, QuestDB, Phoenix,
+ Hudi, kube-prometheus-stack, OTel Operator + Collector, Tempo, Loki,
+ Spark Operator, etc.) declare their endpoints in `topology.yaml`'s
+ `services` list with `cluster`, `namespace`, `protocols`, and
+ `endpoints` populated; `URL_FALLBACK_FIELDS` maps each `Settings`
+ field to the canonical endpoint name. Don't read service URLs from
+ hardcoded constants. Don't reach for any rpi-side namespace
+ (`data-services`, `ml-platform`, `mlops`, `observability`,
+ `flink`, `development`); they no longer exist after the rpi <->
+ AQP decoupling.
+
+ The cluster-management URL defaults to `aqp_control_plane`. The
+ legacy
+ [`ClusterMgmtClient`](aqp/services/cluster_mgmt_client.py) is
+ rollback-only - constructing it raises unless
+ ``AQP_CONTROL_PLANE_LEGACY_FALLBACK=true`` is explicitly set, which
+ only makes sense when the operator has just re-applied
+ ``rpi_kubernetes/kubernetes/legacy-management/`` as an emergency
+ revert. Use
+ [`AQPControlPlaneClient`](aqp/services/control_plane_client.py)
+ for every new call site.
+
+ Domain isolation: AQP is served via its own Cloudflare tunnel on
+ `aqp.fund` / `api.aqp.fund` / `manage.aqp.fund` with cert-manager +
+ Let's Encrypt and Auth0 (`aqp-fund.us.auth0.com`). The portal's
+ `julianwiley.com` tunnel + Microsoft Entra IdP live in
+ `rpi_kubernetes` and are never co-mingled with AQP.
 
 ## Common workflows
 
@@ -597,18 +654,18 @@ docker exec aqp-api alembic upgrade head
 | Add an API route | [aqp/api/routes/](aqp/api/routes/) — copy an existing module, register in [aqp/api/main.py](aqp/api/main.py) |
 | Add a Celery task | [aqp/tasks/](aqp/tasks/) — pick the right file, decorate with `@celery_app.task(bind=True, name=...)`, register in [aqp/tasks/celery_app.py](aqp/tasks/celery_app.py)'s `include` list, route via `task_routes` |
 | Add an LLM provider | One dict entry in [aqp/llm/providers/catalog.py::PROVIDERS](aqp/llm/providers/catalog.py); the router does the rest |
-| Add an ML model | Implement in [aqp/ml/models/](aqp/ml/models/) following the `class`/`module_path`/`kwargs` pattern; decorate with `@register("Name", kind="model")`; add a YAML example in [configs/ml/](configs/ml/) and update [docs/ml-libraries.md](docs/ml-libraries.md) |
-| Add a workbench flow | Implement `run_<flow>_flow(...)` in [aqp/ml/flows.py](aqp/ml/flows.py); register it in `run_flow(...)` and `list_flows()` so the webui drawer picks it up automatically; document in [docs/ml-flows.md](docs/ml-flows.md) |
+| Add an ML model | Implement in [aqp/ml/models/](aqp/ml/models/) following the `class`/`module_path`/`kwargs` pattern; decorate with `@register("Name", kind="model")`; add a YAML example in [configs/ml/](configs/ml/) and update [aqp_docs/ml-libraries.md](aqp_docs/ml-libraries.md) |
+| Add a workbench flow | Implement `run_<flow>_flow(...)` in [aqp/ml/flows.py](aqp/ml/flows.py); register it in `run_flow(...)` and `list_flows()` so the webui drawer picks it up automatically; document in [aqp_docs/ml-flows.md](aqp_docs/ml-flows.md) |
 | Add an ML preprocessor pipeline node | Subclass [aqp/ml/processors.py::Processor](aqp/ml/processors.py); reference the new class from [aqp/data/fetchers/transforms/ml_preprocessing.py](aqp/data/fetchers/transforms/ml_preprocessing.py) (umbrella node) or add a thin specialised tile via `_make_single_processor_node` |
-| Run an alpha-backtest experiment | Use [aqp/ml/alpha_backtest_experiment.py::AlphaBacktestExperiment](aqp/ml/alpha_backtest_experiment.py) (or `POST /ml/alpha-backtest-runs`). Trains + registers + deploys + backtests + persists to `ml_alpha_backtest_runs` in one call. See [docs/ml-alpha-backtest.md](docs/ml-alpha-backtest.md) |
+| Run an alpha-backtest experiment | Use [aqp/ml/alpha_backtest_experiment.py::AlphaBacktestExperiment](aqp/ml/alpha_backtest_experiment.py) (or `POST /ml/alpha-backtest-runs`). Trains + registers + deploys + backtests + persists to `ml_alpha_backtest_runs` in one call. See [aqp_docs/ml-alpha-backtest.md](aqp_docs/ml-alpha-backtest.md) |
 | Add a test workbench mode | Extend [aqp/tasks/ml_test_tasks.py](aqp/tasks/ml_test_tasks.py) with the new task and route it via [aqp/api/routes/ml.py](aqp/api/routes/ml.py); add a tab to [webui/components/ml/MlTestPage.tsx](webui/components/ml/MlTestPage.tsx) |
-| Add a data source | Implement adapter in [aqp/providers/](aqp/providers/) or [aqp/services/](aqp/services/); register in [aqp/persistence/models.py::DataSource](aqp/persistence/models.py); document in [docs/data-plane.md](docs/data-plane.md) |
+| Add a data source | Implement adapter in [aqp/providers/](aqp/providers/) or [aqp/services/](aqp/services/); register in [aqp/persistence/models.py::DataSource](aqp/persistence/models.py); document in [aqp_docs/data-plane.md](aqp_docs/data-plane.md) |
 | Add a regulatory data adapter | Mirror [aqp/data/sources/cfpb/](aqp/data/sources/cfpb/) — client + adapter + catalog upserts + Celery task in [aqp/tasks/regulatory_tasks.py](aqp/tasks/regulatory_tasks.py) + REST route + RAG indexer in [aqp/rag/indexers/](aqp/rag/indexers/) |
-| Add a persistence model | Add the class to the right `aqp/persistence/models_*.py` file; create an Alembic migration; update [docs/data-dictionary.md](docs/data-dictionary.md) and the relevant ERD section in [docs/erd.md](docs/erd.md) |
+| Add a persistence model | Add the class to the right `aqp/persistence/models_*.py` file; create an Alembic migration; update [aqp_docs/data-dictionary.md](aqp_docs/data-dictionary.md) and the relevant ERD section in [aqp_docs/erd.md](aqp_docs/erd.md) |
 | Add a strategy | Subclass `IStrategy` (or use `FrameworkAlgorithm`) in [aqp/strategies/](aqp/strategies/); decorate with `@register("Name")`; YAML config under [configs/strategies/](configs/strategies/) |
-| Author / test a strategy interactively | Land on `/strategy-development/composer` in the Vite frontend. Twelve sibling sub-routes share a persistent KPI strip + cross-route state — composer, simulation, ideation, single / batch / compare / scenario / historical / live / run-comparator / document-library / library. Canonical doc: [docs/strategy-development.md](docs/strategy-development.md) |
-| Add a research-paper RAG corpus entry | Upload via `POST /rag/papers/upload` (math-aware Marker / Nougat / MathPix / PyPDF chain in [aqp/rag/parsers/](aqp/rag/parsers/)); the ingest task feeds chunks through [`HierarchicalRAG.index_chunks`](aqp/rag/hierarchy.py). Hybrid retrieval via `HierarchicalRAG.query_hybrid`. Agents use `data.research_papers.*` DataMCPTools. Canonical doc: [docs/research-papers-rag.md](docs/research-papers-rag.md) |
-| Add a backtest engine | Subclass [aqp/backtest/base.py::BaseBacktestEngine](aqp/backtest/base.py); declare an `EngineCapabilities` class attribute; decorate with `@register("Name")`; add a shortcut to [aqp/backtest/runner.py::_ENGINE_SHORTCUTS](aqp/backtest/runner.py) and document in [docs/backtest-engines.md](docs/backtest-engines.md) |
+| Author / test a strategy interactively | Land on `/strategy-development/composer` in the Vite frontend. Twelve sibling sub-routes share a persistent KPI strip + cross-route state — composer, simulation, ideation, single / batch / compare / scenario / historical / live / run-comparator / document-library / library. Canonical doc: [aqp_docs/strategy-development.md](aqp_docs/strategy-development.md) |
+| Add a research-paper RAG corpus entry | Upload via `POST /rag/papers/upload` (math-aware Marker / Nougat / MathPix / PyPDF chain in [aqp/rag/parsers/](aqp/rag/parsers/)); the ingest task feeds chunks through [`HierarchicalRAG.index_chunks`](aqp/rag/hierarchy.py). Hybrid retrieval via `HierarchicalRAG.query_hybrid`. Agents use `data.research_papers.*` DataMCPTools. Canonical doc: [aqp_docs/research-papers-rag.md](aqp_docs/research-papers-rag.md) |
+| Add a backtest engine | Subclass [aqp/backtest/base.py::BaseBacktestEngine](aqp/backtest/base.py); declare an `EngineCapabilities` class attribute; decorate with `@register("Name")`; add a shortcut to [aqp/backtest/runner.py::_ENGINE_SHORTCUTS](aqp/backtest/runner.py) and document in [aqp_docs/backtest-engines.md](aqp_docs/backtest-engines.md) |
 | Add a bot | Drop a YAML under [aqp_bots/templates/trading/](aqp_bots/templates/trading/) or [aqp_bots/templates/research/](aqp_bots/templates/research/); the registry auto-loads on first lookup. Programmatic: `BotSpec(...)` + `add_spec(spec)`. CRUD via `POST /bots`; lifecycle via `/bots/{id}/{backtest|paper|chat|deploy}`. |
 | Add a bot deployment target | Subclass [aqp_bots/deploy.py::DeploymentTarget](aqp_bots/deploy.py); register on `DeploymentDispatcher.register(target)`; add the kind to the `BOT_PALETTE` Deploy section in [webui/components/bots/botPalette.ts](webui/components/bots/botPalette.ts). |
 | Add an RL component (env / reward / observation / action / termination / policy / agent / data / ensembler / experiment / trajectory_store) | Subclass the matching base in [aqp/rl/core/](aqp/rl/core/) and set `rl_kind` + `rl_alias`. The [`RLComponent`](aqp/rl/core/base.py) metaclass auto-registers via `@register`. Add a palette tile in [webui/components/rl/palette.ts](webui/components/rl/palette.ts) and a serialiser entry in [webui/components/rl/serialize.ts](webui/components/rl/serialize.ts). |
@@ -617,7 +674,7 @@ docker exec aqp-api alembic upgrade head
 | Add an RL data source | Subclass [`BaseDataPipeline`](aqp/rl/core/data.py) in [aqp/rl/data_pipelines/](aqp/rl/data_pipelines/); implement `download_data` / optionally override `add_risk_features` and `df_to_array`; add a YAML under [configs/rl/data_pipelines/](configs/rl/data_pipelines/). |
 | Add an RL experiment / ensemble | Subclass [`BaseExperiment`](aqp/rl/core/experiment.py) / [`BaseEnsembler`](aqp/rl/core/ensembler.py) and ship under [aqp/rl/experiments/](aqp/rl/experiments/) / [aqp/rl/ensemblers/](aqp/rl/ensemblers/). |
 | Run an RL experiment | Author / load an `RLExperimentSpec`, call `RLRuntime(spec).train(...)`. The runtime persists Iceberg trajectories + a `rl_runs` ledger row + MLflow artifacts. From the UI: [`/rl/lab`](webui/app/(shell)/rl/lab/page.tsx) → "Save & train". |
-| Add a vbt-pro mode / kwarg | Extend [aqp/backtest/vbtpro/engine.py::VectorbtProEngine](aqp/backtest/vbtpro/engine.py); update [docs/vbtpro-integration.md](docs/vbtpro-integration.md) |
+| Add a vbt-pro mode / kwarg | Extend [aqp/backtest/vbtpro/engine.py::VectorbtProEngine](aqp/backtest/vbtpro/engine.py); update [aqp_docs/vbtpro-integration.md](aqp_docs/vbtpro-integration.md) |
 | Add an agent-aware alpha (vbt-pro) | Subclass `IAlphaModel` in [aqp/strategies/vbtpro/](aqp/strategies/vbtpro/); implement `generate_panel_signals` for the fast path; decorate with `@register("Name", kind="alpha")` |
 | Add a per-bar agent dispatcher consumer | Strategy reads `context["agents"]` (the [aqp/strategies/agentic/agent_dispatcher.py::AgentDispatcher](aqp/strategies/agentic/agent_dispatcher.py)) and calls `consult(spec_name, inputs, ttl=...)` from `on_bar` — only works on `EventDrivenBacktester` |
 | Add a feature / indicator | [aqp/data/indicators_zoo.py](aqp/data/indicators_zoo.py) — append to the spec map |
@@ -629,22 +686,22 @@ docker exec aqp-api alembic upgrade head
 | Find every place a task is dispatched | `rg "<task_module>\.<task_name>\.delay\(" aqp/` |
 | Find every config knob | [aqp/config/settings.py](aqp/config/settings.py) (single source of truth) |
 | Add an inspiration-rehydrated asset | Decorate with `@register("Name", source="<repo>", category="<bucket>")` from [aqp/core/registry.py](aqp/core/registry.py); add a per-asset note to `aqp_snippets/extractions/<source>/REFERENCE.md`; ship a YAML under `configs/<kind>/<source>/<name>.yaml` |
-| Choose a medallion layer | Use `aqp_bronze_<source>` for raw, `aqp_silver_<source>` for normalised, `aqp_gold_<entity>` for products. Validate with `medallion_layer="bronze\|silver\|gold"` on [`iceberg_catalog.append_arrow`](aqp/data/iceberg_catalog.py). Read [docs/data-layer-unification.md](docs/data-layer-unification.md) |
+| Choose a medallion layer | Use `aqp_bronze_<source>` for raw, `aqp_silver_<source>` for normalised, `aqp_gold_<entity>` for products. Validate with `medallion_layer="bronze\|silver\|gold"` on [`iceberg_catalog.append_arrow`](aqp/data/iceberg_catalog.py). Read [aqp_docs/data-layer-unification.md](aqp_docs/data-layer-unification.md) |
 | Add a normalization strategy | Subclass [`BaseNormalizationStrategy`](aqp/data/normalization/base.py) in [aqp/data/normalization/strategies.py](aqp/data/normalization/strategies.py); decorate with `@register_normalization_strategy("alias")`; reference in `Silver` transform nodes |
-| Add a DataMCP tool | Subclass [`DataMCPTool`](aqp/data/mcp/base.py) under [aqp/data/mcp/tools/](aqp/data/mcp/tools/), decorate with `@register_data_mcp_tool`. The bridge auto-installs into [`TOOL_REGISTRY`](aqp/agents/tools/__init__.py); the FastAPI router and stdio binary expose it externally. Read [docs/data-mcp.md](docs/data-mcp.md) |
-| Add an entity-centric data product | Subclass [`BaseDataProduct`](aqp/data/products/base.py) under [aqp/data/products/](aqp/data/products/); add a matching `data.entities.*` MCP tool and a `/data/entities/...` REST route. Read [docs/data-products.md](docs/data-products.md) |
+| Add a DataMCP tool | Subclass [`DataMCPTool`](aqp/data/mcp/base.py) under [aqp/data/mcp/tools/](aqp/data/mcp/tools/), decorate with `@register_data_mcp_tool`. The bridge auto-installs into [`TOOL_REGISTRY`](aqp/agents/tools/__init__.py); the FastAPI router and stdio binary expose it externally. Read [aqp_docs/data-mcp.md](aqp_docs/data-mcp.md) |
+| Add an entity-centric data product | Subclass [`BaseDataProduct`](aqp/data/products/base.py) under [aqp/data/products/](aqp/data/products/); add a matching `data.entities.*` MCP tool and a `/data/entities/...` REST route. Read [aqp_docs/data-products.md](aqp_docs/data-products.md) |
 | Register active metadata | Call [`aqp.data.catalog.register_dataset`](aqp/data/catalog/active_metadata.py) with `medallion_layer`, `BusinessMetadata`, and an optional `DataContract` — or attach `@dataset(...)` to a fetcher / sink class for auto-upsert |
 | Walk lineage | UI: [/data/hub](webui/app/(shell)/data/hub/page.tsx) Overview tab. API: `GET /data-control/lineage`. Agents: `data.catalog.lineage` MCP tool. Code: [aqp/data/catalog/lineage.py](aqp/data/catalog/lineage.py) |
 | Add a microstructure feature | [aqp/data/microstructure.py](aqp/data/microstructure.py) — append a function and add to `__all__` |
-| Add an analysis flow | Subclass [`FlowParams`](aqp/analysis/base.py); decorate a `(df, params, ctx) -> FlowResult` function with [`@register_analysis_flow`](aqp/analysis/registry.py); add a smoke test under `tests/analysis/`; document in [docs/analysis-flows.md](docs/analysis-flows.md) |
+| Add an analysis flow | Subclass [`FlowParams`](aqp/analysis/base.py); decorate a `(df, params, ctx) -> FlowResult` function with [`@register_analysis_flow`](aqp/analysis/registry.py); add a smoke test under `tests/analysis/`; document in [aqp_docs/analysis-flows.md](aqp_docs/analysis-flows.md) |
 | Run an analysis spec end-to-end | Author / load an `AnalysisSpec`; call `AnalysisRuntime(spec).run()`. The runtime persists `analysis_runs` + `analysis_step_results` ledger rows and gold-tier Iceberg outputs. From the UI: `/analysis/lab` → "Save & run". |
 | Preview a flow without persistence | `POST /analysis/flows/{flow}/preview` (sync) or `/preview-task` (async). Both wrap `AnalysisRuntime.preview`. |
 | Add an OHLC vol estimator | [aqp/data/realised_volatility.py](aqp/data/realised_volatility.py) |
 | Add a label generator | [aqp/data/labels.py](aqp/data/labels.py) |
 | Add a portfolio construction model | [aqp/strategies/portfolio_construction.py](aqp/strategies/portfolio_construction.py); decorate with `@register("Name", kind="portfolio")` |
 | Add a dataset preset | One entry in [aqp/data/dataset_presets.py::PRESETS](aqp/data/dataset_presets.py) + a Celery task in [aqp/tasks/dataset_preset_tasks.py](aqp/tasks/dataset_preset_tasks.py) + dispatch entry in `_TASKS_BY_PRESET` |
-| Add a sink kind | One [`SinkKindDescriptor`](aqp/data/fetchers/sinks/__init__.py) entry, one `SinkNode` subclass under [aqp/data/fetchers/sinks/](aqp/data/fetchers/sinks/) decorated with `@register_node("sink.<kind>")`, document in [docs/data-pipelines-hub.md](docs/data-pipelines-hub.md) |
-| Add a `BaseDataset` kind | Subclass [`BaseDataset`](aqp/data/datasets/base.py) under [aqp/data/datasets/kinds/](aqp/data/datasets/kinds/), set `kind`, implement `_load` / `_save`. Re-export from [`aqp/data/datasets/kinds/__init__.py`](aqp/data/datasets/kinds/__init__.py) so the metaclass auto-registration fires on import. Add a smoke test under `tests/data/datasets/`; document in [docs/datasets-catalog.md](docs/datasets-catalog.md). |
+| Add a sink kind | One [`SinkKindDescriptor`](aqp/data/fetchers/sinks/__init__.py) entry, one `SinkNode` subclass under [aqp/data/fetchers/sinks/](aqp/data/fetchers/sinks/) decorated with `@register_node("sink.<kind>")`, document in [aqp_docs/data-pipelines-hub.md](aqp_docs/data-pipelines-hub.md) |
+| Add a `BaseDataset` kind | Subclass [`BaseDataset`](aqp/data/datasets/base.py) under [aqp/data/datasets/kinds/](aqp/data/datasets/kinds/), set `kind`, implement `_load` / `_save`. Re-export from [`aqp/data/datasets/kinds/__init__.py`](aqp/data/datasets/kinds/__init__.py) so the metaclass auto-registration fires on import. Add a smoke test under `tests/data/datasets/`; document in [aqp_docs/datasets-catalog.md](aqp_docs/datasets-catalog.md). |
 | Add a cached entity dropdown | Add a category to [`aqp.cache.keys.CACHE_CATEGORIES`](aqp/cache/keys.py), add a populator on [`MetadataPrefetcher`](aqp/cache/prefetch.py), expose `<EntityPicker kind="…" />` in the frontend bound to the matching `/cache/<category>` endpoint. Mutation routes call [`cache_write_through`](aqp/cache/invalidation.py) after commit. |
 | Surface a new external-source kind in the discovery browser | Extend [`aqp.data.discovery.service.DiscoveryService`](aqp/data/discovery/service.py) with a new `_*_entries` collator + dedupe key, add a literal to [`DiscoveryLifecycleState`](aqp/data/discovery/types.py) only if the existing four (ingested / pending / orphan / external_only) don't fit, and update the lifecycle filter chips in [`DiscoveryBrowser`](aqp_client/src/components/data/DiscoveryBrowser.tsx). |
 | Promote an external entry into ingestion | Frontend calls `POST /discovery/entries/{id}/promote` and follows the returned `redirect_url`. Backend emits `LineageEvent(transform_kind="discovery.promoted")` via [`LineageWriter`](aqp/data/catalog/lineage.py). |
@@ -652,7 +709,7 @@ docker exec aqp-api alembic upgrade head
 | Generate an AQP Fetcher from the builder | Frontend calls `POST /airbyte/builder/codegen/fetcher` with `commit=false` for a diff preview; toggling `commit=true` writes to `aqp/data/fetchers/userland/<slug>.py` and persists `aqp_fetcher_path` on the connector row. |
 | Open an interactive sandbox session | `POST /dagster/sandbox/sessions`. Write components via `/sessions/{id}/components` or `/sessions/{id}/airbyte`; load + execute stream events through `_progress.emit`. Tear down via `DELETE /sessions/{id}`. Frontend at `/data/sandbox`. |
 | Add a source setup wizard | Append to [`WIZARDS`](aqp/data/sources/setup_wizards.py); steps + runners; surfaced via `/sources/wizards` and the SourceSetupWizardModal UI |
-| Add a Kafka admin endpoint | Extend [`NativeKafkaAdmin`](aqp/streaming/admin/kafka_admin.py); add a route in [aqp/api/routes/kafka.py](aqp/api/routes/kafka.py); update [docs/streaming-admin.md](docs/streaming-admin.md) |
+| Add a Kafka admin endpoint | Extend [`NativeKafkaAdmin`](aqp/streaming/admin/kafka_admin.py); add a route in [aqp/api/routes/kafka.py](aqp/api/routes/kafka.py); update [aqp_docs/streaming-admin.md](aqp_docs/streaming-admin.md) |
 | Add a Flink admin endpoint | Extend [`FlinkRestClient`](aqp/streaming/admin/flink_admin.py) or [`FlinkSessionJobK8s`](aqp/streaming/admin/flink_admin.py); add a route in [aqp/api/routes/flink.py](aqp/api/routes/flink.py) |
 | Add a producer kind | One [`ProducerSpec`](aqp/streaming/producers/catalog.py) entry; the supervisor seeds it on next boot. Custom logic goes in [`ProducerSupervisor`](aqp/streaming/producers/supervisor.py) |
 | Link a dataset to a Kafka topic / Flink job | `POST /datasets/{id}/streaming-links` with `{kind, target_ref, direction}` — the [refresh_links](aqp/tasks/streaming_link_tasks.py) Celery task can also infer them by naming convention |
@@ -662,36 +719,36 @@ docker exec aqp-api alembic upgrade head
 | Add an HFT metric | [aqp/backtest/hft_metrics.py](aqp/backtest/hft_metrics.py) — and surface in `hft_summary()` if appropriate |
 | Add a chart-pattern detector | [aqp/data/patterns.py](aqp/data/patterns.py) — call from `detect_all` |
 | Wire a future LOB strategy | Subclass [aqp/strategies/lob.py::LobStrategy](aqp/strategies/lob.py); use the ``buy``/``sell``/``cancel`` helpers; drive through [aqp/backtest/hft.py::LobBacktestEngine](aqp/backtest/hft.py) |
-| Add an HJB solver | New module under [aqp/optimal_control/](aqp/optimal_control/); pure JAX kernel decorated with `@jax.jit`; route the public API through [aqp/optimal_control/hjb_solver.py](aqp/optimal_control/hjb_solver.py); add a flow under [aqp/analysis/flows/optimal_control.py](aqp/analysis/flows/optimal_control.py) and a DataMCPTool under [aqp/data/mcp/tools/optimal_control.py](aqp/data/mcp/tools/optimal_control.py). See [docs/optimal-control.md](docs/optimal-control.md) |
-| Add a Lucic-Tse hedging term | Extend [aqp/options/portfolio_mm.py](aqp/options/portfolio_mm.py); use ``jnp.einsum``-only matrix ops, no Python loops. Add a flow under [aqp/analysis/flows/optimal_control.py](aqp/analysis/flows/optimal_control.py). See [docs/portfolio-options-mm.md](docs/portfolio-options-mm.md) |
-| Run an HFT LOB backtest | `POST /backtest/lob` (returns task_id) — body: `{strategy, dataset_preset, latency_profile, queue_model, max_events}`. UI at `/backtest/lob`. Direct: `LobBacktestEngine().run(strategy, dataset_preset=...)`. See [docs/hft-backtest.md](docs/hft-backtest.md) |
-| Trigger a toxicity-aware regime update | Run the [optimal_control.toxicity_regime](aqp/analysis/flows/optimal_control.py) flow on a microstructure slice → the [research.toxicity_regime_adapter](configs/agents/research_toxicity_regime_adapter.yaml) agent reads the result via `data.optimal_control.list_regimes` and writes back to `configs/paper/*.yaml` via `data.strategy_config.update`. See [docs/microstructure-toxicity.md](docs/microstructure-toxicity.md) |
+| Add an HJB solver | New module under [aqp/optimal_control/](aqp/optimal_control/); pure JAX kernel decorated with `@jax.jit`; route the public API through [aqp/optimal_control/hjb_solver.py](aqp/optimal_control/hjb_solver.py); add a flow under [aqp/analysis/flows/optimal_control.py](aqp/analysis/flows/optimal_control.py) and a DataMCPTool under [aqp/data/mcp/tools/optimal_control.py](aqp/data/mcp/tools/optimal_control.py). See [aqp_docs/optimal-control.md](aqp_docs/optimal-control.md) |
+| Add a Lucic-Tse hedging term | Extend [aqp/options/portfolio_mm.py](aqp/options/portfolio_mm.py); use ``jnp.einsum``-only matrix ops, no Python loops. Add a flow under [aqp/analysis/flows/optimal_control.py](aqp/analysis/flows/optimal_control.py). See [aqp_docs/portfolio-options-mm.md](aqp_docs/portfolio-options-mm.md) |
+| Run an HFT LOB backtest | `POST /backtest/lob` (returns task_id) — body: `{strategy, dataset_preset, latency_profile, queue_model, max_events}`. UI at `/backtest/lob`. Direct: `LobBacktestEngine().run(strategy, dataset_preset=...)`. See [aqp_docs/hft-backtest.md](aqp_docs/hft-backtest.md) |
+| Trigger a toxicity-aware regime update | Run the [optimal_control.toxicity_regime](aqp/analysis/flows/optimal_control.py) flow on a microstructure slice → the [research.toxicity_regime_adapter](configs/agents/research_toxicity_regime_adapter.yaml) agent reads the result via `data.optimal_control.list_regimes` and writes back to `configs/paper/*.yaml` via `data.strategy_config.update`. See [aqp_docs/microstructure-toxicity.md](aqp_docs/microstructure-toxicity.md) |
 | Exec a command in a pod / container | `POST /cluster/pods/{ns}/{name}/exec` or `data.kubernetes.exec_in_pod` MCP tool. Goes through `KubernetesAdapter.exec_in_pod` (rule 28) — `InClusterAdapter` uses `kubernetes.stream.stream`, `LocalComposeAdapter` uses the Docker SDK with `Accept-Encoding: identity`. See [aqp/kubernetes/protocol.py](aqp/kubernetes/protocol.py) |
 | Stream pod logs to the frontend | WebSocket `GET /cluster/pods/{ns}/{name}/logs/stream` (canonical `{task_id, stage, message, timestamp, **extras}` frame shape — rule 4). The adapter MUST use `_preload_content=False` + `kubernetes.watch.Watch().stream()` (the documented sparse-log hang). Slice snapshots via `data.kubernetes.stream_pod_logs` MCP tool |
 | Pull a tar archive out of a pod | `GET /cluster/pods/{ns}/{name}/archive?path=…` or `data.kubernetes.get_pod_archive` MCP tool. Docker SDK adapters must disable response compression (the gigabyte-tarball latency bug) |
-| Search the AQP codebase from an agent | `codebase.search` MCP tool (hybrid AST + ripgrep). `codebase.elaborate_finding` routes through `router_complete` (rule 2). See [docs/codebase-mcp.md](docs/codebase-mcp.md) |
+| Search the AQP codebase from an agent | `codebase.search` MCP tool (hybrid AST + ripgrep). `codebase.elaborate_finding` routes through `router_complete` (rule 2). See [aqp_docs/codebase-mcp.md](aqp_docs/codebase-mcp.md) |
 | Add a new CodebaseMCPTool | Subclass [`CodebaseMCPTool`](aqp/codebase/mcp/base.py) under [aqp/codebase/mcp/tools/](aqp/codebase/mcp/tools/); decorate with `@register_codebase_mcp_tool`. The bridge in [aqp/agents/tools/codebase_mcp_bridge.py](aqp/agents/tools/codebase_mcp_bridge.py) auto-installs it into `TOOL_REGISTRY` |
-| Run a portfolio tearsheet | Fast metrics: `POST /analytics/portfolio/metrics`. Rolling Sharpe / vol / underwater: `POST /analytics/portfolio/rolling`. Full QuantStats HTML report (async): `POST /analytics/portfolio/tearsheet` → returns `task_id` → attach via `useLiveStream`. Render flows through `aqp/tasks/analytics_tasks.py` (rule 4). See [docs/analytics-frontend.md](docs/analytics-frontend.md) |
-| Add a pgvector-backed table to the MCP allow-list | Extend `_ALLOWED_TABLES` in [aqp/data/mcp/tools/vector.py](aqp/data/mcp/tools/vector.py). Migration goes under [alembic/versions/](alembic/versions/) using the `Vector(N)` helper from [aqp/persistence/types/vector.py](aqp/persistence/types/vector.py). See [docs/pgvector-control-plane.md](docs/pgvector-control-plane.md) |
-| Check / halt stalled agent runs | Read-only: `GET /agents/health` or `data.agents.health` MCP tool. Mutating: the existing `POST /agents/halt` (topbar kill-switch). The Celery beat task in [aqp/tasks/agent_watchdog_tasks.py](aqp/tasks/agent_watchdog_tasks.py) auto-halts stale rows. See [docs/agent-watchdog.md](docs/agent-watchdog.md) |
-| Use SERA-32B as a code model | Set `AQP_SERA_ENABLED=true` + `AQP_SERA_ENDPOINT=…` (Modal proxy or self-hosted vLLM), then point an `AgentSpec.model.provider = "sera"` or pass `model_alias="sera"` to `codebase.elaborate_finding`. Provider entry at [aqp/llm/providers/catalog.py](aqp/llm/providers/catalog.py). See [docs/sera.md](docs/sera.md) |
-| Exec a command in a pod / container (Phase 1) | `POST /cluster/pods/{ns}/{name}/exec` or `data.kubernetes.exec_in_pod` MCP tool — both route through `KubernetesAdapter.exec_in_pod`. `InClusterAdapter` uses `kubernetes.stream.stream(connect_get_namespaced_pod_exec)`; `LocalComposeAdapter` uses the Docker SDK `container.exec_run` with `Accept-Encoding: identity`. See [docs/kubernetes-adapter.md](docs/kubernetes-adapter.md) |
+| Run a portfolio tearsheet | Fast metrics: `POST /analytics/portfolio/metrics`. Rolling Sharpe / vol / underwater: `POST /analytics/portfolio/rolling`. Full QuantStats HTML report (async): `POST /analytics/portfolio/tearsheet` → returns `task_id` → attach via `useLiveStream`. Render flows through `aqp/tasks/analytics_tasks.py` (rule 4). See [aqp_docs/analytics-frontend.md](aqp_docs/analytics-frontend.md) |
+| Add a pgvector-backed table to the MCP allow-list | Extend `_ALLOWED_TABLES` in [aqp/data/mcp/tools/vector.py](aqp/data/mcp/tools/vector.py). Migration goes under [alembic/versions/](alembic/versions/) using the `Vector(N)` helper from [aqp/persistence/types/vector.py](aqp/persistence/types/vector.py). See [aqp_docs/pgvector-control-plane.md](aqp_docs/pgvector-control-plane.md) |
+| Check / halt stalled agent runs | Read-only: `GET /agents/health` or `data.agents.health` MCP tool. Mutating: the existing `POST /agents/halt` (topbar kill-switch). The Celery beat task in [aqp/tasks/agent_watchdog_tasks.py](aqp/tasks/agent_watchdog_tasks.py) auto-halts stale rows. See [aqp_docs/agent-watchdog.md](aqp_docs/agent-watchdog.md) |
+| Use SERA-32B as a code model | Set `AQP_SERA_ENABLED=true` + `AQP_SERA_ENDPOINT=…` (Modal proxy or self-hosted vLLM), then point an `AgentSpec.model.provider = "sera"` or pass `model_alias="sera"` to `codebase.elaborate_finding`. Provider entry at [aqp/llm/providers/catalog.py](aqp/llm/providers/catalog.py). See [aqp_docs/sera.md](aqp_docs/sera.md) |
+| Exec a command in a pod / container (Phase 1) | `POST /cluster/pods/{ns}/{name}/exec` or `data.kubernetes.exec_in_pod` MCP tool — both route through `KubernetesAdapter.exec_in_pod`. `InClusterAdapter` uses `kubernetes.stream.stream(connect_get_namespaced_pod_exec)`; `LocalComposeAdapter` uses the Docker SDK `container.exec_run` with `Accept-Encoding: identity`. See [aqp_docs/kubernetes-adapter.md](aqp_docs/kubernetes-adapter.md) |
 | Stream pod logs in real time (Phase 1) | WebSocket `GET /cluster/pods/{ns}/{name}/logs/stream` — frontend hooks through `useLiveStream`. Adapter side uses `kubernetes.watch.Watch().stream(...)` with `_preload_content=False` (fixes the documented sparse-log hang) |
 | Pull / push a tar archive from / to a pod (Phase 1) | `GET /cluster/pods/{ns}/{name}/archive?path=…` returns the raw tar bytes; `POST /cluster/pods/{ns}/{name}/archive` accepts base64-encoded tar. Agents use `data.kubernetes.get_pod_archive` / `data.kubernetes.put_pod_archive` MCP tools |
-| Search the AQP codebase from an agent (Phase 2) | `codebase.search(query, mode='hybrid', k=20)` via the in-process bridge OR `POST /mcp/codebase/tools/codebase.search/invoke` via streamable HTTP. Indexing is AST-aware via `aqp/codebase/mcp/index/ast_index.py`. See [docs/codebase-mcp.md](docs/codebase-mcp.md) |
+| Search the AQP codebase from an agent (Phase 2) | `codebase.search(query, mode='hybrid', k=20)` via the in-process bridge OR `POST /mcp/codebase/tools/codebase.search/invoke` via streamable HTTP. Indexing is AST-aware via `aqp/codebase/mcp/index/ast_index.py`. See [aqp_docs/codebase-mcp.md](aqp_docs/codebase-mcp.md) |
 | Walk the codebase dependency graph (Phase 2) | `codebase.get_repo_graph(file=…, depth=2)` returns an adjacency slice; backed by `aqp/codebase/mcp/index/graph.py` |
-| Use SERA-32B for code-focused agents (Phase 2.5) | Set `AQP_SERA_ENABLED=true` + `AQP_SERA_ENDPOINT` (Modal or self-hosted vLLM); spec `model.provider = "sera"`. See [docs/sera.md](docs/sera.md) |
-| Run a vector similarity search via pgvector (Phase 3) | `data.vector.search` MCP tool against the three allow-listed tables (`rag_chunks`, `codebase_symbol_embeddings`, `ml_feature_vectors`). Frontend dropdowns use `<EntityPicker kind="vector_indexes" />`. See [docs/pgvector-control-plane.md](docs/pgvector-control-plane.md) |
-| Render a QuantStats portfolio tearsheet (Phase 4) | `POST /analytics/portfolio/tearsheet` enqueues the Celery task; metrics fast path is `POST /analytics/portfolio/metrics`. Frontend route `/analytics/portfolio/:runId`. NOT Streamlit — the Vite app renders interactive views with `recharts` / `lightweight-charts`. See [docs/analytics-frontend.md](docs/analytics-frontend.md) |
-| Check the agent-run watchdog snapshot (Phase 5) | `GET /agents/health` REST route OR `data.agents.health` MCP tool. Stalled rows are auto-halted by `aqp.tasks.agent_watchdog_tasks.scan_for_stalled_agent_runs` on a 60s Celery beat. See [docs/agent-watchdog.md](docs/agent-watchdog.md) |
+| Use SERA-32B for code-focused agents (Phase 2.5) | Set `AQP_SERA_ENABLED=true` + `AQP_SERA_ENDPOINT` (Modal or self-hosted vLLM); spec `model.provider = "sera"`. See [aqp_docs/sera.md](aqp_docs/sera.md) |
+| Run a vector similarity search via pgvector (Phase 3) | `data.vector.search` MCP tool against the three allow-listed tables (`rag_chunks`, `codebase_symbol_embeddings`, `ml_feature_vectors`). Frontend dropdowns use `<EntityPicker kind="vector_indexes" />`. See [aqp_docs/pgvector-control-plane.md](aqp_docs/pgvector-control-plane.md) |
+| Render a QuantStats portfolio tearsheet (Phase 4) | `POST /analytics/portfolio/tearsheet` enqueues the Celery task; metrics fast path is `POST /analytics/portfolio/metrics`. Frontend route `/analytics/portfolio/:runId`. NOT Streamlit — the Vite app renders interactive views with `recharts` / `lightweight-charts`. See [aqp_docs/analytics-frontend.md](aqp_docs/analytics-frontend.md) |
+| Check the agent-run watchdog snapshot (Phase 5) | `GET /agents/health` REST route OR `data.agents.health` MCP tool. Stalled rows are auto-halted by `aqp.tasks.agent_watchdog_tasks.scan_for_stalled_agent_runs` on a 60s Celery beat. See [aqp_docs/agent-watchdog.md](aqp_docs/agent-watchdog.md) |
 | Exec a command inside a pod / container | `POST /cluster/pods/{ns}/{name}/exec` (mutates) or `data.kubernetes.exec_in_pod` MCP tool. Routes through `KubernetesAdapter.exec_in_pod` — `InClusterAdapter` uses `kubernetes.stream.stream`, `LocalComposeAdapter` uses `docker.from_env().containers.get(...).exec_run`. Settings: `AQP_K8S_EXEC_DEFAULT_TIMEOUT`. (Phase 1 refactor) |
 | Stream pod logs to the operator UI | WebSocket `/cluster/pods/{ns}/{name}/logs/stream` or `data.kubernetes.stream_pod_logs` MCP tool. Routes through `KubernetesAdapter.stream_pod_logs` — `InClusterAdapter` enforces `_preload_content=False` + `watch.Watch().stream(...)` (the documented hang fix). Settings: `AQP_K8S_POD_LOG_MAX_SECONDS`, `AQP_K8S_POD_LOG_MAX_LINES`. (Phase 1 refactor) |
 | Pull / push a tarball to a pod | `GET /cluster/pods/{ns}/{name}/archive?path=…` / `POST /cluster/pods/{ns}/{name}/archive` or `data.kubernetes.{get,put}_pod_archive` MCP tools. Docker SDK adapter disables `Accept-Encoding: gzip` (the gigabyte-tarball latency fix). Caller wraps the result in `io.BytesIO` + `tarfile.open`. (Phase 1 refactor) |
-| Search / navigate the AQP source tree from an agent | `codebase.search` / `codebase.get_repo_graph` / `codebase.find_definition` / `codebase.find_references` / `codebase.elaborate_finding` MCP tools from [aqp/codebase/mcp/tools/](aqp/codebase/mcp/tools/), or the same surface over HTTP at `/mcp/codebase/*` and via the `aqp-codebase-mcp` stdio binary. See [docs/codebase-mcp.md](docs/codebase-mcp.md) (Phase 2 refactor) |
-| Use SERA-32B for code-related agent runs | Opt-in. Set `AQP_SERA_ENABLED=true` + `AQP_SERA_ENDPOINT` to point at a Modal-hosted or self-hosted vLLM endpoint, then reference `model.provider = sera` in any `AgentSpec`. See [docs/sera.md](docs/sera.md). |
+| Search / navigate the AQP source tree from an agent | `codebase.search` / `codebase.get_repo_graph` / `codebase.find_definition` / `codebase.find_references` / `codebase.elaborate_finding` MCP tools from [aqp/codebase/mcp/tools/](aqp/codebase/mcp/tools/), or the same surface over HTTP at `/mcp/codebase/*` and via the `aqp-codebase-mcp` stdio binary. See [aqp_docs/codebase-mcp.md](aqp_docs/codebase-mcp.md) (Phase 2 refactor) |
+| Use SERA-32B for code-related agent runs | Opt-in. Set `AQP_SERA_ENABLED=true` + `AQP_SERA_ENDPOINT` to point at a Modal-hosted or self-hosted vLLM endpoint, then reference `model.provider = sera` in any `AgentSpec`. See [aqp_docs/sera.md](aqp_docs/sera.md). |
 | Search a pgvector-backed table | `data.vector.search` MCP tool (free-text or pre-computed embedding). For programmatic access, use the `PgVectorDataset` kind in [aqp/data/datasets/kinds/pgvector.py](aqp/data/datasets/kinds/pgvector.py) or `aqp.rag.pgvector_store.PgVectorStore` directly. (Phase 3 refactor) |
-| Render a portfolio tearsheet | `POST /analytics/portfolio/tearsheet` (enqueues the heavy quantstats render through Celery and returns a `task_id`). For the synchronous metrics fast path, use `POST /analytics/portfolio/metrics`. UI: `/analytics/portfolio/:runId`. See [docs/analytics-frontend.md](docs/analytics-frontend.md) (Phase 4 refactor) |
-| Inspect agent run health / stalled candidates | `GET /agents/health` REST route or `data.agents.health` MCP tool. Watchdog cleanup runs as the `aqp.tasks.agent_watchdog_tasks.scan_for_stalled_agent_runs` Celery beat task (interval = `AQP_AGENT_WATCHDOG_PERIOD_SECONDS`). See [docs/agent-watchdog.md](docs/agent-watchdog.md) (Phase 5 refactor) |
+| Render a portfolio tearsheet | `POST /analytics/portfolio/tearsheet` (enqueues the heavy quantstats render through Celery and returns a `task_id`). For the synchronous metrics fast path, use `POST /analytics/portfolio/metrics`. UI: `/analytics/portfolio/:runId`. See [aqp_docs/analytics-frontend.md](aqp_docs/analytics-frontend.md) (Phase 4 refactor) |
+| Inspect agent run health / stalled candidates | `GET /agents/health` REST route or `data.agents.health` MCP tool. Watchdog cleanup runs as the `aqp.tasks.agent_watchdog_tasks.scan_for_stalled_agent_runs` Celery beat task (interval = `AQP_AGENT_WATCHDOG_PERIOD_SECONDS`). See [aqp_docs/agent-watchdog.md](aqp_docs/agent-watchdog.md) (Phase 5 refactor) |
 | Wire account management for a new IdP feature | Extend `aqp/auth/management_api.py` + add a `/me/*` route in `aqp/api/routes/me.py` + a typed wrapper in `aqp_client/src/lib/api/me.ts` + a tab section in `aqp_client/src/components/account/` |
 | Audit a security event | Call `emit_audit_event(event_type, user_id=..., event_category=..., severity=..., source=..., request=request, details={...})` from `aqp.auth.audit`. Never raises |
 | Invite a user to an org / workspace | `POST /tenancy/invites` admin-only; user accepts via public `POST /tenancy/invites/{token}/accept`; tokens are HMAC-hashed in `tenancy_invites` |
@@ -790,13 +847,13 @@ Things that look like they should work but actively break the system.
 - **Don't put LLM-driven interpretation in an analysis flow.**
  v1 ships zero LLM-routed flows by design — interpretation lives
  in the analysis-AGENTS stack
- ([docs/analysis-agents.md](docs/analysis-agents.md)).
+ ([aqp_docs/analysis-agents.md](aqp_docs/analysis-agents.md)).
 - **Don't read `settings.<service>_client_*` / `_credential` /
  `_token` directly from service code.** Resolve credentials through
  [`aqp.credentials.CredentialResolver`](aqp/credentials/resolver.py)
  — the resolver chain (m2m → file → env) is what closes the
  bootstrap-not-applied class of bug. See
- [docs/credentials.md](docs/credentials.md).
+ [aqp_docs/credentials.md](aqp_docs/credentials.md).
 - **Don't call vendor SDKs or hit `*.well-known/openid-configuration`
  directly from service code.** All OIDC / JWKS / token-exchange / M2M
  operations go through
@@ -804,7 +861,7 @@ Things that look like they should work but actively break the system.
  Don't reach for `httpx` against the IdP's token endpoint; use
  [`OidcHttpClient`](aqp/auth/oidc_client.py) (composed by every
  provider) so discovery / JWKS caches stay shared. See
- [docs/identity.md](docs/identity.md).
+ [aqp_docs/identity.md](aqp_docs/identity.md).
 - **Don't import
  [`ClusterMgmtClient`](aqp/services/cluster_mgmt_client.py) outside
  [`aqp/kubernetes/adapters/rpi_cluster.py`](aqp/kubernetes/adapters/rpi_cluster.py).**
@@ -815,7 +872,7 @@ Things that look like they should work but actively break the system.
  [`aqp/kubernetes/adapters/in_cluster.py`](aqp/kubernetes/adapters/in_cluster.py)
  (the existing `aqp/tasks/finops_tasks.py` direct path is grandfathered
  until the adapter exposes list APIs). See
- [docs/kubernetes-adapter.md](docs/kubernetes-adapter.md).
+ [aqp_docs/kubernetes-adapter.md](aqp_docs/kubernetes-adapter.md).
 - **Don't introduce a free-text input that names an entity in the
  cache.** Datasets / namespaces / sink kinds / Airbyte connectors /
  projects / credentials must use
@@ -864,7 +921,7 @@ Things that look like they should work but actively break the system.
 > deliberately rejects the "rewrite skill on failure" pattern —
 > behaviour changes always produce a **new** version row, never an
 > in-place mutation. See
-> [docs/agentic-development.md](docs/agentic-development.md) for
+> [aqp_docs/agentic-development.md](aqp_docs/agentic-development.md) for
 > the full mapping.
 
 | Concept | One-liner | File |
@@ -896,7 +953,7 @@ Things that look like they should work but actively break the system.
 | `AgentSpec` + `AgentRuntime` | Spec-driven agent contract + executor | [aqp/agents/spec.py](aqp/agents/spec.py), [aqp/agents/runtime.py](aqp/agents/runtime.py) |
 | `RedisHybridMemory` | Working / episodic / reflection memory layer | [aqp/llm/memory.py](aqp/llm/memory.py) |
 | `build_full_pipeline_graph` | Alpha-GPT three-stage agentic loop | [aqp/agents/graph/builder.py](aqp/agents/graph/builder.py) |
-| Author / run a workflow | Author a [`WorkflowSpec`](aqp/agents/orchestration/spec.py) (or drop YAML under [configs/workflows/](configs/workflows/)); call [`WorkflowRuntime(spec).run(...)`](aqp/agents/orchestration/runtime.py) or POST `/workflows/{name}/run`. Replay via `/workflows/runs/{run_id}/replay`. UI at `/workflows`. See [docs/workflow-studio.md](docs/workflow-studio.md). |
+| Author / run a workflow | Author a [`WorkflowSpec`](aqp/agents/orchestration/spec.py) (or drop YAML under [configs/workflows/](configs/workflows/)); call [`WorkflowRuntime(spec).run(...)`](aqp/agents/orchestration/runtime.py) or POST `/workflows/{name}/run`. Replay via `/workflows/runs/{run_id}/replay`. UI at `/workflows`. See [aqp_docs/workflow-studio.md](aqp_docs/workflow-studio.md). |
 | Add an OrchestrationAdapter | Subclass [`OrchestrationAdapter`](aqp/agents/orchestration/base.py) under [aqp/agents/orchestration/adapters/](aqp/agents/orchestration/adapters/); set `adapter_kind` (one of the seven in [`ADAPTER_KINDS`](aqp/agents/orchestration/registry.py)) + `adapter_alias`. The [`OrchestrationAdapterMeta`](aqp/agents/orchestration/base.py) metaclass auto-registers via `@register("alias", kind="orchestration_adapter")`. |
 | Halt every running workflow | `POST /workflows/halt` (mirrors `/agents/halt`, `/paper/stop-all`, `/bots/halt-all`, `/rl/halt-all`, `/quant-agents/halt`). The topbar [`KillSwitch`](aqp_client/src/components/common/KillSwitch.tsx) component fans out to all six in parallel. |
 | Inspect workflow stall candidates | `data.orchestration.health` MCP tool, or `GET /workflows/runs?status=running`. The [`scan_for_stalled_workflow_runs`](aqp/tasks/agent_watchdog_tasks.py) Celery beat task halts rows past `AQP_AGENT_STALL_THRESHOLD_SECONDS`. |
@@ -929,8 +986,8 @@ Things that look like they should work but actively break the system.
 
 ## When in doubt
 
-1. Read [docs/glossary.md](docs/glossary.md) for the term.
-2. Read the relevant subsystem doc from [docs/index.md](docs/index.md).
+1. Read [aqp_docs/glossary.md](aqp_docs/glossary.md) for the term.
+2. Read the relevant subsystem doc from [aqp_docs/index.md](aqp_docs/index.md).
 3. Search the code: `rg "<symbol_or_name>" aqp/`.
 4. If still stuck, file an issue or ask a maintainer; do **not**
    guess and ship.

@@ -3,7 +3,7 @@
 > Human ↔ Cursor-agent collaboration cadence for AQP.
 > Pair with [AGENTS.md](AGENTS.md) (the AI rule-set),
 > [CONTRIBUTING.md](CONTRIBUTING.md) (human onboarding),
-> and [docs/agentic-development.md](docs/agentic-development.md)
+> and [aqp_docs/agentic-development.md](aqp_docs/agentic-development.md)
 > (how AQP's spec-pattern relates to the broader agentic-coder
 > vocabulary).
 
@@ -204,9 +204,9 @@ finished change.
 - [.cursor/rules/](.cursor/rules/) — glob-scoped rule files
 - [.agents/state-template.md](.agents/state-template.md) —
   cross-session state schema
-- [docs/agentic-development.md](docs/agentic-development.md) —
+- [aqp_docs/agentic-development.md](aqp_docs/agentic-development.md) —
   spec-pattern as the AQP skill-artifact equivalent + the ADLC
   security manifesto
-- [docs/multi-agent-patterns.md](docs/multi-agent-patterns.md) —
+- [aqp_docs/multi-agent-patterns.md](aqp_docs/multi-agent-patterns.md) —
   Sequential / Parallel / Debate / ReAct / Coordinator patterns
   mapped to [aqp/agents/graph/](aqp/agents/graph/)

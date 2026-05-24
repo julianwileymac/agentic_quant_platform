@@ -82,7 +82,7 @@ class AQPScope:
     Every scope used by the control plane lives here. Do not hand-write
     a scope string in route code — import it from this class so refactors
     stay grep-able and the Terraform Auth0 module + Auth0 dashboard +
-    docs/scopes.md stay aligned.
+    aqp_docs/scopes.md stay aligned.
     """
 
     # --- Data plane ---------------------------------------------------------
@@ -112,6 +112,7 @@ class AQPScope:
 
     # --- ML / RL / RAG ------------------------------------------------------
     RAG_QUERY: Final[str] = "rag:query"
+    READ_TIMESERIES: Final[str] = "read:timeseries"
     ML_WORKBENCH: Final[str] = "ml:workbench"
     RL_TRAIN: Final[str] = "rl:train"
 
@@ -162,6 +163,7 @@ ALL_AQP_SCOPES: Final[frozenset[str]] = frozenset(
         AQPScope.BACKTEST_READ,
         AQPScope.BACKTEST_CREATE,
         AQPScope.RAG_QUERY,
+        AQPScope.READ_TIMESERIES,
         AQPScope.ML_WORKBENCH,
         AQPScope.RL_TRAIN,
         AQPScope.DEPLOY_RUN,

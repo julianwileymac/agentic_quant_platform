@@ -1,0 +1,21 @@
+# QuestDB high-throughput tick-data + executions store. Phase 2b of
+# the AQP infra-expansion plan. Single-StatefulSet (HA via QuestDB
+# Enterprise is out of scope for the rpi cluster); back-up via the
+# QuestDB Operator's QuestDBSnapshot CR (Phase 4 install).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-timeseries
+
+commonLabels:
+  app.kubernetes.io/part-of: aqp
+  app.kubernetes.io/component: timeseries
+  app.kubernetes.io/managed-by: kustomize
+  aqp.internal/cluster: timeseries.questdb
+
+resources:
+  - configmap.yaml
+  - service.yaml
+  - statefulset.yaml
+  - poddisruptionbudget.yaml
+  - servicemonitor.yaml

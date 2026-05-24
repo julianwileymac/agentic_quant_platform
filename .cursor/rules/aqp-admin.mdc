@@ -1,0 +1,62 @@
+---
+description: Boundary rule for the internal admin (managed services + company accounts) at aqp_admin/. Audit-first; never imports aqp.*; mirrors aqp_control_plane boundary; frontend follows aqp_client patterns.
+globs:
+  - "aqp_admin/**"
+alwaysApply: false
+---
+
+# AQP Admin
+
+- `aqp_admin/` is the internal admin surface for AQP's **managed
+  services** and **company accounts**. It is NOT a customer-facing
+  admin and NOT a replacement for `aqp_control_plane`.
+- **Never import `aqp.*`** in `aqp_admin/src/aqp_admin/`. Shared value
+  types come from [aqp_platform_core](mdc:aqp_platform_core). HTTP-only
+  access to the AQP monolith and control plane.
+- **Audit-first.** Every mutating route writes a structured audit
+  record BEFORE performing the action. Mirrors the `workload_runs`
+  pattern in `aqp_platform_core/src/aqp_platform_core/runtime/workload.py`.
+- **Identity** flows through `IdentityProvider` (AQP rule 27). Never
+  call vendor SDKs (Auth0, MSAL) directly from route handlers.
+- **Credentials** resolve through `CredentialResolver` (AQP rule 26).
+  Never read `settings.*_secret` directly.
+- **Never print or return raw tokens, kubeconfigs, or secret payloads.**
+  Enforces the always-on rule at
+  [aqp-management-engine.mdc](mdc:.cursor/rules/aqp-management-engine.mdc).
+- **Frontend** (`aqp_admin/aqp_admin_ui/`) follows the same throttled-WS,
+  kill-switch, sandbox-indicator, and typed-confirmation contracts as
+  `aqp_client/`. See
+  [frontend.mdc](mdc:.cursor/rules/frontend.mdc).
+
+## Where changes go
+
+| Change | Location |
+| --- | --- |
+| New `/admin/*` route | `aqp_admin/src/aqp_admin/api/routers/` |
+| New account flow | `aqp_admin/src/aqp_admin/accounts/` |
+| New managed-service action | `aqp_admin/src/aqp_admin/services/` |
+| New billing provider | `aqp_admin/src/aqp_admin/providers/` |
+| Shared type with AQP runtime | `aqp_platform_core/src/aqp_platform_core/` |
+| Frontend route | `aqp_admin/aqp_admin_ui/src/routes/` |
+| Typed API wrapper | `aqp_admin/aqp_admin_ui/src/lib/api.ts` |
+| Shared admin UI component | `aqp_admin/aqp_admin_ui/src/components/` |
+
+## Validation
+
+```bash
+# Backend
+cd aqp_admin
+pip install -e ../aqp_platform_core
+pip install -e .[dev]
+pytest -ra
+ruff check src tests
+mypy src
+rg --type py "^from aqp(\.|$)|^import aqp(\.|$)" src   # must return nothing
+
+# Frontend
+cd aqp_admin_ui
+pnpm install
+pnpm typecheck
+pnpm test
+pnpm build
+```

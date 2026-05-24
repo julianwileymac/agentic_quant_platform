@@ -17,7 +17,7 @@ in `docker-compose.yml` for one-command rollback only.
 
 | App | Local dev | Compose host port | State | Source of truth |
 | --- | --- | --- | --- | --- |
-| [aqp_client/](mdc:aqp_client) | `pnpm --dir aqp_client dev` (`:3001`) | `:3002` | active | [aqp_client/CUTOVER.md](mdc:aqp_client/CUTOVER.md), [docs/webui.md](mdc:docs/webui.md) |
+| [aqp_client/](mdc:aqp_client) | `pnpm --dir aqp_client dev` (`:3001`) | `:3002` | active | [aqp_client/CUTOVER.md](mdc:aqp_client/CUTOVER.md), [aqp_docs/webui.md](mdc:aqp_docs/webui.md) |
 | [webui/](mdc:webui) | `pnpm --dir webui dev` (`:3000`) | `:3000` (stopped) | rollback only | — |
 
 All new routes go to `aqp_client/`. Do not add new pages to `webui/` —

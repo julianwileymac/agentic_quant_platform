@@ -1,0 +1,92 @@
+﻿# =============================================================================
+# Example KServe InferenceService backed by an MLflow-registered model.
+# =============================================================================
+# This file is **not applied by Kustomize** because the storageUri references
+# a model name + version that must already exist in the MLflow registry.
+# Substitute the placeholders below and apply with:
+#
+#   kubectl apply -f inferenceservice-mlflow-example.yaml
+#
+# Prerequisites:
+#   1. KServe controller installed (see install/values-kserve.yaml).
+#   2. MLflow registered model + version (e.g. via the SDK
+#      `rpi_k8s_sdk.serving.ModelStore.from_mlflow_run`).
+#   3. The `model-storage-credentials` Secret in `ml-platform`.
+#   4. MinIO bucket `mlflow-artifacts` (created by the bootstrap job).
+# =============================================================================
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: example-sklearn-model
+  namespace: aqp-mlops
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
+  labels:
+    app.kubernetes.io/component: model-serving
+    app.kubernetes.io/managed-by: rpi-k8s-cluster
+    serving.rpi-k8s.io/source: mlflow
+spec:
+  predictor:
+    serviceAccountName: model-serving
+    minReplicas: 1
+    maxReplicas: 3
+    model:
+      modelFormat:
+        name: sklearn
+      # storageUri points at the MLflow artifact store backed by MinIO.
+      # Replace <MODEL_NAME> and <VERSION> with real values.
+      storageUri: s3://mlflow-artifacts/models/<MODEL_NAME>/<VERSION>
+      env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector.aqp-observability.svc.cluster.local:4317
+        - name: OTEL_SERVICE_NAME
+          value: kserve-example-sklearn
+      resources:
+        requests:
+          cpu: "200m"
+          memory: 512Mi
+        limits:
+          cpu: "1"
+          memory: 2Gi
+---
+# =============================================================================
+# vLLM-on-KServe example - serves an MLflow registered LLM artifact via vLLM.
+# Same substitution rules apply.
+# =============================================================================
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: example-vllm-llm
+  namespace: aqp-mlops
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
+  labels:
+    app.kubernetes.io/component: model-serving
+    serving.rpi-k8s.io/source: mlflow
+spec:
+  predictor:
+    serviceAccountName: model-serving
+    minReplicas: 0
+    maxReplicas: 2
+    containers:
+      - name: kserve-container
+        image: vllm/vllm-openai:v0.6.3
+        args:
+          - --model
+          - /mnt/models
+          - --served-model-name
+          - mlflow-llm
+        env:
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: http://otel-collector.aqp-observability.svc.cluster.local:4317
+        ports:
+          - containerPort: 8000
+            protocol: TCP
+        resources:
+          requests:
+            cpu: "1"
+            memory: 4Gi
+          limits:
+            cpu: "4"
+            memory: 12Gi
+    storageUri: s3://mlflow-artifacts/models/<LLM_MODEL_NAME>/<VERSION>

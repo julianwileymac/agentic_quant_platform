@@ -1,0 +1,39 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: av-universe-sync
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: alphavantage-universe-sync
+    data-provider: alphavantage
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: run
+  arguments:
+    parameters:
+      - name: state
+        value: active
+      - name: target_bucket
+        value: av-raw
+  templates:
+    - name: run
+      inputs:
+        parameters:
+          - name: state
+          - name: target_bucket
+      steps:
+        - - name: load
+            templateRef:
+              name: av-bulk
+              template: run
+            arguments:
+              parameters:
+                - name: category
+                  value: universe
+                - name: symbols
+                  value: ""
+                - name: target_bucket
+                  value: "{{inputs.parameters.target_bucket}}"
+                - name: extra_params
+                  value: |
+                    {"state":"{{inputs.parameters.state}}"}

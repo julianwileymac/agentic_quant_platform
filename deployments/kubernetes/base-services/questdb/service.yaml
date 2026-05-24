@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: questdb
+  namespace: aqp-timeseries
+  labels:
+    app.kubernetes.io/name: questdb
+    app.kubernetes.io/component: timeseries
+    app.kubernetes.io/part-of: aqp
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: questdb
+    app.kubernetes.io/instance: questdb
+  ports:
+    - name: http
+      port: 9000
+      targetPort: 9000
+      protocol: TCP
+    - name: ilp-tcp
+      port: 9009
+      targetPort: 9009
+      protocol: TCP
+    - name: pgwire
+      port: 8812
+      targetPort: 8812
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: questdb-headless
+  namespace: aqp-timeseries
+  labels:
+    app.kubernetes.io/name: questdb
+    app.kubernetes.io/component: timeseries
+    app.kubernetes.io/part-of: aqp
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: questdb
+    app.kubernetes.io/instance: questdb
+  ports:
+    - name: http
+      port: 9000
+      targetPort: 9000

@@ -225,23 +225,15 @@ def _adapter_for_target(target: str):
 def _enqueue_target(*, target: str, action: str) -> TaskAccepted:
     target_def = _target_definition(target)
     try:
-        if target_def.kind == "rpi_cluster":
-            from aqp.tasks.terraform_tasks import run_rpi_stack
+        from aqp.tasks.terraform_tasks import run_target_stack
 
-            async_result = run_rpi_stack.apply_async(
-                kwargs={"action": action, "spec_name": target_def.terraform.stack_slug}
-            )
-        elif target_def.kind == "local":
-            from aqp.tasks.terraform_tasks import run_local_stack
-
-            async_result = run_local_stack.apply_async(
-                kwargs={"action": action, "spec_name": target_def.terraform.stack_slug}
-            )
-        else:
-            raise HTTPException(
-                status_code=404,
-                detail=f"target {target!r} has no deployment task mapping",
-            )
+        async_result = run_target_stack.apply_async(
+            kwargs={
+                "target_id": target_def.id,
+                "action": action,
+                "spec_name": target_def.terraform.stack_slug,
+            }
+        )
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001

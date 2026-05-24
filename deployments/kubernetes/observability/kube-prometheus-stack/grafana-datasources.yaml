@@ -1,0 +1,89 @@
+# Grafana datasources discovered by the kube-prometheus-stack sidecar
+# (label grafana_datasource=1). Provisioned in-cluster URLs match the
+# topology.yaml `endpoints` map for each service.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources-aqp
+  namespace: aqp-observability
+  labels:
+    grafana_datasource: "1"
+    app.kubernetes.io/part-of: aqp
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: aqp-prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-operated.aqp-observability.svc.cluster.local:9090
+        isDefault: true
+        editable: false
+        jsonData:
+          timeInterval: 15s
+          httpMethod: POST
+  loki.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        uid: aqp-loki
+        type: loki
+        access: proxy
+        url: http://loki.aqp-observability.svc.cluster.local:3100
+        editable: false
+        jsonData:
+          maxLines: 1000
+          derivedFields:
+            - datasourceUid: aqp-tempo
+              matcherRegex: '"trace_id":"(\w+)"'
+              name: TraceID
+              url: '$${__value.raw}'
+  tempo.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Tempo
+        uid: aqp-tempo
+        type: tempo
+        access: proxy
+        url: http://tempo.aqp-observability.svc.cluster.local:3200
+        editable: false
+        jsonData:
+          tracesToLogs:
+            datasourceUid: aqp-loki
+            tags: ['service', 'pod', 'namespace']
+            spanStartTimeShift: -1h
+            spanEndTimeShift: 1h
+          tracesToMetrics:
+            datasourceUid: aqp-prometheus
+          serviceMap:
+            datasourceUid: aqp-prometheus
+          nodeGraph:
+            enabled: true
+  questdb.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: QuestDB
+        uid: aqp-questdb
+        type: postgres
+        access: proxy
+        url: questdb.aqp-timeseries.svc.cluster.local:8812
+        database: qdb
+        user: aqp
+        editable: false
+        jsonData:
+          sslmode: disable
+          postgresVersion: 1500
+          timescaledb: false
+  phoenix.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Phoenix UI
+        uid: aqp-phoenix
+        type: prometheus
+        access: proxy
+        url: http://phoenix.aqp-observability.svc.cluster.local:6006
+        editable: false
+        jsonData:
+          httpMethod: GET
+          timeInterval: 60s

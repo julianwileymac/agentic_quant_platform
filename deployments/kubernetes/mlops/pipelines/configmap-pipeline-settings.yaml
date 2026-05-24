@@ -1,0 +1,14 @@
+﻿apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pipeline-settings
+  namespace: aqp-mlops
+data:
+  PIPELINE_IMAGE: ghcr.io/julianwiley/rpi-k8s-pipelines:latest
+  PIPELINE_DEFAULT_SCHEDULE: "0 * * * *"
+  PIPELINE_DEFAULT_SOURCE_NAME: sample-source
+  PIPELINE_DEFAULT_SOURCE_TYPE: http
+  PIPELINE_DEFAULT_SOURCE_URI: https://example.com/data.json
+  PIPELINE_DEFAULT_COLLECTION: pipeline_documents
+  PIPELINE_DEFAULT_CDC_TABLE: source_events
+

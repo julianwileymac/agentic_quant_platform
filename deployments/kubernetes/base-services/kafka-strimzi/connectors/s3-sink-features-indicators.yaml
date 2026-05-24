@@ -1,0 +1,39 @@
+﻿# =============================================================================
+# KafkaConnector - Camel AWS S3 Sink for features.indicators.v1
+# =============================================================================
+# Persists computed TA-Lib indicator records to MinIO (S3-compatible) in a
+# timestamped path layout so downstream batch jobs (Dagster, notebooks) can
+# scan them without replaying the Kafka log.
+#
+# Bucket "features-indicators" is bootstrapped by
+# kubernetes/base-services/minio/bootstrap-buckets-job.yaml.
+# =============================================================================
+
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaConnector
+metadata:
+  name: s3-sink-features-indicators
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-connect
+    pipeline-stage: sink
+    target: minio
+spec:
+  class: org.apache.camel.kafkaconnector.awss3sink.CamelAwss3sinkSinkConnector
+  tasksMax: 1
+  state: paused
+  config:
+    topics: features.indicators.v1
+    camel.sink.path.bucketNameOrArn: features-indicators
+    camel.component.aws-s3.region: us-east-1
+    camel.component.aws-s3.overrideEndpoint: "true"
+    camel.component.aws-s3.uriEndpointOverride: http://minio.aqp-streaming.svc.cluster.local:9000
+    camel.component.aws-s3.accessKey: "${secrets:data-services/minio-credentials:access-key}"
+    camel.component.aws-s3.secretKey: "${secrets:data-services/minio-credentials:secret-key}"
+    camel.component.aws-s3.pathStyleAccess: "true"
+    key.converter: org.apache.kafka.connect.storage.StringConverter
+    value.converter: io.apicurio.registry.serde.avro.AvroConverter
+    value.converter.apicurio.registry.url: http://apicurio-registry.aqp-streaming.svc.cluster.local:8080/apis/registry/v2
+    value.converter.apicurio.registry.find-latest: "true"
+    value.converter.apicurio.registry.use-id: contentId
+    value.converter.apicurio.registry.headers.enabled: "true"

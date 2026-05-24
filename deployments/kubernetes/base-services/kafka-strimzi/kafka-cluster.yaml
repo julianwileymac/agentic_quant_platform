@@ -1,0 +1,173 @@
+﻿# =============================================================================
+# Kafka Cluster (Strimzi KRaft Mode)
+# =============================================================================
+# Single-broker Kafka cluster using KRaft (no ZooKeeper) sized for RPi workers.
+# Strimzi Operator CRDs must be installed before applying this resource.
+#
+# Listeners:
+#   - plain        (9092)  internal, no auth - for in-cluster trusted workloads
+#   - tls          (9093)  internal, TLS only - for encrypted in-cluster peers
+#   - scram        (9094)  internal, TLS + SCRAM-SHA-512 - used by KafkaUser CRs
+#
+# Tracing:
+#   spec.kafka.tracing.type = opentelemetry enables native OTel exporter on the
+#   broker request path. The OTel collector at observability:4317 is picked up
+#   automatically via OTEL_EXPORTER_OTLP_ENDPOINT on the broker pods.
+# =============================================================================
+
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaNodePool
+metadata:
+  name: combined
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+spec:
+  replicas: 1
+  roles:
+    - controller
+    - broker
+  storage:
+    type: persistent-claim
+    size: 20Gi
+    class: local-path
+    deleteClaim: false
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1536Mi
+  jvmOptions:
+    -Xms: 256m
+    -Xmx: 1024m
+  template:
+    pod:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: In
+                    values:
+                      - "true"
+      env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector.aqp-observability.svc.cluster.local:4317
+        - name: OTEL_SERVICE_NAME
+          value: trading-kafka-broker
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=data-services,deployment.environment=rpi-cluster
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: trading-kafka
+  namespace: aqp-streaming
+  annotations:
+    strimzi.io/node-pools: enabled
+    strimzi.io/kraft: enabled
+spec:
+  kafka:
+    version: 4.1.0
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+      - name: tls
+        port: 9093
+        type: internal
+        tls: true
+      - name: scram
+        port: 9094
+        type: internal
+        tls: true
+        authentication:
+          type: scram-sha-512
+    authorization:
+      type: simple
+      superUsers:
+        - CN=trading-kafka-kafka
+        - admin-sdk
+    config:
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      default.replication.factor: 1
+      min.insync.replicas: 1
+      num.partitions: 6
+      log.retention.hours: 168
+      log.segment.bytes: 1073741824
+      message.max.bytes: 10485760
+      auto.create.topics.enable: "false"
+    metricsConfig:
+      type: jmxPrometheusExporter
+      valueFrom:
+        configMapKeyRef:
+          name: kafka-metrics-config
+          key: kafka-metrics-config.yml
+    template:
+      pod:
+        metadata:
+          annotations:
+            instrumentation.opentelemetry.io/inject-java: "false"
+  # OpenTelemetry tracing on the broker request path. The broker pods
+  # already export OTEL_* env vars (see KafkaNodePool template.pod.env).
+  tracing:
+    type: opentelemetry
+  entityOperator:
+    topicOperator:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 250m
+          memory: 256Mi
+    userOperator:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 250m
+          memory: 256Mi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-metrics-config
+  namespace: aqp-streaming
+data:
+  kafka-metrics-config.yml: |
+    lowercaseOutputName: true
+    lowercaseOutputLabelNames: true
+    rules:
+      - pattern: kafka.server<type=(.+), name=(.+), clientId=(.+), topic=(.+), partition=(.*)><>Value
+        name: kafka_server_$1_$2
+        type: GAUGE
+        labels:
+          clientId: "$3"
+          topic: "$4"
+          partition: "$5"
+      - pattern: kafka.server<type=(.+), name=(.+), clientId=(.+), brokerHost=(.+), brokerPort=(.+)><>Value
+        name: kafka_server_$1_$2
+        type: GAUGE
+        labels:
+          clientId: "$3"
+          broker: "$4:$5"
+      - pattern: kafka.server<type=(.+), name=(.+)><>Value
+        name: kafka_server_$1_$2
+        type: GAUGE
+      - pattern: kafka.server<type=(.+), name=(.+)><>Count
+        name: kafka_server_$1_$2_total
+        type: COUNTER
+      - pattern: kafka.server<type=(.+), name=(.+)><>(Mean|99thPercentile|OneMinuteRate)
+        name: kafka_server_$1_$2
+        type: GAUGE
+        labels:
+          aggregate: "$3"

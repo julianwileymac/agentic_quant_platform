@@ -1,0 +1,121 @@
+﻿# =============================================================================
+# vLLM (GPU profile) - production-style inference on amd64 + NVIDIA nodes.
+# =============================================================================
+# Pinned image and `replicas: 1` for parity with the CPU profile.  The pod
+# only schedules on amd64 nodes labelled `accelerator: nvidia` and tolerates
+# the canonical `nvidia.com/gpu:NoSchedule` taint applied by the GPU plugin.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-gpu
+  namespace: aqp-mlops
+  labels:
+    app: vllm-gpu
+    serving.rpi-k8s.io/profile: gpu-x86
+    app.kubernetes.io/name: vllm-gpu
+    app.kubernetes.io/component: model-serving
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-gpu
+  template:
+    metadata:
+      labels:
+        app: vllm-gpu
+        app.kubernetes.io/name: vllm-gpu
+        serving.rpi-k8s.io/runtime: vllm
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: model-serving
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        accelerator: nvidia
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.6.3
+          args:
+            - --model
+            - TinyLlama/TinyLlama-1.1B-Chat-v1.0
+            - --served-model-name
+            - tinyllama
+            - --max-model-len
+            - "2048"
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.aqp-observability.svc.cluster.local:4317
+            - name: OTEL_SERVICE_NAME
+              value: vllm-gpu
+          envFrom:
+            - secretRef:
+                name: model-storage-credentials
+          ports:
+            - name: http
+              containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 180
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "2"
+              memory: 12Gi
+            limits:
+              cpu: "4"
+              memory: 24Gi
+              nvidia.com/gpu: "1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-gpu
+  namespace: aqp-mlops
+  labels:
+    app: vllm-gpu
+    app.kubernetes.io/name: vllm-gpu
+spec:
+  selector:
+    app: vllm-gpu
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vllm-gpu
+  namespace: aqp-mlops
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: vllm-gpu.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: vllm-gpu
+                port:
+                  number: 8000

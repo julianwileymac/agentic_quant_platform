@@ -1,0 +1,42 @@
+# AQP-owned shared cluster services. Self-contained: every service in
+# `aqp-*` namespaces, lifted from `rpi_kubernetes/kubernetes/base-services/`
+# during the rpi <-> AQP decoupling.
+#
+# Apply order is governed by the AQP install scripts in
+# `scripts/cluster_install/`. Strimzi + Spark + Phoenix Operators must be
+# installed BEFORE this aggregator (CRDs are prereqs for `kafka-strimzi/`,
+# `flink/`, and `redpanda/`).
+#
+# See `deployments/kubernetes/MIGRATION.md` for the full namespace
+# matrix and the `decouple-aqp-rpi-final` plan for rollout history.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+commonLabels:
+  app.kubernetes.io/part-of: aqp
+  app.kubernetes.io/managed-by: kustomize
+  aqp.internal/canonical-owner: agentic_quant_platform
+
+resources:
+  # Streaming (aqp-streaming)
+  - kafka-strimzi/
+  - schema-registry/
+  - flink/
+  - redpanda/
+  - redpanda-connect/
+  # Time-series (aqp-timeseries)
+  - questdb/
+  # Lakehouse (aqp-lakehouse)
+  - polaris/
+  # Data services (aqp-data-services)
+  - postgres-shared/
+  - redis-shared/
+  - minio/
+  - chromadb/
+  - milvus/
+  - datahub/
+  # ELT (aqp-elt)
+  - airbyte/
+  - ragflow/
+  - jupyterhub/
+  - dask-ray/

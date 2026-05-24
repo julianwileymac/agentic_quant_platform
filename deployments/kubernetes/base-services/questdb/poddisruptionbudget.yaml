@@ -1,0 +1,15 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: questdb
+  namespace: aqp-timeseries
+  labels:
+    app.kubernetes.io/name: questdb
+    app.kubernetes.io/component: timeseries
+    app.kubernetes.io/part-of: aqp
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: questdb
+      app.kubernetes.io/instance: questdb

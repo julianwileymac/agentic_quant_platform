@@ -248,13 +248,13 @@ def upgrade() -> None:
         sa.Column(
             "experiment_id",
             sa.String(length=36),
-            sa.ForeignKey("experiments.id", ondelete="SET NULL"),
+            sa.ForeignKey("aqp_experiments.id", ondelete="SET NULL"),
             nullable=True,
         ),
         sa.Column(
             "test_id",
             sa.String(length=36),
-            sa.ForeignKey("tests.id", ondelete="SET NULL"),
+            sa.ForeignKey("aqp_tests.id", ondelete="SET NULL"),
             nullable=True,
         ),
         *_project_scoped_columns(),

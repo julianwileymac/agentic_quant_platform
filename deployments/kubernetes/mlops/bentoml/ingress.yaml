@@ -1,0 +1,32 @@
+﻿# =============================================================================
+# Yatai/BentoML Ingress
+# =============================================================================
+# The Yatai Helm chart (v0.4.6) does not create an Ingress despite
+# ingress.enabled: true in values.yaml.  This standalone manifest fills that
+# gap so that the Yatai UI is reachable at http://yatai.local.
+# =============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: yatai
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: yatai
+    app.kubernetes.io/instance: yatai
+    app.kubernetes.io/managed-by: rpi-k8s-cluster
+    app.kubernetes.io/part-of: rpi-k8s-platform
+    app.kubernetes.io/component: ml-serving
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: yatai.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: yatai
+                port:
+                  number: 3000

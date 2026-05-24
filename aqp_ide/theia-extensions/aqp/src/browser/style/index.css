@@ -1,0 +1,191 @@
+/********************************************************************************
+ * Copyright (C) 2026 Julian Wiley and others.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the MIT License, which is available in the project root.
+ *
+ * SPDX-License-Identifier: MIT
+ ********************************************************************************/
+
+/* AQP extension styles.
+ * Keep everything namespaced under .aqp-widget so we never leak into
+ * Theia core widgets or the editor area. Use Theia CSS variables (Theia
+ * exposes the active theme via --theia-* custom properties) so we
+ * stay in sync with dark / light theme switches.
+ */
+
+.aqp-widget {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    color: var(--theia-foreground);
+    background-color: var(--theia-sideBar-background);
+    font-family: var(--theia-ui-font-family);
+    font-size: var(--theia-ui-font-size1);
+    overflow: hidden;
+}
+
+.aqp-widget-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--theia-sideBarSectionHeader-border, var(--theia-sideBar-border));
+    background-color: var(--theia-sideBarSectionHeader-background);
+}
+
+.aqp-widget-title {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: var(--theia-ui-font-size0);
+}
+
+.aqp-widget-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.aqp-widget-actions .theia-button {
+    padding: 2px 8px;
+    font-size: var(--theia-ui-font-size0);
+}
+
+.aqp-widget-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 24px 12px;
+    text-align: center;
+    color: var(--theia-descriptionForeground);
+}
+
+.aqp-widget-message code {
+    background: var(--theia-textCodeBlock-background, rgba(127, 127, 127, 0.16));
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-family: var(--theia-editor-font-family);
+}
+
+.aqp-pane {
+    flex: 1;
+    overflow: auto;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.aqp-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.aqp-section label {
+    font-weight: 600;
+    font-size: var(--theia-ui-font-size0);
+    color: var(--theia-descriptionForeground);
+}
+
+.aqp-section select,
+.aqp-section input[type="text"],
+.aqp-section textarea {
+    width: 100%;
+    background-color: var(--theia-input-background);
+    color: var(--theia-input-foreground);
+    border: 1px solid var(--theia-input-border, var(--theia-focusBorder));
+    border-radius: 2px;
+    padding: 4px 6px;
+    font-family: var(--theia-editor-font-family);
+    font-size: var(--theia-ui-font-size1);
+}
+
+.aqp-section textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.aqp-section .theia-button {
+    align-self: flex-start;
+}
+
+.aqp-subtitle {
+    font-weight: 600;
+    font-size: var(--theia-ui-font-size1);
+    color: var(--theia-foreground);
+    margin-bottom: 4px;
+}
+
+.aqp-muted {
+    color: var(--theia-descriptionForeground);
+    font-style: italic;
+    font-size: var(--theia-ui-font-size0);
+}
+
+.aqp-error {
+    color: var(--theia-errorForeground, var(--theia-notificationsErrorIcon-foreground, #f48771));
+    background-color: var(--theia-inputValidation-errorBackground, rgba(244, 135, 113, 0.1));
+    border-left: 3px solid var(--theia-errorBorder, var(--theia-notificationsErrorIcon-foreground, #f48771));
+    padding: 6px 10px;
+    border-radius: 2px;
+    font-size: var(--theia-ui-font-size0);
+}
+
+.aqp-ok {
+    color: var(--theia-debugConsole-infoForeground, var(--theia-gitDecoration-addedResourceForeground, #4caf50));
+    font-weight: 600;
+}
+
+.aqp-warn {
+    color: var(--theia-editorWarning-foreground, #ffcc00);
+    font-weight: 600;
+}
+
+.aqp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--theia-ui-font-size0);
+}
+
+.aqp-table th,
+.aqp-table td {
+    text-align: left;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--theia-sideBar-border, rgba(127, 127, 127, 0.18));
+    vertical-align: top;
+}
+
+.aqp-table th {
+    font-weight: 600;
+    color: var(--theia-descriptionForeground);
+    background-color: var(--theia-sideBarSectionHeader-background);
+}
+
+.aqp-code-block {
+    background-color: var(--theia-editor-background);
+    color: var(--theia-editor-foreground);
+    border: 1px solid var(--theia-sideBar-border, rgba(127, 127, 127, 0.18));
+    border-radius: 2px;
+    padding: 8px;
+    font-family: var(--theia-editor-font-family);
+    font-size: var(--theia-ui-font-size0);
+    max-height: 300px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Status-bar login pill */
+.aqp-statusbar-login {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}
+
+.aqp-statusbar-login .codicon {
+    font-size: var(--theia-ui-font-size0);
+}

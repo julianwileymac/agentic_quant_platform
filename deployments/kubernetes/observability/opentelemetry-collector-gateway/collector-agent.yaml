@@ -1,0 +1,84 @@
+# Node-local OpenTelemetry Collector DaemonSet. Forwards local OTLP +
+# host metrics to the gateway. Smaller resource footprint than the
+# gateway; runs on every node so applications point at localhost:4317
+# / 4318 and avoid cross-node hops.
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-agent
+  namespace: aqp-observability
+  labels:
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/component: observability
+spec:
+  mode: daemonset
+  serviceAccount: otel-collector
+  image: otel/opentelemetry-collector-contrib:0.110.0
+  resources:
+    requests:
+      cpu: "100m"
+      memory: 128Mi
+    limits:
+      cpu: "500m"
+      memory: 512Mi
+  env:
+    - name: GOMEMLIMIT
+      value: "450MiB"
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      hostmetrics:
+        collection_interval: 30s
+        scrapers:
+          cpu: null
+          memory: null
+          load: null
+          disk: null
+          filesystem: null
+          network: null
+          paging: null
+
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: 400
+        spike_limit_mib: 100
+      batch:
+        send_batch_size: 4096
+        timeout: 2s
+      resourcedetection:
+        detectors: [env, system]
+
+    exporters:
+      otlp/gateway:
+        endpoint: otel-gateway.aqp-observability.svc.cluster.local:4317
+        tls:
+          insecure: true
+        sending_queue:
+          enabled: true
+          queue_size: 2000
+        retry_on_failure:
+          enabled: true
+
+    service:
+      telemetry:
+        logs:
+          level: info
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, resourcedetection, batch]
+          exporters: [otlp/gateway]
+        metrics:
+          receivers: [otlp, hostmetrics]
+          processors: [memory_limiter, resourcedetection, batch]
+          exporters: [otlp/gateway]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, resourcedetection, batch]
+          exporters: [otlp/gateway]

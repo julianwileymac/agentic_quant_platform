@@ -1,0 +1,52 @@
+﻿# =============================================================================
+# Flink RBAC
+# =============================================================================
+# ServiceAccount, Role, and RoleBinding for Flink jobs.
+# The Flink Operator ServiceAccount is managed by the Helm chart.
+# This covers the job-level ServiceAccount used by JobManager/TaskManager pods.
+# =============================================================================
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flink
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: flink-job-role
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "configmaps", "services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flink-job-role-binding
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: flink-job-role
+subjects:
+  - kind: ServiceAccount
+    name: flink
+    namespace: aqp-streaming

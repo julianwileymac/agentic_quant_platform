@@ -1,0 +1,59 @@
+---
+description: Sole-writer boundary for aqp_index/. Only the aqp-index-curator subagent writes here. Files are pointers + signatures + summaries, never copied prose. Every file carries a "Last refreshed" stamp.
+globs:
+  - "aqp_index/**"
+alwaysApply: false
+---
+
+# AQP Index (sole-writer tree)
+
+`aqp_index/` is AQP's single source of truth for project orientation:
+the centralized index, SSoT architecture pointers, the consolidated
+configuration set, token-saving code indices, the project skills
+registry, and the subagent registry.
+
+## Sole writer
+
+The only agent permitted to write inside this tree is the
+[aqp-index-curator](mdc:.cursor/agents/aqp-index-curator.md) subagent.
+
+All other agents — Cursor, subagents, and humans operating through
+Cursor — have **read-only** access to this folder. The single
+documented exception is appending or fixing a one-liner pointer in
+repo-root [README.md](mdc:README.md) or [AGENTS.md](mdc:AGENTS.md) that
+orients readers into `aqp_index/`.
+
+## Curator invariants
+
+The curator MUST:
+
+1. Cite a specific file path for every claim. No fabrication. If a
+   claim cannot be verified, write a `// TODO: verify <reason>` block
+   and open a note in `.cursor/plans/`.
+2. Stamp every refreshed file with a top-of-file `> Last refreshed:
+   YYYY-MM-DD by aqp-index-curator` line.
+3. Generate code indices as signatures only (class / function names + a
+   one-line docstring slice, with `path:line` citations). Never paste
+   function bodies.
+4. Respect AQP rules 1-47 (see [AGENTS.md](mdc:AGENTS.md)). Never edit
+   Python source, migrations, or production configs from this role.
+5. Refresh on a qualifying trigger: any commit touching
+   [AGENTS.md](mdc:AGENTS.md), [.cursor/rules/](mdc:.cursor/rules),
+   [aqp_docs/](mdc:aqp_docs), [configs/](mdc:configs), or the public
+   surface of any `aqp_*` package.
+
+## Read-only contract for everyone else
+
+Other agents reading from here SHOULD:
+
+- Prefer `aqp_index/code-index/*.md` to scanning source files when
+  only signatures are needed; this is the explicit token-saving win.
+- Link to `aqp_index/architecture/*.md` for canonical orientation.
+- Open a `.cursor/plans/` note (rather than editing here directly)
+  when they notice stale content.
+
+## Procedure
+
+The curator's pass procedure is documented at
+[aqp_index/skills/aqp-index-curator-skill.md](mdc:aqp_index/skills/aqp-index-curator-skill.md):
+Plan -> Scan -> Diff -> Refresh -> Validate.

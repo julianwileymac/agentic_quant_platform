@@ -1,0 +1,73 @@
+﻿# =============================================================================
+# In-cluster Helm Job: upgrade the Dagster release with the values shipped
+# in helm-runner-values (matches kubernetes/mlops/dagster/values.yaml).
+# =============================================================================
+# Use this Job when SSH access to the control plane is unavailable and the
+# `helm upgrade` step in the Dagster README cannot be run from a developer
+# laptop.  Re-running is safe; Helm will reconcile to the desired state.
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dagster-upgrade
+  namespace: helm-runner
+  labels:
+    app.kubernetes.io/component: helm-bootstrap
+    app.kubernetes.io/managed-by: rpi-k8s-platform
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: dagster-upgrade
+    spec:
+      restartPolicy: Never
+      serviceAccountName: helm-runner
+      containers:
+        - name: helm
+          # alpine/k8s ships kubectl + helm in one image (we need both for
+          # the post-upgrade `kubectl get pods` sanity check).
+          image: alpine/k8s:1.29.0
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              set -euo pipefail
+              echo "==> Adding dagster repo"
+              helm repo add dagster https://dagster-io.github.io/helm
+              helm repo update dagster
+
+              echo "==> Upgrading dagster release in mlops namespace"
+              helm upgrade --install dagster dagster/dagster \
+                --namespace aqp-mlops --create-namespace \
+                --values /etc/helm-values/values-dagster.yaml \
+                --wait --timeout 15m
+
+              echo "==> Listing pods"
+              kubectl get pods -n aqp-mlops -l app.kubernetes.io/instance=dagster
+          volumeMounts:
+            - name: helm-values
+              mountPath: /etc/helm-values
+              readOnly: true
+            - name: helm-cache
+              mountPath: /root/.cache
+            - name: helm-config
+              mountPath: /root/.config
+      volumes:
+        - name: helm-values
+          configMap:
+            name: helm-runner-values
+        - name: helm-cache
+          emptyDir: {}
+        - name: helm-config
+          emptyDir: {}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["amd64"]

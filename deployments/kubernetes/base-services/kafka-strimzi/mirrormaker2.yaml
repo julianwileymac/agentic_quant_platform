@@ -1,0 +1,75 @@
+﻿# =============================================================================
+# Kafka Mirror Maker 2 (Strimzi) - cross-cluster replication placeholder
+# =============================================================================
+# Suspended/0-replica template for replicating trading-kafka topics into a
+# secondary (DR, lab, or cloud) cluster. To activate:
+#
+#   1. Update spec.clusters[1].bootstrapServers (and auth) to the target.
+#   2. Set spec.replicas: 1.
+#   3. Adjust spec.mirrors[0].sourceConnector.config.topicsPattern and
+#      groupsPattern.
+#   4. Apply and monitor via:
+#        kubectl get kafkamirrormaker2 -n data-services
+#        kubectl logs -l app.kubernetes.io/name=trading-mirror-mm2
+#
+# While replicas=0 the operator still validates the spec, so any future
+# change is reviewed before workload flips on.
+# =============================================================================
+
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaMirrorMaker2
+metadata:
+  name: trading-mirror
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-mirror
+spec:
+  version: 4.1.0
+  replicas: 0
+  connectCluster: target
+  clusters:
+    - alias: source
+      bootstrapServers: trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9094
+      authentication:
+        type: scram-sha-512
+        username: admin-sdk
+        passwordSecret:
+          secretName: admin-sdk
+          password: password
+      tls:
+        trustedCertificates:
+          - secretName: trading-kafka-cluster-ca-cert
+            certificate: ca.crt
+    - alias: target
+      bootstrapServers: REPLACE_ME_target-kafka-bootstrap.remote.svc.cluster.local:9092
+      config:
+        config.storage.replication.factor: 1
+        offset.storage.replication.factor: 1
+        status.storage.replication.factor: 1
+  mirrors:
+    - sourceCluster: source
+      targetCluster: target
+      sourceConnector:
+        tasksMax: 1
+        config:
+          replication.factor: 1
+          offset-syncs.topic.replication.factor: 1
+          sync.topic.acls.enabled: "false"
+          refresh.topics.interval.seconds: 60
+      heartbeatConnector:
+        config:
+          heartbeats.topic.replication.factor: 1
+      checkpointConnector:
+        tasksMax: 1
+        config:
+          checkpoints.topic.replication.factor: 1
+          refresh.groups.interval.seconds: 60
+      topicsPattern: "market\\..*|features\\..*"
+      groupsPattern: "flink-.*|management-.*"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi

@@ -1,0 +1,274 @@
+﻿apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: aqp-observability
+data:
+  config.yaml: |
+    # =============================================================================
+    # OpenTelemetry Collector Configuration
+    # =============================================================================
+    # Single source of truth for traces, logs, and metrics ingestion.
+    # All sections are deduplicated - any duplicate top-level keys silently dropped
+    # the first definition under YAML rules, which historically broke log shipping.
+    # =============================================================================
+
+    receivers:
+      # OTLP receiver for traces, metrics, and logs from applications
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+      # Kubernetes container logs (CRI / containerd)
+      # Tails /var/log/pods on each node and forwards to Loki via the logs pipeline.
+      # `start_at: beginning` ensures we pick up historical lines after a collector
+      # restart (was previously `end`, which silently dropped logs).
+      filelog:
+        include:
+          - /var/log/pods/*/*/*.log
+        exclude:
+          - /var/log/pods/kube-system_*/*/*.log
+          - /var/log/pods/*/otel-collector/*.log
+        include_file_path: true
+        include_file_name: true
+        start_at: beginning
+        operators:
+          # Parse the CRI/containerd container log format (timestamp, stream, log)
+          - id: container-parser
+            type: container
+            add_metadata_from_filepath: true
+          # Recombine multi-line stack traces / Java exceptions into a single log entry.
+          # Any line that does not start with an ISO-8601 timestamp is treated as a
+          # continuation of the previous log line.
+          - id: multiline-recombine
+            type: recombine
+            combine_field: body
+            is_first_entry: 'body matches "^[0-9]{4}-[0-9]{2}-[0-9]{2}"'
+            source_identifier: attributes["log.file.path"]
+
+      # Prometheus receiver for self-scraping the collector's own telemetry
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: 'otel-collector'
+              scrape_interval: 30s
+              static_configs:
+                - targets: ['localhost:8888']
+
+      # Host metrics for node-level monitoring
+      hostmetrics:
+        collection_interval: 30s
+        scrapers:
+          cpu:
+          disk:
+          filesystem:
+          load:
+          memory:
+          network:
+          process:
+            include:
+              match_type: regexp
+              names: ['.*']
+
+      # Redis receiver - pulls INFO-derived metrics directly from the shared
+      # Redis 8 Stack as a secondary source alongside oliver006/redis_exporter.
+      # Emits metrics namespaced `redis.*` so Grafana can distinguish OTel
+      # sourced metrics from the exporter's `redis_*` series.
+      redis:
+        endpoint: redis.aqp-data-services.svc.cluster.local:6379
+        password: ${env:REDIS_PASSWORD}
+        collection_interval: 30s
+        metrics:
+          redis.maxmemory:
+            enabled: true
+          redis.cmd.latency:
+            enabled: true
+
+    processors:
+      # Memory limiter must run first to prevent OOMs under back-pressure.
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 512
+        spike_limit_mib: 128
+
+      # Enrich telemetry with Kubernetes metadata (pod name, namespace, node, uid).
+      # Used by traces AND logs pipelines so log entries carry the same labels
+      # Grafana / Jaeger / Loki use for cross-correlation.
+      k8sattributes:
+        auth_type: serviceAccount
+        passthrough: false
+        # Limit the API watch to the current node (filter.node_from_env_var was
+        # the top-level `node_from_env_var` in older collectors; it was moved
+        # under `filter` in v0.96+).
+        filter:
+          node_from_env_var: K8S_NODE_NAME
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.uid
+          - sources:
+              - from: connection
+        extract:
+          metadata:
+            - k8s.namespace.name
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.container.name
+            - k8s.node.name
+            - k8s.deployment.name
+          labels:
+            - tag_name: app
+              key: app
+              from: pod
+            - tag_name: app.kubernetes.io/name
+              key: app.kubernetes.io/name
+              from: pod
+
+      # Resource processor to add cluster metadata
+      resource:
+        attributes:
+          - key: cluster.name
+            value: rpi-k8s-cluster
+            action: upsert
+          - key: deployment.environment
+            value: development
+            action: upsert
+
+      # Attributes processor for trace enrichment
+      attributes:
+        actions:
+          - key: service.namespace
+            from_attribute: k8s.namespace.name
+            action: upsert
+
+      # Span processor for vector-db (Milvus) trace name normalization
+      span:
+        name:
+          from_attributes: [db.system, db.operation]
+          separator: "/"
+
+      # Attributes for vector-db spans (Milvus, ChromaDB)
+      attributes/vectordb:
+        actions:
+          - key: vectordb.cluster
+            value: rpi-k8s-cluster
+            action: upsert
+          - key: vectordb.namespace
+            from_attribute: k8s.namespace.name
+            action: upsert
+          - key: trace.source
+            value: milvus-standalone
+            action: insert
+
+      # Tail-based sampling: keep 100% of error/slow spans, 10% of the rest.
+      # Greatly reduces Jaeger storage pressure without losing high-signal traces.
+      tail_sampling:
+        decision_wait: 10s
+        num_traces: 50000
+        expected_new_traces_per_sec: 100
+        policies:
+          - name: errors-policy
+            type: status_code
+            status_code:
+              status_codes: [ERROR]
+          - name: slow-policy
+            type: latency
+            latency:
+              threshold_ms: 1000
+          - name: probabilistic-policy
+            type: probabilistic
+            probabilistic:
+              sampling_percentage: 10
+
+      # Batch processor for efficient export (must be last in every pipeline).
+      batch:
+        timeout: 5s
+        send_batch_size: 1024
+        send_batch_max_size: 2048
+
+    exporters:
+      # Jaeger exporter for traces
+      otlp/jaeger:
+        endpoint: jaeger-collector.aqp-observability.svc.cluster.local:4317
+        tls:
+          insecure: true
+
+      # Prometheus scrape endpoint exposed by the collector itself
+      prometheus:
+        endpoint: 0.0.0.0:8889
+        namespace: otel
+        send_timestamps: true
+
+      # VictoriaMetrics remote_write for long-term metrics storage
+      prometheusremotewrite/victoriametrics:
+        endpoint: http://victoriametrics.observability:8428/api/v1/write
+        external_labels:
+          cluster: rpi-k8s-cluster
+
+      # Loki exporter for logs
+      loki:
+        endpoint: http://loki.observability:3100/loki/api/v1/push
+        default_labels_enabled:
+          exporter: true
+          job: true
+          instance: true
+          level: true
+
+      # Debug exporter for low-volume diagnostics (replaces the deprecated
+      # `logging` exporter as of v0.86; same effect, new name).
+      debug:
+        verbosity: normal
+        sampling_initial: 5
+        sampling_thereafter: 200
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      pprof:
+        endpoint: 0.0.0.0:1777
+      zpages:
+        endpoint: 0.0.0.0:55679
+
+    service:
+      extensions: [health_check, pprof, zpages]
+
+      pipelines:
+        # Traces pipeline -> Jaeger (with tail sampling for noise control)
+        traces:
+          receivers: [otlp]
+          processors:
+            - memory_limiter
+            - k8sattributes
+            - resource
+            - attributes
+            - attributes/vectordb
+            - span
+            - tail_sampling
+            - batch
+          exporters: [otlp/jaeger, debug]
+
+        # Metrics pipeline - export to both Prometheus and VictoriaMetrics.
+        # The `redis` receiver is wired in as a secondary source alongside the
+        # oliver006/redis_exporter ServiceMonitor scrape.  If the Collector
+        # cannot reach Redis (e.g. first boot) the pipeline still succeeds.
+        metrics:
+          receivers: [otlp, prometheus, hostmetrics, redis]
+          processors: [memory_limiter, k8sattributes, resource, batch]
+          exporters: [prometheus, prometheusremotewrite/victoriametrics, debug]
+
+        # Logs pipeline - OTLP + Kubernetes container logs to Loki.
+        # k8sattributes enriches every log line with pod/namespace/node so they
+        # join cleanly against trace and metric labels in Grafana.
+        logs:
+          receivers: [otlp, filelog]
+          processors: [memory_limiter, k8sattributes, resource, attributes, batch]
+          exporters: [loki, debug]
+
+      telemetry:
+        logs:
+          level: info
+        metrics:
+          address: 0.0.0.0:8888

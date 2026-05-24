@@ -1,0 +1,16 @@
+﻿# =============================================================================
+# PersistentVolumeClaim for ChromaDB
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chromadb-data
+  namespace: aqp-data-services
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi

@@ -1,0 +1,40 @@
+﻿# =============================================================================
+# FlinkSessionJob - Technical Indicator Computation
+# =============================================================================
+# Consumes market.bar.v1, computes SMA/EMA/RSI/MACD/BB/ATR/VWAP/OBV +
+# lagged returns per symbol, and produces features.indicators.v1.
+#
+# Job source: rpi_kubernetes/flink-jobs/jobs/indicator_compute.py
+# =============================================================================
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkSessionJob
+metadata:
+  name: indicator-compute
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+    job: indicator-compute
+    pipeline-stage: compute
+spec:
+  deploymentName: flink-trading-session
+  job:
+    jarURI: s3://flink-jobs/indicator_compute.py
+    entryClass: org.apache.flink.client.python.PythonDriver
+    args:
+      - "--python"
+      - "/opt/aqp-flink-jobs/jobs/indicator_compute.py"
+      - "--pyFiles"
+      - "/opt/aqp-flink-jobs/jobs"
+      - "--kafka.bootstrap.servers"
+      - "trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9092"
+      - "--kafka.source.topic"
+      - "market.bar.v1"
+      - "--kafka.sink.topic"
+      - "features.indicators.v1"
+      - "--kafka.group.id"
+      - "flink-indicators"
+      - "--window.size.seconds"
+      - "60"
+    parallelism: 2
+    upgradeMode: savepoint
+    state: suspended

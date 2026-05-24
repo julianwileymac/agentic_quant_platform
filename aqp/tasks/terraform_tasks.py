@@ -308,7 +308,7 @@ def cancel_terraform_run(self, *, run_id: str) -> dict[str, Any]:
 
 _LOCAL_TARGET_ID = "local"
 _RPI_TARGET_ID = "rpi"
-_LOCAL_ACTIONS = {"up", "apply", "down", "destroy", "plan", "refresh", "build"}
+_TARGET_ACTIONS = {"up", "apply", "down", "destroy", "plan", "refresh", "build"}
 
 
 def _deployment_target(target_id: str):
@@ -317,20 +317,12 @@ def _deployment_target(target_id: str):
     return get_target(target_id)
 
 
-def _resolve_local_env_path() -> str:
-    return str(_deployment_target(_LOCAL_TARGET_ID).terraform.environment_path)
+def _resolve_env_path(target_id: str) -> str:
+    return str(_deployment_target(target_id).terraform.environment_path)
 
 
-def _resolve_rpi_env_path() -> str:
-    return str(_deployment_target(_RPI_TARGET_ID).terraform.environment_path)
-
-
-def _load_local_spec():
-    """Hydrate the canonical local TerraformStackSpec.
-
-    Mirrors :func:`aqp.cli.deploy_cmd._load_local_spec` so the CLI and
-    the Celery worker resolve the same registry entry.
-    """
+def _load_target_spec(target_id: str):
+    """Hydrate the canonical TerraformStackSpec for a topology target."""
     from aqp.terraform.registry import (
         add_spec,
         get_terraform_spec,
@@ -342,7 +334,7 @@ def _load_local_spec():
         TerraformStackSpec,
     )
 
-    target = _deployment_target(_LOCAL_TARGET_ID)
+    target = _deployment_target(target_id)
     try:
         return get_terraform_spec(target.terraform.stack_slug)
     except KeyError:
@@ -362,7 +354,7 @@ def _load_local_spec():
         name=target.terraform.stack_slug,
         slug=target.terraform.stack_slug,
         module_kind="composite",
-        description="Local AQP stack (synthesised)",
+        description=f"{target.label} stack (synthesised)",
         cloud_provider=target.cloud_provider,
         environment=target.environment,
         provider=TerraformProviderRef(kind=target.cloud_provider),
@@ -372,36 +364,86 @@ def _load_local_spec():
     return spec
 
 
-def _load_rpi_spec():
-    from aqp.terraform.registry import add_spec, get_terraform_spec, reload_yaml_dir
-    from aqp.terraform.spec import TerraformBackendRef, TerraformProviderRef, TerraformStackSpec
+def _run_target_stack_impl(
+    task_id: str,
+    *,
+    target_id: str,
+    action: str,
+    spec_name: str | None = None,
+) -> dict[str, Any]:
+    """Drive a topology target through TerraformRuntime."""
+    target = _deployment_target(target_id)
+    spec_name = spec_name or target.terraform.stack_slug
+    if action not in _TARGET_ACTIONS:
+        msg = f"unknown target action {action!r}; valid: {sorted(_TARGET_ACTIONS)}"
+        emit_error(task_id, msg)
+        return {"ok": False, "error": msg}
 
-    target = _deployment_target(_RPI_TARGET_ID)
+    emit(
+        task_id,
+        "load",
+        f"loading {spec_name}",
+        spec=spec_name,
+        action=action,
+        target=target_id,
+    )
     try:
-        return get_terraform_spec(target.terraform.stack_slug)
-    except KeyError:
-        pass
-    from pathlib import Path
+        spec = _load_target_spec(target_id)
+    except Exception as exc:  # noqa: BLE001
+        emit_error(task_id, f"spec load failed: {exc}")
+        return {"ok": False, "error": str(exc)}
 
-    yaml_dir = Path(__file__).resolve().parent.parent.parent / "configs" / "terraform"
-    if yaml_dir.exists():
-        reload_yaml_dir(yaml_dir)
-        try:
-            return get_terraform_spec(target.terraform.stack_slug)
-        except KeyError:
-            pass
-    spec = TerraformStackSpec(
-        name=target.terraform.stack_slug,
-        slug=target.terraform.stack_slug,
-        module_kind="composite",
-        description="rpi_kubernetes AQP stack (synthesised)",
-        cloud_provider=target.cloud_provider,
-        environment=target.environment,
-        provider=TerraformProviderRef(kind=target.cloud_provider),
-        backend=TerraformBackendRef(kind="local"),
+    from aqp.terraform.runtime import TerraformRuntime
+
+    runtime = TerraformRuntime(
+        spec=spec,
+        workspace_id=target.terraform.stack_slug,
+        task_id=task_id,
+        prerendered_workspace_dir=_resolve_env_path(target_id),
     )
-    add_spec(spec)
-    return spec
+
+    try:
+        if action in ("up", "apply", "build"):
+            emit(task_id, "plan", "running terraform plan")
+            plan_res = runtime.plan()
+            if int(plan_res.exit_code or 0) not in (0, 2):
+                payload = plan_res.to_dict()
+                payload["ok"] = False
+                emit_error(task_id, f"plan failed: {plan_res.error}")
+                return payload
+            emit(task_id, "apply", "running terraform apply")
+            apply_res = runtime.apply(plan_file=None)
+            payload = apply_res.to_dict()
+            payload["ok"] = int(apply_res.exit_code or 0) == 0
+            emit_done(task_id, payload)
+            return payload
+        if action in ("down", "destroy"):
+            emit(task_id, "destroy", "running terraform destroy")
+            res = runtime.destroy()
+            payload = res.to_dict()
+            payload["ok"] = int(res.exit_code or 0) == 0
+            emit_done(task_id, payload)
+            return payload
+        if action == "plan":
+            res = runtime.plan()
+            payload = res.to_dict()
+            payload["ok"] = int(res.exit_code or 0) in (0, 2)
+            emit_done(task_id, payload)
+            return payload
+        if action == "refresh":
+            res = runtime.refresh()
+            payload = res.to_dict()
+            payload["ok"] = int(res.exit_code or 0) == 0
+            emit_done(task_id, payload)
+            return payload
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("run_target_stack(%s:%s) crashed", target_id, action)
+        emit_error(task_id, str(exc))
+        return {"ok": False, "error": str(exc)}
+
+    msg = f"unhandled target stack action {action!r}"
+    emit_error(task_id, msg)
+    return {"ok": False, "error": msg}
 
 
 def _run_local_stack_impl(
@@ -410,72 +452,13 @@ def _run_local_stack_impl(
     action: str,
     spec_name: str | None = None,
 ) -> dict[str, Any]:
-    """Underlying implementation, callable from tests without Celery binding."""
-    target = _deployment_target(_LOCAL_TARGET_ID)
-    spec_name = spec_name or target.terraform.stack_slug
-    if action not in _LOCAL_ACTIONS:
-        msg = f"unknown local stack action {action!r}; valid: {sorted(_LOCAL_ACTIONS)}"
-        emit_error(task_id, msg)
-        return {"ok": False, "error": msg}
-
-    emit(task_id, "load", f"loading {spec_name}", spec=spec_name, action=action)
-    try:
-        spec = _load_local_spec()
-    except Exception as exc:  # noqa: BLE001
-        emit_error(task_id, f"spec load failed: {exc}")
-        return {"ok": False, "error": str(exc)}
-
-    from aqp.terraform.runtime import TerraformRuntime
-
-    runtime = TerraformRuntime(
-        spec=spec,
-        workspace_id=target.terraform.stack_slug,
-        task_id=task_id,
-        prerendered_workspace_dir=_resolve_local_env_path(),
+    """Backward-compatible local wrapper."""
+    return _run_target_stack_impl(
+        task_id,
+        target_id=_LOCAL_TARGET_ID,
+        action=action,
+        spec_name=spec_name,
     )
-
-    try:
-        if action in ("up", "apply", "build"):
-            emit(task_id, "plan", "running terraform plan")
-            plan_res = runtime.plan()
-            if int(plan_res.exit_code or 0) not in (0, 2):
-                payload = plan_res.to_dict()
-                payload["ok"] = False
-                emit_error(task_id, f"plan failed: {plan_res.error}")
-                return payload
-            emit(task_id, "apply", "running terraform apply")
-            apply_res = runtime.apply(plan_file=None)
-            payload = apply_res.to_dict()
-            payload["ok"] = int(apply_res.exit_code or 0) == 0
-            emit_done(task_id, payload)
-            return payload
-        if action in ("down", "destroy"):
-            emit(task_id, "destroy", "running terraform destroy")
-            res = runtime.destroy()
-            payload = res.to_dict()
-            payload["ok"] = int(res.exit_code or 0) == 0
-            emit_done(task_id, payload)
-            return payload
-        if action == "plan":
-            res = runtime.plan()
-            payload = res.to_dict()
-            payload["ok"] = int(res.exit_code or 0) in (0, 2)
-            emit_done(task_id, payload)
-            return payload
-        if action == "refresh":
-            res = runtime.refresh()
-            payload = res.to_dict()
-            payload["ok"] = int(res.exit_code or 0) == 0
-            emit_done(task_id, payload)
-            return payload
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("run_local_stack(%s) crashed", action)
-        emit_error(task_id, str(exc))
-        return {"ok": False, "error": str(exc)}
-
-    msg = f"unhandled local stack action {action!r}"
-    emit_error(task_id, msg)
-    return {"ok": False, "error": msg}
 
 
 def _run_rpi_stack_impl(
@@ -484,72 +467,33 @@ def _run_rpi_stack_impl(
     action: str,
     spec_name: str | None = None,
 ) -> dict[str, Any]:
-    """Underlying implementation for rpi stack actions."""
-    target = _deployment_target(_RPI_TARGET_ID)
-    spec_name = spec_name or target.terraform.stack_slug
-    if action not in _LOCAL_ACTIONS:
-        msg = f"unknown rpi stack action {action!r}; valid: {sorted(_LOCAL_ACTIONS)}"
-        emit_error(task_id, msg)
-        return {"ok": False, "error": msg}
-
-    emit(task_id, "load", f"loading {spec_name}", spec=spec_name, action=action)
-    try:
-        spec = _load_rpi_spec()
-    except Exception as exc:  # noqa: BLE001
-        emit_error(task_id, f"spec load failed: {exc}")
-        return {"ok": False, "error": str(exc)}
-
-    from aqp.terraform.runtime import TerraformRuntime
-
-    runtime = TerraformRuntime(
-        spec=spec,
-        workspace_id=target.terraform.stack_slug,
-        task_id=task_id,
-        prerendered_workspace_dir=_resolve_rpi_env_path(),
+    """Backward-compatible rpi wrapper."""
+    return _run_target_stack_impl(
+        task_id,
+        target_id=_RPI_TARGET_ID,
+        action=action,
+        spec_name=spec_name,
     )
 
-    try:
-        if action in ("up", "apply", "build"):
-            emit(task_id, "plan", "running terraform plan")
-            plan_res = runtime.plan()
-            if int(plan_res.exit_code or 0) not in (0, 2):
-                payload = plan_res.to_dict()
-                payload["ok"] = False
-                emit_error(task_id, f"plan failed: {plan_res.error}")
-                return payload
-            emit(task_id, "apply", "running terraform apply")
-            apply_res = runtime.apply(plan_file=None)
-            payload = apply_res.to_dict()
-            payload["ok"] = int(apply_res.exit_code or 0) == 0
-            emit_done(task_id, payload)
-            return payload
-        if action in ("down", "destroy"):
-            emit(task_id, "destroy", "running terraform destroy")
-            res = runtime.destroy()
-            payload = res.to_dict()
-            payload["ok"] = int(res.exit_code or 0) == 0
-            emit_done(task_id, payload)
-            return payload
-        if action == "plan":
-            res = runtime.plan()
-            payload = res.to_dict()
-            payload["ok"] = int(res.exit_code or 0) in (0, 2)
-            emit_done(task_id, payload)
-            return payload
-        if action == "refresh":
-            res = runtime.refresh()
-            payload = res.to_dict()
-            payload["ok"] = int(res.exit_code or 0) == 0
-            emit_done(task_id, payload)
-            return payload
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("run_rpi_stack(%s) crashed", action)
-        emit_error(task_id, str(exc))
-        return {"ok": False, "error": str(exc)}
 
-    msg = f"unhandled rpi stack action {action!r}"
-    emit_error(task_id, msg)
-    return {"ok": False, "error": msg}
+@celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.terraform_tasks.run_target_stack")
+def run_target_stack(
+    self,
+    *,
+    target_id: str,
+    action: str,
+    spec_name: str | None = None,
+) -> dict[str, Any]:
+    """Drive any topology-defined stack through TerraformRuntime."""
+    target = _deployment_target(target_id)
+    task_id = self.request.id or f"{target_id}:{action}"
+    spec_name = spec_name or target.terraform.stack_slug
+    return _run_target_stack_impl(
+        task_id,
+        target_id=target_id,
+        action=action,
+        spec_name=spec_name,
+    )
 
 
 @celery_app.task(bind=True, base=SecureTask, name="aqp.tasks.terraform_tasks.run_local_stack")
@@ -585,9 +529,11 @@ def run_rpi_stack(
 
 
 __all__ = [
+    "_run_target_stack_impl",
     "_run_local_stack_impl",
     "_run_rpi_stack_impl",
     "cancel_terraform_run",
+    "run_target_stack",
     "run_local_stack",
     "run_rpi_stack",
     "run_terraform_apply",

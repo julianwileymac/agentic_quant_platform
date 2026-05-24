@@ -1,0 +1,111 @@
+# Override values to run in-repo pipeline assets as Dagster user code.
+# Use together with values.yaml:
+#   helm upgrade --install dagster dagster/dagster \
+#     --namespace mlops --create-namespace \
+#     -f values.yaml \
+#     -f values-pipelines-user-code.yaml
+
+dagster-user-deployments:
+  enabled: true
+  enableSubchart: true
+  deployments:
+    - name: pipelines-user-code
+      image:
+        repository: ghcr.io/julianwiley/rpi-k8s-pipelines
+        tag: latest
+        pullPolicy: IfNotPresent
+      dagsterApiGrpcArgs:
+        - "-m"
+        - "pipelines.dagster_user_code.definitions"
+      port: 3030
+      includeConfigInLaunchedRuns:
+        enabled: true
+      env:
+        - name: PIPELINE_MINIO_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-sink-credentials
+              key: PIPELINE_MINIO_ENDPOINT
+        - name: PIPELINE_MINIO_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-sink-credentials
+              key: PIPELINE_MINIO_ACCESS_KEY
+        - name: PIPELINE_MINIO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-sink-credentials
+              key: PIPELINE_MINIO_SECRET_KEY
+        - name: PIPELINE_MINIO_BUCKET_RAW
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-sink-credentials
+              key: PIPELINE_MINIO_BUCKET_RAW
+        - name: PIPELINE_MINIO_BUCKET_PROCESSED
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-sink-credentials
+              key: PIPELINE_MINIO_BUCKET_PROCESSED
+        - name: PIPELINE_POSTGRES_DSN
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-sink-credentials
+              key: PIPELINE_POSTGRES_DSN
+        - name: PIPELINE_SOURCE_POSTGRES_DSN
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-sink-credentials
+              key: PIPELINE_SOURCE_POSTGRES_DSN
+        - name: PIPELINE_MILVUS_HOST
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-sink-credentials
+              key: PIPELINE_MILVUS_HOST
+        - name: PIPELINE_MILVUS_PORT
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-sink-credentials
+              key: PIPELINE_MILVUS_PORT
+        - name: PIPELINE_CHROMA_HOST
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-sink-credentials
+              key: PIPELINE_CHROMA_HOST
+        - name: PIPELINE_CHROMA_PORT
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-sink-credentials
+              key: PIPELINE_CHROMA_PORT
+        - name: PIPELINE_REST_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-source-credentials
+              key: PIPELINE_REST_API_TOKEN
+        - name: PIPELINE_HTTP_AUTH_HEADER
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-source-credentials
+              key: PIPELINE_HTTP_AUTH_HEADER
+        - name: PIPELINE_S3_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-source-credentials
+              key: PIPELINE_S3_ENDPOINT
+        - name: PIPELINE_S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-source-credentials
+              key: PIPELINE_S3_ACCESS_KEY
+        - name: PIPELINE_S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-source-credentials
+              key: PIPELINE_S3_SECRET_KEY
+        - name: PIPELINE_S3_REGION
+          valueFrom:
+            secretKeyRef:
+              name: pipeline-source-credentials
+              key: PIPELINE_S3_REGION
+
+dagsterDaemon:
+  enabled: true

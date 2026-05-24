@@ -1,0 +1,123 @@
+﻿# =============================================================================
+# Redis 8 Stack - Deployment
+# =============================================================================
+# Single-replica Redis Stack server (Recreate strategy on PVC).  Ships all
+# modules used across the framework:
+#   FT.*    (RediSearch)     - vector search, keyword index, FT.INFO
+#   JSON.*  (RedisJSON)      - document store primary storage
+#   TS.*    (RedisTimeSeries)- observability counters, market data demos
+#   BF.* CF.* TOPK.* TDIGEST.* (RedisBloom)
+#
+# The image is multi-arch (linux/amd64 + linux/arm64) so it runs on the Pi
+# cluster.  Resources are tuned to leave headroom for RAGFlow and Milvus on
+# the same node.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: aqp-data-services
+  labels:
+    app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: rpi-k8s-platform
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/component: cache
+      annotations:
+        prometheus.io/scrape: "false"
+    spec:
+      containers:
+        - name: redis
+          image: redis/redis-stack-server:7.4.0-v3
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          command:
+            - redis-stack-server
+            - /etc/redis/redis.conf
+            - --requirepass
+            - $(REDIS_PASSWORD)
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: password
+            - name: REDIS_ARGS
+              value: ""
+          volumeMounts:
+            - name: config
+              mountPath: /etc/redis
+              readOnly: true
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 1536Mi
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping | grep -q PONG'
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping | grep -q PONG'
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping | grep -q PONG'
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 24
+      volumes:
+        - name: config
+          configMap:
+            name: redis-config
+            items:
+              - key: redis.conf
+                path: redis.conf
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-data
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.kubernetes.io/role
+                    operator: In
+                    values:
+                      - control-plane

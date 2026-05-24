@@ -1,0 +1,37 @@
+﻿# =============================================================================
+# FlinkSessionJob - Dedupe
+# =============================================================================
+# Consumes raw market.trade.v1 / market.quote.v1 / market.bar.v1 records
+# from Kafka, removes duplicates that arise when both IBKR and Alpaca
+# ingest the same symbol, and re-publishes cleaned records to the same
+# topics with a dedupe marker.
+#
+# Job source: rpi_kubernetes/flink-jobs/jobs/dedupe.py -- uploaded by
+# bootstrap/scripts/build-flink-jobs.sh to s3://flink-jobs/dedupe.py.
+# =============================================================================
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkSessionJob
+metadata:
+  name: market-data-dedupe
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+    job: market-data-dedupe
+    pipeline-stage: ingest
+spec:
+  deploymentName: flink-trading-session
+  job:
+    jarURI: s3://flink-jobs/dedupe.py
+    entryClass: org.apache.flink.client.python.PythonDriver
+    args:
+      - "--python"
+      - "/opt/aqp-flink-jobs/jobs/dedupe.py"
+      - "--pyFiles"
+      - "/opt/aqp-flink-jobs/jobs"
+      - "--kafka.bootstrap.servers"
+      - "trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9092"
+      - "--kafka.group.id"
+      - "flink-dedupe"
+    parallelism: 2
+    upgradeMode: savepoint
+    state: suspended

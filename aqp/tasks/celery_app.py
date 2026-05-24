@@ -103,6 +103,11 @@ celery_app = Celery(
         # clean ``emit_error`` instead of crashing when the flag is
         # off and the spec lookup misses.
         "aqp.tasks.assistant_tasks",
+        # Data Lab — LabRuntime dispatcher (run_lab_graph) + the
+        # per-node Phase 2 dispatcher (run_lab_node).
+        "aqp.tasks.lab_tasks",
+        "aqp.tasks.lab_live_bridge",
+        "aqp.tasks.lab_rag_tasks",
     ],
 )
 
@@ -190,6 +195,12 @@ celery_app.conf.update(
         # orchestration since it ultimately delegates to one of those
         # runtimes through the AssistantRuntime layer.
         "aqp.tasks.assistant_tasks.*": {"queue": "agents"},
+        # Data Lab — graph-level dispatcher and per-node tasks share
+        # the ``lab.cpu`` queue so a future KEDA scaler can scale the
+        # Lab workers independently of agents / backtest / paper.
+        "aqp.tasks.lab_tasks.*": {"queue": "lab.cpu"},
+        "aqp.tasks.lab_live_bridge.*": {"queue": "lab.cpu"},
+        "aqp.tasks.lab_rag_tasks.*": {"queue": "lab.cpu"},
         # Terraform IaC control plane — dedicated queue so the slow
         # ``terraform apply`` (multi-minute) doesn't block bar-cadence
         # work on the default queue. KEDA scales the worker pool from
@@ -440,6 +451,15 @@ def _configure_worker_tracing(*_args, **_kwargs):
         configure_structured_logging()
     except Exception:  # noqa: BLE001
         logger.warning("worker structured logging not configured", exc_info=True)
+    # Phase 2d of the AQP infra-expansion plan — Phoenix observability
+    # for LLM / agent / RAG spans inside Celery workers (where the
+    # majority of agentic traffic runs). Idempotent + soft-fail.
+    try:
+        from aqp.observability.phoenix import configure_phoenix_for_celery
+
+        configure_phoenix_for_celery()
+    except Exception:  # noqa: BLE001
+        logger.warning("worker Phoenix bootstrap not configured", exc_info=True)
     # MLflow autolog hooks are wired lazily to avoid a hard dependency
     # at import time (the tracking URI may not yet be reachable).
     try:

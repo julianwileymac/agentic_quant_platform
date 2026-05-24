@@ -1,0 +1,120 @@
+﻿# =============================================================================
+# Flink Session Cluster (FlinkDeployment)
+# =============================================================================
+# Shared Flink session cluster for the AQP algorithmic trading jobs. Jobs
+# (dedupe / indicator-compute / normalize-sink / scanner-alert) are
+# submitted via FlinkSessionJob CRs.
+#
+# State: RocksDB with checkpoints/savepoints in MinIO (S3-compatible).
+# Metrics: Prometheus reporter on port 9249 for scraping.
+# Image: ghcr.io/julianwiley/flink-trading:1.20 -- multi-arch build over
+#        flink:1.20-java11 that pre-installs PyFlink + S3/Kafka/JDBC
+#        plugins + PostgreSQL JDBC driver. See rpi_kubernetes/flink-jobs/
+#        Dockerfile.
+#
+# Requires: Flink Kubernetes Operator CRDs installed via Helm, plus
+#           rpi_kubernetes/bootstrap/scripts/build-flink-jobs.sh run to
+#           build + push the image and upload job .py files to MinIO.
+# =============================================================================
+
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  name: flink-trading-session
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+    pipeline: trading
+spec:
+  image: ghcr.io/julianwiley/flink-trading:1.20
+  flinkVersion: v1_20
+  serviceAccount: flink
+
+  podTemplate:
+    spec:
+      containers:
+        - name: flink-main-container
+          env:
+            # S3 plugin is baked into ghcr.io/julianwiley/flink-trading:1.20
+            # but we keep the env var as a belt-and-suspenders fallback in case
+            # the session cluster is temporarily rolled back to flink:1.20.
+            - name: ENABLE_BUILT_IN_PLUGINS
+              value: "flink-s3-fs-hadoop-1.20.3.jar"
+            - name: PYTHONPATH
+              value: "/opt/aqp-flink-jobs"
+
+  flinkConfiguration:
+    # Task slots
+    taskmanager.numberOfTaskSlots: "4"
+
+    # State backend -- RocksDB for large keyed state
+    state.backend.type: rocksdb
+    state.backend.incremental: "true"
+
+    # Checkpoints in MinIO
+    state.checkpoints.dir: s3://flink-checkpoints/checkpoints
+    state.savepoints.dir: s3://flink-checkpoints/savepoints
+    execution.checkpointing.interval: "60000"
+    execution.checkpointing.min-pause: "30000"
+    execution.checkpointing.timeout: "600000"
+    execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
+
+    # S3 (MinIO) filesystem
+    s3.endpoint: http://minio.aqp-data-services.svc.cluster.local:9000
+    s3.path.style.access: "true"
+    s3.access-key: minioadmin
+    s3.secret-key: minioadmin123
+
+    # High availability via Kubernetes
+    high-availability.type: kubernetes
+    high-availability.storageDir: s3://flink-checkpoints/ha
+
+    # Prometheus metrics
+    metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+    metrics.reporter.prom.port: "9249"
+
+    # REST / Web UI
+    rest.flamegraph.enabled: "true"
+    web.cancel.enable: "true"
+    web.submit.enable: "true"
+
+    # Python / PyFlink
+    python.executable: "/usr/bin/python3"
+    python.client.executable: "/usr/bin/python3"
+
+    # Logging
+    env.java.opts.all: "-Dlog4j2.formatMsgNoLookups=true"
+
+  jobManager:
+    resource:
+      memory: "1024m"
+      cpu: 0.5
+    podTemplate:
+      spec:
+        affinity:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                    - key: node-role.kubernetes.io/control-plane
+                      operator: In
+                      values:
+                        - "true"
+
+  taskManager:
+    replicas: 2
+    resource:
+      memory: "1536m"
+      cpu: 1
+    podTemplate:
+      spec:
+        affinity:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 50
+                podAffinityTerm:
+                  labelSelector:
+                    matchLabels:
+                      component: taskmanager
+                  topologyKey: kubernetes.io/hostname

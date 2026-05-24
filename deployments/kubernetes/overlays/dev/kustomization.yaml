@@ -4,8 +4,10 @@ kind: Kustomization
 resources:
   - ../../base
 
-commonLabels:
-  app.kubernetes.io/environment: dev
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/environment: dev
 
 images:
   - name: docker.io/julian0215/aqp-client

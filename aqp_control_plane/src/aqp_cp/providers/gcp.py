@@ -24,7 +24,7 @@ class GcpProvider(CloudProviderStub):
     provider_alias = "gcp"
     cloud_name = "GCP"
     follow_up_pr = "aqp-control-plane#gcp-impl"
-    docs_link = "docs/operations/add-new-provider.md#gcp"
+    docs_link = "aqp_docs/operations/add-new-provider.md#gcp"
     delegate_kubernetes_alias = (
         "kubernetes"
         if os.environ.get("AQP_CP_GCP_DELEGATE_K8S", "").lower() in ("1", "true", "yes")

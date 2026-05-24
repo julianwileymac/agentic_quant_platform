@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: phoenix-postgresql
+  namespace: aqp-observability
+  labels:
+    app.kubernetes.io/name: phoenix-postgresql
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: aqp
+spec:
+  serviceName: phoenix-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: phoenix-postgresql
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: phoenix-postgresql
+        app.kubernetes.io/component: observability
+        app.kubernetes.io/part-of: aqp
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_DB
+              value: phoenix
+            - name: POSTGRES_USER
+              value: phoenix
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: phoenix-postgresql
+                  key: password
+          ports:
+            - name: pg
+              containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+              subPath: pgdata
+          resources:
+            requests:
+              cpu: "200m"
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          readinessProbe:
+            tcpSocket:
+              port: pg
+            initialDelaySeconds: 5
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: aqp-ssd
+        resources:
+          requests:
+            storage: 50Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: phoenix-postgresql
+  namespace: aqp-observability
+  labels:
+    app.kubernetes.io/name: phoenix-postgresql
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: aqp
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: phoenix-postgresql
+  ports:
+    - name: pg
+      port: 5432
+      targetPort: 5432

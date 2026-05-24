@@ -1,0 +1,121 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: pipeline-raw-ingest
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: pipeline-raw-ingest
+    app.kubernetes.io/component: orchestration
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: ingest-raw
+  arguments:
+    parameters:
+      - name: pipeline_image
+        value: ghcr.io/julianwiley/rpi-k8s-pipelines:latest
+      - name: source_type
+        value: http
+      - name: source_name
+        value: sample-source
+      - name: source_uri
+        value: https://example.com/data.json
+      - name: output_prefix
+        value: raw
+      - name: target_bucket
+        value: pipeline-raw
+      - name: rest_method
+        value: GET
+      - name: rest_body_json
+        value: ""
+  templates:
+    - name: ingest-raw
+      metadata:
+        annotations:
+          pipelines.rpi-k8s.io/todo-pagination: "Add source-specific pagination for large REST exports."
+          pipelines.rpi-k8s.io/todo-retention: "Add lifecycle policy and dead-letter bucket handling."
+      inputs:
+        parameters:
+          - name: pipeline_image
+          - name: source_type
+          - name: source_name
+          - name: source_uri
+          - name: output_prefix
+          - name: target_bucket
+          - name: rest_method
+          - name: rest_body_json
+      container:
+        image: "{{inputs.parameters.pipeline_image}}"
+        command:
+          - python
+          - -m
+          - pipelines.cli
+          - raw-ingest
+        args:
+          - --source-type
+          - "{{inputs.parameters.source_type}}"
+          - --source-name
+          - "{{inputs.parameters.source_name}}"
+          - --source-uri
+          - "{{inputs.parameters.source_uri}}"
+          - --output-prefix
+          - "{{inputs.parameters.output_prefix}}"
+          - --target-bucket
+          - "{{inputs.parameters.target_bucket}}"
+          - --rest-method
+          - "{{inputs.parameters.rest_method}}"
+          - --rest-body-json
+          - "{{inputs.parameters.rest_body_json}}"
+        env:
+          - name: PIPELINE_HTTP_AUTH_HEADER
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-source-credentials
+                key: PIPELINE_HTTP_AUTH_HEADER
+          - name: PIPELINE_REST_API_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-source-credentials
+                key: PIPELINE_REST_API_TOKEN
+          - name: PIPELINE_S3_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-source-credentials
+                key: PIPELINE_S3_ENDPOINT
+          - name: PIPELINE_S3_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-source-credentials
+                key: PIPELINE_S3_ACCESS_KEY
+          - name: PIPELINE_S3_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-source-credentials
+                key: PIPELINE_S3_SECRET_KEY
+          - name: PIPELINE_S3_REGION
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-source-credentials
+                key: PIPELINE_S3_REGION
+          - name: PIPELINE_MINIO_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-sink-credentials
+                key: PIPELINE_MINIO_ENDPOINT
+          - name: PIPELINE_MINIO_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-sink-credentials
+                key: PIPELINE_MINIO_ACCESS_KEY
+          - name: PIPELINE_MINIO_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-sink-credentials
+                key: PIPELINE_MINIO_SECRET_KEY
+          - name: PIPELINE_MINIO_REGION
+            valueFrom:
+              secretKeyRef:
+                name: pipeline-sink-credentials
+                key: PIPELINE_MINIO_REGION
+        envFrom:
+          - secretRef:
+              name: pipeline-sink-credentials

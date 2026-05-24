@@ -1,0 +1,19 @@
+# Apache Hudi services. Additive to Iceberg per AGENTS rule 3.
+# - hudi-streamer-properties: ConfigMap mounted by every HoodieStreamer
+#   SparkApplication submitted via aqp.data.lakehouse.hudi.hudi_streamer.
+# - hudi-warehouse-bootstrap: one-shot Job that creates the MinIO
+#   bucket structure for s3://aqp-lakehouse/hudi/.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-lakehouse
+
+commonLabels:
+  app.kubernetes.io/part-of: aqp
+  app.kubernetes.io/component: lakehouse
+  app.kubernetes.io/managed-by: kustomize
+  aqp.internal/cluster: lakehouse.hudi
+
+resources:
+  - streamer-properties.yaml
+  - warehouse-bootstrap-job.yaml

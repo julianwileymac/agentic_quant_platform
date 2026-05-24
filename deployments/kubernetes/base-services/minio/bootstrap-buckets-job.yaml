@@ -1,0 +1,111 @@
+﻿apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-bucket-bootstrap
+  namespace: aqp-data-services
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: bootstrap
+          image: minio/mc:latest
+          env:
+            - name: MINIO_ENDPOINT
+              value: "http://minio.aqp-data-services.svc.cluster.local:9000"
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: root-user
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: root-password
+            - name: MLFLOW_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-service-credentials
+                  key: MLFLOW_ACCESS_KEY
+            - name: MLFLOW_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-service-credentials
+                  key: MLFLOW_SECRET_KEY
+            - name: DATAHUB_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-service-credentials
+                  key: DATAHUB_ACCESS_KEY
+            - name: DATAHUB_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-service-credentials
+                  key: DATAHUB_SECRET_KEY
+            - name: PIPELINE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-service-credentials
+                  key: PIPELINE_ACCESS_KEY
+            - name: PIPELINE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-service-credentials
+                  key: PIPELINE_SECRET_KEY
+            - name: MODEL_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-service-credentials
+                  key: MODEL_ACCESS_KEY
+            - name: MODEL_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-service-credentials
+                  key: MODEL_SECRET_KEY
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+
+              echo "Waiting for MinIO API..."
+              until mc alias set minio "${MINIO_ENDPOINT}" "${MINIO_ACCESS_KEY}" "${MINIO_SECRET_KEY}"; do
+                echo "MinIO not ready yet, retrying in 5 seconds..."
+                sleep 5
+              done
+
+              for bucket in mlflow-artifacts argo-workflows bentoml-artifacts dagster-artifacts milvus-bucket loki-data ragflow flink-checkpoints flink-jobs av-raw pipeline-raw pipeline-processed iceberg-warehouse model-registry model-cache; do
+                mc mb --ignore-existing "minio/${bucket}"
+              done
+
+              cat >/tmp/mlflow-policy.json <<'EOF'
+              {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::mlflow-artifacts","arn:aws:s3:::mlflow-artifacts/*"]}]}
+              EOF
+              cat >/tmp/datahub-policy.json <<'EOF'
+              {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::iceberg-warehouse","arn:aws:s3:::iceberg-warehouse/*","arn:aws:s3:::mlflow-artifacts","arn:aws:s3:::mlflow-artifacts/*","arn:aws:s3:::pipeline-raw","arn:aws:s3:::pipeline-raw/*","arn:aws:s3:::pipeline-processed","arn:aws:s3:::pipeline-processed/*"]}]}
+              EOF
+              cat >/tmp/pipeline-policy.json <<'EOF'
+              {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::pipeline-raw","arn:aws:s3:::pipeline-raw/*","arn:aws:s3:::pipeline-processed","arn:aws:s3:::pipeline-processed/*","arn:aws:s3:::dagster-artifacts","arn:aws:s3:::dagster-artifacts/*","arn:aws:s3:::av-raw","arn:aws:s3:::av-raw/*"]}]}
+              EOF
+              cat >/tmp/model-policy.json <<'EOF'
+              {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::model-registry","arn:aws:s3:::model-registry/*","arn:aws:s3:::model-cache","arn:aws:s3:::model-cache/*","arn:aws:s3:::bentoml-artifacts","arn:aws:s3:::bentoml-artifacts/*"]}]}
+              EOF
+
+              mc admin user add minio "${MLFLOW_ACCESS_KEY}" "${MLFLOW_SECRET_KEY}" || true
+              mc admin user add minio "${DATAHUB_ACCESS_KEY}" "${DATAHUB_SECRET_KEY}" || true
+              mc admin user add minio "${PIPELINE_ACCESS_KEY}" "${PIPELINE_SECRET_KEY}" || true
+              mc admin user add minio "${MODEL_ACCESS_KEY}" "${MODEL_SECRET_KEY}" || true
+
+              mc admin policy create minio mlflow-policy /tmp/mlflow-policy.json || true
+              mc admin policy create minio datahub-policy /tmp/datahub-policy.json || true
+              mc admin policy create minio pipeline-policy /tmp/pipeline-policy.json || true
+              mc admin policy create minio model-policy /tmp/model-policy.json || true
+
+              mc admin policy attach minio mlflow-policy --user "${MLFLOW_ACCESS_KEY}" || true
+              mc admin policy attach minio datahub-policy --user "${DATAHUB_ACCESS_KEY}" || true
+              mc admin policy attach minio pipeline-policy --user "${PIPELINE_ACCESS_KEY}" || true
+              mc admin policy attach minio model-policy --user "${MODEL_ACCESS_KEY}" || true
+
+              echo "MinIO buckets are ready."

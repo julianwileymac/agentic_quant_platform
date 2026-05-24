@@ -1,0 +1,19 @@
+# AQP-owned edge namespace (cloudflared tunnel for AQP services).
+#
+# AQP runs its own Cloudflare tunnel for `aqp.fund` / `api.aqp.fund` /
+# `manage.aqp.fund` here in `aqp-edge`, independent of the
+# `julianwiley-portal` tunnel that lives in `rpi_kubernetes/kubernetes/
+# base-services/cloudflared/` (namespace `edge`). The two tunnels and
+# their TLS / Auth domains never share state, so portal changes cannot
+# disrupt AQP and vice versa.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+commonLabels:
+  app.kubernetes.io/part-of: aqp
+  app.kubernetes.io/component: edge
+  app.kubernetes.io/managed-by: kustomize
+  aqp.internal/canonical-owner: agentic_quant_platform
+
+resources:
+  - cloudflared-aqp/

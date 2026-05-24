@@ -92,7 +92,7 @@ with a schema-driven form and a "AQP-native Fetcher stub" code path.
 
 ## Docs + rules
 
-- `docs/airbyte-builder.md` — narrative, AQP-native vs Airbyte-native
+- `aqp_docs/airbyte-builder.md` — narrative, AQP-native vs Airbyte-native
   decision.
 - `.cursor/rules/airbyte-builder.mdc` — rule 31 scope.
 - `AGENTS.md` rule 31 — no `AIRBYTE_ENABLE_UNSAFE_CODE`; Fetcher

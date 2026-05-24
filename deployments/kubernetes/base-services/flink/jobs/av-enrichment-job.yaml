@@ -1,0 +1,38 @@
+﻿# =============================================================================
+# FlinkSessionJob - Alpha Vantage enrichment
+# =============================================================================
+# Joins alphavantage.quote.v1 with alphavantage.overview.v1 (broadcast) and
+# publishes sector/industry/market-cap enriched quotes to
+# features.indicators.v1. Suspended by default so it only runs when the AV
+# producer is live.
+#
+# Job source: rpi_kubernetes/flink-jobs/jobs/av_enrichment.py -- uploaded by
+# bootstrap/scripts/build-flink-jobs.sh to s3://flink-jobs/av_enrichment.py.
+# =============================================================================
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkSessionJob
+metadata:
+  name: alphavantage-enrichment
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+    job: alphavantage-enrichment
+    pipeline-stage: compute
+    data-provider: alphavantage
+spec:
+  deploymentName: flink-trading-session
+  job:
+    jarURI: s3://flink-jobs/av_enrichment.py
+    entryClass: org.apache.flink.client.python.PythonDriver
+    args:
+      - "--python"
+      - "/opt/aqp-flink-jobs/jobs/av_enrichment.py"
+      - "--pyFiles"
+      - "/opt/aqp-flink-jobs/jobs"
+      - "--kafka.bootstrap.servers"
+      - "trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9092"
+      - "--kafka.group.id"
+      - "flink-av-enrichment"
+    parallelism: 1
+    upgradeMode: savepoint
+    state: suspended

@@ -1,0 +1,16 @@
+﻿# =============================================================================
+# Kustomization - Argo Workflows
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: argo-workflows
+
+namespace: aqp-mlops
+
+resources:
+  - secret.yaml
+  # Note: Argo Workflows is deployed via Helm
+  # See README.md for installation instructions

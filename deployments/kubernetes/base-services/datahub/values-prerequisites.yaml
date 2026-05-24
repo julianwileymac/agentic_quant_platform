@@ -1,0 +1,159 @@
+# =============================================================================
+# DataHub Prerequisites - Helm Values
+# =============================================================================
+# Helm values for datahub/datahub-prerequisites chart.
+# Deploys Kafka, Zookeeper, and Elasticsearch required by DataHub.
+# Existing PostgreSQL in data-services is reused (MySQL/Neo4j disabled).
+#
+# Install:
+#   helm install prerequisites datahub/datahub-prerequisites \
+#     --namespace data-services \
+#     -f values-prerequisites.yaml
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Elasticsearch
+# ---------------------------------------------------------------------------
+elasticsearch:
+  enabled: true
+  replicas: 1
+  minimumMasterNodes: 1
+
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "1Gi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+
+  esJavaOpts: "-Xmx1g -Xms1g"
+
+  volumeClaimTemplate:
+    accessModes: ["ReadWriteOnce"]
+    storageClassName: local-path
+    resources:
+      requests:
+        storage: 10Gi
+
+  nodeSelector:
+    kubernetes.io/arch: amd64
+
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+  antiAffinity: "soft"
+
+  esConfig:
+    elasticsearch.yml: |
+      cluster.name: "datahub-elasticsearch"
+      network.host: 0.0.0.0
+      xpack.security.enabled: false
+
+# ---------------------------------------------------------------------------
+# Kafka (Bitnami chart, bundled with datahub-prerequisites)
+# ---------------------------------------------------------------------------
+kafka:
+  enabled: true
+
+  broker:
+    replicaCount: 1
+    minId: 0
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "512Mi"
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
+    persistence:
+      storageClass: local-path
+      size: 10Gi
+    nodeSelector:
+      kubernetes.io/arch: amd64
+    tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+    extraConfig: |
+      message.max.bytes=5242880
+      default.replication.factor=1
+      offsets.topic.replication.factor=1
+      transaction.state.log.replication.factor=1
+
+  controller:
+    replicaCount: 0
+
+  listeners:
+    client:
+      protocol: PLAINTEXT
+    interbroker:
+      protocol: PLAINTEXT
+
+  kraft:
+    enabled: false
+
+  zookeeper:
+    enabled: true
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "256Mi"
+      limits:
+        cpu: "250m"
+        memory: "512Mi"
+    persistence:
+      storageClass: local-path
+      size: 5Gi
+    nodeSelector:
+      kubernetes.io/arch: amd64
+    tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+
+# ---------------------------------------------------------------------------
+# Confluent cp-helm-charts (only schema registry enabled)
+# ---------------------------------------------------------------------------
+cp-helm-charts:
+  enabled: true
+  cp-schema-registry:
+    enabled: true
+    kafka:
+      bootstrapServers: "PLAINTEXT://prerequisites-kafka:9092"
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "256Mi"
+      limits:
+        cpu: "250m"
+        memory: "512Mi"
+    nodeSelector:
+      kubernetes.io/arch: amd64
+    tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+  cp-kafka:
+    enabled: false
+  cp-zookeeper:
+    enabled: false
+  cp-kafka-rest:
+    enabled: false
+  cp-kafka-connect:
+    enabled: false
+
+# ---------------------------------------------------------------------------
+# MySQL -- disabled (using existing PostgreSQL)
+# ---------------------------------------------------------------------------
+mysql:
+  enabled: false
+
+# ---------------------------------------------------------------------------
+# Neo4j -- disabled (using Elasticsearch for graph)
+# ---------------------------------------------------------------------------
+neo4j:
+  enabled: false

@@ -23,6 +23,6 @@ Before editing, decide which boundary owns the request:
 - Quant runtime domains (agents, RL, analysis, backtests, data, persistence,
   tasks) stay in `aqp/`.
 
-Read `docs/repository-split.md` and the nearest `AGENTS.md` before moving
+Read `aqp_docs/repository-split.md` and the nearest `AGENTS.md` before moving
 source across boundaries.
 

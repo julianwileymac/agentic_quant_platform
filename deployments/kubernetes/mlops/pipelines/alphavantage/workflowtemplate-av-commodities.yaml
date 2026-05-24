@@ -1,0 +1,42 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: av-commodities
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: alphavantage-commodities
+    data-provider: alphavantage
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: run
+  arguments:
+    parameters:
+      - name: commodities
+        value: "WTI,BRENT,NATURAL_GAS,COPPER,ALUMINUM,WHEAT,CORN,COTTON,SUGAR,COFFEE,ALL_COMMODITIES"
+      - name: interval
+        value: "monthly"
+      - name: target_bucket
+        value: av-raw
+  templates:
+    - name: run
+      inputs:
+        parameters:
+          - name: commodities
+          - name: interval
+          - name: target_bucket
+      steps:
+        - - name: load
+            templateRef:
+              name: av-bulk
+              template: run
+            arguments:
+              parameters:
+                - name: category
+                  value: commodities
+                - name: symbols
+                  value: "{{inputs.parameters.commodities}}"
+                - name: target_bucket
+                  value: "{{inputs.parameters.target_bucket}}"
+                - name: extra_params
+                  value: |
+                    {"interval":"{{inputs.parameters.interval}}"}

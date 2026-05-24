@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spark-operator-values
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: spark-operator
+    app.kubernetes.io/component: lakehouse
+    app.kubernetes.io/part-of: aqp
+data:
+  values.yaml: |
+    image:
+      repository: ghcr.io/kubeflow/spark-operator
+      tag: 2.0.2
+    sparkJobNamespaces:
+      - aqp-mlops
+      - aqp-lakehouse
+    webhook:
+      enable: true
+    metrics:
+      enable: true
+    resources:
+      requests:
+        cpu: "100m"
+        memory: 256Mi
+      limits:
+        cpu: "500m"
+        memory: 1Gi

@@ -2,7 +2,7 @@
 
 Phase 5 ships the registration scaffold + credential-chain probe. Full
 ECS ``update_service`` / SSM ``put_parameter`` impl lands in a follow-up
-PR — see ``docs/operations/add-new-provider.md`` for the contract.
+PR — see ``aqp_docs/operations/add-new-provider.md`` for the contract.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class AwsProvider(CloudProviderStub):
     provider_alias = "aws"
     cloud_name = "AWS"
     follow_up_pr = "aqp-control-plane#aws-impl"
-    docs_link = "docs/operations/add-new-provider.md#aws"
+    docs_link = "aqp_docs/operations/add-new-provider.md#aws"
     delegate_kubernetes_alias = (
         "kubernetes"
         if os.environ.get("AQP_CP_AWS_DELEGATE_K8S", "").lower() in ("1", "true", "yes")

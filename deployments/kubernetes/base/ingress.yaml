@@ -5,6 +5,11 @@
 #   https://api.aqp.fund/    -> aqp-core (FastAPI API + WebSocket)
 #   https://manage.aqp.fund/ -> aqp-cp (control plane)
 #
+# Blue/green note:
+# - ``deployments/kubernetes/overlays/tower-green`` patches these hosts to
+#   ``aqp-green.aqp.fund`` / ``api-green.aqp.fund`` /
+#   ``manage-green.aqp.fund`` for cutover validation.
+#
 # The control-plane Ingress carries an EXTRA annotation enforcing the
 # admin:cluster or manage:infrastructure scope via a Lua snippet that
 # inspects the JWT permissions claim emitted by Auth0.
@@ -92,8 +97,9 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
     # Authorization is enforced in aqp_control_plane via Auth0/JWT
-    # validation. Do not use nginx configuration-snippet here: the
-    # rpi_kubernetes ingress controller disables snippet annotations.
+    # validation. Avoid nginx configuration-snippet annotations because
+    # many managed ingress-nginx installs (incl. rpi_kubernetes) disable
+    # them; rely on in-process JWT scope checks instead.
     cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: nginx

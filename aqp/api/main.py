@@ -163,6 +163,11 @@ from aqp.api.routes import (  # noqa: E402
 from aqp.api.routes import (  # noqa: E402
     assistants as assistants_routes,
 )
+# Data Lab — four-mode GraphSpec workspace (EDA / Testing / Evaluation /
+# Simulation). REST + WebSocket surface, gated by settings.aqp_lab_enabled.
+from aqp.api.routes import (  # noqa: E402
+    lab as lab_routes,
+)
 from aqp.config import settings
 from aqp.observability import (
     configure_tracing,
@@ -177,6 +182,21 @@ logger = logging.getLogger(__name__)
 configure_tracing(service_name=f"{settings.otel_service_name}-api")
 instrument_httpx()
 instrument_redis()
+
+# Phase 2d of the AQP infra-expansion plan: Phoenix observability for
+# LLM / agent / RAG spans. Runs alongside (not in place of) the OTel
+# tracing pipeline; Phoenix's auto-instrumentation tags spans with
+# OpenInference attributes so the Otel gateway routes them to Phoenix
+# while keeping infra spans on Tempo.
+try:
+    from aqp.observability.phoenix import configure_phoenix_for_app
+
+    configure_phoenix_for_app()
+except Exception:  # noqa: BLE001
+    logger.warning(
+        "Phoenix bootstrap failed for the API process; continuing without it",
+        exc_info=True,
+    )
 
 # Phase 4a of the AQP control-plane maturation — structured JSON
 # logging with auto-injected OpenTelemetry trace_id + span_id and
@@ -419,6 +439,11 @@ app.include_router(workflows_routes.router)
 # Assistant Engine (Phase 3) — dispatcher + WS stream. Each route gates
 # on settings.assistant_engine_enabled.
 app.include_router(assistants_routes.router)
+# Data Lab — mount the REST + WS routers behind the master flag so
+# the API surface stays a no-op when the operator hasn't opted in.
+if getattr(settings, "aqp_lab_enabled", False):
+    app.include_router(lab_routes.router)
+    app.include_router(lab_routes.ws_router)
 app.include_router(selection_agents.router)
 app.include_router(trader_agents.router)
 app.include_router(analysis_agents.router)

@@ -1,0 +1,45 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: av-bulk-timeseries
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: alphavantage-bulk-timeseries
+    data-provider: alphavantage
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: run
+  arguments:
+    parameters:
+      - name: symbols
+        value: "IBM,AAPL,MSFT"
+      - name: function
+        value: daily
+      - name: outputsize
+        value: full
+      - name: target_bucket
+        value: av-raw
+  templates:
+    - name: run
+      inputs:
+        parameters:
+          - name: symbols
+          - name: function
+          - name: outputsize
+          - name: target_bucket
+      steps:
+        - - name: load
+            templateRef:
+              name: av-bulk
+              template: run
+            arguments:
+              parameters:
+                - name: category
+                  value: timeseries
+                - name: symbols
+                  value: "{{inputs.parameters.symbols}}"
+                - name: target_bucket
+                  value: "{{inputs.parameters.target_bucket}}"
+                - name: extra_params
+                  value: |
+                    {"function":"{{inputs.parameters.function}}","outputsize":"{{inputs.parameters.outputsize}}"}

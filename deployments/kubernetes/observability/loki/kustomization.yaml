@@ -1,0 +1,31 @@
+﻿# =============================================================================
+# Loki - Kustomize entry
+# =============================================================================
+# The Loki binary itself is installed via the grafana/loki Helm chart
+# (`bootstrap/scripts/install-loki.sh`).  This Kustomization manages the
+# *supporting* resources that the chart does NOT own but which the chart
+# values reference, so a `kubectl apply -k kubernetes/` will keep them in
+# sync with the rest of the cluster:
+#
+#   * loki-minio Secret      - MinIO credentials consumed via global.extraEnvFrom
+#                              (values.yaml -> ${LOKI_S3_*} variable substitution).
+#   * loki-tenant ConfigMap  - Optional extra tenant config consumed by Grafana.
+#
+# Why split it like this?  Keeping the secret here means cluster operators do
+# not have to remember to `kubectl apply -f` it before running the install
+# script, and it documents the expected key names alongside the chart values.
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-observability
+
+resources:
+  - secret-loki-minio.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: loki
+      app.kubernetes.io/component: log-aggregation
+      app.kubernetes.io/part-of: rpi-k8s-platform

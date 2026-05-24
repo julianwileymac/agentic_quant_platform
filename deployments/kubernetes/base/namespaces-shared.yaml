@@ -1,0 +1,140 @@
+# Phase 1 of the AQP infra-expansion plan: AQP-owned shared
+# infrastructure namespaces. Replaces the rpi_kubernetes-side
+# `data-services`, `ml-platform`, `observability`, `mlops`, and `flink`
+# namespaces. The original rpi-side namespaces stay declared during the
+# Phase 1 -> Phase 5 migration window for the deprecated
+# `rpi-k8s-management` legacy stack and the `julianwiley-portal` web app
+# (portal continues to read Prometheus from the `observability`
+# namespace until the portal ConfigMap cuts over to `aqp-observability`).
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aqp-streaming
+  labels:
+    app.kubernetes.io/name: aqp-streaming
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    aqp.internal/canonical-owner: agentic_quant_platform
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    aqp.internal/description: "AQP-owned streaming brokers (Strimzi Kafka + Redpanda side-by-side)."
+    aqp.internal/replaces: "rpi_kubernetes/kubernetes/base-services/kafka -> data-services namespace."
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aqp-timeseries
+  labels:
+    app.kubernetes.io/name: aqp-timeseries
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    aqp.internal/canonical-owner: agentic_quant_platform
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    aqp.internal/description: "QuestDB high-throughput tick-data + executions store."
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aqp-lakehouse
+  labels:
+    app.kubernetes.io/name: aqp-lakehouse
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    aqp.internal/canonical-owner: agentic_quant_platform
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    aqp.internal/description: "Iceberg (canonical) + Hudi (additive) lakehouse writers + Spark Operator + Polaris catalog."
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aqp-observability
+  labels:
+    app.kubernetes.io/name: aqp-observability
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    aqp.internal/canonical-owner: agentic_quant_platform
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    aqp.internal/description: "kube-prometheus-stack + OpenTelemetry Operator + Tempo + Loki + Phoenix + Vector."
+    aqp.internal/replaces: "rpi_kubernetes/kubernetes/observability/* (Phase 5 cleanup)."
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aqp-data-services
+  labels:
+    app.kubernetes.io/name: aqp-data-services
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    aqp.internal/canonical-owner: agentic_quant_platform
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    aqp.internal/description: "PostgreSQL + Redis + MinIO + ChromaDB + Milvus + Schema Registry + DataHub canonical instances."
+    aqp.internal/replaces: "rpi_kubernetes/kubernetes/base-services/{postgresql,redis,minio,chromadb,milvus,schema-registry,datahub} (Phase 5 cleanup)."
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aqp-mlops
+  labels:
+    app.kubernetes.io/name: aqp-mlops
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    aqp.internal/canonical-owner: agentic_quant_platform
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    aqp.internal/description: "MLflow + Argo Workflows/Events + BentoML/Yatai + KServe + Dagster + AQP bots."
+    aqp.internal/replaces: "rpi_kubernetes/kubernetes/{base-services/mlflow, mlops/*} (Phase 5 cleanup)."
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aqp-elt
+  labels:
+    app.kubernetes.io/name: aqp-elt
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    aqp.internal/canonical-owner: agentic_quant_platform
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    aqp.internal/description: "Airbyte (visual builder + workspace) + RAGFlow + JupyterHub + Dask/Ray notebook compute."
+    aqp.internal/replaces: "rpi_kubernetes/kubernetes/base-services/{airbyte,ragflow,jupyterhub,dask-ray} (Phase 5 cleanup)."
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aqp-edge
+  labels:
+    app.kubernetes.io/name: aqp-edge
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    aqp.internal/canonical-owner: agentic_quant_platform
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    aqp.internal/description: "AQP-owned Cloudflare tunnel (cloudflared-aqp). Portal keeps its separate tunnel in rpi_kubernetes/edge."
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aqp-bots
+  labels:
+    app.kubernetes.io/name: aqp-bots
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    aqp.internal/canonical-owner: agentic_quant_platform
+    aqp.io/component: bots
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    aqp.internal/description: "Default namespace for AQP bot Deployments + ConfigMaps applied by aqp.bots.deploy.KubernetesTarget and the aqp-bot-deploy Argo WorkflowTemplate."

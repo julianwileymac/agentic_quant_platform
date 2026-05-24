@@ -5,6 +5,11 @@ Wraps ``confluent_kafka.admin.AdminClient`` with helpers used by the
 consumer groups + lag, sample messages). The client is lazy: instances
 fail-fast when the underlying SDK is missing or the cluster is
 unreachable, but importing this module never raises.
+
+Phase 2a of the AQP infra-expansion plan added optional cluster
+selection. Pass ``cluster="redpanda"`` (or any registered cluster
+alias) to :class:`NativeKafkaAdmin` to target Redpanda. Defaults to
+the legacy Strimzi cluster so every existing call site keeps working.
 """
 from __future__ import annotations
 
@@ -15,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from aqp.config import settings
+from aqp.streaming.clusters import StreamingCluster, get_cluster
 
 logger = logging.getLogger(__name__)
 
@@ -82,12 +88,40 @@ def _admin_config() -> dict[str, Any]:
 
 
 class NativeKafkaAdmin:
-    """Thin facade over confluent_kafka.admin.AdminClient."""
+    """Thin facade over confluent_kafka.admin.AdminClient.
 
-    def __init__(self, config: dict[str, Any] | None = None) -> None:
-        self._config = config or _admin_config()
+    By default targets the legacy Strimzi cluster (resolved through
+    ``settings.kafka_*``). Pass ``cluster="redpanda"`` (or another
+    registered alias from :mod:`aqp.streaming.clusters`) to drive a
+    side-by-side Redpanda cluster instead.
+    """
+
+    def __init__(
+        self,
+        config: dict[str, Any] | None = None,
+        *,
+        cluster: str | StreamingCluster | None = None,
+    ) -> None:
+        if isinstance(cluster, StreamingCluster):
+            self._cluster = cluster
+        elif cluster:
+            self._cluster = get_cluster(cluster)
+        else:
+            self._cluster = None
+        if config is not None:
+            self._config = config
+        elif self._cluster is not None:
+            self._config = self._cluster.admin_config()
+        else:
+            self._config = _admin_config()
         self._lock = threading.Lock()
         self._client: Any | None = None
+
+    @property
+    def cluster_name(self) -> str:
+        if self._cluster is not None:
+            return self._cluster.name
+        return "strimzi"
 
     def _get_client(self) -> Any:
         with self._lock:
@@ -293,16 +327,22 @@ class NativeKafkaAdmin:
         return out
 
 
-_singleton: NativeKafkaAdmin | None = None
+_singletons: dict[str, NativeKafkaAdmin] = {}
 _singleton_lock = threading.Lock()
 
 
-def get_kafka_admin() -> NativeKafkaAdmin:
-    global _singleton
+def get_kafka_admin(cluster: str | None = None) -> NativeKafkaAdmin:
+    """Return the cached admin client for ``cluster`` (default: strimzi).
+
+    Phase 2a infra-expansion: pass ``cluster="redpanda"`` to get the
+    Redpanda admin client; ``None`` keeps the legacy default. Each
+    cluster gets its own cached singleton.
+    """
+    key = (cluster or "strimzi").strip().lower()
     with _singleton_lock:
-        if _singleton is None:
-            _singleton = NativeKafkaAdmin()
-        return _singleton
+        if key not in _singletons:
+            _singletons[key] = NativeKafkaAdmin(cluster=cluster)
+        return _singletons[key]
 
 
 __all__ = [

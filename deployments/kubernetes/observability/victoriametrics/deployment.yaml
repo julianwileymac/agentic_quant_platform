@@ -1,0 +1,85 @@
+﻿# =============================================================================
+# VictoriaMetrics Deployment
+# =============================================================================
+# VictoriaMetrics is a high-performance, resource-efficient time-series database
+# designed as a drop-in replacement for Prometheus long-term storage.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: victoriametrics
+  namespace: aqp-observability
+  labels:
+    app: victoriametrics
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: victoriametrics
+  template:
+    metadata:
+      labels:
+        app: victoriametrics
+    spec:
+      containers:
+        - name: victoriametrics
+          image: victoriametrics/victoria-metrics:v1.100.0
+          args:
+            - -storageDataPath=/victoria-metrics-data
+            - -retentionPeriod=90d
+            - -httpListenAddr=:8428
+            - -promscrape.config=/etc/victoriametrics/scrape.yml
+            - -promscrape.config.strictParse=false
+          ports:
+            - name: http
+              containerPort: 8428
+              protocol: TCP
+            - name: metrics
+              containerPort: 8428
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /victoria-metrics-data
+            - name: config
+              mountPath: /etc/victoriametrics
+              readOnly: true
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8428
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8428
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: victoriametrics-data
+        - name: config
+          configMap:
+            name: victoriametrics-config
+      # Prefer scheduling on control plane
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.kubernetes.io/role
+                    operator: In
+                    values:
+                      - control-plane

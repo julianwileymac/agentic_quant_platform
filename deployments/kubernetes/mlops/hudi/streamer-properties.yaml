@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aqp-hudi-streamer-properties
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/component: lakehouse
+    app.kubernetes.io/part-of: aqp
+data:
+  # Default streamer.properties; per-streamer overrides happen through
+  # the launcher's `_configmap_streamer_properties` payload.
+  streamer.properties: |
+    hoodie.streamer.transformer.sql.enabled=true
+    hoodie.write.lock.provider=org.apache.hudi.client.transaction.lock.InProcessLockProvider
+    hoodie.write.concurrency.mode=optimistic_concurrency_control
+    hoodie.cleaner.policy=KEEP_LATEST_BY_HOURS
+    hoodie.cleaner.hours.retained=72
+    hoodie.compact.inline=false
+    hoodie.compact.inline.max.delta.commits=8
+    hoodie.metadata.enable=true

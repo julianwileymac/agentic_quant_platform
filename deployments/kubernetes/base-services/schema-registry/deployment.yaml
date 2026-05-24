@@ -1,0 +1,102 @@
+﻿# =============================================================================
+# Apicurio Registry - Schema Registry for Kafka Avro payloads
+# =============================================================================
+# Storage: Kafka (topic kafkasql-journal), so no separate database required.
+# API: REST v2 (/apis/registry/v2) + Confluent Schema Registry compatibility
+#      shim (/apis/ccompat/v7) for ecosystem tools.
+# Auth: none (internal network only). A network policy could be added later.
+# Tracing: OpenTelemetry SDK auto-instrumentation via OTEL_* env vars.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apicurio-registry
+  namespace: aqp-streaming
+  labels:
+    app: apicurio-registry
+    app.kubernetes.io/name: apicurio-registry
+    app.kubernetes.io/component: schema-registry
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: apicurio-registry
+  template:
+    metadata:
+      labels:
+        app: apicurio-registry
+        app.kubernetes.io/name: apicurio-registry
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: In
+                    values: ["true"]
+      containers:
+        - name: apicurio-registry
+          image: apicurio/apicurio-registry:2.5.11.Final
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: QUARKUS_HTTP_PORT
+              value: "8080"
+            - name: QUARKUS_PROFILE
+              value: prod
+            - name: REGISTRY_STORAGE
+              value: kafkasql
+            - name: REGISTRY_KAFKASQL_BOOTSTRAP_SERVERS
+              value: trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9092
+            - name: REGISTRY_KAFKASQL_TOPIC
+              value: apicurio-kafkasql-journal
+            - name: REGISTRY_KAFKASQL_TOPIC_AUTO_CREATE
+              value: "true"
+            - name: REGISTRY_APIS_V2_BASE_HREF
+              value: /apis/registry/v2
+            - name: REGISTRY_CCOMPAT_LEGACY_ID_MODE_ENABLED
+              value: "true"
+            - name: REGISTRY_UI_FEATURES_READONLY
+              value: "false"
+            - name: CORS_ALLOWED_ORIGINS
+              value: "*"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.aqp-observability.svc.cluster.local:4317
+            - name: OTEL_SERVICE_NAME
+              value: apicurio-registry
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.namespace=data-services,deployment.environment=rpi-cluster
+            - name: OTEL_METRICS_EXPORTER
+              value: none
+            - name: QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: http://otel-collector.aqp-observability.svc.cluster.local:4317
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30

@@ -1,12 +1,18 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-commonLabels:
-  app.kubernetes.io/part-of: aqp
-  app.kubernetes.io/managed-by: kustomize
-
+# Do not use commonLabels — kustomize injects them into NetworkPolicy
+# podSelectors and breaks cross-namespace egress rules.
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: aqp
+      app.kubernetes.io/managed-by: kustomize
 resources:
   - namespace.yaml
+  # Phase 1 of the infra-expansion plan: AQP-owned shared infrastructure
+  # namespaces. Empty until Phase 2 / Phase 5 fill in the workloads.
+  - namespaces-shared.yaml
   - network-policies.yaml
   - rbac/service-accounts.yaml
   - rbac/cluster-roles.yaml
@@ -34,5 +40,12 @@ resources:
   - aqp-cp/pdb.yaml
   # Redis Stack (cache + HierarchicalRAG store)
   - redis-master/statefulset.yaml
+  # AQP-owned shared infra aggregators (each empty in Phase 1; Phase 2
+  # and Phase 5 fill in the actual workload manifests). Listed here so
+  # `kubectl apply -k deployments/kubernetes/base/` walks every group.
+  - ../base-services
+  - ../observability
+  - ../mlops
+  - ../edge
   # Ingress (TLS + Auth0 enforcement)
   - ingress.yaml

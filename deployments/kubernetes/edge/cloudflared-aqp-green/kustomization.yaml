@@ -1,0 +1,64 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-edge
+
+resources:
+  - ../cloudflared-aqp
+
+patches:
+  - target:
+      kind: Deployment
+      name: cloudflared-aqp
+      namespace: aqp-edge
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: cloudflared-aqp-green
+      - op: replace
+        path: /metadata/labels/app
+        value: cloudflared-aqp-green
+      - op: replace
+        path: /metadata/labels/app.kubernetes.io~1name
+        value: cloudflared-aqp-green
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: cloudflared-aqp-green
+      - op: replace
+        path: /spec/selector/matchLabels/app.kubernetes.io~1name
+        value: cloudflared-aqp-green
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: cloudflared-aqp-green
+      - op: replace
+        path: /spec/template/metadata/labels/app.kubernetes.io~1name
+        value: cloudflared-aqp-green
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
+        value: cloudflared-aqp-green-token
+      - op: replace
+        path: /spec/template/spec/topologySpreadConstraints/0/labelSelector/matchLabels/app
+        value: cloudflared-aqp-green
+      - op: replace
+        path: /spec/template/spec/topologySpreadConstraints/0/labelSelector/matchLabels/app.kubernetes.io~1name
+        value: cloudflared-aqp-green
+  - target:
+      kind: Service
+      name: cloudflared-aqp-metrics
+      namespace: aqp-edge
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: cloudflared-aqp-green-metrics
+      - op: replace
+        path: /metadata/labels/app
+        value: cloudflared-aqp-green
+      - op: replace
+        path: /metadata/labels/app.kubernetes.io~1name
+        value: cloudflared-aqp-green
+      - op: replace
+        path: /spec/selector/app
+        value: cloudflared-aqp-green
+      - op: replace
+        path: /spec/selector/app.kubernetes.io~1name
+        value: cloudflared-aqp-green

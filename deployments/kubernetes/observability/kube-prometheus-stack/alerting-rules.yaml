@@ -1,0 +1,80 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aqp-platform-rules
+  namespace: aqp-observability
+  labels:
+    app.kubernetes.io/part-of: aqp
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: aqp.streaming
+      interval: 30s
+      rules:
+        - alert: RedpandaUnderReplicatedPartitions
+          expr: redpanda_kafka_under_replicated_partitions > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: redpanda
+          annotations:
+            summary: Redpanda under-replicated partitions
+            runbook: https://docs.aqp.fund/runbooks/redpanda-replication
+
+        - alert: KafkaConsumerGroupLag
+          expr: kafka_consumergroup_lag > 100000
+          for: 10m
+          labels:
+            severity: warning
+            component: kafka
+          annotations:
+            summary: Kafka consumer group lag exceeds 100k
+
+    - name: aqp.timeseries
+      interval: 30s
+      rules:
+        - alert: QuestDBWriteAmplification
+          expr: |
+            (questdb_physically_written_rows_total
+             / clamp_min(questdb_committed_rows_total, 1)) > 3.0
+          for: 15m
+          labels:
+            severity: warning
+            component: questdb
+          annotations:
+            summary: QuestDB write amplification > 3x (compaction backlog)
+            runbook: https://docs.aqp.fund/runbooks/questdb-write-amp
+
+    - name: aqp.workloads
+      interval: 30s
+      rules:
+        - alert: WorkloadRunFailureBurst
+          expr: |
+            sum(increase(aqp_workload_runs_failed_total[15m])) > 5
+          for: 15m
+          labels:
+            severity: critical
+            component: aqp_control_plane
+          annotations:
+            summary: WorkloadRuntime failure burst (5+ failed runs in 15m)
+
+        - alert: AgentRunStalled
+          expr: aqp_agent_runs_stalled > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: agent_watchdog
+          annotations:
+            summary: Agent watchdog detected stalled runs
+
+    - name: aqp.observability
+      interval: 30s
+      rules:
+        - alert: OtelCollectorExporterFailure
+          expr: rate(otelcol_exporter_send_failed_spans[5m]) > 0
+          for: 10m
+          labels:
+            severity: warning
+            component: otel-collector
+          annotations:
+            summary: OpenTelemetry Collector exporter failures

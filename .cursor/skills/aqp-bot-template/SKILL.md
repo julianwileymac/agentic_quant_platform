@@ -5,7 +5,7 @@ template.
 
 ## Workflow
 
-1. Read `aqp_bots/AGENTS.md` and `docs/bots.md`.
+1. Read `aqp_bots/AGENTS.md` and `aqp_docs/bots.md`.
 2. Choose `aqp_bots/templates/trading/` for deployable trading bots or
    `aqp_bots/templates/research/` for research/chat bots.
 3. Use existing registry aliases and module paths.

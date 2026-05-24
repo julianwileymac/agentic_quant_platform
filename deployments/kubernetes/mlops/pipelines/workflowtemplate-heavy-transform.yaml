@@ -1,0 +1,64 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: pipeline-heavy-transform
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: pipeline-heavy-transform
+    app.kubernetes.io/component: orchestration
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: transform
+  arguments:
+    parameters:
+      - name: pipeline_image
+        value: ghcr.io/julianwiley/rpi-k8s-pipelines:latest
+      - name: source_key
+        value: raw/sample-source/latest.json
+      - name: source_bucket
+        value: dagster-artifacts
+      - name: target_bucket
+        value: dagster-artifacts
+      - name: output_prefix
+        value: processed/heavy
+      - name: transform_mode
+        value: normalize-json
+      - name: target_table
+        value: pipeline_curated_records
+  templates:
+    - name: transform
+      metadata:
+        annotations:
+          pipelines.rpi-k8s.io/todo-ha: "Pin resources and retry strategy for production workloads."
+      inputs:
+        parameters:
+          - name: pipeline_image
+          - name: source_key
+          - name: source_bucket
+          - name: target_bucket
+          - name: output_prefix
+          - name: transform_mode
+          - name: target_table
+      container:
+        image: "{{inputs.parameters.pipeline_image}}"
+        command:
+          - python
+          - -m
+          - pipelines.cli
+          - heavy-transform
+        args:
+          - --source-key
+          - "{{inputs.parameters.source_key}}"
+          - --source-bucket
+          - "{{inputs.parameters.source_bucket}}"
+          - --target-bucket
+          - "{{inputs.parameters.target_bucket}}"
+          - --output-prefix
+          - "{{inputs.parameters.output_prefix}}"
+          - --transform-mode
+          - "{{inputs.parameters.transform_mode}}"
+          - --target-table
+          - "{{inputs.parameters.target_table}}"
+        envFrom:
+          - secretRef:
+              name: pipeline-sink-credentials

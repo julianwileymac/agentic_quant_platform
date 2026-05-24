@@ -7,8 +7,8 @@
 #   3. production      — python:3.11-slim, FastAPI runtime; NO Node, NO npm
 #
 # See:
-#   docs/architecture/decisions/001-static-export-over-ssr.md
-#   docs/architecture/decisions/002-single-container-client.md
+#   aqp_docs/architecture/decisions/001-static-export-over-ssr.md
+#   aqp_docs/architecture/decisions/002-single-container-client.md
 #
 # Build:
 #   docker buildx build \

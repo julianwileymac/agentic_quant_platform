@@ -1,0 +1,31 @@
+﻿apiVersion: flink.apache.org/v1beta1
+kind: FlinkSessionJob
+metadata:
+  name: indicators-volatility
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+    job: indicators-volatility
+    pipeline-stage: compute
+    category: volatility
+spec:
+  deploymentName: flink-trading-session
+  job:
+    jarURI: s3://flink-jobs/java/indicators-volatility.jar
+    entryClass: io.rpi.flink.indicators.volatility.VolatilityJob
+    args:
+      - "--kafka.bootstrap.servers"
+      - "trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9092"
+      - "--kafka.source.topic"
+      - "market.bar.v1"
+      - "--kafka.sink.topic"
+      - "features.indicators.v1"
+      - "--kafka.group.id"
+      - "flink-java-volatility"
+      - "--schema.registry.url"
+      - "http://apicurio-registry.aqp-streaming.svc.cluster.local:8080/apis/registry/v2"
+      - "--category.label"
+      - "volatility"
+    parallelism: 1
+    upgradeMode: savepoint
+    state: suspended

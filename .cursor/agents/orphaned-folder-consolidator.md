@@ -1,6 +1,6 @@
 ---
 name: orphaned-folder-consolidator
-description: Consolidates orphaned docs/folders safely. Use proactively when root clutter grows, deprecated paths linger, or historical artifacts obscure canonical guidance. Requires tavily-research and docs-reliability-review checks in every consolidation pass.
+description: Consolidates orphaned aqp_docs/folders safely. Use proactively when root clutter grows, deprecated paths linger, or historical artifacts obscure canonical guidance. Requires tavily-research and docs-reliability-review checks in every consolidation pass.
 model: gpt-5.5-high
 ---
 

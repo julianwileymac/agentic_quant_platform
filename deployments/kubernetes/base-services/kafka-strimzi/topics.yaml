@@ -1,0 +1,536 @@
+﻿# =============================================================================
+# Kafka Topics for the AQP Streaming Pipeline
+# =============================================================================
+# Twelve canonical topics matching the Avro schemas in
+# ``agentic_quant_platform/aqp/streaming/schemas/``. Partitioning,
+# retention, and cleanup policy are tuned per-topic based on expected
+# cardinality and consumer semantics:
+#
+#   - Raw tick streams (trade/quote): high-throughput, 1d retention.
+#   - Bar / snapshot: moderate volume, 7d retention.
+#   - Market metadata (contract): log-compacted, infinite retention.
+#   - Scanner / imbalance / status / correction: low volume, 7d retention.
+#   - Features (indicators/normalized/signals): 30d with compact+delete
+#     so strategies can rewind for a month.
+#   - Deadletter: 30d, append-only sink for producer failures.
+#
+# All topics are managed by the Strimzi Topic Operator.
+# =============================================================================
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: market.trade.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: market_trade_v1
+spec:
+  partitions: 12
+  replicas: 1
+  config:
+    retention.ms: 86400000
+    segment.bytes: 536870912
+    cleanup.policy: delete
+    message.timestamp.type: LogAppendTime
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: market.quote.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: market_quote_v1
+spec:
+  partitions: 12
+  replicas: 1
+  config:
+    retention.ms: 86400000
+    segment.bytes: 536870912
+    cleanup.policy: delete
+    message.timestamp.type: LogAppendTime
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: market.bar.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: market_bar_v1
+spec:
+  partitions: 6
+  replicas: 1
+  config:
+    retention.ms: 604800000
+    segment.bytes: 536870912
+    cleanup.policy: delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: market.snapshot.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: market_snapshot_v1
+spec:
+  partitions: 6
+  replicas: 1
+  config:
+    retention.ms: 604800000
+    segment.bytes: 536870912
+    cleanup.policy: delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: market.scanner.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: market_scanner_v1
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    retention.ms: 604800000
+    segment.bytes: 268435456
+    cleanup.policy: delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: market.contract.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: metadata
+    schema: market_contract_v1
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: compact
+    min.compaction.lag.ms: 60000
+    segment.bytes: 268435456
+    delete.retention.ms: 0
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: market.imbalance.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: market_imbalance_v1
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    retention.ms: 604800000
+    segment.bytes: 268435456
+    cleanup.policy: delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: market.status.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: market_status_v1
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    retention.ms: 604800000
+    segment.bytes: 268435456
+    cleanup.policy: delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: market.correction.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: market_correction_v1
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    retention.ms: 604800000
+    segment.bytes: 268435456
+    cleanup.policy: delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: features.indicators.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: compute
+    schema: features_indicators_v1
+spec:
+  partitions: 6
+  replicas: 1
+  config:
+    retention.ms: 2592000000
+    segment.bytes: 536870912
+    cleanup.policy: compact,delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: features.normalized.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: normalize
+    schema: features_normalized_v1
+spec:
+  partitions: 6
+  replicas: 1
+  config:
+    retention.ms: 2592000000
+    segment.bytes: 536870912
+    cleanup.policy: compact,delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: features.signals.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: signal
+    schema: features_signals_v1
+spec:
+  partitions: 6
+  replicas: 1
+  config:
+    retention.ms: 2592000000
+    segment.bytes: 536870912
+    cleanup.policy: compact,delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: market.deadletter.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: deadletter
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    retention.ms: 2592000000
+    segment.bytes: 268435456
+    cleanup.policy: delete
+
+# =============================================================================
+# Alpha Vantage dedicated topics (alphavantage.*.v1)
+# =============================================================================
+# One topic per AV data kind. Fed by the poll-and-emit producer at
+# templates/alphavantage-producer/ and by the Argo bulk-load WorkflowTemplates
+# at kubernetes/mlops/pipelines/alphavantage/. Schemas live under
+# flink-jobs/jobs/schemas/alphavantage/. Kept distinct from the market.*.v1
+# topics so AV-specific data and the existing trading/IBKR/Alpaca streams stay
+# independently evolvable.
+# =============================================================================
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: alphavantage.quote.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: alphavantage_quote_v1
+    data-provider: alphavantage
+spec:
+  partitions: 6
+  replicas: 1
+  config:
+    retention.ms: 86400000
+    segment.bytes: 268435456
+    cleanup.policy: delete
+    message.timestamp.type: LogAppendTime
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: alphavantage.bar.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: alphavantage_bar_v1
+    data-provider: alphavantage
+spec:
+  partitions: 6
+  replicas: 1
+  config:
+    retention.ms: 604800000
+    segment.bytes: 536870912
+    cleanup.policy: delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: alphavantage.fx.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: alphavantage_fx_v1
+    data-provider: alphavantage
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    retention.ms: 604800000
+    segment.bytes: 268435456
+    cleanup.policy: delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: alphavantage.crypto.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: alphavantage_crypto_v1
+    data-provider: alphavantage
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    retention.ms: 604800000
+    segment.bytes: 268435456
+    cleanup.policy: delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: alphavantage.indicator.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: compute
+    schema: alphavantage_indicator_v1
+    data-provider: alphavantage
+spec:
+  partitions: 6
+  replicas: 1
+  config:
+    retention.ms: 2592000000
+    segment.bytes: 536870912
+    cleanup.policy: compact,delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: alphavantage.news.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: alphavantage_news_v1
+    data-provider: alphavantage
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    # 30d retention, keyed by article hash so compaction can dedupe duplicates
+    # across poll intervals.
+    retention.ms: 2592000000
+    segment.bytes: 268435456
+    cleanup.policy: compact,delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: alphavantage.gainers.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: alphavantage_gainers_v1
+    data-provider: alphavantage
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    retention.ms: 604800000
+    segment.bytes: 134217728
+    cleanup.policy: delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: alphavantage.insider.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: alphavantage_insider_v1
+    data-provider: alphavantage
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    retention.ms: 31536000000
+    segment.bytes: 134217728
+    cleanup.policy: compact,delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: alphavantage.overview.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: metadata
+    schema: alphavantage_overview_v1
+    data-provider: alphavantage
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    # Compacted so the latest OVERVIEW blob per symbol is retained indefinitely.
+    cleanup.policy: compact
+    min.compaction.lag.ms: 60000
+    segment.bytes: 268435456
+    delete.retention.ms: 0
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: alphavantage.earnings.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: alphavantage_earnings_v1
+    data-provider: alphavantage
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    retention.ms: 31536000000
+    segment.bytes: 268435456
+    cleanup.policy: compact,delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: alphavantage.options.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: alphavantage_options_v1
+    data-provider: alphavantage
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    retention.ms: 604800000
+    segment.bytes: 536870912
+    cleanup.policy: delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: alphavantage.commodity.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: alphavantage_commodity_v1
+    data-provider: alphavantage
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    retention.ms: 31536000000
+    segment.bytes: 268435456
+    cleanup.policy: compact,delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: alphavantage.econ.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: ingest
+    schema: alphavantage_econ_v1
+    data-provider: alphavantage
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    retention.ms: 31536000000
+    segment.bytes: 268435456
+    cleanup.policy: compact,delete
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: alphavantage.deadletter.v1
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    pipeline-stage: deadletter
+    schema: alphavantage_deadletter_v1
+    data-provider: alphavantage
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    retention.ms: 2592000000
+    segment.bytes: 268435456
+    cleanup.policy: delete

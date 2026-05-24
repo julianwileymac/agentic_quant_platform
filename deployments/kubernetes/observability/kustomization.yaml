@@ -1,0 +1,33 @@
+# AQP-owned observability stack. Self-contained: kube-prometheus-stack,
+# OpenTelemetry Operator + Collector (gateway + DaemonSet agent), Tempo,
+# Loki, Vector, VictoriaMetrics, Jaeger, and Phoenix all run in the
+# `aqp-observability` namespace.
+#
+# The OTel Collector gateway routes infrastructure spans to Tempo and AI
+# / LLM / RAG spans (those carrying `openinference.span.kind`) to Phoenix.
+# See `deployments/kubernetes/observability/opentelemetry-collector-gateway/`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+commonLabels:
+  app.kubernetes.io/part-of: aqp
+  app.kubernetes.io/component: observability
+  app.kubernetes.io/managed-by: kustomize
+  aqp.internal/canonical-owner: agentic_quant_platform
+
+resources:
+  - kube-prometheus-stack/
+  - opentelemetry-operator/
+  - opentelemetry-collector-gateway/   # canonical OTel gateway + DaemonSet agent
+  - phoenix/
+  - jaeger/
+  - loki/
+  - vector/
+  - victoriametrics/
+
+# Legacy `otel-collector/` from rpi_kubernetes is kept under
+# `deployments/kubernetes/observability/otel-collector/` for replay /
+# rollback only. It is intentionally NOT wired into this aggregator
+# because the AQP-canonical pattern is the
+# `opentelemetry-collector-gateway/` (operator-installed gateway +
+# DaemonSet agent, Phoenix routing rules, instrumentation CR).

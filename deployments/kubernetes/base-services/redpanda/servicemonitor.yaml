@@ -1,0 +1,28 @@
+# Prometheus ServiceMonitor for Redpanda. Exposes /metrics + /public_metrics
+# on the admin port (9644). Picked up by the kube-prometheus-stack instance
+# in aqp-observability/ (Phase 2c).
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: redpanda
+  namespace: aqp-streaming
+  labels:
+    app.kubernetes.io/name: redpanda
+    app.kubernetes.io/component: streaming
+    app.kubernetes.io/part-of: aqp
+    release: kube-prometheus-stack  # kube-prom-stack discovery selector
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redpanda
+      app.kubernetes.io/instance: redpanda
+  namespaceSelector:
+    matchNames:
+      - aqp-streaming
+  podMetricsEndpoints:
+    - port: admin
+      path: /metrics
+      interval: 15s
+    - port: admin
+      path: /public_metrics
+      interval: 15s

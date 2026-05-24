@@ -1,0 +1,42 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: av-fundamentals
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: alphavantage-fundamentals
+    data-provider: alphavantage
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: run
+  arguments:
+    parameters:
+      - name: symbols
+        value: "IBM,AAPL,MSFT"
+      - name: kinds
+        value: "overview,income,balance,cashflow,earnings,estimates"
+      - name: target_bucket
+        value: av-raw
+  templates:
+    - name: run
+      inputs:
+        parameters:
+          - name: symbols
+          - name: kinds
+          - name: target_bucket
+      steps:
+        - - name: load
+            templateRef:
+              name: av-bulk
+              template: run
+            arguments:
+              parameters:
+                - name: category
+                  value: fundamentals
+                - name: symbols
+                  value: "{{inputs.parameters.symbols}}"
+                - name: target_bucket
+                  value: "{{inputs.parameters.target_bucket}}"
+                - name: extra_params
+                  value: |
+                    {"kinds":"{{inputs.parameters.kinds}}"}

@@ -13,7 +13,7 @@ Public surface::
     svc = DiscoveryService()
     page = svc.list(lifecycle="pending", limit=50)
 
-The narrative walkthrough is :file:`docs/data-discovery.md` and the
+The narrative walkthrough is :file:`aqp_docs/data-discovery.md` and the
 phase plan is
 :file:`.cursor/plans/data-self-service-phase-1.plan.md`.
 """

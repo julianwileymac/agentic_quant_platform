@@ -1,0 +1,18 @@
+﻿apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-mlops
+
+resources:
+  - secret.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: mlflow
+      app.kubernetes.io/component: ml-tracking
+      app.kubernetes.io/part-of: rpi-k8s-platform

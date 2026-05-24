@@ -1,0 +1,118 @@
+﻿# =============================================================================
+# vLLM (CPU profile) - lightweight inference deployment for testing.
+# =============================================================================
+# Image is pinned to a known-good vLLM release rather than `latest` so that
+# upgrades are explicit.  Replicas are intentionally `1` (was previously `0`
+# as a placeholder) so the service is reachable as soon as the manifest is
+# applied; scale to zero from the management console if the cluster is busy.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-cpu-small
+  namespace: aqp-mlops
+  labels:
+    app: vllm-cpu-small
+    serving.rpi-k8s.io/profile: cpu-small
+    app.kubernetes.io/name: vllm-cpu-small
+    app.kubernetes.io/component: model-serving
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-cpu-small
+  template:
+    metadata:
+      labels:
+        app: vllm-cpu-small
+        app.kubernetes.io/name: vllm-cpu-small
+        serving.rpi-k8s.io/runtime: vllm
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: model-serving
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.6.3
+          args:
+            - --model
+            - facebook/opt-125m
+            - --served-model-name
+            - opt-125m
+            - --dtype
+            - float16
+            - --max-model-len
+            - "2048"
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.aqp-observability.svc.cluster.local:4317
+            - name: OTEL_SERVICE_NAME
+              value: vllm-cpu-small
+          envFrom:
+            - secretRef:
+                name: model-storage-credentials
+          ports:
+            - name: http
+              containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 90
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-cpu-small
+  namespace: aqp-mlops
+  labels:
+    app: vllm-cpu-small
+    app.kubernetes.io/name: vllm-cpu-small
+spec:
+  selector:
+    app: vllm-cpu-small
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vllm-cpu-small
+  namespace: aqp-mlops
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: vllm.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: vllm-cpu-small
+                port:
+                  number: 8000

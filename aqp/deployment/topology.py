@@ -58,6 +58,7 @@ class Tooling(StrictModel):
 
 class ServiceDefinition(StrictModel):
     id: str
+    aliases: list[str] = Field(default_factory=list)
     label: str
     role: str
     workload: Literal["deployment", "statefulset", "daemonset", "job", "external"]
@@ -69,9 +70,25 @@ class ServiceDefinition(StrictModel):
     storage: str = ""
     restartable: bool = False
     logs_enabled: bool = True
+    cluster: str = ""
+    namespace: str = ""
+    protocols: dict[str, int] = Field(default_factory=dict)
+    endpoints: dict[str, str] = Field(default_factory=dict)
 
     def selector(self) -> str:
         return f"app={self.app_label}"
+
+    def endpoint(self, name: str) -> str | None:
+        return self.endpoints.get(name)
+
+    def primary_url(self) -> str | None:
+        if not self.endpoints:
+            return None
+        for preferred in ("bootstrap", "ui", "http", "api", "admin"):
+            value = self.endpoints.get(preferred)
+            if value:
+                return value
+        return next(iter(self.endpoints.values()), None)
 
     def frontend_dict(self) -> dict[str, Any]:
         data = self.model_dump()
@@ -152,7 +169,7 @@ class DeploymentTarget(StrictModel):
 
     def terraform_vars(self) -> dict[str, Any]:
         """Return Terraform variable values derived from the topology target."""
-        if self.id == "local":
+        if self.kind == "local" or self.id == "local":
             return {
                 "environment": self.environment,
                 "namespace": self.namespace,
@@ -164,15 +181,20 @@ class DeploymentTarget(StrictModel):
                 "local_shell_interpreter": self._local_shell_interpreter(),
                 "enabled_services": self.services,
             }
-        if self.id == "rpi":
+        if self.kind in {"rpi_cluster", "kubernetes"}:
+            auth0_domain = (
+                self.auth.oidc_issuer.removeprefix("https://").removesuffix("/")
+                if self.auth.oidc_issuer
+                else ""
+            )
             return {
-                "rpi_kubeconfig_path": self.cluster.kubeconfig_path,
-                "rpi_kube_context": self.cluster.kube_context,
-                "rpi_namespace": self.namespace,
+                "kubeconfig_path": self.cluster.kubeconfig_path,
+                "kube_context": self.cluster.kube_context,
+                "namespace": self.namespace,
                 "app_version": self.images.app_version,
-                "rpi_image_registry": self.images.registry,
-                "rpi_ingress_host": self.cluster.ingress_host,
-                "auth0_domain": self.auth.oidc_issuer.removeprefix("https://").removesuffix("/"),
+                "image_registry": self.images.registry,
+                "ingress_host": self.cluster.ingress_host,
+                "auth0_domain": auth0_domain,
                 "auth0_audience": self.auth.audience,
                 "auth0_client_id": self.auth.client_id,
                 "auth_scim_m2m_audience": self.auth.audience,
@@ -183,6 +205,12 @@ class DeploymentTarget(StrictModel):
                 "auth_scim_bearer_token_hash_secret_name": self.auth.secret_refs.get(
                     "scim_bearer_token_hash", ""
                 ),
+                # Legacy compatibility for existing rpi tf env names.
+                "rpi_kubeconfig_path": self.cluster.kubeconfig_path,
+                "rpi_kube_context": self.cluster.kube_context,
+                "rpi_namespace": self.namespace,
+                "rpi_image_registry": self.images.registry,
+                "rpi_ingress_host": self.cluster.ingress_host,
             }
         return {}
 

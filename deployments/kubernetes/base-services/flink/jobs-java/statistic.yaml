@@ -1,0 +1,31 @@
+﻿apiVersion: flink.apache.org/v1beta1
+kind: FlinkSessionJob
+metadata:
+  name: indicators-statistic
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+    job: indicators-statistic
+    pipeline-stage: compute
+    category: statistic
+spec:
+  deploymentName: flink-trading-session
+  job:
+    jarURI: s3://flink-jobs/java/indicators-statistic.jar
+    entryClass: io.rpi.flink.indicators.statistic.StatisticJob
+    args:
+      - "--kafka.bootstrap.servers"
+      - "trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9092"
+      - "--kafka.source.topic"
+      - "market.bar.v1"
+      - "--kafka.sink.topic"
+      - "features.indicators.v1"
+      - "--kafka.group.id"
+      - "flink-java-statistic"
+      - "--schema.registry.url"
+      - "http://apicurio-registry.aqp-streaming.svc.cluster.local:8080/apis/registry/v2"
+      - "--category.label"
+      - "statistic"
+    parallelism: 1
+    upgradeMode: savepoint
+    state: suspended

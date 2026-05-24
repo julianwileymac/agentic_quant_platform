@@ -18,7 +18,7 @@ Public surface:
   helpers wired into mutation routes so the cache stays consistent
   without waiting for the next prefetch cycle.
 
-Architecture notes live in :mod:`docs/metadata-cache.md`. The Cursor
+Architecture notes live in :mod:`aqp_docs/metadata-cache.md`. The Cursor
 rule that scopes this package is :file:`.cursor/rules/cache.mdc`.
 """
 from __future__ import annotations

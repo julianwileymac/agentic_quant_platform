@@ -1,1 +1,1 @@
-"""Tests for the AQP Management Engine (see docs/management-engine.md)."""
+"""Tests for the AQP Management Engine (see aqp_docs/management-engine.md)."""

@@ -43,7 +43,16 @@ export type CacheCategory =
   | "cloud_providers"
   | "entra_tenants"
   | "k8s_namespaces"
-  | "k8s_clusters";
+  | "k8s_clusters"
+  // Phase 3 of the AQP infra-expansion plan — Strimzi + Redpanda
+  // streaming clusters, QuestDB, Phoenix, Grafana dashboards,
+  // Iceberg + Hudi tables, and the topology service catalog.
+  | "streaming_clusters"
+  | "timeseries_databases"
+  | "phoenix_projects"
+  | "grafana_dashboards"
+  | "lakehouse_tables"
+  | "topology_services";
 
 export interface CacheItem {
   id: string;
@@ -98,6 +107,15 @@ const CACHE_PATH: Record<CacheCategory, string> = {
   entra_tenants: "/cache/entra_tenants",
   k8s_namespaces: "/cache/k8s_namespaces",
   k8s_clusters: "/cache/k8s_clusters",
+  // Phase 3 infra-expansion categories. Defaults to the cache, but
+  // streaming_clusters / topology_services are also fed by the
+  // /manage/topology snapshot when the cache populator hasn't run yet.
+  streaming_clusters: "/cache/streaming_clusters",
+  timeseries_databases: "/cache/timeseries_databases",
+  phoenix_projects: "/cache/phoenix_projects",
+  grafana_dashboards: "/cache/grafana_dashboards",
+  lakehouse_tables: "/cache/lakehouse_tables",
+  topology_services: "/cache/topology_services",
 };
 
 export const CacheApi = {

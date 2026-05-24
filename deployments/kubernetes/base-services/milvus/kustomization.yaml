@@ -1,0 +1,23 @@
+﻿# =============================================================================
+# Milvus - Kustomize entry
+# =============================================================================
+# The Milvus binary is installed via the milvus/milvus Helm chart (see
+# README.md).  This Kustomization manages the supporting secret so a clean
+# `kubectl apply -k kubernetes/` keeps it in sync with the rest of the
+# cluster (the chart cannot own the secret because it must exist BEFORE
+# the chart is installed).
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-data-services
+
+resources:
+  - secret.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: milvus
+      app.kubernetes.io/component: vector-database
+      app.kubernetes.io/part-of: rpi-k8s-platform

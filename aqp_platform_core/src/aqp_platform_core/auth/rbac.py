@@ -47,6 +47,7 @@ _SCOPE_TRADE_LIVE = "trade:live"
 _SCOPE_BACKTEST_READ = "backtest:read"
 _SCOPE_BACKTEST_CREATE = "backtest:create"
 _SCOPE_RAG_QUERY = "rag:query"
+_SCOPE_READ_TIMESERIES = "read:timeseries"
 _SCOPE_ML_WORKBENCH = "ml:workbench"
 _SCOPE_RL_TRAIN = "rl:train"
 _SCOPE_DEPLOY_RUN = "deploy:run"
@@ -93,6 +94,7 @@ ALL_CANONICAL_SCOPES: frozenset[str] = frozenset(
         _SCOPE_BACKTEST_READ,
         _SCOPE_BACKTEST_CREATE,
         _SCOPE_RAG_QUERY,
+        _SCOPE_READ_TIMESERIES,
         _SCOPE_ML_WORKBENCH,
         _SCOPE_RL_TRAIN,
         _SCOPE_DEPLOY_RUN,
@@ -127,6 +129,7 @@ _VIEWER_SCOPES: frozenset[str] = frozenset(
         _SCOPE_TRADE_READ,
         _SCOPE_BACKTEST_READ,
         _SCOPE_RAG_QUERY,
+        _SCOPE_READ_TIMESERIES,
     }
 )
 

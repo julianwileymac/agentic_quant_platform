@@ -1,0 +1,41 @@
+﻿# =============================================================================
+# KafkaConnector - JDBC Sink for features.signals.v1 -> PostgreSQL
+# =============================================================================
+# Persists generated trading signals into the flink_trading schema alongside
+# the existing FLink JDBC sinks. The target table is auto-created with
+# idempotent upsert semantics using the composite key (vt_symbol, ts_ns).
+# =============================================================================
+
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaConnector
+metadata:
+  name: jdbc-sink-features-signals
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-connect
+    pipeline-stage: sink
+    target: postgresql
+spec:
+  class: io.confluent.connect.jdbc.JdbcSinkConnector
+  tasksMax: 1
+  state: paused
+  config:
+    topics: features.signals.v1
+    connection.url: "jdbc:postgresql://postgresql.aqp-streaming.svc.cluster.local:5432/postgres"
+    connection.user: "${secrets:data-services/postgresql-credentials:username}"
+    connection.password: "${secrets:data-services/postgresql-credentials:password}"
+    insert.mode: upsert
+    pk.mode: record_value
+    pk.fields: vt_symbol,ts_ns
+    auto.create: "true"
+    auto.evolve: "true"
+    table.name.format: flink_trading.kafka_signals
+    batch.size: 500
+    max.retries: 10
+    retry.backoff.ms: 3000
+    key.converter: org.apache.kafka.connect.storage.StringConverter
+    value.converter: io.apicurio.registry.serde.avro.AvroConverter
+    value.converter.apicurio.registry.url: http://apicurio-registry.aqp-streaming.svc.cluster.local:8080/apis/registry/v2
+    value.converter.apicurio.registry.find-latest: "true"
+    value.converter.apicurio.registry.use-id: contentId
+    value.converter.apicurio.registry.headers.enabled: "true"

@@ -262,6 +262,22 @@ from aqp.persistence.models_extraction import (
 )
 from aqp.persistence.models_sinks import SinkRow, SinkVersionRow
 from aqp.persistence.models_dagster_sandbox import DagsterSandboxSessionRow
+from aqp.persistence.models_lab import (
+    LAB_LABEL_KINDS,
+    LAB_MODES,
+    LAB_NODE_STATUSES,
+    LAB_NOTE_TARGETS,
+    LAB_RUN_STATUSES,
+    LAB_SNIPPET_LANGS,
+    LabArtifact,
+    LabGraph,
+    LabLabel,
+    LabNodeRun,
+    LabNote,
+    LabPaperChunk,
+    LabRun,
+    LabSnippet,
+)
 from aqp.persistence.models_producers import MarketDataProducerRow
 from aqp.persistence.models_streaming_links import StreamingDatasetLink
 from aqp.persistence.models_lineage import DataLineageEvent
@@ -509,6 +525,21 @@ __all__ = [
     "StreamingDatasetLink",
     # Dagster sandbox (data fabric phase 3)
     "DagsterSandboxSessionRow",
+    # Data Lab (foundation — 4-mode GraphSpec workspace)
+    "LAB_LABEL_KINDS",
+    "LAB_MODES",
+    "LAB_NODE_STATUSES",
+    "LAB_NOTE_TARGETS",
+    "LAB_RUN_STATUSES",
+    "LAB_SNIPPET_LANGS",
+    "LabArtifact",
+    "LabGraph",
+    "LabLabel",
+    "LabNodeRun",
+    "LabNote",
+    "LabPaperChunk",
+    "LabRun",
+    "LabSnippet",
     # Data lineage (Phase 2 - data layer unification)
     "DataLineageEvent",
     # Terraform IaC control plane + Entra ID tenant link

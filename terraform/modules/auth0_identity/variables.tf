@@ -30,14 +30,32 @@ variable "callback_urls" {
   default = []
 }
 
+variable "cutover_callback_urls" {
+  type        = list(string)
+  default     = []
+  description = "Additional callback URLs used during blue/green domain transitions."
+}
+
 variable "logout_urls" {
   type    = list(string)
   default = []
 }
 
+variable "cutover_logout_urls" {
+  type        = list(string)
+  default     = []
+  description = "Additional logout URLs used during blue/green domain transitions."
+}
+
 variable "web_origins" {
   type    = list(string)
   default = []
+}
+
+variable "cutover_web_origins" {
+  type        = list(string)
+  default     = []
+  description = "Additional web origins used during blue/green domain transitions."
 }
 
 variable "scim_base_url" {

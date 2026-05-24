@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aqp-config
+  namespace: aqp
+data:
+  AQP_INGRESS_BASE_URL: https://aqp-green.aqp.fund
+  VITE_API_URL: https://api-green.aqp.fund
+  VITE_WS_URL: wss://api-green.aqp.fund
+  VITE_AUTH0_REDIRECT_URI: https://aqp-green.aqp.fund

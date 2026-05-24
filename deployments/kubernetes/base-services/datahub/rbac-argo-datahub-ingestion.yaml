@@ -1,0 +1,38 @@
+﻿apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-datahub-ingestion
+  namespace: aqp-data-services
+  labels:
+    app.kubernetes.io/name: datahub
+    app.kubernetes.io/component: metadata-ingestion
+rules:
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-datahub-ingestion
+  namespace: aqp-data-services
+  labels:
+    app.kubernetes.io/name: datahub
+    app.kubernetes.io/component: metadata-ingestion
+subjects:
+  - kind: ServiceAccount
+    name: argo-workflow
+    namespace: aqp-mlops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argo-datahub-ingestion

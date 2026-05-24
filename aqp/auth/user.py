@@ -362,7 +362,7 @@ def _apply_custom_claims_memberships(
 ) -> None:
     """Read AQP-namespaced custom claims and upsert matching memberships.
 
-    Recognised claims (see ``docs/auth0-actions.md``):
+    Recognised claims (see ``aqp_docs/auth0-actions.md``):
 
     - ``https://aqp/org_id`` — string, single org membership.
     - ``https://aqp/team_id`` — string, single team membership.

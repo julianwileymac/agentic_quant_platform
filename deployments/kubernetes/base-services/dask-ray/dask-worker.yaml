@@ -1,0 +1,86 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dask-worker
+  namespace: aqp-elt
+  labels:
+    app: dask
+    component: worker
+spec:
+  replicas: 4  # One per RPi node
+  selector:
+    matchLabels:
+      app: dask
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: dask
+        component: worker
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/dask/dask:latest
+          command:
+            - dask-worker
+            - dask-scheduler.aqp-elt.svc.cluster.local:8786
+            - --nthreads=2
+            - --memory-limit=2GB
+            - --death-timeout=60
+            - --dashboard-address=:8789
+          env:
+            - name: DASK_SCHEDULER_ADDRESS
+              value: "tcp://dask-scheduler.aqp-elt.svc.cluster.local:8786"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          readinessProbe:
+            tcpSocket:
+              port: 8789
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      # Spread workers across RPi nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: dask
+                    component: worker
+                topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: hardware/type
+                    operator: In
+                    values:
+                      - raspberry-pi
+---
+# HorizontalPodAutoscaler for workers
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: dask-worker
+  namespace: aqp-elt
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: dask-worker
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

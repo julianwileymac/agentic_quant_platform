@@ -109,7 +109,7 @@ connect to the Kafka cluster deployed by the companion
 assumes both workloads live in the same cluster. Override it in an
 overlay to point at an external Kafka.
 
-See [../../docs/streaming.md](../../docs/streaming.md) for the full
+See [../../aqp_docs/streaming.md](../../aqp_docs/streaming.md) for the full
 ingester + Flink + KafkaDataFeed architecture.
 
 ## Observability

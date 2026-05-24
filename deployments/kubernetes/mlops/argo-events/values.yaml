@@ -1,0 +1,44 @@
+# =============================================================================
+# Argo Events Helm Values
+# =============================================================================
+# Install with:
+#   helm repo add argo https://argoproj.github.io/argo-helm
+#   helm repo update
+#   helm upgrade --install argo-events argo/argo-events \
+#     --namespace mlops --create-namespace -f values.yaml
+# =============================================================================
+
+nameOverride: argo-events
+
+crds:
+  install: true
+  keep: true
+
+global:
+  image:
+    imagePullPolicy: IfNotPresent
+
+controller:
+  # Run Argo Events in mlops only for least-privilege operation.
+  rbac:
+    enabled: true
+    namespaced: true
+    managedNamespace: mlops
+
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  metrics:
+    enabled: true
+
+webhook:
+  # Keep disabled for now; enable when you deploy validating webhooks for
+  # EventSources/Sensors across namespaces.
+  enabled: false

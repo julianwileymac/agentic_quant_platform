@@ -10,7 +10,7 @@ Asserts two things:
    be strictly additive — flipping any combination on or off may not
    change the node names produced by the five legacy builders.
 
-This is the regression test the rollout doc (docs/orchestration-
+This is the regression test the rollout doc (aqp_docs/orchestration-
 refactor-rollout.md) refers operators to before they enable any
 ``orchestration_*`` flag.
 """

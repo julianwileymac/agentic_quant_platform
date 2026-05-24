@@ -1,0 +1,72 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jupyterhub
+  namespace: aqp-elt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jupyterhub
+  template:
+    metadata:
+      labels:
+        app: jupyterhub
+    spec:
+      serviceAccountName: jupyterhub
+      containers:
+        - name: jupyterhub
+          image: jupyterhub/jupyterhub:4.0
+          command:
+            - jupyterhub
+            - -f
+            - /etc/jupyterhub/jupyterhub_config.py
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+            - name: hub
+              containerPort: 8081
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/jupyterhub
+            - name: data
+              mountPath: /srv/jupyterhub
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /hub/health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /hub/health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: jupyterhub-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: jupyterhub-data
+      # Prefer control plane for hub (spawned notebooks can go anywhere)
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.kubernetes.io/role
+                    operator: In
+                    values:
+                      - control-plane

@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redpanda-connect-pipelines
+  namespace: aqp-streaming
+  labels:
+    app.kubernetes.io/name: redpanda-connect
+    app.kubernetes.io/component: streaming
+    app.kubernetes.io/part-of: aqp
+data:
+  # Three pipelines: market.l1 -> market_l1, market.l2 -> market_l2,
+  # execution.orders -> executions. Add more pipelines by appending
+  # to the input list and the output switch case (or run multiple
+  # Connect Deployments per topic family for tighter isolation).
+  pipelines.yaml: |
+    input:
+      label: redpanda_market_streams
+      kafka_franz:
+        seed_brokers:
+          - redpanda.aqp-streaming.svc.cluster.local:9092
+        topics:
+          - "market.l1.*"
+          - "market.l2.*"
+          - "execution.orders.*"
+        consumer_group: redpanda-connect-questdb
+        commit_period: 1s
+        start_from_oldest: false
+
+    pipeline:
+      processors:
+        - mapping: |
+            root.measurement = if this.kafka.topic.contains("market.l1") {
+              "market_l1"
+            } else if this.kafka.topic.contains("market.l2") {
+              "market_l2"
+            } else if this.kafka.topic.contains("execution.orders") {
+              "executions"
+            } else {
+              "agentic_state"
+            }
+
+    output:
+      label: questdb_ilp
+      questdb:
+        # The questdb output landed in Redpanda Connect v4.37+.
+        address: questdb.aqp-timeseries.svc.cluster.local:9009
+        max_in_flight: 64
+        batching:
+          count: 1000
+          period: 100ms
+        designated_timestamp_field: ts_ns
+        timestamp_units: ns

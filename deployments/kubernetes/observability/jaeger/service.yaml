@@ -1,0 +1,60 @@
+﻿apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-query
+  namespace: aqp-observability
+spec:
+  type: ClusterIP
+  ports:
+    - name: ui
+      port: 16686
+      targetPort: 16686
+      protocol: TCP
+    - name: admin-http
+      port: 14269
+      targetPort: 14269
+      protocol: TCP
+  selector:
+    app: jaeger
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-collector
+  namespace: aqp-observability
+spec:
+  type: ClusterIP
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP
+    - name: collector
+      port: 14268
+      targetPort: 14268
+      protocol: TCP
+    - name: collector-grpc
+      port: 14250
+      targetPort: 14250
+      protocol: TCP
+  selector:
+    app: jaeger
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-external
+  namespace: aqp-observability
+spec:
+  type: LoadBalancer
+  ports:
+    - name: ui
+      port: 16686
+      targetPort: 16686
+      protocol: TCP
+  selector:
+    app: jaeger

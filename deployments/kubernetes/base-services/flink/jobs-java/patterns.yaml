@@ -1,0 +1,33 @@
+﻿apiVersion: flink.apache.org/v1beta1
+kind: FlinkSessionJob
+metadata:
+  name: indicators-patterns
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+    job: indicators-patterns
+    pipeline-stage: compute
+    category: patterns
+spec:
+  deploymentName: flink-trading-session
+  job:
+    jarURI: s3://flink-jobs/java/indicators-patterns.jar
+    entryClass: io.rpi.flink.indicators.patterns.PatternsJob
+    args:
+      - "--kafka.bootstrap.servers"
+      - "trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9092"
+      - "--kafka.source.topic"
+      - "market.bar.v1"
+      - "--kafka.sink.topic"
+      - "features.indicators.v1"
+      - "--kafka.group.id"
+      - "flink-java-patterns"
+      - "--schema.registry.url"
+      - "http://apicurio-registry.aqp-streaming.svc.cluster.local:8080/apis/registry/v2"
+      - "--category.label"
+      - "patterns"
+      - "--buffer.size"
+      - "30"
+    parallelism: 2
+    upgradeMode: savepoint
+    state: suspended

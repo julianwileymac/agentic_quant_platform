@@ -1,0 +1,107 @@
+﻿# =============================================================================
+# BentoML Yatai Helm Values
+# =============================================================================
+# Install with:
+#   helm repo add bentoml https://bentoml.github.io/yatai-chart
+#   helm repo update
+#   helm upgrade --install yatai bentoml/yatai \
+#     --namespace ml-platform --create-namespace -f values.yaml
+# =============================================================================
+
+# Yatai configuration
+yatai:
+  image:
+    repository: bentoml/yatai
+    tag: 1.0.0
+    pullPolicy: IfNotPresent
+  
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  
+  # PostgreSQL for metadata
+  postgresql:
+    enabled: false  # Use external PostgreSQL
+    external:
+      host: postgresql.aqp-data-services.svc.cluster.local
+      port: 5432
+      database: bentoml
+      user: bentoml
+      password: bentoml123
+  
+  # MinIO for artifact storage
+  minio:
+    enabled: false  # Use external MinIO
+    external:
+      endpoint: minio.aqp-data-services.svc.cluster.local:9000
+      # Defaults are overridden from yatai-minio in README/setup guide.
+      # Keep in sync with secret.yaml (yatai-minio)
+      accessKey: minioadmin
+      secretKey: minioadmin123
+      bucket: bentoml-artifacts
+      secure: false
+
+  extraEnvs:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: "http://otel-collector.aqp-observability.svc.cluster.local:4317"
+    - name: OTEL_SERVICE_NAME
+      value: "bentoml-yatai"
+    - name: OTEL_TRACES_EXPORTER
+      value: "otlp"
+    - name: OTEL_LOGS_EXPORTER
+      value: "otlp"
+
+# Yatai Deployment Operator
+yataiDeploymentOperator:
+  enabled: true
+  image:
+    repository: bentoml/yatai-deployment-operator
+    tag: 1.0.0
+    pullPolicy: IfNotPresent
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Yatai Image Builder
+yataiImageBuilder:
+  enabled: true
+  image:
+    repository: bentoml/yatai-image-builder
+    tag: 1.0.0
+    pullPolicy: IfNotPresent
+  
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 3000
+
+# Ingress
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hosts:
+    - host: yatai.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+# RBAC
+rbac:
+  create: true

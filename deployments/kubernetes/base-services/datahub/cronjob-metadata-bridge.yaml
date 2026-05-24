@@ -1,0 +1,46 @@
+﻿apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: datahub-metadata-bridge
+  namespace: aqp-data-services
+  labels:
+    app.kubernetes.io/name: datahub
+    app.kubernetes.io/component: metadata-ingestion
+    datahub.ingestion/source: metadata-bridge
+spec:
+  schedule: "35 * * * *"
+  # Safe-by-default: enable after setting token/credentials.
+  suspend: true
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 1800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: datahub
+            app.kubernetes.io/component: metadata-ingestion
+            datahub.ingestion/source: metadata-bridge
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: bridge
+              image: acryldata/datahub-ingestion:latest
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - configMapRef:
+                    name: datahub-ingestion-settings
+                - secretRef:
+                    name: datahub-ingestion-secrets
+              command:
+                - python
+                - /opt/datahub/bridge/push_metadata.py
+              volumeMounts:
+                - name: bridge-script
+                  mountPath: /opt/datahub/bridge
+                  readOnly: true
+          volumes:
+            - name: bridge-script
+              configMap:
+                name: datahub-metadata-bridge

@@ -1,0 +1,16 @@
+﻿# =============================================================================
+# Kustomization - KafkaConnector sample sinks
+# =============================================================================
+# Sample KafkaConnector CRs reconciled by the trading-connect KafkaConnect
+# cluster. Each connector is created in a paused state so operators can
+# review configuration before flipping spec.state to running.
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-streaming
+
+resources:
+  - s3-sink-features-indicators.yaml
+  - jdbc-sink-features-signals.yaml

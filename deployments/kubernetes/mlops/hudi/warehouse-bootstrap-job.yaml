@@ -1,0 +1,40 @@
+# One-shot Job that creates the MinIO bucket layout used by Hudi.
+# Idempotent (mc mb --ignore-existing).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aqp-hudi-warehouse-bootstrap
+  namespace: aqp-lakehouse
+  labels:
+    app.kubernetes.io/component: lakehouse
+    app.kubernetes.io/part-of: aqp
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: lakehouse
+        app.kubernetes.io/part-of: aqp
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: minio/mc:RELEASE.2024-10-15T00-04-19Z
+          env:
+            - name: MC_HOST_aqp
+              valueFrom:
+                secretKeyRef:
+                  name: minio-aqp-credentials
+                  key: mc_host_url
+                  optional: true
+          command:
+            - sh
+            - -c
+            - |
+              set -euo pipefail
+              mc alias set aqp \
+                http://minio.aqp-data-services.svc.cluster.local:9000 \
+                "${MINIO_ROOT_USER:-aqp}" "${MINIO_ROOT_PASSWORD:-aqp-password}"
+              mc mb --ignore-existing aqp/aqp-lakehouse
+              mc mb --ignore-existing aqp/aqp-lakehouse/hudi
+              mc anonymous set none aqp/aqp-lakehouse
+              echo "Hudi warehouse layout ready at s3://aqp-lakehouse/hudi/"

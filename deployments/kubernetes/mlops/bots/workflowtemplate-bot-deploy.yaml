@@ -1,0 +1,107 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: aqp-bot-deploy
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: aqp-bot-deploy
+    app.kubernetes.io/component: orchestration
+    aqp.io/managed-by: bot-runtime
+  annotations:
+    aqp.io/notes: >-
+      Cluster-side companion to ``aqp.bots.deploy.KubernetesTarget``.
+      Renders + applies the per-bot ``Deployment`` + ``ConfigMap``
+      manifest produced by the AQP API. Triggered manually (CLI) or
+      from the AQP UI's "Render K8s manifest" button.
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: deploy-bot
+  arguments:
+    parameters:
+      - name: aqp_image
+        value: ghcr.io/julianwiley/agentic-quant-platform:latest
+      - name: bot_slug
+        value: ""
+      - name: bot_kind
+        value: trading
+      - name: target_namespace
+        value: aqp-bots
+      - name: bot_image
+        value: ghcr.io/julianwiley/agentic-quant-platform:latest
+  templates:
+    - name: deploy-bot
+      inputs:
+        parameters:
+          - name: aqp_image
+          - name: bot_slug
+          - name: bot_kind
+          - name: target_namespace
+          - name: bot_image
+      steps:
+        - - name: render
+            template: render-manifest
+        - - name: apply
+            template: apply-manifest
+            arguments:
+              artifacts:
+                - name: manifest
+                  from: "{{steps.render.outputs.artifacts.manifest}}"
+
+    - name: render-manifest
+      metadata:
+        annotations:
+          aqp.io/step: render
+      container:
+        image: "{{workflow.parameters.aqp_image}}"
+        command:
+          - /bin/sh
+          - -c
+        args:
+          - |
+            set -euo pipefail
+            mkdir -p /tmp/out
+            python -m aqp.bots.cli show "{{workflow.parameters.bot_slug}}" --yaml > /tmp/out/spec.yaml
+            python -c "
+            from pathlib import Path
+            from aqp.bots.deploy import KubernetesTarget
+            from aqp.bots.registry import get_bot_spec
+            from aqp.bots.base import build_bot
+            spec = get_bot_spec('{{workflow.parameters.bot_slug}}')
+            bot = build_bot(spec)
+            target = KubernetesTarget(manifest_root=Path('/tmp/out'), apply=False)
+            yaml_text = target.render_manifest(
+                bot,
+                overrides={
+                    'namespace': '{{workflow.parameters.target_namespace}}',
+                    'image': '{{workflow.parameters.bot_image}}',
+                },
+            )
+            Path('/tmp/out/manifest.yaml').write_text(yaml_text, encoding='utf-8')
+            "
+        env:
+          - name: AQP_BOT_SLUG
+            value: "{{workflow.parameters.bot_slug}}"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+      outputs:
+        artifacts:
+          - name: manifest
+            path: /tmp/out/manifest.yaml
+
+    - name: apply-manifest
+      metadata:
+        annotations:
+          aqp.io/step: apply
+      inputs:
+        artifacts:
+          - name: manifest
+            path: /tmp/in/manifest.yaml
+      container:
+        image: bitnami/kubectl:1.30
+        command:
+          - /bin/sh
+          - -c
+        args:
+          - |
+            set -euo pipefail
+            kubectl apply -n "{{workflow.parameters.target_namespace}}" -f /tmp/in/manifest.yaml

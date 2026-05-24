@@ -1,0 +1,26 @@
+# =============================================================================
+# helm-runner - in-cluster Helm bootstrap Jobs.
+# =============================================================================
+# Apply only the namespace + RBAC + values ConfigMap by default.  Trigger
+# individual install/upgrade Jobs explicitly with:
+#
+#   kubectl apply -f kubernetes/bootstrap/helm-runner/job-kserve.yaml
+#   kubectl apply -f kubernetes/bootstrap/helm-runner/job-dagster.yaml
+#   kubectl apply -f kubernetes/bootstrap/helm-runner/job-airbyte.yaml
+#
+# Jobs are intentionally NOT in the default resources list so that
+# `kubectl apply -k kubernetes/` does not re-trigger them on every apply.
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - configmap-values.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: helm-runner
+      app.kubernetes.io/part-of: rpi-k8s-platform

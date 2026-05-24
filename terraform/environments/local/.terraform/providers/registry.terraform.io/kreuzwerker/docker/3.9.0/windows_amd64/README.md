@@ -22,7 +22,7 @@
 
 The documentation for the provider is available on the [Terraform Registry](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs).
 
-Do you want to migrate from `v2.x` to `v3.x`? Please read the [migration guide](docs/v2_v3_migration.md)
+Do you want to migrate from `v2.x` to `v3.x`? Please read the [migration guide](aqp_docs/v2_v3_migration.md)
 
 ## Example usage
 

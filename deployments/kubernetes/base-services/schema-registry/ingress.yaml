@@ -1,0 +1,31 @@
+﻿# =============================================================================
+# Apicurio Registry Ingress
+# =============================================================================
+# Exposes the web UI + REST APIs at http://schema-registry.local for
+# workstation access. Cluster-internal callers should prefer the service
+# DNS name apicurio-registry.aqp-streaming.svc.cluster.local:8080.
+# =============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: apicurio-registry
+  namespace: aqp-streaming
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "5m"
+  labels:
+    app: apicurio-registry
+    app.kubernetes.io/component: schema-registry
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: schema-registry.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: apicurio-registry
+                port:
+                  number: 8080

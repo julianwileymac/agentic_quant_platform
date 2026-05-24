@@ -1,0 +1,16 @@
+# OpenTelemetry Operator Helm release. Phase 2c of the AQP infra-
+# expansion plan. Auto-instrumentation injection for Python (FastAPI +
+# Celery) is opt-in via the Instrumentation CR in
+# opentelemetry-collector-gateway/instrumentation.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-observability
+
+commonLabels:
+  app.kubernetes.io/part-of: aqp
+  app.kubernetes.io/component: observability
+  app.kubernetes.io/managed-by: kustomize
+
+resources:
+  - helm-values.yaml

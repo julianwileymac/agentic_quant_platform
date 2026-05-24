@@ -13,7 +13,7 @@ structure and runtime behavior.
 
 ## Required workflow
 
-1. Identify changed or relevant docs/surfaces.
+1. Identify changed or relevant docs / surfaces.
 2. Run Tavily deep research for external standards when guidance is
    architecture/process-sensitive.
 3. Run a `docs-reliability-review` pass for path/command/reference drift.

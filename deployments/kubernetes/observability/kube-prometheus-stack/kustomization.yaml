@@ -1,0 +1,19 @@
+# kube-prometheus-stack Helm release. Phase 2c of the AQP infra-
+# expansion plan. Installed via helm-runner with the values.yaml
+# below; this kustomization holds the supporting manifests
+# (Grafana datasources sidecar config, ServiceMonitor / PodMonitor
+# selectors, alerting rules).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-observability
+
+commonLabels:
+  app.kubernetes.io/part-of: aqp
+  app.kubernetes.io/component: observability
+  app.kubernetes.io/managed-by: kustomize
+
+resources:
+  - grafana-datasources.yaml
+  - alerting-rules.yaml
+  - helm-values.yaml

@@ -1,0 +1,14 @@
+﻿apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pipeline-sources
+  namespace: aqp-mlops
+data:
+  HTTP_SAMPLE_URL: https://example.com/data.json
+  REST_SAMPLE_URL: https://example.com/api/events
+  S3_SAMPLE_URI: s3://example-bucket/path/to/object.json
+  FILESYSTEM_SAMPLE_PATH: /data/input/sample.json
+  SOURCE_POSTGRES_TABLE: source_events
+  SOURCE_POSTGRES_PRIMARY_KEY: id
+  SOURCE_POSTGRES_UPDATED_AT: updated_at
+

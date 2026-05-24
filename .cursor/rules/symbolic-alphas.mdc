@@ -13,7 +13,7 @@ alwaysApply: false
 
 Phase 4 of the agentic-RL rollout. Hard rule **39** in
 [AGENTS.md](mdc:AGENTS.md) is the source of truth. Companion doc:
-[docs/alpha-researcher-agent.md](mdc:docs/alpha-researcher-agent.md).
+[aqp_docs/alpha-researcher-agent.md](mdc:aqp_docs/alpha-researcher-agent.md).
 
 ## What this scope covers
 

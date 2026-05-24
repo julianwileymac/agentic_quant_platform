@@ -1,0 +1,151 @@
+﻿# =============================================================================
+# PostgreSQL Schema for Flink Trading Pipeline
+# =============================================================================
+# Tables used by Flink JDBC sink connectors. Apply to the existing PostgreSQL
+# instance in data-services:
+#   kubectl exec -n data-services deploy/postgresql -- \
+#     psql -U postgres -f /tmp/flink-init.sql
+#
+# Or use this ConfigMap as a volume mount for a one-off Job.
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flink-postgres-init
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+data:
+  flink-init.sql: |
+    -- Flink Trading Pipeline Schema
+    -- Run against PostgreSQL in data-services namespace
+
+    CREATE SCHEMA IF NOT EXISTS flink_trading;
+
+    -- Raw market data persisted from ingest job
+    CREATE TABLE IF NOT EXISTS flink_trading.market_data (
+        id              BIGSERIAL PRIMARY KEY,
+        symbol          VARCHAR(20)     NOT NULL,
+        exchange        VARCHAR(20),
+        data_source     VARCHAR(20)     NOT NULL,  -- 'ibkr' or 'alpaca'
+        event_type      VARCHAR(20)     NOT NULL,  -- 'trade', 'quote', 'bar'
+        price           NUMERIC(18,8),
+        volume          NUMERIC(18,4),
+        bid             NUMERIC(18,8),
+        ask             NUMERIC(18,8),
+        bid_size        NUMERIC(18,4),
+        ask_size        NUMERIC(18,4),
+        open            NUMERIC(18,8),
+        high            NUMERIC(18,8),
+        low             NUMERIC(18,8),
+        close           NUMERIC(18,8),
+        bar_volume      NUMERIC(18,4),
+        vwap            NUMERIC(18,8),
+        bar_interval    VARCHAR(10),
+        event_timestamp TIMESTAMPTZ     NOT NULL,
+        ingest_timestamp TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+        raw_payload     JSONB
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_market_data_symbol_ts
+        ON flink_trading.market_data (symbol, event_timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_market_data_source_ts
+        ON flink_trading.market_data (data_source, event_timestamp DESC);
+
+    -- Computed technical indicators
+    CREATE TABLE IF NOT EXISTS flink_trading.indicators (
+        id              BIGSERIAL PRIMARY KEY,
+        symbol          VARCHAR(20)     NOT NULL,
+        window_start    TIMESTAMPTZ     NOT NULL,
+        window_end      TIMESTAMPTZ     NOT NULL,
+        window_size_sec INTEGER         NOT NULL,
+        -- Moving averages
+        sma_5           NUMERIC(18,8),
+        sma_10          NUMERIC(18,8),
+        sma_20          NUMERIC(18,8),
+        sma_50          NUMERIC(18,8),
+        ema_12          NUMERIC(18,8),
+        ema_26          NUMERIC(18,8),
+        -- Momentum
+        rsi_14          NUMERIC(8,4),
+        macd_line       NUMERIC(18,8),
+        macd_signal     NUMERIC(18,8),
+        macd_histogram  NUMERIC(18,8),
+        -- Volatility
+        bb_upper        NUMERIC(18,8),
+        bb_middle       NUMERIC(18,8),
+        bb_lower        NUMERIC(18,8),
+        atr_14          NUMERIC(18,8),
+        -- Volume
+        vwap            NUMERIC(18,8),
+        volume_sma_20   NUMERIC(18,4),
+        obv             NUMERIC(18,4),
+        -- Lagged values
+        price_lag_1     NUMERIC(18,8),
+        price_lag_5     NUMERIC(18,8),
+        price_lag_10    NUMERIC(18,8),
+        volume_lag_1    NUMERIC(18,4),
+        return_1        NUMERIC(12,8),
+        return_5        NUMERIC(12,8),
+        return_10       NUMERIC(12,8),
+        compute_timestamp TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_indicators_symbol_window
+        ON flink_trading.indicators (symbol, window_end DESC);
+
+    -- Normalized signals for backtesting and ML
+    CREATE TABLE IF NOT EXISTS flink_trading.signals (
+        id              BIGSERIAL PRIMARY KEY,
+        symbol          VARCHAR(20)     NOT NULL,
+        signal_timestamp TIMESTAMPTZ    NOT NULL,
+        -- Normalized features (z-score or min-max)
+        norm_price      NUMERIC(12,8),
+        norm_volume     NUMERIC(12,8),
+        norm_rsi        NUMERIC(12,8),
+        norm_macd       NUMERIC(12,8),
+        norm_bb_width   NUMERIC(12,8),
+        norm_atr        NUMERIC(12,8),
+        norm_return_1   NUMERIC(12,8),
+        norm_return_5   NUMERIC(12,8),
+        -- Feature vector (for ML model input)
+        feature_vector  REAL[],
+        -- Metadata
+        normalization_method VARCHAR(20) DEFAULT 'zscore',
+        emit_timestamp  TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_signals_symbol_ts
+        ON flink_trading.signals (symbol, signal_timestamp DESC);
+
+    -- Job execution metadata for tracking and auditing
+    CREATE TABLE IF NOT EXISTS flink_trading.job_metadata (
+        id              BIGSERIAL PRIMARY KEY,
+        job_name        VARCHAR(100)    NOT NULL,
+        job_id          VARCHAR(64),
+        flink_job_id    VARCHAR(64),
+        status          VARCHAR(20)     NOT NULL,  -- 'running', 'finished', 'failed', 'cancelled'
+        started_at      TIMESTAMPTZ,
+        finished_at     TIMESTAMPTZ,
+        checkpoint_path VARCHAR(500),
+        savepoint_path  VARCHAR(500),
+        records_in      BIGINT          DEFAULT 0,
+        records_out     BIGINT          DEFAULT 0,
+        error_message   TEXT,
+        config_snapshot JSONB,
+        created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_job_metadata_name_status
+        ON flink_trading.job_metadata (job_name, status);
+
+    -- Grant access to the default postgres user (Flink JDBC connector user)
+    GRANT USAGE ON SCHEMA flink_trading TO postgres;
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA flink_trading TO postgres;
+    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA flink_trading TO postgres;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA flink_trading
+        GRANT ALL PRIVILEGES ON TABLES TO postgres;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA flink_trading
+        GRANT ALL PRIVILEGES ON SEQUENCES TO postgres;

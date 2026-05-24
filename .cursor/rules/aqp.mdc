@@ -36,6 +36,10 @@ glob-scoped sibling rules under [.cursor/rules/](mdc:.cursor/rules):
 | `aqp/graph/**/*.py`, `aqp/persistence/models_{experiments,resources,tenancy}.py`, `aqp/data/mcp/tools/{ownership,experiments,tests}.py`, `aqp/tasks/ownership_tasks.py` | [ownership-graph.mdc](mdc:.cursor/rules/ownership-graph.mdc) | `OwnershipGraphStore`, after_flush_postexec hooks, Neo4j projection, `experiments`/`tests`/`resources` umbrella, hard rules 33-34 |
 | `aqp/api/security.py`, `aqp/api/routes/auth0_sync.py`, `aqp/auth/**/*.py`, `aqp_client/src/lib/auth/**/*.{ts,tsx}` | [identity.mdc](mdc:.cursor/rules/identity.mdc) | Auth0 enforcement modes, `require_scope` / `require_membership`, claim namespace, Action sync endpoint |
 | `aqp/strategies/lean/**/*.py`, `scripts/ingest_lean_templates.py`, `aqp/data/mcp/tools/strategies.py`, `aqp/api/routes/strategy_templates.py`, `aqp_client/src/routes/strategy-development/templates/**/*.tsx` | [strategy-templates.mdc](mdc:.cursor/rules/strategy-templates.mdc) | LEAN ingester, AST translator, polymorphic Resource catalog, hard rule 35 |
+| `aqp_ide/**` | [aqp-ide.mdc](mdc:.cursor/rules/aqp-ide.mdc) | Vendored Theia IDE workspace; AQP code lives only inside `theia-extensions/aqp/`; no Theia → `agentic_quant_platform` source imports |
+| `aqp_cli/**` | [aqp-cli.mdc](mdc:.cursor/rules/aqp-cli.mdc) | Standalone operator CLI; HTTP-only; never imports `aqp.*` or `aqp_control_plane.*`; identity through `IdentityProvider`; redacted token output |
+| `aqp_admin/**` | [aqp-admin.mdc](mdc:.cursor/rules/aqp-admin.mdc) | Internal admin (managed services + company accounts); audit-first; never imports `aqp.*`; mirrors `aqp_control_plane` boundary |
+| `aqp_index/**` | [aqp-index.mdc](mdc:.cursor/rules/aqp-index.mdc) | Sole-writer boundary: only `aqp-index-curator` subagent writes; pointers + signatures + summaries, never copied prose |
 
 Workflow + collaboration cadence: [WORKFLOW.md](mdc:WORKFLOW.md).
 Cross-session state template: [.agents/state-template.md](mdc:.agents/state-template.md).
@@ -107,6 +111,6 @@ file references.
 1. Read the relevant **scoped** rule above.
 2. Read [AGENTS.md](mdc:AGENTS.md) for the full hard-rule list (45
    rules + Don'ts).
-3. Read the canonical doc from [docs/index.md](mdc:docs/index.md).
+3. Read the canonical doc from [aqp_docs/index.md](mdc:aqp_docs/index.md).
 4. Search the code: `rg "<symbol>" aqp/`.
 5. Still stuck → ask. Don't guess and ship.

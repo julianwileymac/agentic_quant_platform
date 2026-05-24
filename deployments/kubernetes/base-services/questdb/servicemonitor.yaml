@@ -1,0 +1,22 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: questdb
+  namespace: aqp-timeseries
+  labels:
+    app.kubernetes.io/name: questdb
+    app.kubernetes.io/component: timeseries
+    app.kubernetes.io/part-of: aqp
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: questdb
+      app.kubernetes.io/instance: questdb
+  namespaceSelector:
+    matchNames:
+      - aqp-timeseries
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

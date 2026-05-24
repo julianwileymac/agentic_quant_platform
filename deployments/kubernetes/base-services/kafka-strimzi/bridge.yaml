@@ -1,0 +1,107 @@
+﻿# =============================================================================
+# Kafka Bridge (Strimzi) - HTTP gateway to Kafka
+# =============================================================================
+# Exposes Kafka over a REST API at http://trading-bridge-bridge-service:8080.
+# The management backend's /kafka/topics/{name}/produce endpoint proxies to
+# this bridge so clients without a Kafka driver (e.g. webhooks, notebooks)
+# can still publish.
+#
+# Authentication: SCRAM-SHA-512 as user `bridge-gateway` over listener 9094.
+# =============================================================================
+
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaBridge
+metadata:
+  name: trading-bridge
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+spec:
+  replicas: 1
+  bootstrapServers: trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9094
+  authentication:
+    type: scram-sha-512
+    username: bridge-gateway
+    passwordSecret:
+      secretName: bridge-gateway
+      password: password
+  tls:
+    trustedCertificates:
+      - secretName: trading-kafka-cluster-ca-cert
+        certificate: ca.crt
+  http:
+    port: 8080
+    cors:
+      allowedOrigins:
+        - "*"
+      allowedMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+        - PATCH
+  producer:
+    config:
+      acks: all
+      enable.idempotence: "true"
+      compression.type: snappy
+  consumer:
+    config:
+      auto.offset.reset: earliest
+      isolation.level: read_committed
+  enableMetrics: true
+  tracing:
+    type: opentelemetry
+  template:
+    bridgeContainer:
+      env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector.aqp-observability.svc.cluster.local:4317
+        - name: OTEL_SERVICE_NAME
+          value: trading-bridge
+        - name: OTEL_METRICS_EXPORTER
+          value: none
+    pod:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: In
+                    values: ["true"]
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: trading-bridge
+  namespace: aqp-streaming
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+  labels:
+    strimzi.io/cluster: trading-kafka
+    app.kubernetes.io/component: kafka-bridge
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: kafka-bridge.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: trading-bridge-bridge-service
+                port:
+                  number: 8080

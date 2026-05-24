@@ -1,0 +1,60 @@
+﻿# =============================================================================
+# Flink Shared Configuration
+# =============================================================================
+# Shared configuration for Flink jobs -- Kafka bootstrap servers, PostgreSQL
+# connection strings, schema registry URL, and sink endpoints used across
+# all trading jobs (both PyFlink and Java).
+#
+# Topic names match kubernetes/base-services/kafka/topics.yaml and the Avro
+# schemas under flink-jobs/jobs/schemas/.
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flink-trading-config
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+data:
+  # Kafka - plain listener for in-cluster trusted callers
+  KAFKA_BOOTSTRAP_SERVERS: "trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9092"
+  # SCRAM listener for authenticated jobs (KafkaUser consumer-flink)
+  KAFKA_BOOTSTRAP_SERVERS_SCRAM: "trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9094"
+  KAFKA_GROUP_ID_PREFIX: "flink-trading"
+
+  # Canonical topic names (match topics.yaml + Avro schemas)
+  TOPIC_MARKET_TRADE: "market.trade.v1"
+  TOPIC_MARKET_QUOTE: "market.quote.v1"
+  TOPIC_MARKET_BAR: "market.bar.v1"
+  TOPIC_MARKET_SNAPSHOT: "market.snapshot.v1"
+  TOPIC_MARKET_SCANNER: "market.scanner.v1"
+  TOPIC_MARKET_CONTRACT: "market.contract.v1"
+  TOPIC_MARKET_IMBALANCE: "market.imbalance.v1"
+  TOPIC_MARKET_STATUS: "market.status.v1"
+  TOPIC_MARKET_CORRECTION: "market.correction.v1"
+  TOPIC_FEATURES_INDICATORS: "features.indicators.v1"
+  TOPIC_FEATURES_NORMALIZED: "features.normalized.v1"
+  TOPIC_FEATURES_SIGNALS: "features.signals.v1"
+  TOPIC_MARKET_DEADLETTER: "market.deadletter.v1"
+
+  # Schema Registry (Apicurio) - REST v2 + Confluent-compat endpoints
+  SCHEMA_REGISTRY_URL: "http://apicurio-registry.aqp-streaming.svc.cluster.local:8080/apis/registry/v2"
+  SCHEMA_REGISTRY_CCOMPAT_URL: "http://apicurio-registry.aqp-streaming.svc.cluster.local:8080/apis/ccompat/v7"
+
+  # PostgreSQL (JDBC sinks)
+  POSTGRES_URL: "jdbc:postgresql://postgresql.aqp-data-services.svc.cluster.local:5432/postgres"
+  POSTGRES_DRIVER: "org.postgresql.Driver"
+
+  # MinIO / S3 (checkpoints, savepoints, job JAR storage, raw artifacts)
+  S3_ENDPOINT: "http://minio.aqp-data-services.svc.cluster.local:9000"
+  S3_BUCKET_CHECKPOINTS: "flink-checkpoints"
+  S3_BUCKET_JOBS: "flink-jobs"
+  S3_BUCKET_ARTIFACTS: "dagster-artifacts"
+  S3_BUCKET_FEATURES_INDICATORS: "features-indicators"
+
+  # VictoriaMetrics remote-write endpoint
+  VICTORIAMETRICS_WRITE_URL: "http://victoriametrics.aqp-observability.svc.cluster.local:8428/api/v1/write"
+
+  # OpenTelemetry collector
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.aqp-observability.svc.cluster.local:4317"

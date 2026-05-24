@@ -1,0 +1,79 @@
+﻿# =============================================================================
+# Redis 8 Stack - Server Configuration
+# =============================================================================
+# Tuned for a Raspberry Pi k3s cluster running the full Stack module set:
+#   - RediSearch (FT.*)       - vector search, full-text indexing
+#   - RedisJSON (JSON.*)      - native JSON documents
+#   - RedisTimeSeries (TS.*)  - observability counters, market data demos
+#   - RedisBloom (BF.* CF.* TOPK.* TDIGEST.*)  - probabilistic structures
+#
+# Observability: latency-monitor and slowlog are enabled so the Grafana
+# redis-datasource plugin can render direct-query panels alongside the
+# oliver006/redis_exporter metrics scraped by Prometheus.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: aqp-data-services
+  labels:
+    app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+data:
+  redis.conf: |
+    # -------------------------------------------------------------------------
+    # Network
+    # -------------------------------------------------------------------------
+    bind 0.0.0.0
+    protected-mode yes
+    port 6379
+    tcp-keepalive 60
+
+    # -------------------------------------------------------------------------
+    # Memory policy - cache + persistent namespaces can coexist.  LFU makes
+    # `cache:*` eviction smart while `doc:*`/`chunk:*` are written durably.
+    # -------------------------------------------------------------------------
+    maxmemory 512mb
+    maxmemory-policy allkeys-lfu
+
+    # -------------------------------------------------------------------------
+    # Persistence - AOF for durability, RDB snapshots as secondary.
+    # -------------------------------------------------------------------------
+    appendonly yes
+    appendfsync everysec
+    save 60 1000
+    save 300 100
+    save 900 1
+
+    # -------------------------------------------------------------------------
+    # Keyspace notifications - allows agent-memory / cache invalidation
+    # listeners to react to expirations, sets, deletes (A+K+E).
+    # -------------------------------------------------------------------------
+    notify-keyspace-events AKE
+
+    # -------------------------------------------------------------------------
+    # Observability: latency monitor + slowlog
+    # Threshold 10ms is aggressive but useful on Pi ARM cores.
+    # -------------------------------------------------------------------------
+    latency-monitor-threshold 10
+    slowlog-log-slower-than 1000000
+    slowlog-max-len 256
+
+    # -------------------------------------------------------------------------
+    # Client tracking (used by cache-aside / read-through integrations).
+    # -------------------------------------------------------------------------
+    tracking-table-max-keys 1000000
+
+    # -------------------------------------------------------------------------
+    # Module defaults - Redis Stack bundles all modules in the image; these
+    # tunables keep memory in check on ARM boards.
+    # -------------------------------------------------------------------------
+    # RediSearch worker threads (per shard); keep small on Pi.
+    # (honored by Redis Stack via FT.CONFIG SET MAXSEARCHRESULTS etc.)
+
+    # -------------------------------------------------------------------------
+    # Logging - redirect to stdout for Loki/OTel filelog ingestion.
+    # -------------------------------------------------------------------------
+    logfile ""
+    loglevel notice

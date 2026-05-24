@@ -1,0 +1,13 @@
+﻿# =============================================================================
+# VictoriaMetrics Configuration
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: victoriametrics-config
+  namespace: aqp-observability
+data:
+  scrape.yml: |
+    # Empty scrape config - VictoriaMetrics primarily receives via remote_write
+    # from Prometheus. This file is required but can be empty.

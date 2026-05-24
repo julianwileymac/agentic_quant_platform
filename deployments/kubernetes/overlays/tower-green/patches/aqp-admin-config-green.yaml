@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aqp-config
+  namespace: aqp-admin
+data:
+  AQP_INGRESS_BASE_URL: https://manage-green.aqp.fund

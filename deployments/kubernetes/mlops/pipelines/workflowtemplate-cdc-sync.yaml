@@ -1,0 +1,69 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: pipeline-cdc-sync
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: pipeline-cdc-sync
+    app.kubernetes.io/component: orchestration
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: cdc-sync
+  arguments:
+    parameters:
+      - name: pipeline_image
+        value: ghcr.io/julianwiley/rpi-k8s-pipelines:latest
+      - name: pipeline_name
+        value: cdc-source-events
+      - name: source_table
+        value: source_events
+      - name: primary_key
+        value: id
+      - name: updated_at_column
+        value: updated_at
+      - name: batch_size
+        value: "500"
+      - name: output_prefix
+        value: cdc
+      - name: output_bucket
+        value: dagster-artifacts
+  templates:
+    - name: cdc-sync
+      metadata:
+        annotations:
+          pipelines.rpi-k8s.io/todo-replay: "Add late-arriving event replay window control."
+      inputs:
+        parameters:
+          - name: pipeline_image
+          - name: pipeline_name
+          - name: source_table
+          - name: primary_key
+          - name: updated_at_column
+          - name: batch_size
+          - name: output_prefix
+          - name: output_bucket
+      container:
+        image: "{{inputs.parameters.pipeline_image}}"
+        command:
+          - python
+          - -m
+          - pipelines.cli
+          - cdc-sync
+        args:
+          - --pipeline-name
+          - "{{inputs.parameters.pipeline_name}}"
+          - --source-table
+          - "{{inputs.parameters.source_table}}"
+          - --primary-key
+          - "{{inputs.parameters.primary_key}}"
+          - --updated-at-column
+          - "{{inputs.parameters.updated_at_column}}"
+          - --batch-size
+          - "{{inputs.parameters.batch_size}}"
+          - --output-prefix
+          - "{{inputs.parameters.output_prefix}}"
+          - --output-bucket
+          - "{{inputs.parameters.output_bucket}}"
+        envFrom:
+          - secretRef:
+              name: pipeline-sink-credentials

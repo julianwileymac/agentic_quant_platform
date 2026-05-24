@@ -1,0 +1,30 @@
+# =============================================================================
+# Strimzi Kafka Operator - Helm Values
+# =============================================================================
+# Helm install command:
+#   helm repo add strimzi https://strimzi.io/charts/
+#   helm install strimzi-kafka-operator strimzi/strimzi-kafka-operator \
+#     --namespace data-services \
+#     -f kubernetes/base-services/kafka/values.yaml
+# =============================================================================
+
+replicas: 1
+
+watchNamespaces:
+  - data-services
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+nodeSelector:
+  node-role.kubernetes.io/control-plane: "true"
+
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule

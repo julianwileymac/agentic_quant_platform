@@ -1,0 +1,181 @@
+# =============================================================================
+# Chart values bundled into the helm-runner Jobs.
+# =============================================================================
+# The Jobs mount this ConfigMap so they can run `helm upgrade --install`
+# without needing the repository checked out inside the runner pod.  Edit
+# the values, re-apply this ConfigMap, then re-trigger the Job.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: helm-runner-values
+  namespace: helm-runner
+data:
+  # ---------------------------------------------------------------------------
+  # KServe controller - minimal install used by the Phase 2 InferenceService
+  # examples.  Mirrors kubernetes/mlops/kserve/install/values-kserve.yaml.
+  # ---------------------------------------------------------------------------
+  values-kserve.yaml: |
+    kserve:
+      controller:
+        deploymentMode: RawDeployment
+      storageInitializer:
+        enableDirectPvcVolumeMount: true
+      agent:
+        enablePrometheusScraping: true
+
+  # ---------------------------------------------------------------------------
+  # Airbyte - hybrid ELT control plane used by agentic_quant_platform.
+  # Mirrors kubernetes/base-services/airbyte/values.yaml.
+  # ---------------------------------------------------------------------------
+  values-airbyte.yaml: |
+    global:
+      edition: community
+      serviceAccountName: airbyte-admin
+    fullnameOverride: airbyte
+    webapp:
+      service:
+        type: ClusterIP
+    server:
+      service:
+        type: ClusterIP
+      extraEnv:
+        - name: AIRBYTE_ROLE
+          value: "server"
+    worker:
+      extraEnv:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector.observability.svc.cluster.local:4317"
+        - name: OTEL_SERVICE_NAME
+          value: "airbyte-worker"
+        - name: AIRBYTE_STAGING_ROOT
+          value: "s3://aqp-datasets/airbyte"
+    postgresql:
+      enabled: false
+    externalDatabase:
+      host: postgresql.data-services.svc.cluster.local
+      port: 5432
+      database: airbyte
+      user: airbyte
+      existingSecret: airbyte-secrets
+      existingSecretPasswordKey: AIRBYTE_DATABASE_PASSWORD
+    minio:
+      enabled: false
+    logs:
+      s3:
+        enabled: true
+        bucket: aqp-datasets
+        bucketRegion: us-east-1
+        endpoint: http://minio.data-services.svc.cluster.local:9000
+    ingress:
+      enabled: false
+
+  # ---------------------------------------------------------------------------
+  # Dagster - copied from kubernetes/mlops/dagster/values.yaml so the
+  # in-cluster Job can run a stand-alone `helm upgrade` without checking
+  # out the repository.  Keep these two files in sync (`make sync-helm-values`
+  # documented in bootstrap/scripts/sync-helm-values.ps1).
+  # ---------------------------------------------------------------------------
+  values-dagster.yaml: |
+    fullnameOverride: dagster
+    global:
+      dagsterHome: /opt/dagster/dagster_home
+    dagsterWebserver:
+      replicaCount: 1
+      service:
+        type: ClusterIP
+        port: 80
+      env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector.observability.svc.cluster.local:4317"
+        - name: OTEL_SERVICE_NAME
+          value: "dagster-webserver"
+        - name: OTEL_TRACES_EXPORTER
+          value: "otlp"
+        - name: OTEL_LOGS_EXPORTER
+          value: "otlp"
+      envFrom:
+        - secretRef:
+            name: dagster-minio
+    dagsterDaemon:
+      enabled: true
+      env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://otel-collector.observability.svc.cluster.local:4317"
+        - name: OTEL_SERVICE_NAME
+          value: "dagster-daemon"
+        - name: OTEL_TRACES_EXPORTER
+          value: "otlp"
+      envFrom:
+        - secretRef:
+            name: dagster-minio
+    dagster-user-deployments:
+      enabled: true
+      enableSubchart: true
+      deployments:
+        - name: bootstrap-user-code
+          image:
+            repository: docker.io/dagster/dagster-celery-k8s
+            tag: "1.12.21"
+            pullPolicy: IfNotPresent
+          dagsterApiGrpcArgs:
+            - "--python-file"
+            - "/opt/dagster/user_code/definitions.py"
+          port: 3030
+          includeConfigInLaunchedRuns:
+            enabled: true
+          envSecrets:
+            - name: dagster-minio
+            - name: pipeline-sink-credentials
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.observability.svc.cluster.local:4317
+            - name: OTEL_SERVICE_NAME
+              value: dagster-user-code
+          volumes:
+            - name: bootstrap-user-code
+              configMap:
+                name: dagster-bootstrap-user-code
+          volumeMounts:
+            - name: bootstrap-user-code
+              mountPath: /opt/dagster/user_code/definitions.py
+              subPath: definitions.py
+    scheduler:
+      type: DagsterDaemonScheduler
+    runLauncher:
+      type: K8sRunLauncher
+      config:
+        k8sRunLauncher:
+          jobNamespace: mlops
+          loadInclusterConfig: true
+          envSecrets:
+            - name: pipeline-sink-credentials
+            - name: dagster-minio
+          envVars:
+            - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.observability.svc.cluster.local:4317
+            - OTEL_TRACES_EXPORTER=otlp
+            - OTEL_LOGS_EXPORTER=otlp
+    postgresql:
+      enabled: false
+      postgresqlHost: postgresql.data-services.svc.cluster.local
+      postgresqlDatabase: dagster
+      postgresqlUsername: dagster
+      postgresqlPassword: dagster123
+      service:
+        port: 5432
+    computeLogManager:
+      type: S3ComputeLogManager
+      config:
+        s3ComputeLogManager:
+          bucket: dagster-artifacts
+          endpointUrl: http://minio.data-services.svc.cluster.local:9000
+          useSsl: false
+          verify: false
+          prefix: dagster-compute-logs
+    ingress:
+      enabled: true
+      ingressClassName: nginx
+      dagsterWebserver:
+        host: dagster.local
+        path: /
+        pathType: Prefix

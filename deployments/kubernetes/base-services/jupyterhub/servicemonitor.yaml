@@ -1,0 +1,24 @@
+﻿# =============================================================================
+# JupyterHub ServiceMonitor
+# =============================================================================
+# Scrapes the hub's built-in Prometheus endpoint at /hub/metrics so user
+# spawn rates / active sessions show up in Grafana.
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: jupyterhub
+  namespace: aqp-observability
+  labels:
+    app: jupyterhub
+spec:
+  namespaceSelector:
+    matchNames:
+      - development
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jupyterhub
+  endpoints:
+    - port: hub
+      path: /hub/metrics
+      interval: 30s

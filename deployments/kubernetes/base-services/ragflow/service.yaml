@@ -1,0 +1,58 @@
+﻿# =============================================================================
+# RAGFlow Service and Ingress
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: ragflow
+  namespace: aqp-elt
+  labels:
+    app: ragflow
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+    - name: api
+      port: 9380
+      targetPort: 9380
+      protocol: TCP
+    - name: admin
+      port: 9381
+      targetPort: 9381
+      protocol: TCP
+  selector:
+    app: ragflow
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ragflow
+  namespace: aqp-elt
+  labels:
+    app: ragflow
+    app.kubernetes.io/name: ragflow
+    app.kubernetes.io/managed-by: rpi-k8s-cluster
+    app.kubernetes.io/part-of: rpi-k8s-platform
+    app.kubernetes.io/component: rag-engine
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "128m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ragflow.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ragflow
+                port:
+                  number: 80

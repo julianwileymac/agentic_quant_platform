@@ -1,0 +1,52 @@
+﻿apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datahub-ingestion-settings
+  namespace: aqp-data-services
+  labels:
+    app.kubernetes.io/name: datahub
+    app.kubernetes.io/component: metadata-ingestion
+data:
+  DATAHUB_GMS_SERVER: "http://datahub-datahub-gms.aqp-data-services.svc.cluster.local:8080"
+  DATAHUB_ENV: "PROD"
+
+  # Native ingestion source coordinates (non-secret values only).
+  INGEST_POSTGRES_HOST_PORT: "postgresql.aqp-data-services.svc.cluster.local:5432"
+  INGEST_POSTGRES_DATABASE: "dagster"
+  INGEST_MINIO_ENDPOINT: "minio.aqp-data-services.svc.cluster.local:9000"
+  INGEST_MINIO_REGION: "us-east-1"
+  INGEST_MLFLOW_TRACKING_URI: "http://mlflow.aqp-mlops.svc.cluster.local:5000"
+  INGEST_MLFLOW_PLATFORM_INSTANCE: "rpi-kubernetes"
+  INGEST_MLFLOW_EXTERNAL_URL: "http://mlflow.local:5000"
+  INGEST_ICEBERG_REST_URI: "http://polaris.aqp-lakehouse.svc.cluster.local:8181/api/catalog"
+  INGEST_ICEBERG_WAREHOUSE: "quickstart_catalog"
+  INGEST_ICEBERG_PLATFORM_INSTANCE: "rpi-kubernetes"
+
+  # Cross-repo lakehouse and MLflow source coordinates.
+  INGEST_AQP_ICEBERG_REST_URI: "http://polaris.aqp-lakehouse.svc.cluster.local:8181/api/catalog"
+  INGEST_AQP_ICEBERG_WAREHOUSE: "quickstart_catalog"
+  INGEST_AQP_ICEBERG_PLATFORM_INSTANCE: "agentic-quant-platform"
+  INGEST_AQP_MLFLOW_TRACKING_URI: "http://mlflow.aqp-mlops.svc.cluster.local:5000"
+  INGEST_AQP_MLFLOW_PLATFORM_INSTANCE: "agentic-quant-platform"
+  INGEST_AQP_MLFLOW_EXTERNAL_URL: "http://mlflow.local:5000"
+
+  # Platform service ingestion coordinates.
+  INGEST_KAFKA_BOOTSTRAP: "trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9092"
+  INGEST_KAFKA_SCHEMA_REGISTRY_URL: "http://apicurio-registry.aqp-streaming.svc.cluster.local:8080"
+  INGEST_KAFKA_PLATFORM_INSTANCE: "rpi-kubernetes"
+  INGEST_GRAFANA_URL: "http://prometheus-grafana.aqp-observability.svc.cluster.local:3000"
+  INGEST_GRAFANA_PLATFORM_INSTANCE: "rpi-kubernetes"
+  INGEST_AQP_OPENAPI_NAME: "agentic-quant-platform-api"
+  INGEST_AQP_OPENAPI_URL: "http://api.aqp.svc.cluster.local:8000"
+  INGEST_AQP_OPENAPI_SWAGGER_FILE: "openapi.json"
+  INGEST_AIRBYTE_URL: "http://airbyte-server-svc.elt.svc.cluster.local:8001"
+  INGEST_AIRBYTE_PLATFORM_INSTANCE: "rpi-kubernetes"
+
+  # Metadata bridge source lists.
+  ARGO_WORKFLOWTEMPLATES: "pipeline-raw-ingest,pipeline-heavy-transform,pipeline-vector-sync,pipeline-cdc-sync,datahub-ingestion"
+  ARGO_CRONWORKFLOWS: "pipeline-raw-ingest-hourly,pipeline-cdc-sync-hourly,datahub-ingestion-daily"
+  DAGSTER_ASSETS: "minio_to_postgres_curated,vectorize_to_milvus_chroma,cdc_incremental_sync,hybrid_argo_heavy_transform,datahub_lakehouse_sources,datahub_mlflow_sources,datahub_platform_sources,datahub_api_sources,datahub_metadata_bridge"
+  PREFECT_FLOWS: "datahub-lakehouse-sync,datahub-mlflow-sync,datahub-platform-sync,datahub-api-sync"
+  FLINK_JOBS: "flink-trading-streams,flink-market-data-enrichment"
+  MILVUS_COLLECTIONS: "pipeline_documents"
+  CHROMA_COLLECTIONS: "pipeline_documents"

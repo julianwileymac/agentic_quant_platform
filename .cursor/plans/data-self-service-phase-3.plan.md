@@ -63,5 +63,5 @@ production state.
 - `tests/dagster/test_sandbox_runtime.py` — tempdir lifecycle,
   Redis namespacing.
 - `tests/dagster/test_env_resolver.py` — ContextVar substitution.
-- `docs/dagster-sandbox.md` — narrative.
+- `aqp_docs/dagster-sandbox.md` — narrative.
 - `.cursor/rules/dagster-sandbox.mdc` — AGENTS rule 32 scope.

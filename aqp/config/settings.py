@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     # IdentityProvider. The multi-tenant default authority
     # ``/organizations`` accepts users from any Entra tenant (B2B / external
     # enterprise clients); pin to ``/{tenant_id}`` for single-tenant.
-    # See docs/msal-entra-setup.md for the full app-reg walkthrough.
+    # See aqp_docs/msal-entra-setup.md for the full app-reg walkthrough.
     auth_msal_tenant_id: str = Field(default="")
     auth_msal_client_id: str = Field(default="")
     auth_msal_client_secret: str = Field(default="")
@@ -227,12 +227,12 @@ class Settings(BaseSettings):
     # client-credentials grant with a DPoP header).
     dpop_enforcement_enabled: bool = Field(default=False)
     # AQP-namespaced custom claim prefix injected by the Auth0 Action.
-    # See ``docs/auth0-actions.md``. Decoupled from the issuer URL so
+    # See ``aqp_docs/auth0-actions.md``. Decoupled from the issuer URL so
     # the same Action works against staging / prod tenants without
     # rebuilding the SPA.
     #
     # Canonical namespace as of the refactor is ``https://aqp.internal/``
-    # (per ADR 003 — `docs/architecture/decisions/003-auth0-zero-trust.md`).
+    # (per ADR 003 — `aqp_docs/architecture/decisions/003-auth0-zero-trust.md`).
     # The legacy ``https://aqp/`` namespace continues to be read for one
     # release via ``auth_claims_namespace_aliases`` so existing tokens
     # validate during the rollout window.
@@ -670,6 +670,50 @@ class Settings(BaseSettings):
     cluster_mgmt_url: str = Field(default="")
     cluster_mgmt_token: str = Field(default="")
 
+    # --- Phase 2 infra services (additive, side-by-side with the legacy
+    # rpi_kubernetes-owned shared services). Defaults stay empty so that
+    # ``aqp.config.topology_fallback.apply_topology_fallback`` is the only
+    # source of populated URLs in Phase 2; downstream code that wants to
+    # use these MUST short-circuit on empty values.
+
+    # Redpanda (side-by-side with Strimzi Kafka per plan question 2).
+    redpanda_bootstrap: str = Field(default="")
+    redpanda_admin_url: str = Field(default="")
+    redpanda_schema_registry_url: str = Field(default="")
+    redpanda_connect_url: str = Field(default="")
+
+    # QuestDB time-series database.
+    questdb_pg_url: str = Field(default="")
+    questdb_ilp_url: str = Field(default="")
+    questdb_http_url: str = Field(default="")
+
+    # Arize Phoenix (self-hosted LLM/agent/RAG observability).
+    phoenix_endpoint: str = Field(default="")
+    phoenix_grpc_endpoint: str = Field(default="")
+    phoenix_ui_url: str = Field(default="")
+    phoenix_project_default: str = Field(default="aqp")
+
+    # Prometheus + Grafana + Loki + Tempo (observability stack).
+    prometheus_url: str = Field(default="")
+    prometheus_remote_write_url: str = Field(default="")
+    grafana_url: str = Field(default="")
+    loki_url: str = Field(default="")
+    tempo_otlp_url: str = Field(default="")
+
+    # Apache Hudi (additive lakehouse for upsert-heavy partitions per
+    # plan section D; Iceberg remains the canonical write path - rule 3).
+    hudi_warehouse_url: str = Field(default="")
+    hudi_metastore_url: str = Field(default="")
+    hudi_namespace_prefix: str = Field(default="aqp_hudi_")
+
+    # AQP control-plane legacy fallback (rpi-k8s-management API).
+    # Default ``False`` — AQP no longer reaches into rpi_kubernetes shared
+    # services. Only flip to ``True`` for an emergency rollback to the
+    # deprecated `rpi-k8s-management` legacy API; the matching k8s
+    # Deployment is rollback-only under
+    # `rpi_kubernetes/kubernetes/legacy-management/`.
+    control_plane_legacy_fallback: bool = Field(default=False)
+
     # --- Terraform IaC control plane ----------------------------------------
     # Centralized Terraform IaC for multi-cloud + local + baremetal. Five
     # state backends (``local | s3 | azurerm | gcs | hcp``) are routed by
@@ -842,7 +886,7 @@ class Settings(BaseSettings):
     orchestration_max_debate_rounds: int = Field(default=2)
     # Per-node halt check timeout used by ``WorkflowRuntime`` between
     # adapter transitions. Kept short so a flipped kill switch is
-    # observed inside the SLA from ``docs/orchestration-refactor-rollout.md``.
+    # observed inside the SLA from ``aqp_docs/orchestration-refactor-rollout.md``.
     orchestration_halt_check_timeout_seconds: float = Field(default=1.0)
 
     # --- Assistant Engine (additive layer on top of the orchestration
@@ -869,6 +913,55 @@ class Settings(BaseSettings):
     assistant_sandbox_backend: str = Field(default="blocked")
     assistant_max_rounds: int = Field(default=4)
     assistant_halt_check_timeout_seconds: float = Field(default=1.0)
+
+    # --- Data Lab (four-mode GraphSpec workspace) ---
+    #
+    # ``aqp_lab_enabled`` is the master feature flag for the Data Lab
+    # routes (REST + WebSocket) and Celery task surface introduced in
+    # the Data Lab implementation. When False, the routes are not
+    # mounted on the FastAPI app, the Celery task module is not
+    # included, and the Vite frontend hides the /labs/[lab_id]/workspace
+    # entry point. Mirrors the assistant_engine_enabled pattern.
+    aqp_lab_enabled: bool = Field(default=True)
+    aqp_lab_default_queue: str = Field(default="lab.cpu")
+    aqp_lab_inline_runs: bool = Field(default=True)
+    aqp_lab_snippet_sandbox_tier: str = Field(default="tier1")
+    aqp_lab_snippet_timeout_seconds: int = Field(default=300)
+    # ``aqp_lab_default_iceberg_namespace`` is the Iceberg namespace the
+    # Data Lab's data.iceberg_scan executor uses when the user omits one.
+    # Mirrors ``iceberg_namespace_default`` for the Lab's reproducibility
+    # contract — runs pin a snapshot id resolved against this namespace
+    # when no explicit ns is configured.
+    aqp_lab_default_iceberg_namespace: str = Field(default="aqp_silver_equities_bars")
+    # ``aqp_lab_executor_images`` maps an executor alias (e.g.
+    # ``vbtpro``, ``hftbacktest``, ``torch_gpu``) to the container image
+    # digest the snippet runner pulls. The ``code_snapshot`` hash on
+    # every LabRun mixes a stable hash of this dict so a replay refuses
+    # if the digest no longer exists in the registry.
+    aqp_lab_executor_images: dict[str, str] = Field(default_factory=dict)
+    # ``aqp_lab_sandbox_runtime`` picks the Tier-2 server-side sandbox
+    # for vectorbt-pro / hftbacktest / Numba / GPU snippets. ``none``
+    # disables Tier 2 entirely (snippet runner refuses to dispatch
+    # heavy workloads); ``gvisor`` wraps the snippet container with the
+    # gVisor runtime (``runsc``); ``docker`` is the unsafe fallback for
+    # local dev only.
+    aqp_lab_sandbox_runtime: str = Field(default="none")
+    # ``aqp_lab_pyodide_enabled`` is the frontend feature flag for the
+    # Pyodide Tier-1 sandbox (in-browser pure-Python execution). When
+    # False, EDA cells fall back to the server-side AnalysisRuntime
+    # kernel only. Toggle once Pyodide is bundled into aqp_client.
+    aqp_lab_pyodide_enabled: bool = Field(default=False)
+    # ``aqp_lab_ray_tune_enabled`` switches the Evaluation sweep
+    # controller from the default Celery-group dispatch to a
+    # ``ray.tune.Tuner`` job. Falls back to Celery when the Ray cluster
+    # is unreachable.
+    aqp_lab_ray_tune_enabled: bool = Field(default=False)
+    # Phase 3 — DSR safety. The Evaluation mode refuses sweeps that
+    # would produce more than ``aqp_lab_max_sweep_trials`` train/test
+    # combinations unless the caller passes ``confirm=true``. Default
+    # set per plan §3 (warn at 100, refuse >500).
+    aqp_lab_max_sweep_trials: int = Field(default=500)
+    aqp_lab_warn_sweep_trials: int = Field(default=100)
 
     # --- Streaming producers ---
     streaming_producers_namespace: str = Field(default="data-services")
@@ -1163,7 +1256,25 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    instance = Settings()
+    # Phase 0 infra-expansion: apply topology.yaml fallback for URL fields
+    # whose default is still in effect (no AQP_* env override). Failures
+    # are logged inside the helper and never break boot.
+    try:
+        from aqp.config.topology_fallback import apply_topology_fallback
+
+        apply_topology_fallback(instance)
+    except Exception:  # noqa: BLE001
+        # Topology fallback is best-effort. Any unexpected failure must
+        # not prevent the cached singleton from being returned, since
+        # half the codebase imports ``settings`` at module load time.
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "topology fallback failed during get_settings()",
+            exc_info=True,
+        )
+    return instance
 
 
 settings = get_settings()

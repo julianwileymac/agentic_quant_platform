@@ -1,0 +1,77 @@
+﻿# =============================================================================
+# redis_exporter - Prometheus metrics for the Redis 8 Stack
+# =============================================================================
+# Scraped by the ServiceMonitor in servicemonitor.yaml.  Exposes keyspace
+# hit/miss ratios, memory, replication, slowlog counters, etc.  The password
+# file approach avoids leaking the password via process args/env audits.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-exporter
+  namespace: aqp-data-services
+  labels:
+    app: redis-exporter
+    app.kubernetes.io/name: redis-exporter
+    app.kubernetes.io/component: metrics-exporter
+    app.kubernetes.io/part-of: rpi-k8s-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-exporter
+  template:
+    metadata:
+      labels:
+        app: redis-exporter
+        app.kubernetes.io/name: redis-exporter
+        app.kubernetes.io/component: metrics-exporter
+    spec:
+      containers:
+        - name: redis-exporter
+          image: oliver006/redis_exporter:v1.66.0-alpine
+          imagePullPolicy: IfNotPresent
+          args:
+            - --redis.addr=redis://redis.aqp-data-services.svc.cluster.local:6379
+            - --redis.password-file=/secrets/password
+            - --include-system-metrics
+            - --check-keys=doc:*,chunk:*,ann:*,cache:*,semcache:*,agent:*,stats:*
+            - --check-single-keys=stats:cache:hits,stats:cache:misses,stats:cache:latency
+          ports:
+            - name: metrics
+              containerPort: 9121
+              protocol: TCP
+          env:
+            - name: REDIS_EXPORTER_LOG_FORMAT
+              value: json
+          volumeMounts:
+            - name: redis-password
+              mountPath: /secrets
+              readOnly: true
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: redis-password
+          secret:
+            secretName: redis-credentials
+            items:
+              - key: password
+                path: password
+                mode: 0400

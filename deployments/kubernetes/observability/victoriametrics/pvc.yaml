@@ -1,0 +1,16 @@
+﻿# =============================================================================
+# PersistentVolumeClaim for VictoriaMetrics
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: victoriametrics-data
+  namespace: aqp-observability
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 50Gi

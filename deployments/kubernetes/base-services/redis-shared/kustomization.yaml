@@ -1,0 +1,27 @@
+﻿# =============================================================================
+# Kustomization - Redis 8 Stack (shared cache / vector store / agent memory)
+# =============================================================================
+# Apply order:
+#   1. namespace exists (data-services) -- provided by namespaces/namespaces.yaml
+#   2. credentials + config
+#   3. persistent storage
+#   4. redis deployment + services (primary + ragflow alias)
+#   5. observability sidecar + ServiceMonitor
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: redis
+
+namespace: aqp-data-services
+
+resources:
+  - secret.yaml
+  - configmap.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - exporter-deployment.yaml
+  - exporter-service.yaml
+  - servicemonitor.yaml

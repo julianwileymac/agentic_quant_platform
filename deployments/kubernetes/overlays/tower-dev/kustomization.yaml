@@ -1,0 +1,93 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespaces.yaml
+  - ingress.yaml
+  - ../../base/rbac
+  - ../../base/configmaps
+  - ../../base/secrets
+  - ../../base/aqp-client
+  - ../../base/aqp-core
+  - ../../base/aqp-worker
+  - ../../base/aqp-cp
+  - ../../base/redis-master
+  - ../../base-services/postgres-shared
+  - ../../base-services/questdb
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/environment: tower-dev
+
+images:
+  - name: docker.io/julian0215/aqp-client
+    newTag: dev
+  - name: docker.io/julian0215/aqp-api
+    newTag: dev
+  - name: docker.io/julian0215/aqp-worker
+    newTag: dev
+  - name: docker.io/julian0215/aqp-control-plane
+    newTag: dev
+
+patches:
+  - path: patches/questdb-statefulset.yaml
+  - path: patches/questdb-servicemonitor.yaml
+  - target:
+      kind: ConfigMap
+      name: aqp-config
+      namespace: aqp
+    patch: |-
+      - op: replace
+        path: /data/AQP_CP_PROVIDER
+        value: kubernetes
+      - op: add
+        path: /data/AQP_CP_TOPOLOGY_TARGET_ID
+        value: tower
+  - target:
+      kind: Deployment
+      name: aqp-client
+      namespace: aqp
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: Deployment
+      name: aqp-core
+      namespace: aqp
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: Deployment
+      name: aqp-worker
+      namespace: aqp
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: Deployment
+      name: aqp-cp
+      namespace: aqp-admin
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: PodDisruptionBudget
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 0
+  - target:
+      kind: HorizontalPodAutoscaler
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3

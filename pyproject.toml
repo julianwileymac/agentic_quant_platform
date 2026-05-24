@@ -104,7 +104,7 @@ auth = [
 ]
 # MSAL / Microsoft Entra ID identity provider (multi-tenant). Pure-Python;
 # enables MsalEntraProvider auto-registration. The SPA-side counterpart is
-# ``@azure/msal-react`` in aqp_client/package.json. See docs/msal-entra-setup.md.
+# ``@azure/msal-react`` in aqp_client/package.json. See aqp_docs/msal-entra-setup.md.
 auth-msal = [
     "msal>=1.36",
     "python-jose[cryptography]>=3.3",
@@ -328,7 +328,7 @@ dagster-aqp = [
 # ``hft`` ships the hftbacktest LOB engine wrapped by
 # ``aqp.backtest.hft.LobBacktestEngine``. The hftbacktest wheel depends on
 # Maturin + a Rust toolchain at install time on most platforms — see
-# docs/installation.md.
+# aqp_docs/installation.md.
 # ---------------------------------------------------------------------------
 optimal-control = [
     "jax>=0.4.30",

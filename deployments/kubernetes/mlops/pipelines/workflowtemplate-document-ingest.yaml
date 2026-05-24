@@ -1,0 +1,126 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: pipeline-document-ingest
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: pipeline-document-ingest
+    app.kubernetes.io/component: orchestration
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: document-ingest
+  arguments:
+    parameters:
+      - name: pipeline_image
+        value: ghcr.io/julianwiley/rpi-k8s-pipelines:latest
+      - name: source_key
+        value: ""
+      - name: source_bucket
+        value: dagster-artifacts
+      - name: collection_name
+        value: rag_documents
+      - name: embedding_provider
+        value: deterministic
+      - name: embedding_model
+        value: all-MiniLM-L6-v2
+      - name: chunk_strategy
+        value: recursive
+      - name: chunk_size
+        value: "800"
+      - name: chunk_overlap
+        value: "200"
+  templates:
+    - name: document-ingest
+      dag:
+        tasks:
+          - name: load-and-chunk
+            template: process-document
+            arguments:
+              parameters:
+                - name: pipeline_image
+                  value: "{{workflow.parameters.pipeline_image}}"
+                - name: source_key
+                  value: "{{workflow.parameters.source_key}}"
+                - name: source_bucket
+                  value: "{{workflow.parameters.source_bucket}}"
+                - name: collection_name
+                  value: "{{workflow.parameters.collection_name}}"
+                - name: embedding_provider
+                  value: "{{workflow.parameters.embedding_provider}}"
+                - name: embedding_model
+                  value: "{{workflow.parameters.embedding_model}}"
+                - name: chunk_strategy
+                  value: "{{workflow.parameters.chunk_strategy}}"
+                - name: chunk_size
+                  value: "{{workflow.parameters.chunk_size}}"
+                - name: chunk_overlap
+                  value: "{{workflow.parameters.chunk_overlap}}"
+
+    - name: process-document
+      inputs:
+        parameters:
+          - name: pipeline_image
+          - name: source_key
+          - name: source_bucket
+          - name: collection_name
+          - name: embedding_provider
+          - name: embedding_model
+          - name: chunk_strategy
+          - name: chunk_size
+          - name: chunk_overlap
+      container:
+        image: "{{inputs.parameters.pipeline_image}}"
+        command:
+          - python
+          - -c
+          - |
+            import json, sys
+            from pipelines.config import PipelineConfig
+            from pipelines.document_loaders import load_minio_object
+            from pipelines.chunking import chunk_documents
+            from pipelines.embeddings import EmbeddingProvider
+            from pipelines.vector_io import upsert_chromadb, upsert_milvus
+            import hashlib
+
+            config = PipelineConfig()
+            source_key = "{{inputs.parameters.source_key}}"
+            source_bucket = "{{inputs.parameters.source_bucket}}"
+            collection_name = "{{inputs.parameters.collection_name}}"
+            strategy = "{{inputs.parameters.chunk_strategy}}"
+            chunk_size = int("{{inputs.parameters.chunk_size}}")
+            chunk_overlap = int("{{inputs.parameters.chunk_overlap}}")
+
+            embedder = EmbeddingProvider(
+                provider="{{inputs.parameters.embedding_provider}}",
+                model_name="{{inputs.parameters.embedding_model}}",
+            )
+
+            docs = load_minio_object(config, bucket=source_bucket, key=source_key)
+            if not docs:
+                print("No documents loaded"); sys.exit(0)
+
+            texts = [d.text for d in docs]
+            chunks = chunk_documents(texts, strategy=strategy, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+            chunk_texts = [c.text for c in chunks]
+            embeddings = embedder.embed_texts(chunk_texts)
+
+            records = []
+            for idx, (chunk, emb) in enumerate(zip(chunks, embeddings)):
+                cid = hashlib.sha1(f"{source_key}:{idx}".encode()).hexdigest()
+                records.append({"id": cid, "text": chunk.text, "embedding": emb,
+                                "metadata": {"source_key": source_key, "chunk_index": idx}})
+
+            mc = upsert_milvus(host=config.milvus_host, port=config.milvus_port,
+                               collection_name=collection_name, records=records,
+                               embedding_dim=embedder.dimension)
+            cc = upsert_chromadb(host=config.chroma_host, port=config.chroma_port,
+                                 collection_name=collection_name, records=records)
+            print(json.dumps({"chunks": len(records), "milvus": mc, "chromadb": cc}))
+        envFrom:
+          - secretRef:
+              name: pipeline-sink-credentials
+        env:
+          - name: EMBEDDING_PROVIDER
+            value: "{{inputs.parameters.embedding_provider}}"
+          - name: EMBEDDING_MODEL
+            value: "{{inputs.parameters.embedding_model}}"

@@ -1,0 +1,82 @@
+# =============================================================================
+# In-cluster Helm Job: install (or upgrade) the KServe controller.
+# =============================================================================
+# Run with:
+#   kubectl delete job kserve-install -n helm-runner --ignore-not-found
+#   kubectl apply -f kubernetes/bootstrap/helm-runner/job-kserve.yaml
+#   kubectl wait -n helm-runner --for=condition=Complete job/kserve-install --timeout=600s
+#   kubectl logs -n helm-runner job/kserve-install
+#
+# Replaces the SSH-required `helm upgrade --install kserve` step from
+# kubernetes/mlops/kserve/install/README.md.
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kserve-install
+  namespace: helm-runner
+  labels:
+    app.kubernetes.io/component: helm-bootstrap
+    app.kubernetes.io/managed-by: rpi-k8s-platform
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: kserve-install
+    spec:
+      restartPolicy: Never
+      serviceAccountName: helm-runner
+      containers:
+        - name: helm
+          # alpine/k8s ships kubectl + helm + curl + jq in one image so the
+          # script below has every CLI it needs without `apk add`.
+          image: alpine/k8s:1.29.0
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              set -euo pipefail
+              echo "==> Installing KServe CRDs"
+              # CRDs ship as plain YAML (no chart) - the controller chart
+              # depends on them being present.  Idempotent.
+              curl -sSfL "https://github.com/kserve/kserve/releases/download/v0.13.0/kserve.yaml" \
+                | kubectl apply --server-side --force-conflicts -f -
+
+              echo "==> Upgrading kserve controller"
+              helm upgrade --install kserve oci://ghcr.io/kserve/charts/kserve \
+                --version v0.13.0 \
+                --namespace kserve --create-namespace \
+                --values /etc/helm-values/values-kserve.yaml \
+                --wait --timeout 10m
+
+              echo "==> Done.  ServiceMonitor + InferenceServices already in place;"
+              echo "    the controller will start reconciling InferenceService manifests."
+          volumeMounts:
+            - name: helm-values
+              mountPath: /etc/helm-values
+              readOnly: true
+            - name: helm-cache
+              mountPath: /root/.cache
+            - name: helm-config
+              mountPath: /root/.config
+      volumes:
+        - name: helm-values
+          configMap:
+            name: helm-runner-values
+        - name: helm-cache
+          emptyDir: {}
+        - name: helm-config
+          emptyDir: {}
+      affinity:
+        nodeAffinity:
+          # alpine/helm + kubectl images on the helm chart are amd64-only;
+          # the control plane is the only amd64 node in this cluster.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["amd64"]

@@ -85,7 +85,7 @@ export function DocsRoute() {
             <p className="text-sm text-[var(--text-secondary)]">
               The docs index endpoint isn't registered on this build. Until then, refer to the
               legacy webui at <code className="font-mono">/docs</code>, or the markdown files under{" "}
-              <code className="font-mono">docs/</code> on disk.
+              <code className="font-mono">aqp_docs/</code> on disk.
             </p>
           </CardContent>
         </Card>

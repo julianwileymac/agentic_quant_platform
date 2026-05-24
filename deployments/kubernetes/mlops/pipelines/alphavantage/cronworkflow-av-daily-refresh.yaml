@@ -1,0 +1,48 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: av-daily-refresh
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: alphavantage-daily-refresh
+    data-provider: alphavantage
+spec:
+  # Nightly at 03:00 UTC: refresh timeseries + fundamentals for the watch list.
+  schedule: "0 3 * * *"
+  timezone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 5
+  suspend: false
+  workflowSpec:
+    serviceAccountName: argo-workflow
+    entrypoint: run
+    templates:
+      - name: run
+        steps:
+          - - name: fundamentals
+              templateRef:
+                name: av-fundamentals
+                template: run
+              arguments:
+                parameters:
+                  - name: symbols
+                    value: "IBM,AAPL,MSFT,GOOGL,NVDA,SPY"
+                  - name: kinds
+                    value: "overview,income,balance,cashflow,earnings,estimates"
+                  - name: target_bucket
+                    value: av-raw
+          - - name: timeseries
+              templateRef:
+                name: av-bulk-timeseries
+                template: run
+              arguments:
+                parameters:
+                  - name: symbols
+                    value: "IBM,AAPL,MSFT,GOOGL,NVDA,SPY"
+                  - name: function
+                    value: "daily_adjusted"
+                  - name: outputsize
+                    value: "compact"
+                  - name: target_bucket
+                    value: av-raw

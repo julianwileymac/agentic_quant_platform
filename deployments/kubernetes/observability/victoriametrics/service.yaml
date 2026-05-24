@@ -1,0 +1,58 @@
+﻿# =============================================================================
+# VictoriaMetrics Service
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoriametrics
+  namespace: aqp-observability
+  labels:
+    app: victoriametrics
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8428
+      targetPort: 8428
+      protocol: TCP
+  selector:
+    app: victoriametrics
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoriametrics-external
+  namespace: aqp-observability
+  labels:
+    app: victoriametrics
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      port: 8428
+      targetPort: 8428
+      protocol: TCP
+  selector:
+    app: victoriametrics
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: victoriametrics
+  namespace: aqp-observability
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: vm.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: victoriametrics
+                port:
+                  number: 8428

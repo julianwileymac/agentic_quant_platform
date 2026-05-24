@@ -1,6 +1,6 @@
 > Archived context note: this file captures a historical implementation prompt.  
-> Canonical runbooks and governance now live in `docs/index.md`,
-> `docs/operations/*`, and `AGENTS.md`. See `docs/archive/README.md`.
+> Canonical runbooks and governance now live in `aqp_docs/index.md`,
+> `aqp_docs/operations/*`, and `AGENTS.md`. See `aqp_docs/archive/README.md`.
 
 # 🚀 Actionable Implementation Prompt: Institutional-Grade AQP Refactor
 

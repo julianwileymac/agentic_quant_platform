@@ -1,0 +1,22 @@
+﻿# =============================================================================
+# Kustomization - RAGFlow
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: ragflow
+
+namespace: aqp-elt
+
+resources:
+  - secret.yaml
+  - configmap.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+
+# Redis is provided by `base-services/redis-shared/` (in aqp-data-services).
+# RAGFlow connects via cross-namespace DNS (redis.aqp-elt.svc.cluster.local)
+# at db=1; an alias Service keeps the legacy `ragflow-redis` host stable.

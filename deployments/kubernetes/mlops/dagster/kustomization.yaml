@@ -1,0 +1,13 @@
+﻿apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: dagster
+
+namespace: aqp-mlops
+
+resources:
+  - secret.yaml
+  - user-code-bootstrap-configmap.yaml
+  # Note: Dagster runtime components are deployed via Helm.
+  # See README.md for installation instructions.

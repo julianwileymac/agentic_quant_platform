@@ -8,7 +8,7 @@ JSON layer. Code inside `aqp/` keeps using these classes; the
 control plane uses `aqp_platform_core.topology` instances. Migration
 to a single shared class hierarchy happens in a follow-up PR.
 
-See `docs/architecture/decisions/005-separated-control-plane.md`.
+See `aqp_docs/architecture/decisions/005-separated-control-plane.md`.
 """
 from __future__ import annotations
 

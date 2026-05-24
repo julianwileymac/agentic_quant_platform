@@ -1,0 +1,110 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: datahub-ingestion
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: datahub-ingestion
+    app.kubernetes.io/component: orchestration
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: run-datahub-ingestion
+  arguments:
+    parameters:
+      - name: kubectl_image
+        value: bitnami/kubectl:latest
+      - name: source_group
+        value: all
+      - name: job_suffix
+        value: argo
+      - name: timeout_seconds
+        value: "1800"
+  templates:
+    - name: run-datahub-ingestion
+      inputs:
+        parameters:
+          - name: kubectl_image
+          - name: source_group
+          - name: job_suffix
+          - name: timeout_seconds
+      container:
+        image: "{{inputs.parameters.kubectl_image}}"
+        imagePullPolicy: IfNotPresent
+        command:
+          - /bin/sh
+          - -c
+        env:
+          - name: SOURCE_GROUP
+            value: "{{inputs.parameters.source_group}}"
+          - name: JOB_SUFFIX
+            value: "{{inputs.parameters.job_suffix}}"
+          - name: TIMEOUT_SECONDS
+            value: "{{inputs.parameters.timeout_seconds}}"
+        args:
+          - |
+            set -eu
+
+            case "${SOURCE_GROUP}" in
+              all)
+                cronjobs="datahub-metadata-bridge"
+                ;;
+              native)
+                cronjobs="datahub-ingest-postgres datahub-ingest-minio-s3 datahub-ingest-mlflow datahub-ingest-iceberg datahub-ingest-aqp-iceberg datahub-ingest-aqp-mlflow datahub-ingest-kafka datahub-ingest-grafana datahub-ingest-aqp-openapi"
+                ;;
+              lakehouse)
+                cronjobs="datahub-ingest-minio-s3 datahub-ingest-iceberg datahub-ingest-aqp-iceberg"
+                ;;
+              mlflow)
+                cronjobs="datahub-ingest-mlflow datahub-ingest-aqp-mlflow"
+                ;;
+              platform)
+                cronjobs="datahub-ingest-kafka datahub-ingest-grafana datahub-metadata-bridge"
+                ;;
+              api)
+                cronjobs="datahub-ingest-aqp-openapi"
+                ;;
+              bridge)
+                cronjobs="datahub-metadata-bridge"
+                ;;
+              *)
+                echo "Unknown source_group '${SOURCE_GROUP}'. Use all, native, lakehouse, mlflow, platform, api, or bridge." >&2
+                exit 2
+                ;;
+            esac
+
+            suffix="$(echo "${JOB_SUFFIX}" | tr -cd 'a-zA-Z0-9-' | tr 'A-Z' 'a-z' | cut -c1-16)"
+            if [ -z "${suffix}" ]; then
+              suffix="argo"
+            fi
+
+            for cronjob in ${cronjobs}; do
+              base="$(echo "${cronjob}-${suffix}" | cut -c1-48)"
+              job_name="${base}-$(date +%H%M%S)"
+              echo "Starting ${job_name} from CronJob ${cronjob}"
+              kubectl create job -n data-services "${job_name}" --from="cronjob/${cronjob}"
+
+              deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
+              while [ "$(date +%s)" -lt "${deadline}" ]; do
+                complete="$(kubectl get job -n data-services "${job_name}" -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' || true)"
+                failed="$(kubectl get job -n data-services "${job_name}" -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' || true)"
+                if [ "${complete}" = "True" ]; then
+                  echo "Completed ${job_name}"
+                  break
+                fi
+                if [ "${failed}" = "True" ]; then
+                  echo "DataHub ingestion job ${job_name} failed" >&2
+                  kubectl describe job -n data-services "${job_name}" || true
+                  kubectl logs -n data-services -l "job-name=${job_name}" --tail=200 || true
+                  exit 1
+                fi
+                sleep 5
+              done
+
+              complete="$(kubectl get job -n data-services "${job_name}" -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' || true)"
+              if [ "${complete}" != "True" ]; then
+                echo "DataHub ingestion job ${job_name} timed out" >&2
+                kubectl describe job -n data-services "${job_name}" || true
+                kubectl logs -n data-services -l "job-name=${job_name}" --tail=200 || true
+                exit 1
+              fi
+            done

@@ -1,0 +1,27 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: datahub-ingestion-daily
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: datahub-ingestion
+    app.kubernetes.io/component: orchestration
+spec:
+  schedule: "30 3 * * *"
+  timezone: "UTC"
+  suspend: true
+  concurrencyPolicy: "Forbid"
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  workflowSpec:
+    serviceAccountName: argo-workflow
+    workflowTemplateRef:
+      name: datahub-ingestion
+    arguments:
+      parameters:
+        - name: source_group
+          value: all
+        - name: job_suffix
+          value: daily
+        - name: timeout_seconds
+          value: "2400"

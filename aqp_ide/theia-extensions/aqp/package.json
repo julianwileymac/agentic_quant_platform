@@ -1,0 +1,44 @@
+{
+  "private": true,
+  "name": "theia-ide-aqp-ext",
+  "version": "1.71.100",
+  "description": "Theia IDE extension for the Agentic Quant Platform (AQP): Auth0 login + operator widgets (agent runs, workflows, bots, topology) + global kill-switch.",
+  "dependencies": {
+    "@auth0/auth0-react": "^2.5.0",
+    "@auth0/auth0-spa-js": "^2.4.0",
+    "@theia/core": "1.72.0-next.20",
+    "@theia/messages": "1.72.0-next.20",
+    "inversify": "^6.2.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "rimraf": "^2.7.1",
+    "typescript": "^4.9.5"
+  },
+  "theiaExtensions": [
+    {
+      "frontend": "lib/browser/aqp-frontend-module",
+      "backend": "lib/node/aqp-backend-module"
+    }
+  ],
+  "keywords": [
+    "theia-extension"
+  ],
+  "license": "MIT",
+  "files": [
+    "lib",
+    "src"
+  ],
+  "scripts": {
+    "clean": "rimraf lib *.tsbuildinfo",
+    "build": "tsc -b",
+    "lint": "eslint --ext js,jsx,ts,tsx src",
+    "lint:fix": "eslint --ext js,jsx,ts,tsx src --fix",
+    "watch": "tsc -w",
+    "update:theia": "ts-node ../../scripts/update-theia-version.ts",
+    "update:next": "ts-node ../../scripts/update-theia-version.ts next"
+  },
+  "peerDependencies": {
+    "react": "^16.8.0"
+  }
+}

@@ -1,0 +1,55 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: av-news-ingest
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: alphavantage-news-ingest
+    data-provider: alphavantage
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: run
+  arguments:
+    parameters:
+      - name: tickers
+        value: ""
+      - name: topics
+        value: "financial_markets,technology,earnings,economy_macro"
+      - name: start_date
+        value: ""
+      - name: end_date
+        value: ""
+      - name: limit
+        value: "1000"
+      - name: target_bucket
+        value: av-raw
+  templates:
+    - name: run
+      inputs:
+        parameters:
+          - name: tickers
+          - name: topics
+          - name: start_date
+          - name: end_date
+          - name: limit
+          - name: target_bucket
+      steps:
+        - - name: load
+            templateRef:
+              name: av-bulk
+              template: run
+            arguments:
+              parameters:
+                - name: category
+                  value: news
+                - name: symbols
+                  value: "{{inputs.parameters.tickers}}"
+                - name: start_date
+                  value: "{{inputs.parameters.start_date}}"
+                - name: end_date
+                  value: "{{inputs.parameters.end_date}}"
+                - name: target_bucket
+                  value: "{{inputs.parameters.target_bucket}}"
+                - name: extra_params
+                  value: |
+                    {"topics":"{{inputs.parameters.topics}}","limit":{{inputs.parameters.limit}}}

@@ -1,0 +1,50 @@
+﻿# =============================================================================
+# Kafka Rebalance (Strimzi + Cruise Control) - on-demand template
+# =============================================================================
+# Strimzi reconciles KafkaRebalance CRs against Cruise Control, which must
+# be enabled on the Kafka cluster (spec.cruiseControl in the Kafka CR). The
+# template below is set to "full rebalance" mode; to use it:
+#
+#   1. Uncomment spec.cruiseControl in kubernetes/base-services/kafka/kafka-cluster.yaml
+#      and re-apply.
+#   2. Apply this CR: the proposal is generated in ~2 minutes, inspect with:
+#        kubectl describe kafkarebalance/trading-rebalance -n data-services
+#   3. Approve with:
+#        kubectl annotate kafkarebalance/trading-rebalance strimzi.io/rebalance=approve -n data-services
+#
+# The management API (/kafka/rebalances) surfaces approval workflow.
+# Left in annotations-only skeleton (no apply by default) because Cruise
+# Control adds ~256Mi memory and isn't needed on a single-broker cluster.
+# =============================================================================
+
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaRebalance
+metadata:
+  name: trading-rebalance
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+  annotations:
+    # Strimzi will only reconcile when this is added: approve, stop, or refresh.
+    # strimzi.io/rebalance: approve
+    strimzi.io/pause-reconciliation: "true"
+spec:
+  mode: full
+  goals:
+    - RackAwareGoal
+    - ReplicaCapacityGoal
+    - DiskCapacityGoal
+    - NetworkInboundCapacityGoal
+    - NetworkOutboundCapacityGoal
+    - CpuCapacityGoal
+    - ReplicaDistributionGoal
+    - PotentialNwOutGoal
+    - DiskUsageDistributionGoal
+    - NetworkInboundUsageDistributionGoal
+    - NetworkOutboundUsageDistributionGoal
+    - CpuUsageDistributionGoal
+    - TopicReplicaDistributionGoal
+    - LeaderReplicaDistributionGoal
+    - LeaderBytesInDistributionGoal
+  skipHardGoalCheck: false
+  rebalanceDisk: false

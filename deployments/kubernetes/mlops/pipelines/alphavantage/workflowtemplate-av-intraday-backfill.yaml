@@ -1,0 +1,52 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: av-intraday-backfill
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: alphavantage-intraday-backfill
+    data-provider: alphavantage
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: run
+  arguments:
+    parameters:
+      - name: symbols
+        value: "IBM"
+      - name: interval
+        value: "5min"
+      - name: start_date
+        value: "2024-01"
+      - name: end_date
+        value: "2024-12"
+      - name: target_bucket
+        value: av-raw
+  templates:
+    - name: run
+      inputs:
+        parameters:
+          - name: symbols
+          - name: interval
+          - name: start_date
+          - name: end_date
+          - name: target_bucket
+      steps:
+        - - name: load
+            templateRef:
+              name: av-bulk
+              template: run
+            arguments:
+              parameters:
+                - name: category
+                  value: intraday-backfill
+                - name: symbols
+                  value: "{{inputs.parameters.symbols}}"
+                - name: start_date
+                  value: "{{inputs.parameters.start_date}}"
+                - name: end_date
+                  value: "{{inputs.parameters.end_date}}"
+                - name: target_bucket
+                  value: "{{inputs.parameters.target_bucket}}"
+                - name: extra_params
+                  value: |
+                    {"interval":"{{inputs.parameters.interval}}"}

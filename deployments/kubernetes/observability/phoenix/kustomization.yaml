@@ -1,0 +1,21 @@
+# Self-hosted Arize Phoenix. Phase 2d of the AQP infra-expansion plan.
+# Postgres backend lives next to it as a small dedicated StatefulSet
+# (``phoenix-postgresql``) so Phoenix's trace volume cannot starve the
+# main AQP application Postgres.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-observability
+
+commonLabels:
+  app.kubernetes.io/part-of: aqp
+  app.kubernetes.io/component: observability
+  app.kubernetes.io/managed-by: kustomize
+  aqp.internal/cluster: observability.ai
+
+resources:
+  - postgres.yaml
+  - secret.yaml
+  - deployment.yaml
+  - service.yaml
+  - servicemonitor.yaml

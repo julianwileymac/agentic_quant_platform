@@ -5,7 +5,7 @@ Use this skill when adding or changing an `InfrastructureProvider` in
 
 ## Workflow
 
-1. Read `docs/repository-split.md`.
+1. Read `aqp_docs/repository-split.md`.
 2. Read `aqp_control_plane/AGENTS.md` and `aqp_platform_core/AGENTS.md`.
 3. Add shared protocol or value-type changes to `aqp_platform_core` first.
 4. Add concrete provider behavior under `aqp_control_plane/src/aqp_cp/providers/`.

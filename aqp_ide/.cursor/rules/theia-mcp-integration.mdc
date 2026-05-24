@@ -1,0 +1,17 @@
+---
+description: Keep Theia AQP MCP and code-index integration path-accurate.
+globs:
+  - "theia-extensions/aqp/**"
+  - "docs/**"
+alwaysApply: false
+---
+
+# Theia AQP MCP Integration
+
+- Use `docs/aqp-monorepo-paths.md` for AQP paths.
+- DataMCP and CodebaseMCP are AQP-owned surfaces; Theia consumes them
+  through configured HTTP/API clients.
+- Do not import from `agentic_quant_platform` source into Theia extension
+  code.
+- Keep AQP-specific behavior inside `theia-extensions/aqp/`.
+

@@ -1,0 +1,51 @@
+---
+description: Boundary rule for the standalone operator CLI at aqp_cli/. HTTP-only; never imports aqp.* or aqp_control_plane.*; identity routes through IdentityProvider via the control plane; redacted token output.
+globs:
+  - "aqp_cli/**"
+alwaysApply: false
+---
+
+# AQP CLI
+
+- `aqp_cli/` is a **thin operator CLI**. It is NOT a place for new
+  business logic. Every command resolves into a call to
+  `/manage/*` on `aqp_control_plane` (preferred), `/auth/*` or
+  `/data/*` on the AQP monolith, or a local probe (Docker socket,
+  kubernetes context, filesystem) when no remote endpoint can answer
+  the question.
+- **Never import `aqp.*` or `aqp_control_plane.*` source.** The CLI
+  ships independently and must run against a remote AQP install.
+- **Identity flows go through `IdentityProvider`** (AQP rule 27). The
+  `--direct` escape hatch requires an explicit `--i-understand`
+  acknowledgement.
+- **Credentials resolve through `CredentialResolver`** (AQP rule 26).
+  On-disk storage lives under `~/.config/aqp/credentials/`.
+- **Never print raw tokens, kubeconfig contents, or secret payloads.**
+  Token output is redacted to a 4-character prefix; secret values are
+  replaced with `<redacted>`. Enforces the always-on rule at
+  [aqp-management-engine.mdc](mdc:.cursor/rules/aqp-management-engine.mdc).
+- **Service URLs resolve via the topology service**, not via hard-coded
+  constants.
+
+## Where changes go
+
+- New `aqp-cli <subcommand>`: `aqp_cli/src/aqp_cli/commands/<subcommand>.py`,
+  registered into `aqp_cli/src/aqp_cli/cli.py`.
+- New backend HTTP wrapper: `aqp_cli/src/aqp_cli/clients/`.
+- Output helpers: `aqp_cli/src/aqp_cli/ui/`.
+- Settings field: `aqp_cli/src/aqp_cli/config.py` (prefix `AQP_CLI_*`).
+- Tests: `aqp_cli/tests/` (use `respx` for httpx mocking).
+
+## Validation
+
+```bash
+cd aqp_cli
+pip install -e .[dev]
+pytest -ra
+ruff check src tests
+mypy src
+# The CLI MUST NOT import AQP server code directly:
+rg --type py "^from (aqp|aqp_cp|aqp_control_plane)(\.|$)|^import (aqp|aqp_cp|aqp_control_plane)(\.|$)" src
+```
+
+The `rg` command should return no matches.

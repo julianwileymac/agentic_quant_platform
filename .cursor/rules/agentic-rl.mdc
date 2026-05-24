@@ -17,8 +17,8 @@ alwaysApply: false
 
 Phase 1-2 + Phase 5 of the agentic-RL rollout. Hard rules **36 + 38**
 in [AGENTS.md](mdc:AGENTS.md) are the source of truth. The
-companion docs are [docs/agentic-rl.md](mdc:docs/agentic-rl.md) and
-[docs/weight-centric-pipeline.md](mdc:docs/weight-centric-pipeline.md).
+companion docs are [aqp_docs/agentic-rl.md](mdc:aqp_docs/agentic-rl.md) and
+[aqp_docs/weight-centric-pipeline.md](mdc:aqp_docs/weight-centric-pipeline.md).
 
 ## What this scope covers
 

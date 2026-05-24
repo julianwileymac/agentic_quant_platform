@@ -1,0 +1,27 @@
+# =============================================================================
+# RBAC for the in-cluster Helm runner Jobs.
+# =============================================================================
+# Helm runs against the Kubernetes API like any other client; the broad
+# cluster-admin role is necessary because chart resources can land in any
+# namespace (CRDs, ClusterRoles, RoleBindings).  The ServiceAccount is
+# scoped to the `helm-runner` namespace so it cannot be impersonated by
+# arbitrary pods.
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: helm-runner
+  namespace: helm-runner
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: helm-runner
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: helm-runner
+    namespace: helm-runner

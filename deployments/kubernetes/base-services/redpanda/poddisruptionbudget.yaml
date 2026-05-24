@@ -1,0 +1,15 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redpanda
+  namespace: aqp-streaming
+  labels:
+    app.kubernetes.io/name: redpanda
+    app.kubernetes.io/component: streaming
+    app.kubernetes.io/part-of: aqp
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redpanda
+      app.kubernetes.io/instance: redpanda

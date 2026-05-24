@@ -1,0 +1,21 @@
+﻿apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dagster-bootstrap-user-code
+  namespace: aqp-mlops
+data:
+  definitions.py: |
+    from dagster import Definitions, job, op
+
+
+    @op
+    def dagster_bootstrap_healthcheck() -> str:
+        return "ok"
+
+
+    @job
+    def dagster_bootstrap_job():
+        dagster_bootstrap_healthcheck()
+
+
+    defs = Definitions(jobs=[dagster_bootstrap_job])

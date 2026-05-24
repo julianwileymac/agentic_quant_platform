@@ -47,6 +47,11 @@ import { AirbyteBuilderRoute } from "@/routes/airbyte/builder/page";
 import { AirbyteConnectorsRoute } from "@/routes/airbyte/connectors/page";
 import { AirbyteRunsRoute } from "@/routes/airbyte/runs/page";
 import { LabsAdminRoute } from "@/routes/admin/labs/page";
+import { LabWorkspaceRoute } from "@/routes/labs/[lab_id]/workspace/page";
+import { LabEdaRoute } from "@/routes/labs/[lab_id]/workspace/eda/page";
+import { LabTestingRoute } from "@/routes/labs/[lab_id]/workspace/testing/page";
+import { LabEvaluationRoute } from "@/routes/labs/[lab_id]/workspace/evaluation/page";
+import { LabSimulationRoute } from "@/routes/labs/[lab_id]/workspace/simulation/page";
 import { LayeredConfigsRoute } from "@/routes/admin/configs/page";
 import { OrgsAdminRoute } from "@/routes/admin/orgs/page";
 import { ProjectsAdminRoute } from "@/routes/admin/projects/page";
@@ -174,7 +179,7 @@ import { KafkaTopicDetailRoute } from "@/routes/streaming/kafka/topics/[name]/pa
 import { FlinkJobDetailRoute } from "@/routes/streaming/flink/jobs/[name]/page";
 import { ProducerDetailRoute } from "@/routes/streaming/producers/[name]/page";
 import { StrategyNewRoute } from "@/routes/strategies/new/page";
-// Consolidated `/strategy-development/*` umbrella — see docs/strategy-development.md.
+// Consolidated `/strategy-development/*` umbrella — see aqp_docs/strategy-development.md.
 import { StrategyDevLayoutRoute } from "@/routes/strategy-development/layout";
 import { StrategyDevIndexRoute } from "@/routes/strategy-development/page";
 import { StrategyComposerRoute as StrategyDevComposerPage } from "@/routes/strategy-development/composer/page";
@@ -435,6 +440,22 @@ const DYNAMIC_ROUTES: RouteObject[] = [
   // shadow the existing /workflows/{agent,data,strategy} editor entries.
   { path: "workflows/specs/:name", element: <WorkflowDetailRoute /> },
   { path: "workflows/runs/:runId", element: <WorkflowRunRoute /> },
+  // Data Lab — four-mode workspace (EDA / Testing / Evaluation / Simulation).
+  // Mounted under /labs/:lab_id/workspace[/:mode] so the existing
+  // /admin/labs CRUD and the rest of the Lab tenancy entity surface stay
+  // untouched. The shell owns the WS multiplex + 4-mode tab bar; each
+  // mode renders its own canvas inside the shell's <main>.
+  {
+    path: "labs/:lab_id/workspace",
+    element: <LabWorkspaceRoute />,
+    children: [
+      { index: true, element: <LabTestingRoute /> },
+      { path: "eda", element: <LabEdaRoute /> },
+      { path: "testing", element: <LabTestingRoute /> },
+      { path: "evaluation", element: <LabEvaluationRoute /> },
+      { path: "simulation", element: <LabSimulationRoute /> },
+    ],
+  },
   // Phase 7 — Terraform IaC dynamic routes (stack catalog + workspace + run detail).
   { path: "infra/terraform/stacks", element: <TerraformStacksRoute /> },
   { path: "infra/terraform/workspaces/:id", element: <TerraformWorkspaceDetailRoute /> },

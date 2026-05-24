@@ -1,0 +1,191 @@
+﻿apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datahub-ingestion-recipes
+  namespace: aqp-data-services
+  labels:
+    app.kubernetes.io/name: datahub
+    app.kubernetes.io/component: metadata-ingestion
+data:
+  recipe-postgres.yaml: |
+    source:
+      type: postgres
+      config:
+        host_port: ${INGEST_POSTGRES_HOST_PORT}
+        database: ${INGEST_POSTGRES_DATABASE}
+        username: ${INGEST_POSTGRES_USERNAME}
+        password: ${INGEST_POSTGRES_PASSWORD}
+        include_tables: true
+        include_views: true
+        stateful_ingestion:
+          enabled: true
+          remove_stale_metadata: true
+
+    sink:
+      type: datahub-rest
+      config:
+        server: ${DATAHUB_GMS_SERVER}
+        token: ${DATAHUB_TOKEN}
+
+  recipe-minio-s3.yaml: |
+    source:
+      type: s3
+      config:
+        path_specs:
+          - include: "s3://argo-workflows/**"
+          - include: "s3://dagster-artifacts/**"
+          - include: "s3://mlflow-artifacts/**"
+          - include: "s3://pipeline-raw/**"
+          - include: "s3://pipeline-processed/**"
+          - include: "s3://iceberg-warehouse/**"
+          - include: "s3://model-registry/**"
+          - include: "s3://model-cache/**"
+          - include: "s3://aqp-artifacts/**"
+          - include: "s3://aqp-datasets/**"
+        aws_config:
+          aws_access_key_id: ${INGEST_MINIO_ACCESS_KEY}
+          aws_secret_access_key: ${INGEST_MINIO_SECRET_KEY}
+          aws_endpoint_url: "http://${INGEST_MINIO_ENDPOINT}"
+          aws_region: ${INGEST_MINIO_REGION}
+        profiling:
+          enabled: false
+        stateful_ingestion:
+          enabled: true
+          remove_stale_metadata: true
+
+    sink:
+      type: datahub-rest
+      config:
+        server: ${DATAHUB_GMS_SERVER}
+        token: ${DATAHUB_TOKEN}
+
+  recipe-iceberg-rest.yaml: |
+    source:
+      type: iceberg
+      config:
+        catalog:
+          type: rest
+          uri: ${INGEST_ICEBERG_REST_URI}
+          warehouse: ${INGEST_ICEBERG_WAREHOUSE}
+          credential: ${INGEST_ICEBERG_REST_CREDENTIAL}
+          scope: "PRINCIPAL_ROLE:ALL"
+          s3.endpoint: "http://${INGEST_MINIO_ENDPOINT}"
+          s3.access-key-id: ${INGEST_MINIO_ACCESS_KEY}
+          s3.secret-access-key: ${INGEST_MINIO_SECRET_KEY}
+          s3.region: ${INGEST_MINIO_REGION}
+          s3.path-style-access: true
+        platform_instance: ${INGEST_ICEBERG_PLATFORM_INSTANCE}
+
+    sink:
+      type: datahub-rest
+      config:
+        server: ${DATAHUB_GMS_SERVER}
+        token: ${DATAHUB_TOKEN}
+
+  recipe-mlflow.yaml: |
+    source:
+      type: mlflow
+      config:
+        tracking_uri: ${INGEST_MLFLOW_TRACKING_URI}
+        platform_instance: ${INGEST_MLFLOW_PLATFORM_INSTANCE}
+        base_external_url: ${INGEST_MLFLOW_EXTERNAL_URL}
+
+    sink:
+      type: datahub-rest
+      config:
+        server: ${DATAHUB_GMS_SERVER}
+        token: ${DATAHUB_TOKEN}
+
+  recipe-aqp-iceberg-rest.yaml: |
+    source:
+      type: iceberg
+      config:
+        catalog:
+          type: rest
+          uri: ${INGEST_AQP_ICEBERG_REST_URI}
+          warehouse: ${INGEST_AQP_ICEBERG_WAREHOUSE}
+          credential: ${INGEST_ICEBERG_REST_CREDENTIAL}
+          scope: "PRINCIPAL_ROLE:ALL"
+          s3.endpoint: "http://${INGEST_MINIO_ENDPOINT}"
+          s3.access-key-id: ${INGEST_MINIO_ACCESS_KEY}
+          s3.secret-access-key: ${INGEST_MINIO_SECRET_KEY}
+          s3.region: ${INGEST_MINIO_REGION}
+          s3.path-style-access: true
+        platform_instance: ${INGEST_AQP_ICEBERG_PLATFORM_INSTANCE}
+
+    sink:
+      type: datahub-rest
+      config:
+        server: ${DATAHUB_GMS_SERVER}
+        token: ${DATAHUB_TOKEN}
+
+  recipe-aqp-mlflow.yaml: |
+    source:
+      type: mlflow
+      config:
+        tracking_uri: ${INGEST_AQP_MLFLOW_TRACKING_URI}
+        platform_instance: ${INGEST_AQP_MLFLOW_PLATFORM_INSTANCE}
+        base_external_url: ${INGEST_AQP_MLFLOW_EXTERNAL_URL}
+
+    sink:
+      type: datahub-rest
+      config:
+        server: ${DATAHUB_GMS_SERVER}
+        token: ${DATAHUB_TOKEN}
+
+  recipe-kafka.yaml: |
+    source:
+      type: kafka
+      config:
+        platform_instance: ${INGEST_KAFKA_PLATFORM_INSTANCE}
+        connection:
+          bootstrap: ${INGEST_KAFKA_BOOTSTRAP}
+          schema_registry_url: ${INGEST_KAFKA_SCHEMA_REGISTRY_URL}
+
+    sink:
+      type: datahub-rest
+      config:
+        server: ${DATAHUB_GMS_SERVER}
+        token: ${DATAHUB_TOKEN}
+
+  recipe-grafana.yaml: |
+    source:
+      type: grafana
+      config:
+        url: ${INGEST_GRAFANA_URL}
+        platform_instance: ${INGEST_GRAFANA_PLATFORM_INSTANCE}
+        service_account_token: ${INGEST_GRAFANA_SERVICE_ACCOUNT_TOKEN}
+
+    sink:
+      type: datahub-rest
+      config:
+        server: ${DATAHUB_GMS_SERVER}
+        token: ${DATAHUB_TOKEN}
+
+  recipe-aqp-openapi.yaml: |
+    source:
+      type: openapi
+      config:
+        name: ${INGEST_AQP_OPENAPI_NAME}
+        url: ${INGEST_AQP_OPENAPI_URL}
+        swagger_file: ${INGEST_AQP_OPENAPI_SWAGGER_FILE}
+
+    sink:
+      type: datahub-rest
+      config:
+        server: ${DATAHUB_GMS_SERVER}
+        token: ${DATAHUB_TOKEN}
+
+  recipe-airbyte.yaml: |
+    source:
+      type: airbyte
+      config:
+        url: ${INGEST_AIRBYTE_URL}
+        token: ${INGEST_AIRBYTE_TOKEN}
+        platform_instance: ${INGEST_AIRBYTE_PLATFORM_INSTANCE}
+
+    sink:
+      type: datahub-rest
+      config:
+        server: ${DATAHUB_GMS_SERVER}
+        token: ${DATAHUB_TOKEN}

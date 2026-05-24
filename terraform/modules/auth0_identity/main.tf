@@ -36,6 +36,7 @@ locals {
     { value = "backtest:create", description = "Submit a new backtest job to the engine fleet" },
     # ML / RL / RAG
     { value = "rag:query", description = "Query the hierarchical RAG corpus" },
+    { value = "read:timeseries", description = "Read QuestDB timeseries metadata and health endpoints" },
     { value = "ml:workbench", description = "Run ML workbench flows (training, evaluation, registry)" },
     { value = "rl:train", description = "Submit RLExperimentSpec runs through RLRuntime" },
     # Deployment lifecycle
@@ -68,6 +69,7 @@ locals {
       "trade:read",
       "backtest:read",
       "rag:query",
+      "read:timeseries",
     ]
     operator = [
       # viewer +
@@ -77,6 +79,7 @@ locals {
       "trade:read",
       "backtest:read",
       "rag:query",
+      "read:timeseries",
       # operator-only:
       "manage:agents",
       "agent:execute",
@@ -97,6 +100,7 @@ locals {
       "trade:read",
       "backtest:read",
       "rag:query",
+      "read:timeseries",
       "manage:agents",
       "agent:execute",
       "agent:terminate",
@@ -124,6 +128,7 @@ locals {
       "trade:read",
       "backtest:read",
       "rag:query",
+      "read:timeseries",
       "manage:agents",
       "agent:execute",
       "agent:terminate",
@@ -150,6 +155,10 @@ locals {
       "platform:admin",
     ]
   }
+
+  spa_callbacks   = distinct(compact(concat(var.callback_urls, var.cutover_callback_urls)))
+  spa_logout_urls = distinct(compact(concat(var.logout_urls, var.cutover_logout_urls)))
+  spa_web_origins = distinct(compact(concat(var.web_origins, var.cutover_web_origins)))
 }
 
 resource "auth0_client" "spa" {
@@ -158,10 +167,10 @@ resource "auth0_client" "spa" {
   app_type        = "spa"
   oidc_conformant = true
 
-  callbacks                  = var.callback_urls
-  allowed_logout_urls        = var.logout_urls
-  allowed_origins            = var.web_origins
-  web_origins                = var.web_origins
+  callbacks                  = local.spa_callbacks
+  allowed_logout_urls        = local.spa_logout_urls
+  allowed_origins            = local.spa_web_origins
+  web_origins                = local.spa_web_origins
   grant_types                = ["authorization_code", "refresh_token"]
   token_endpoint_auth_method = "none"
 }

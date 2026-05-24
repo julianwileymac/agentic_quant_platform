@@ -1,0 +1,174 @@
+﻿# =============================================================================
+# Dagster Helm Values
+# =============================================================================
+# Install with:
+#   helm repo add dagster https://dagster-io.github.io/helm
+#   helm repo update
+#   helm upgrade --install dagster dagster/dagster \
+#     --namespace mlops --create-namespace \
+#     -f values.yaml \
+#     -f values-pipelines-user-code.yaml   # when ready to ship in-repo user code
+#
+# Production hardening notes (see README.md):
+#   1. User-code images are pulled from `pipeline-sink-credentials` secret
+#      keys; rotate that secret to rotate MinIO/Postgres credentials.
+#   2. The Dagster daemon is enabled by default so schedules + sensors run.
+#   3. AWS credentials are sourced from the dagster-minio Secret instead of
+#      being inlined in environment variables.
+# =============================================================================
+
+fullnameOverride: dagster
+
+global:
+  dagsterHome: /opt/dagster/dagster_home
+
+dagsterWebserver:
+  replicaCount: 1
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 750m
+      memory: 1Gi
+
+  env:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: "http://otel-collector.aqp-observability.svc.cluster.local:4317"
+    - name: OTEL_SERVICE_NAME
+      value: "dagster-webserver"
+    - name: OTEL_TRACES_EXPORTER
+      value: "otlp"
+    - name: OTEL_LOGS_EXPORTER
+      value: "otlp"
+
+  # Source MinIO credentials from the dagster-minio Secret (managed by
+  # secret.yaml in this directory) so they can be rotated without editing
+  # the Helm values.
+  envSecrets:
+    - name: dagster-minio
+  envFrom:
+    - secretRef:
+        name: dagster-minio
+
+dagsterDaemon:
+  # Enabled so schedules + sensors actually run.  Was previously disabled as
+  # a baseline; the in-repo user-code deployment is healthy enough now to
+  # keep the daemon online.
+  enabled: true
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 750m
+      memory: 1Gi
+
+  env:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: "http://otel-collector.aqp-observability.svc.cluster.local:4317"
+    - name: OTEL_SERVICE_NAME
+      value: "dagster-daemon"
+    - name: OTEL_TRACES_EXPORTER
+      value: "otlp"
+    - name: OTEL_LOGS_EXPORTER
+      value: "otlp"
+
+  envSecrets:
+    - name: dagster-minio
+  envFrom:
+    - secretRef:
+        name: dagster-minio
+
+# Baseline install keeps a lightweight example code location so Dagster starts
+# with a valid workspace.  In-repo pipeline user code is enabled via
+# values-pipelines-user-code.yaml.
+dagster-user-deployments:
+  enabled: true
+  enableSubchart: true
+  deployments:
+    - name: bootstrap-user-code
+      image:
+        repository: docker.io/dagster/dagster-celery-k8s
+        # Pinned to an immutable tag (was previously a moving label).  Update
+        # this when promoting a new user-code image; do not use `:latest`.
+        tag: "1.12.21"
+        pullPolicy: IfNotPresent
+      dagsterApiGrpcArgs:
+        - "--python-file"
+        - "/opt/dagster/user_code/definitions.py"
+      port: 3030
+      includeConfigInLaunchedRuns:
+        enabled: true
+      envSecrets:
+        - name: dagster-minio
+        - name: pipeline-sink-credentials
+      env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector.aqp-observability.svc.cluster.local:4317
+        - name: OTEL_SERVICE_NAME
+          value: dagster-user-code
+      volumes:
+        - name: bootstrap-user-code
+          configMap:
+            name: dagster-bootstrap-user-code
+      volumeMounts:
+        - name: bootstrap-user-code
+          mountPath: /opt/dagster/user_code/definitions.py
+          subPath: definitions.py
+
+scheduler:
+  type: DagsterDaemonScheduler
+
+runLauncher:
+  type: K8sRunLauncher
+  config:
+    k8sRunLauncher:
+      jobNamespace: mlops
+      loadInclusterConfig: true
+      # Pipeline runs receive credentials via the existing pipeline-sink-credentials
+      # secret (managed by kubernetes/mlops/pipelines/) so we do not have to
+      # duplicate them here.
+      envSecrets:
+        - name: pipeline-sink-credentials
+        - name: dagster-minio
+      envVars:
+        - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.aqp-observability.svc.cluster.local:4317
+        - OTEL_TRACES_EXPORTER=otlp
+        - OTEL_LOGS_EXPORTER=otlp
+
+# Use existing cluster PostgreSQL instead of the chart subchart.
+postgresql:
+  enabled: false
+  postgresqlHost: postgresql.aqp-data-services.svc.cluster.local
+  postgresqlDatabase: dagster
+  postgresqlUsername: dagster
+  postgresqlPassword: dagster123
+  service:
+    port: 5432
+
+# Persist Dagster compute logs in MinIO (S3-compatible).  Credentials come
+# from the AWS_* keys provisioned by the dagster-minio Secret above.
+computeLogManager:
+  type: S3ComputeLogManager
+  config:
+    s3ComputeLogManager:
+      bucket: dagster-artifacts
+      endpointUrl: http://minio.aqp-data-services.svc.cluster.local:9000
+      useSsl: false
+      verify: false
+      prefix: dagster-compute-logs
+
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  dagsterWebserver:
+    host: dagster.local
+    path: /
+    pathType: Prefix

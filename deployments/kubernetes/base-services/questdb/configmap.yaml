@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: questdb-config
+  namespace: aqp-timeseries
+  labels:
+    app.kubernetes.io/name: questdb
+    app.kubernetes.io/component: timeseries
+    app.kubernetes.io/part-of: aqp
+data:
+  # QuestDB server.conf overrides. Keep the rest of the defaults.
+  server.conf: |
+    http.enabled=true
+    http.bind.to=0.0.0.0:9000
+    line.tcp.enabled=true
+    line.tcp.net.bind.to=0.0.0.0:9009
+    line.default.partition.by=HOUR
+    pg.enabled=true
+    pg.net.bind.to=0.0.0.0:8812
+    pg.user=aqp
+    cairo.commit.lag=1000
+    cairo.max.uncommitted.rows=500000
+    cairo.o3.min.lag=1000
+    line.tcp.maintenance.job.interval=30000
+    line.tcp.commit.interval.default=2000
+    line.tcp.writer.worker.count=4
+    metrics.enabled=true

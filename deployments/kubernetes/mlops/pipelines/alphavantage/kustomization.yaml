@@ -1,0 +1,30 @@
+﻿apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: alphavantage-pipelines
+
+namespace: aqp-mlops
+
+resources:
+  - secret-alphavantage-credentials.yaml
+  - workflowtemplate-av-bulk.yaml
+  - workflowtemplate-av-timeseries.yaml
+  - workflowtemplate-av-intraday-backfill.yaml
+  - workflowtemplate-av-fundamentals.yaml
+  - workflowtemplate-av-universe-sync.yaml
+  - workflowtemplate-av-news.yaml
+  - workflowtemplate-av-fx-backfill.yaml
+  - workflowtemplate-av-crypto-backfill.yaml
+  - workflowtemplate-av-technicals.yaml
+  - workflowtemplate-av-commodities.yaml
+  - workflowtemplate-av-economics.yaml
+  - workflowtemplate-av-earnings.yaml
+  - cronworkflow-av-universe-sync.yaml
+  - cronworkflow-av-daily-refresh.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: rpi-k8s-platform
+      data-provider: alphavantage

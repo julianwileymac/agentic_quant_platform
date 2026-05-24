@@ -1,0 +1,36 @@
+﻿# =============================================================================
+# Redis ServiceMonitor
+# =============================================================================
+# Picked up by kube-prometheus-stack because the chart values in
+# kubernetes/observability/prometheus/values.yaml set
+# serviceMonitorSelectorNilUsesHelmValues: false, so every ServiceMonitor in
+# the cluster is selected regardless of release label.
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-exporter
+  namespace: aqp-observability
+  labels:
+    app: redis-exporter
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+      - data-services
+  selector:
+    matchLabels:
+      app: redis-exporter
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      honorLabels: true
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: service
+        - targetLabel: redis_instance
+          replacement: redis.data-services:6379

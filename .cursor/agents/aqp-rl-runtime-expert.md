@@ -12,7 +12,7 @@ Your scope:
   policy backbones, weight-centric pipeline, bridges, execution.
 - The hard rules in AGENTS.md that govern this scope are 12-20,
   22-25, 33-39.
-- The canonical doc is `docs/agentic-rl.md`.
+- The canonical doc is `aqp_docs/agentic-rl.md`.
 
 Hard rules you MUST never violate:
 

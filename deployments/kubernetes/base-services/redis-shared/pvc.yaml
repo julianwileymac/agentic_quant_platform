@@ -1,0 +1,23 @@
+﻿# =============================================================================
+# Redis 8 Stack - Persistent Volume Claim
+# =============================================================================
+# Replaces the prior 2Gi Valkey PVC with a larger slot sized for combined
+# RAGFlow queue state, the document store JSON + vector index, and Redis OM
+# metadata.  local-path is the default k3s storage class.
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: aqp-data-services
+  labels:
+    app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: local-path

@@ -1,0 +1,37 @@
+---
+description: Boundary rule for the vendored Theia IDE workspace at aqp_ide/. AQP code lives only inside theia-extensions/aqp/. No Theia → agentic_quant_platform source imports.
+globs:
+  - "aqp_ide/**"
+alwaysApply: false
+---
+
+# AQP IDE (vendored Theia workspace)
+
+- `aqp_ide/` is a copy of an upstream Theia IDE workspace plus an
+  additive AQP extension. Treat upstream behavior changes carefully.
+- AQP-specific behavior lives **only** inside
+  `aqp_ide/theia-extensions/aqp/`. Do not sprinkle AQP imports into
+  core Theia files.
+- Do not `import` from `agentic_quant_platform` source code (Python or
+  TypeScript) into Theia extension TypeScript. Cross the boundary only
+  through HTTP (`AqpApiService`) or the DataMCP / CodebaseMCP HTTP
+  surfaces.
+- Keep browser / electron target scope explicit in docs and commands.
+- Validate script names against `aqp_ide/package.json` before
+  documenting them.
+- Reference AQP paths through `aqp_ide/docs/aqp-monorepo-paths.md`
+  (in-folder Theia docs) for Theia-side guidance, or
+  `../aqp_docs/aqp-monorepo-paths.md` for monorepo-wide references.
+
+## Validation
+
+```bash
+cd aqp_ide
+yarn install
+yarn build:extensions
+yarn build:applications:dev
+```
+
+These commands are NOT chained from the monorepo's top-level Makefile
+(which builds the AQP Python/Vite stack). The Theia build is a
+standalone step.

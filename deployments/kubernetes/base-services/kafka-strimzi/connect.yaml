@@ -1,0 +1,159 @@
+﻿# =============================================================================
+# Kafka Connect (Strimzi) - shared connector runtime
+# =============================================================================
+# Runs a Kafka Connect cluster that hosts sink/source connectors driven by
+# KafkaConnector CRs under kubernetes/base-services/kafka/connectors/.
+#
+# Plugins are built by Strimzi at deploy time via spec.build, pulling JARs
+# from Maven Central and Confluent Hub. The resulting image is pushed to
+# MinIO-backed OCI registry reachable at registry.data-services:5000 when
+# configured (see spec.build.output), otherwise the operator writes it to
+# the in-cluster imagestream on the Strimzi side.
+#
+# Authentication: SCRAM-SHA-512 as user `connect-sinks` over listener 9094.
+# Tracing: native OpenTelemetry via spec.tracing, OTEL_* env vars override
+# the collector endpoint.
+# =============================================================================
+
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaConnect
+metadata:
+  name: trading-connect
+  namespace: aqp-streaming
+  annotations:
+    # Required so KafkaConnector CRs can be reconciled against this cluster.
+    strimzi.io/use-connector-resources: "true"
+  labels:
+    strimzi.io/cluster: trading-connect
+spec:
+  version: 4.1.0
+  replicas: 1
+  bootstrapServers: trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9094
+  authentication:
+    type: scram-sha-512
+    username: connect-sinks
+    passwordSecret:
+      secretName: connect-sinks
+      password: password
+  tls:
+    trustedCertificates:
+      - secretName: trading-kafka-cluster-ca-cert
+        certificate: ca.crt
+  config:
+    group.id: trading-connect-cluster
+    offset.storage.topic: connect-cluster-offsets
+    config.storage.topic: connect-cluster-configs
+    status.storage.topic: connect-cluster-status
+    offset.storage.replication.factor: 1
+    config.storage.replication.factor: 1
+    status.storage.replication.factor: 1
+    config.providers: secrets,configmaps
+    config.providers.secrets.class: io.strimzi.kafka.KubernetesSecretConfigProvider
+    config.providers.configmaps.class: io.strimzi.kafka.KubernetesConfigMapConfigProvider
+    key.converter: org.apache.kafka.connect.storage.StringConverter
+    value.converter: io.apicurio.registry.serde.avro.AvroConverter
+    value.converter.schemas.enable: "true"
+    value.converter.apicurio.registry.url: http://apicurio-registry.aqp-streaming.svc.cluster.local:8080/apis/registry/v2
+    value.converter.apicurio.registry.auto-register: "false"
+    value.converter.apicurio.registry.find-latest: "true"
+    value.converter.apicurio.registry.use-id: contentId
+    value.converter.apicurio.registry.headers.enabled: "true"
+  build:
+    output:
+      type: docker
+      image: trading-connect-plugins:latest
+    plugins:
+      - name: camel-aws-s3-sink
+        artifacts:
+          - type: maven
+            group: org.apache.camel.kafkaconnector
+            artifact: camel-aws-s3-sink-kafka-connector
+            version: 4.4.1
+      - name: kafka-connect-jdbc
+        artifacts:
+          - type: maven
+            group: io.confluent
+            artifact: kafka-connect-jdbc
+            version: 10.7.6
+          - type: jar
+            url: https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.3/postgresql-42.7.3.jar
+            sha512sum: 30f7c5b9df40eadb43c46a56a1b64e9a13b53b0cf0f4c2e0afa4d4e3aed8f45bf9b0a5d64ff4be6c88e7ddd1f4f05cd9b2e6be35b5fd4ef9e8bde7d5ba3a4a88b
+      - name: apicurio-converters
+        artifacts:
+          - type: maven
+            group: io.apicurio
+            artifact: apicurio-registry-distro-connect-converter
+            version: 2.5.11.Final
+  metricsConfig:
+    type: jmxPrometheusExporter
+    valueFrom:
+      configMapKeyRef:
+        name: connect-metrics-config
+        key: connect-metrics.yml
+  tracing:
+    type: opentelemetry
+  template:
+    connectContainer:
+      env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector.aqp-observability.svc.cluster.local:4317
+        - name: OTEL_SERVICE_NAME
+          value: trading-connect
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=data-services,deployment.environment=rpi-cluster
+        - name: OTEL_METRICS_EXPORTER
+          value: none
+    pod:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: In
+                    values: ["true"]
+  resources:
+    requests:
+      cpu: 200m
+      memory: 768Mi
+    limits:
+      cpu: 1
+      memory: 1536Mi
+  jvmOptions:
+    -Xms: 512m
+    -Xmx: 1024m
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: connect-metrics-config
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-connect
+data:
+  connect-metrics.yml: |
+    lowercaseOutputName: true
+    lowercaseOutputLabelNames: true
+    rules:
+      - pattern: "kafka.connect<type=connect-worker-metrics>([^:]+):(.+)"
+        name: kafka_connect_worker_$1_$2
+        type: GAUGE
+      - pattern: "kafka.connect<type=connector-metrics, connector=([^>]+)><>(.+)"
+        name: kafka_connect_connector_$2
+        type: GAUGE
+        labels:
+          connector: "$1"
+      - pattern: "kafka.connect<type=sink-task-metrics, connector=([^>]+), task=([^>]+)><>(.+)"
+        name: kafka_connect_sink_task_$3
+        type: GAUGE
+        labels:
+          connector: "$1"
+          task: "$2"
+      - pattern: "kafka.connect<type=source-task-metrics, connector=([^>]+), task=([^>]+)><>(.+)"
+        name: kafka_connect_source_task_$3
+        type: GAUGE
+        labels:
+          connector: "$1"
+          task: "$2"

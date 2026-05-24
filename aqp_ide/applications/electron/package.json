@@ -1,0 +1,181 @@
+{
+  "private": true,
+  "name": "theia-ide-electron-app",
+  "description": "Eclipse Theia IDE product",
+  "productName": "Theia IDE",
+  "version": "1.71.100",
+  "main": "scripts/theia-electron-main.js",
+  "license": "MIT",
+  "author": "Eclipse Theia <theia-dev@eclipse.org>",
+  "homepage": "https://github.com/eclipse-theia/theia-ide#readme",
+  "bugs": {
+    "url": "https://github.com/eclipse-theia/theia/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eclipse-theia/theia-ide.git"
+  },
+  "engines": {
+    "yarn": ">=1.7.0 <2",
+    "node": ">=22"
+  },
+  "theia": {
+    "target": "electron",
+    "frontend": {
+      "config": {
+        "applicationName": "Theia IDE",
+        "reloadOnReconnect": true,
+        "preferences": {
+          "toolbar.showToolbar": true
+        },
+        "electron": {
+          "showWindowEarly": false,
+          "splashScreenOptions": {
+            "content": "resources/TheiaIDESplash.svg",
+            "height": 276,
+            "width": 446
+          }
+        }
+      }
+    },
+    "backend": {
+      "config": {
+        "frontendConnectionTimeout": -1,
+        "startupTimeout": -1,
+        "resolveSystemPlugins": false,
+        "configurationFolder": ".theia-ide"
+      }
+    },
+    "generator": {
+      "config": {
+        "preloadTemplate": "./resources/preload.html"
+      }
+    }
+  },
+  "dependencies": {
+    "@theia/ai-anthropic": "1.72.0-next.20",
+    "@theia/ai-chat": "1.72.0-next.20",
+    "@theia/ai-chat-ui": "1.72.0-next.20",
+    "@theia/ai-claude-code": "1.72.0-next.20",
+    "@theia/ai-code-completion": "1.72.0-next.20",
+    "@theia/ai-codex": "1.72.0-next.20",
+    "@theia/ai-copilot": "1.72.0-next.20",
+    "@theia/ai-core": "1.72.0-next.20",
+    "@theia/ai-core-ui": "1.72.0-next.20",
+    "@theia/ai-editor": "1.72.0-next.20",
+    "@theia/ai-google": "1.72.0-next.20",
+    "@theia/ai-history": "1.72.0-next.20",
+    "@theia/ai-huggingface": "1.72.0-next.20",
+    "@theia/ai-ide": "1.72.0-next.20",
+    "@theia/ai-llamafile": "1.72.0-next.20",
+    "@theia/ai-mcp": "1.72.0-next.20",
+    "@theia/ai-mcp-server": "1.72.0-next.20",
+    "@theia/ai-mcp-ui": "1.72.0-next.20",
+    "@theia/ai-ollama": "1.72.0-next.20",
+    "@theia/ai-openai": "1.72.0-next.20",
+    "@theia/ai-scanoss": "1.72.0-next.20",
+    "@theia/ai-terminal": "1.72.0-next.20",
+    "@theia/ai-vercel-ai": "1.72.0-next.20",
+    "@theia/bulk-edit": "1.72.0-next.20",
+    "@theia/callhierarchy": "1.72.0-next.20",
+    "@theia/collaboration": "1.72.0-next.20",
+    "@theia/console": "1.72.0-next.20",
+    "@theia/core": "1.72.0-next.20",
+    "@theia/debug": "1.72.0-next.20",
+    "@theia/dev-container": "1.72.0-next.20",
+    "@theia/editor": "1.72.0-next.20",
+    "@theia/editor-preview": "1.72.0-next.20",
+    "@theia/electron": "1.72.0-next.20",
+    "@theia/external-terminal": "1.72.0-next.20",
+    "@theia/file-search": "1.72.0-next.20",
+    "@theia/filesystem": "1.72.0-next.20",
+    "@theia/getting-started": "1.72.0-next.20",
+    "@theia/keymaps": "1.72.0-next.20",
+    "@theia/markers": "1.72.0-next.20",
+    "@theia/memory-inspector": "1.72.0-next.20",
+    "@theia/messages": "1.72.0-next.20",
+    "@theia/metrics": "1.72.0-next.20",
+    "@theia/mini-browser": "1.72.0-next.20",
+    "@theia/monaco": "1.72.0-next.20",
+    "@theia/navigator": "1.72.0-next.20",
+    "@theia/notebook": "1.72.0-next.20",
+    "@theia/outline-view": "1.72.0-next.20",
+    "@theia/output": "1.72.0-next.20",
+    "@theia/plugin-dev": "1.72.0-next.20",
+    "@theia/plugin-ext": "1.72.0-next.20",
+    "@theia/plugin-ext-vscode": "1.72.0-next.20",
+    "@theia/preferences": "1.72.0-next.20",
+    "@theia/preview": "1.72.0-next.20",
+    "@theia/process": "1.72.0-next.20",
+    "@theia/property-view": "1.72.0-next.20",
+    "@theia/remote": "1.72.0-next.20",
+    "@theia/remote-wsl": "1.72.0-next.20",
+    "@theia/scanoss": "1.72.0-next.20",
+    "@theia/scm": "1.72.0-next.20",
+    "@theia/search-in-workspace": "1.72.0-next.20",
+    "@theia/secondary-window": "1.72.0-next.20",
+    "@theia/task": "1.72.0-next.20",
+    "@theia/terminal": "1.72.0-next.20",
+    "@theia/terminal-manager": "1.72.0-next.20",
+    "@theia/test": "1.72.0-next.20",
+    "@theia/timeline": "1.72.0-next.20",
+    "@theia/toolbar": "1.72.0-next.20",
+    "@theia/typehierarchy": "1.72.0-next.20",
+    "@theia/userstorage": "1.72.0-next.20",
+    "@theia/variable-resolver": "1.72.0-next.20",
+    "@theia/vsx-registry": "1.72.0-next.20",
+    "@theia/workspace": "1.72.0-next.20",
+    "fs-extra": "^9.1.0",
+    "theia-ide-launcher-ext": "1.71.100",
+    "theia-ide-product-ext": "1.71.100",
+    "theia-ide-updater-ext": "1.71.100"
+  },
+  "devDependencies": {
+    "@theia/cli": "1.72.0-next.20",
+    "@theia/bundle-plugin": "1.72.0-next.20",
+    "@types/js-yaml": "^3.12.10",
+    "@types/yargs": "17.0.7",
+    "@wdio/cli": "^6.12.1",
+    "@wdio/local-runner": "^6.12.1",
+    "@wdio/mocha-framework": "^6.11.0",
+    "@wdio/spec-reporter": "^6.11.0",
+    "app-builder-lib": "26.0.12",
+    "chai": "^4.5.0",
+    "concurrently": "^3.6.1",
+    "electron": "39.8.7",
+    "electron-builder": "26.0.12",
+    "electron-chromedriver": "^28.3.3",
+    "electron-mocha": "^12.3.1",
+    "electron-osx-sign": "^0.6.0",
+    "js-yaml": "^3.14.2",
+    "mocha": "^8.4.0",
+    "rimraf": "^2.7.1",
+    "ts-node": "^10.9.2",
+    "wdio-chromedriver-service": "^6.0.4",
+    "webdriverio": "^6.12.1",
+    "yargs": "17.2.1"
+  },
+  "scripts": {
+    "clean": "theia clean && rimraf node_modules",
+    "clean:dist": "rimraf dist",
+    "build": "yarn -s rebuild && theia build --app-target=\"electron\" --mode development",
+    "build:prod": "yarn -s rebuild && theia build --app-target=\"electron\"",
+    "rebuild": "theia rebuild:electron --cacheRoot ../..",
+    "watch": "concurrently -n compile,build \"theiaext watch --preserveWatchOutput\" \"theia build --watch --mode development\"",
+    "start": "electron scripts/theia-electron-main.js --plugins=local-dir:../../plugins",
+    "start:debug": "yarn start --log-level=debug",
+    "package": "yarn clean:dist && yarn rebuild && electron-builder -c.mac.identity=null --publish never",
+    "package:prod": "yarn deploy",
+    "deploy": "yarn clean:dist && yarn rebuild && electron-builder -c.mac.identity=null --publish always",
+    "package:preview": "yarn clean:dist && yarn rebuild && electron-builder -c.mac.identity=null --dir",
+    "update:checksum": "ts-node scripts/update-checksum.ts",
+    "update:blockmap": "ts-node scripts/update-blockmap.ts",
+    "update:theia": "ts-node ../../scripts/update-theia-version.ts",
+    "update:next": "ts-node ../../scripts/update-theia-version.ts next",
+    "sign:directory": "ts-node scripts/sign-directory.ts",
+    "sign:directory:windows": "ts-node scripts/sign-directory-windows.ts",
+    "test": "mocha --timeout 60000 \"./test/*.spec.js\"",
+    "lint": "eslint --ext js,jsx,ts,tsx scripts && eslint --ext js,jsx,ts,tsx test",
+    "lint:fix": "eslint --ext js,jsx,ts,tsx scripts --fix && eslint --ext js,jsx,ts,tsx test -fix"
+  }
+}

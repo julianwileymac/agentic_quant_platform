@@ -1,0 +1,17 @@
+﻿# =============================================================================
+# RAGFlow Persistent Volume Claims
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ragflow-data
+  namespace: aqp-elt
+  labels:
+    app: ragflow
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

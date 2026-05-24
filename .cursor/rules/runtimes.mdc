@@ -19,7 +19,7 @@ alwaysApply: false
 
 AQP has four hash-locked, ledger-backed spec runtimes. They are AQP's
 **skill-artifact** equivalent — see
-[docs/agentic-development.md](mdc:docs/agentic-development.md) for the
+[aqp_docs/agentic-development.md](mdc:aqp_docs/agentic-development.md) for the
 full mapping. This rule consolidates AGENTS.md hard rules **12–20** and
 **22–25** so you don't have to re-read the whole file when working in
 these directories.
@@ -28,10 +28,10 @@ these directories.
 
 | Spec | Runtime | Versions table | Canonical doc |
 | --- | --- | --- | --- |
-| [`AgentSpec`](mdc:aqp/agents/spec.py) | [`AgentRuntime`](mdc:aqp/agents/runtime.py) | `agent_spec_versions` | [docs/agents.md](mdc:docs/agents.md) |
-| [`BotSpec`](mdc:aqp/bots/spec.py) | [`BotRuntime`](mdc:aqp/bots/runtime.py) | `bot_versions` | [docs/bots.md](mdc:docs/bots.md) |
-| [`RLExperimentSpec`](mdc:aqp/rl/spec.py) | [`RLRuntime`](mdc:aqp/rl/runtime.py) | `rl_experiment_versions` | [docs/rl-framework.md](mdc:docs/rl-framework.md) |
-| [`AnalysisSpec`](mdc:aqp/analysis/spec.py) | [`AnalysisRuntime`](mdc:aqp/analysis/runtime.py) | `analysis_spec_versions` | [docs/analysis-framework.md](mdc:docs/analysis-framework.md) |
+| [`AgentSpec`](mdc:aqp/agents/spec.py) | [`AgentRuntime`](mdc:aqp/agents/runtime.py) | `agent_spec_versions` | [aqp_docs/agents.md](mdc:aqp_docs/agents.md) |
+| [`BotSpec`](mdc:aqp/bots/spec.py) | [`BotRuntime`](mdc:aqp/bots/runtime.py) | `bot_versions` | [aqp_docs/bots.md](mdc:aqp_docs/bots.md) |
+| [`RLExperimentSpec`](mdc:aqp/rl/spec.py) | [`RLRuntime`](mdc:aqp/rl/runtime.py) | `rl_experiment_versions` | [aqp_docs/rl-framework.md](mdc:aqp_docs/rl-framework.md) |
+| [`AnalysisSpec`](mdc:aqp/analysis/spec.py) | [`AnalysisRuntime`](mdc:aqp/analysis/runtime.py) | `analysis_spec_versions` | [aqp_docs/analysis-framework.md](mdc:aqp_docs/analysis-framework.md) |
 
 ## Hard rules
 
@@ -84,7 +84,7 @@ these directories.
    descriptor + JSON-schema-driven form generation are wired
    automatically. Flows must NOT call LLM SDKs directly —
    interpretation lives in the analysis-AGENTS stack
-   ([docs/analysis-agents.md](mdc:docs/analysis-agents.md)).
+   ([aqp_docs/analysis-agents.md](mdc:aqp_docs/analysis-agents.md)).
 
 ## Adding a new spec — the checklist
 

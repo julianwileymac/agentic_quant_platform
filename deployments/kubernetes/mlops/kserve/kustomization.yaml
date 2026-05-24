@@ -1,0 +1,32 @@
+﻿apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: kserve-vllm
+
+namespace: aqp-mlops
+
+# The KServe controller itself is installed via Helm with the values in
+# `install/values-kserve.yaml` (see install/README.md).  These resources are
+# the namespace-local pieces that we manage with Kustomize:
+#
+#   * model-storage-credentials  - MinIO credentials shared with the storage
+#                                  initializer + vLLM pods.
+#   * model-serving SA           - annotated for KServe S3 storage URIs.
+#   * vllm-cpu-small Deployment  - lightweight test target (replicas=1).
+#   * vllm-gpu Deployment        - GPU-backed inference (replicas=1, amd64).
+#
+# The example MLflow-backed InferenceService is intentionally NOT included
+# here because its storageUri references a model name + version that must
+# already exist in the MLflow registry; apply it manually after publishing.
+resources:
+  - secret-model-storage.yaml
+  - serviceaccount-model-serving.yaml
+  - vllm-cpu-small.yaml
+  - vllm-gpu-profile.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/component: model-serving
+      app.kubernetes.io/part-of: rpi-k8s-platform

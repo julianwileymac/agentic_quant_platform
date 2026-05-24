@@ -1,0 +1,124 @@
+﻿apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jupyterhub-config
+  namespace: aqp-elt
+  labels:
+    app.kubernetes.io/name: jupyterhub
+data:
+  jupyterhub_config.py: |
+    # =========================================================================
+    # JupyterHub configuration for the rpi_kubernetes lab.
+    # =========================================================================
+    # Two spawner profiles are supported and switched via the JUPYTER_SPAWNER
+    # env var (set on the JupyterHub Deployment):
+    #
+    #   - "simple"  -> SimpleLocalProcessSpawner (default; same-pod, lightweight)
+    #   - "kube"    -> KubeSpawner (separate pod per user; production style)
+    #
+    # The Kube spawner picks notebook images / resources from a YAML profile
+    # list in the same ConfigMap (see KUBE_PROFILES below).
+    # =========================================================================
+
+    import os
+
+    c = get_config()  # noqa: F821
+
+    # ----- Hub network config -------------------------------------------------
+    c.JupyterHub.ip = '0.0.0.0'
+    c.JupyterHub.port = 8000
+    c.JupyterHub.hub_ip = '0.0.0.0'
+    c.JupyterHub.hub_port = 8081
+
+    # ----- Spawner selection --------------------------------------------------
+    spawner_mode = os.environ.get('JUPYTER_SPAWNER', 'simple').lower()
+
+    if spawner_mode == 'kube':
+        # KubeSpawner spawns each user notebook into its own pod, which is the
+        # recommended production layout.  Requires `jupyterhub-kubespawner` to
+        # be installed in the hub image.
+        c.JupyterHub.spawner_class = 'kubespawner.KubeSpawner'
+        c.KubeSpawner.namespace = os.environ.get('JUPYTER_USER_NAMESPACE', 'development')
+        c.KubeSpawner.service_account = 'jupyterhub'
+        c.KubeSpawner.start_timeout = 240
+        c.KubeSpawner.http_timeout = 60
+        c.KubeSpawner.cpu_limit = 1.0
+        c.KubeSpawner.cpu_guarantee = 0.2
+        c.KubeSpawner.mem_limit = '1G'
+        c.KubeSpawner.mem_guarantee = '256M'
+        c.KubeSpawner.image = 'jupyter/scipy-notebook:latest'
+        c.KubeSpawner.image_pull_policy = 'IfNotPresent'
+        c.KubeSpawner.environment = {
+            'MLFLOW_TRACKING_URI': 'http://mlflow.aqp-mlops.svc.cluster.local:5000',
+            'OTEL_EXPORTER_OTLP_ENDPOINT': 'http://otel-collector.aqp-observability.svc.cluster.local:4317',
+            'OTEL_SERVICE_NAME': 'jupyter-user',
+            'AWS_ACCESS_KEY_ID': 'minioadmin',
+            'AWS_SECRET_ACCESS_KEY': 'minioadmin123',
+            'MLFLOW_S3_ENDPOINT_URL': 'http://minio.aqp-data-services.svc.cluster.local:9000',
+        }
+        # Profile list lets users pick a notebook image at spawn time.
+        c.KubeSpawner.profile_list = [
+            {
+                'display_name': 'Standard SciPy (CPU, 1G)',
+                'default': True,
+                'kubespawner_override': {
+                    'image': 'jupyter/scipy-notebook:latest',
+                },
+            },
+            {
+                'display_name': 'PyTorch CPU (2G)',
+                'kubespawner_override': {
+                    'image': 'jupyter/pytorch-notebook:latest',
+                    'mem_limit': '2G',
+                    'cpu_limit': 2.0,
+                },
+            },
+            {
+                'display_name': 'TensorFlow CPU (2G)',
+                'kubespawner_override': {
+                    'image': 'jupyter/tensorflow-notebook:latest',
+                    'mem_limit': '2G',
+                    'cpu_limit': 2.0,
+                },
+            },
+        ]
+    else:
+        # Backwards-compatible default: same-pod spawner for very small clusters.
+        c.JupyterHub.spawner_class = 'jupyterhub.spawner.SimpleLocalProcessSpawner'
+
+    # ----- Spawner timeouts (apply to both modes) -----------------------------
+    c.Spawner.start_timeout = 240
+    c.Spawner.http_timeout = 60
+    c.Spawner.poll_interval = 30
+
+    # ----- Authenticator ------------------------------------------------------
+    auth_mode = os.environ.get('JUPYTER_AUTH', 'dummy').lower()
+    if auth_mode == 'native':
+        c.JupyterHub.authenticator_class = 'nativeauthenticator.NativeAuthenticator'
+        c.Authenticator.allow_all = False
+    else:
+        c.JupyterHub.authenticator_class = 'jupyterhub.auth.DummyAuthenticator'
+        c.DummyAuthenticator.password = os.environ.get('JUPYTER_DUMMY_PASSWORD', 'jupyter')
+        c.Authenticator.allow_all = True
+
+    c.Authenticator.admin_users = set(os.environ.get('JUPYTER_ADMIN_USERS', 'admin').split(','))
+    c.Authenticator.allowed_users = set()
+
+    # ----- Hub database -------------------------------------------------------
+    c.JupyterHub.db_url = os.environ.get('JUPYTER_DB_URL', 'sqlite:///jupyterhub.sqlite')
+
+    # ----- Notebook defaults --------------------------------------------------
+    c.Spawner.notebook_dir = '/home/jovyan'
+    c.Spawner.environment = {
+        'MLFLOW_TRACKING_URI': 'http://mlflow.aqp-mlops.svc.cluster.local:5000',
+        'OTEL_EXPORTER_OTLP_ENDPOINT': 'http://otel-collector.aqp-observability.svc.cluster.local:4317',
+        'OTEL_SERVICE_NAME': 'jupyter-notebook',
+        'AWS_ACCESS_KEY_ID': 'minioadmin',
+        'AWS_SECRET_ACCESS_KEY': 'minioadmin123',
+        'MLFLOW_S3_ENDPOINT_URL': 'http://minio.aqp-data-services.svc.cluster.local:9000',
+    }
+
+    # ----- Hub-side metrics ---------------------------------------------------
+    # The /hub/metrics endpoint exposes Prometheus metrics out of the box.
+    # The ServiceMonitor in this directory scrapes it.
+    c.JupyterHub.statsd_host = ''  # disable; rely on Prometheus only

@@ -3,7 +3,7 @@
 This rule scopes [`aqp/cache/`](mdc:aqp/cache) — the Redis-backed
 prefetch layer that powers every entity-dropdown in the frontend.
 
-Narrative walkthrough: [docs/metadata-cache.md](mdc:docs/metadata-cache.md).
+Narrative walkthrough: [aqp_docs/metadata-cache.md](mdc:aqp_docs/metadata-cache.md).
 Phase plan: [.cursor/plans/data-self-service-phase-0.plan.md](mdc:.cursor/plans/data-self-service-phase-0.plan.md).
 
 ## Hard rules

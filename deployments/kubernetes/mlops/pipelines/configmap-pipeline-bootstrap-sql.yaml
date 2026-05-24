@@ -1,0 +1,39 @@
+﻿apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pipeline-bootstrap-sql
+  namespace: aqp-mlops
+data:
+  bootstrap.sql: |
+    CREATE TABLE IF NOT EXISTS pipeline_cdc_state (
+      pipeline_name TEXT PRIMARY KEY,
+      watermark TIMESTAMPTZ NOT NULL DEFAULT '1970-01-01T00:00:00Z',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS pipeline_cdc_records (
+      pipeline_name TEXT NOT NULL,
+      source_table TEXT NOT NULL,
+      source_pk TEXT NOT NULL,
+      payload JSONB NOT NULL,
+      source_updated_at TIMESTAMPTZ,
+      loaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (pipeline_name, source_table, source_pk)
+    );
+
+    CREATE TABLE IF NOT EXISTS pipeline_vector_audit (
+      pipeline_name TEXT NOT NULL,
+      source_key TEXT NOT NULL,
+      chunk_id TEXT NOT NULL,
+      sink_name TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (pipeline_name, source_key, chunk_id, sink_name)
+    );
+
+    CREATE TABLE IF NOT EXISTS pipeline_curated_records (
+      id BIGSERIAL PRIMARY KEY,
+      source_key TEXT NOT NULL,
+      payload JSONB NOT NULL,
+      loaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+

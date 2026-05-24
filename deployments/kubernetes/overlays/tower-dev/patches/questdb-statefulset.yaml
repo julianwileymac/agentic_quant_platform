@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: questdb
+  namespace: aqp-timeseries
+spec:
+  template:
+    spec:
+      nodeSelector: {}
+      tolerations: []
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 90
+              preference:
+                matchExpressions:
+                  - key: aqp.internal/node-role
+                    operator: In
+                    values: ["tower"]
+      containers:
+        - name: questdb
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 30Gi

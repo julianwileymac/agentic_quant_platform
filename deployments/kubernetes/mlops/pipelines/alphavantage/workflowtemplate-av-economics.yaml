@@ -1,0 +1,45 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: av-economics
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: alphavantage-economics
+    data-provider: alphavantage
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: run
+  arguments:
+    parameters:
+      - name: indicators
+        value: "REAL_GDP,CPI,INFLATION,TREASURY_YIELD,FEDERAL_FUNDS_RATE,UNEMPLOYMENT,NONFARM_PAYROLL"
+      - name: interval
+        value: "monthly"
+      - name: maturity
+        value: "10year"
+      - name: target_bucket
+        value: av-raw
+  templates:
+    - name: run
+      inputs:
+        parameters:
+          - name: indicators
+          - name: interval
+          - name: maturity
+          - name: target_bucket
+      steps:
+        - - name: load
+            templateRef:
+              name: av-bulk
+              template: run
+            arguments:
+              parameters:
+                - name: category
+                  value: economics
+                - name: symbols
+                  value: "{{inputs.parameters.indicators}}"
+                - name: target_bucket
+                  value: "{{inputs.parameters.target_bucket}}"
+                - name: extra_params
+                  value: |
+                    {"interval":"{{inputs.parameters.interval}}","maturity":"{{inputs.parameters.maturity}}"}

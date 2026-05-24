@@ -5,11 +5,11 @@ agent-readable indexes, or future repo split guidance.
 
 ## Workflow
 
-1. Read `docs/repository-split.md`.
+1. Read `aqp_docs/repository-split.md`.
 2. Read the nearest `AGENTS.md` for the target folder.
 3. Search the owning domain before searching the whole repository.
 4. Check for forbidden imports across future repo boundaries.
-5. Update `docs/code-index-governance.md` when index rules or search
+5. Update `aqp_docs/code-index-governance.md` when index rules or search
    workflow changes.
 
 ## Boundary Checks

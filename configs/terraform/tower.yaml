@@ -1,0 +1,18 @@
+name: aqp-tower
+slug: aqp-tower
+module_kind: composite
+description: |
+  Terraform-owned AQP deployment target for the dedicated two-node
+  tower+laptop Kubernetes cluster. Driven through TerraformRuntime /
+  aqp deploy so plan/apply/destroy runs are ledgered and halt-able.
+cloud_provider: rpi_cluster
+environment: tower
+provider:
+  kind: rpi_cluster
+backend:
+  kind: local
+  config:
+    path: data/terraform/state/tower.tfstate
+annotations:
+  aqp.io/stack-kind: tower-kubernetes
+  aqp.io/source: terraform-owned

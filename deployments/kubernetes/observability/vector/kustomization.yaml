@@ -1,0 +1,23 @@
+﻿# =============================================================================
+# Vector - backup log shipper
+# =============================================================================
+# Defense-in-depth alongside the OTel Collector's filelog receiver.  Both ship
+# to Loki under different `shipper` labels so dashboards can distinguish them
+# and operators can compare cardinality during incident review.
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-observability
+
+resources:
+  - configmap.yaml
+  - daemonset.yaml
+  - service.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: vector
+      app.kubernetes.io/component: log-shipper
+      app.kubernetes.io/part-of: rpi-k8s-platform

@@ -9,6 +9,15 @@ Thin wrapper over ``confluent_kafka.Producer`` that:
 - Emits Prometheus counters/histograms for rate + latency + errors.
 - Applies the ``AQP_KAFKA_TOPIC_PREFIX`` prefix consistently.
 - Routes persistent delivery failures onto ``market.deadletter.v1``.
+
+Phase 2a of the AQP infra-expansion plan added optional side-by-side
+routing between Strimzi Kafka and Redpanda. Pass ``cluster="redpanda"``
+to :class:`KafkaAvroProducer` to target Redpanda explicitly. When the
+``cluster`` kwarg is omitted, the producer falls back to the legacy
+``settings.kafka_*`` values (Strimzi). The :func:`produce_record`
+method also auto-routes per-record by topic-name prefix:
+``market.l1.*`` / ``market.l2.*`` / ``execution.orders.*`` /
+``agentic.state.*`` go to Redpanda; everything else stays on Strimzi.
 """
 from __future__ import annotations
 
@@ -17,6 +26,11 @@ import time
 from typing import Any
 
 from aqp.config import settings
+from aqp.streaming.clusters import (
+    StreamingCluster,
+    cluster_for_topic,
+    get_cluster,
+)
 from aqp.streaming.schemas import (
     SCHEMA_BY_TOPIC,
     TOPIC_BY_SCHEMA,
@@ -70,6 +84,8 @@ class KafkaAvroProducer:
         *,
         topic_prefix: str | None = None,
         extra_config: dict[str, Any] | None = None,
+        cluster: str | StreamingCluster | None = None,
+        auto_route: bool = False,
     ) -> None:
         try:
             from confluent_kafka import Producer  # type: ignore[import]
@@ -79,8 +95,25 @@ class KafkaAvroProducer:
                 'Install with: pip install -e ".[streaming]"'
             ) from exc
 
-        self.bootstrap = bootstrap or settings.kafka_bootstrap
-        self.client_id = client_id or settings.kafka_client_id
+        if isinstance(cluster, StreamingCluster):
+            self._cluster = cluster
+        elif cluster:
+            self._cluster = get_cluster(cluster)
+        else:
+            self._cluster = None
+
+        self._auto_route = bool(auto_route)
+        # Per-cluster cached delegate producers when auto_route=True.
+        self._sibling_producers: dict[str, "KafkaAvroProducer"] = {}
+
+        # Bootstrap precedence: explicit ctor arg > cluster descriptor > legacy
+        # settings.kafka_bootstrap. Same for client_id.
+        if self._cluster is not None:
+            self.bootstrap = bootstrap or self._cluster.bootstrap
+            self.client_id = client_id or f"aqp-{self._cluster.name}"
+        else:
+            self.bootstrap = bootstrap or settings.kafka_bootstrap
+            self.client_id = client_id or settings.kafka_client_id
         self.topic_prefix = topic_prefix if topic_prefix is not None else settings.kafka_topic_prefix
 
         cfg: dict[str, Any] = {
@@ -95,19 +128,37 @@ class KafkaAvroProducer:
             "queue.buffering.max.kbytes": 524_288,
             "message.max.bytes": 10_485_760,
         }
-        if settings.kafka_security_protocol and settings.kafka_security_protocol != "PLAINTEXT":
-            cfg["security.protocol"] = settings.kafka_security_protocol
-        if settings.kafka_sasl_mechanism:
-            cfg["sasl.mechanism"] = settings.kafka_sasl_mechanism
-        if settings.kafka_sasl_username:
-            cfg["sasl.username"] = settings.kafka_sasl_username
-        if settings.kafka_sasl_password:
-            cfg["sasl.password"] = settings.kafka_sasl_password
+        # Pull security from the cluster descriptor if set; otherwise legacy.
+        if self._cluster is not None:
+            sec = self._cluster.security_protocol
+            mech = self._cluster.sasl_mechanism
+            user = self._cluster.sasl_username
+            password = self._cluster.sasl_password
+        else:
+            sec = settings.kafka_security_protocol
+            mech = settings.kafka_sasl_mechanism
+            user = settings.kafka_sasl_username
+            password = settings.kafka_sasl_password
+        if sec and sec != "PLAINTEXT":
+            cfg["security.protocol"] = sec
+        if mech:
+            cfg["sasl.mechanism"] = mech
+        if user:
+            cfg["sasl.username"] = user
+        if password:
+            cfg["sasl.password"] = password
         if extra_config:
             cfg.update(extra_config)
 
         self._producer = Producer(cfg)
         self._pending_starts: dict[int, float] = {}
+
+    @property
+    def cluster_name(self) -> str:
+        """Return the cluster alias this producer targets (default: strimzi)."""
+        if self._cluster is not None:
+            return self._cluster.name
+        return "strimzi"
 
     def _topic(self, name: str) -> str:
         if not self.topic_prefix:
@@ -125,8 +176,20 @@ class KafkaAvroProducer:
 
         ``key`` defaults to ``record["vt_symbol"]`` so downstream consumers
         see per-symbol ordering; pass an explicit key (or ``""``) to opt out.
+
+        When ``auto_route=True`` was passed to the constructor, the topic
+        name is matched against :data:`aqp.streaming.clusters.TOPIC_PREFIX_ROUTES`
+        and the call delegates to a per-cluster sibling producer when the
+        match diverges from this producer's cluster.
         """
         topic = self._topic(topic_for(schema_name))
+        if self._auto_route:
+            target_cluster = cluster_for_topic(topic)
+            if target_cluster.name != self.cluster_name:
+                self._delegate(target_cluster).produce_record(
+                    schema_name, record, key=key
+                )
+                return
         venue_source = str(record.get("venue_source", "unknown"))
         effective_key = (
             key if key is not None else str(record.get("vt_symbol", ""))
@@ -197,11 +260,28 @@ class KafkaAvroProducer:
         except Exception:
             logger.exception("deadletter produce failed for %s", origin_topic)
 
+    def _delegate(self, target: StreamingCluster) -> "KafkaAvroProducer":
+        """Lazily build a sibling producer for ``target`` (auto-route mode)."""
+        if target.name in self._sibling_producers:
+            return self._sibling_producers[target.name]
+        sibling = KafkaAvroProducer(
+            cluster=target,
+            topic_prefix=self.topic_prefix,
+            auto_route=False,
+        )
+        self._sibling_producers[target.name] = sibling
+        return sibling
+
     def flush(self, timeout: float = 10.0) -> None:
         """Block until every queued record has been delivered or timed out."""
         remaining = self._producer.flush(timeout)
         if remaining > 0:
             logger.warning("kafka flush timed out with %d records still pending", remaining)
+        for sibling in self._sibling_producers.values():
+            try:
+                sibling.flush(timeout)
+            except Exception:  # noqa: BLE001
+                logger.warning("sibling cluster flush failed", exc_info=True)
 
     def close(self) -> None:
         """Flush and drop the producer. Safe to call multiple times."""
@@ -209,6 +289,11 @@ class KafkaAvroProducer:
             self.flush()
         except Exception:
             logger.exception("kafka flush raised on close")
+        for sibling in self._sibling_producers.values():
+            try:
+                sibling.close()
+            except Exception:  # noqa: BLE001
+                logger.warning("sibling cluster close failed", exc_info=True)
 
 
 def topic_names(prefix: str | None = None) -> list[str]:

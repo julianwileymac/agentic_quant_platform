@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: phoenix
+  namespace: aqp-observability
+  labels:
+    app.kubernetes.io/name: phoenix
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: aqp
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: phoenix
+  podMetricsEndpoints:
+    - port: ui-http
+      path: /metrics
+      interval: 30s

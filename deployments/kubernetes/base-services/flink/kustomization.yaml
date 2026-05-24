@@ -1,0 +1,32 @@
+﻿# =============================================================================
+# Kustomization - Apache Flink
+# =============================================================================
+# Flink session cluster, RBAC, services, and job placeholders.
+# The Flink Kubernetes Operator is installed via Helm (see install script).
+# Usage: kubectl apply -k kubernetes/base-services/flink/
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-streaming
+
+resources:
+  - rbac.yaml
+  - flink-configmap.yaml
+  - flink-postgres-init.yaml
+  - session-cluster.yaml
+  - service.yaml
+  - ingress.yaml
+  - jobs/dedupe-job.yaml
+  - jobs/indicator-compute-job.yaml
+  - jobs/normalize-sink-job.yaml
+  - jobs/scanner-alert-job.yaml
+  - jobs/av-enrichment-job.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: flink
+      app.kubernetes.io/component: stream-processing
+      app.kubernetes.io/part-of: rpi-k8s-platform

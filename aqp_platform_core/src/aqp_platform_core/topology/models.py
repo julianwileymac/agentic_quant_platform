@@ -58,9 +58,64 @@ class ServiceDefinition(StrictModel):
     storage: str = ""
     restartable: bool = False
     logs_enabled: bool = True
+    cluster: str = Field(
+        default="",
+        description=(
+            "Optional logical cluster grouping. Used by the side-by-side "
+            "Strimzi/Redpanda streaming topology and the additive "
+            "Iceberg/Hudi lakehouse topology. Examples: ``streaming.strimzi``, "
+            "``streaming.redpanda``, ``lakehouse.iceberg``, ``lakehouse.hudi``."
+        ),
+    )
+    namespace: str = Field(
+        default="",
+        description=(
+            "Kubernetes namespace this service runs in. Empty falls back to "
+            "the active DeploymentTarget's namespace. Allows AQP-owned shared "
+            "infrastructure to live in dedicated namespaces (e.g., "
+            "``aqp-streaming``, ``aqp-observability``, ``aqp-lakehouse``)."
+        ),
+    )
+    protocols: dict[str, int] = Field(
+        default_factory=dict,
+        description=(
+            "Map of protocol name to port. Use when a service exposes more "
+            "than one port (e.g., QuestDB ``http: 9000, ilp_tcp: 9009, "
+            "pgwire: 8812``; Phoenix ``ui_http: 6006, otlp_grpc: 4317``)."
+        ),
+    )
+    endpoints: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Map of endpoint name to canonical URL. The single source of "
+            "truth for service-to-service URLs once topology fallback is "
+            "wired into ``aqp.config.settings``. Examples: ``bootstrap``, "
+            "``admin``, ``ui``, ``otlp``, ``metrics``, ``ilp``, ``pgwire``."
+        ),
+    )
 
     def selector(self) -> str:
         return f"app={self.app_label}"
+
+    def endpoint(self, name: str) -> str | None:
+        """Return a named endpoint URL or ``None`` if unset."""
+        return self.endpoints.get(name)
+
+    def primary_url(self) -> str | None:
+        """Return the canonical URL for this service.
+
+        Resolution order: explicit ``endpoints['bootstrap']`` -> ``ui`` ->
+        ``http`` -> first endpoint declared. Used by the
+        ``aqp.config.topology_fallback`` resolver to back-fill URL-typed
+        ``Settings`` fields without changing their hardcoded defaults.
+        """
+        if not self.endpoints:
+            return None
+        for preferred in ("bootstrap", "ui", "http", "api", "admin"):
+            value = self.endpoints.get(preferred)
+            if value:
+                return value
+        return next(iter(self.endpoints.values()), None)
 
     def frontend_dict(self) -> dict[str, Any]:
         data = self.model_dump()

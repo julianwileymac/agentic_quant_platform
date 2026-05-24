@@ -1,0 +1,17 @@
+# Spark Operator (Kubeflow). Phase 2e of the AQP infra-expansion plan.
+# Drives HoodieStreamer + Hudi compaction / clustering jobs as
+# SparkApplication CRs under aqp-mlops/. Installed via Helm; the
+# kustomization holds the values.yaml ConfigMap consumed by the
+# helm-runner.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-mlops
+
+commonLabels:
+  app.kubernetes.io/part-of: aqp
+  app.kubernetes.io/component: lakehouse
+  app.kubernetes.io/managed-by: kustomize
+
+resources:
+  - helm-values.yaml

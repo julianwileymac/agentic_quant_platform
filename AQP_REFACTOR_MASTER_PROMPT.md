@@ -1,6 +1,6 @@
 > Archived context note: this document is historical planning material.  
 > Canonical operational guidance lives in `README.md`, `CONTRIBUTING.md`,
-> `docs/index.md`, and `docs/operations/*`. See `docs/archive/README.md`.
+> `aqp_docs/index.md`, and `aqp_docs/operations/*`. See `aqp_docs/archive/README.md`.
 
 # AQP Refactor Master Prompt
 
@@ -134,7 +134,7 @@ Touchpoints:
 - `aqp/config/settings.py`
 - `aqp/agents/graph/builder.py`
 - `aqp/api/routes/agent_specs.py`
-- docs updates under `docs/`
+- docs updates under `aqp_docs/`
 
 Acceptance criteria:
 
@@ -248,7 +248,7 @@ Touchpoints:
 - `aqp/api/routes/` (new workflow route module)
 - persistence models and migration(s) under `aqp/persistence/` + `alembic/versions/`
 - `aqp_client/src/routes/` and/or `aqp_client/src/components/` for workflow studio surfaces
-- docs updates in `docs/`
+- docs updates in `aqp_docs/`
 
 Acceptance criteria:
 
@@ -317,11 +317,11 @@ Minimum suites:
 
 Update these docs (additive):
 
-- `docs/multi-agent-patterns.md`
-- `docs/agentic-development.md`
-- `docs/data-mcp.md`
-- new doc: `docs/workflow-studio.md` (or equivalent)
-- any affected architecture index references in `docs/index.md`
+- `aqp_docs/multi-agent-patterns.md`
+- `aqp_docs/agentic-development.md`
+- `aqp_docs/data-mcp.md`
+- new doc: `aqp_docs/workflow-studio.md` (or equivalent)
+- any affected architecture index references in `aqp_docs/index.md`
 
 ### Deliverable contract
 

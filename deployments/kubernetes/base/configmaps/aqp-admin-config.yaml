@@ -6,6 +6,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: aqp
 data:
+  # tower-green overlay patches this to manage-green.aqp.fund during cutover.
   AQP_INGRESS_BASE_URL: https://manage.aqp.fund
   AQP_AUTH_PROVIDER: auth0
   AQP_AUTH_ENFORCE: strict

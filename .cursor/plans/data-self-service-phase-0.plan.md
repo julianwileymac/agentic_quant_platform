@@ -239,17 +239,17 @@ form. There is no big-bang refactor required this phase.
 
 ### Docs
 
-- [`docs/datasets-catalog.md`](../../docs/datasets-catalog.md)
+- [`aqp_docs/datasets-catalog.md`](../../aqp_docs/datasets-catalog.md)
   new — the Kedro lens, BaseDataset taxonomy, kind registry, when to
   add a new kind vs. a new manifest.
-- [`docs/metadata-cache.md`](../../docs/metadata-cache.md)
+- [`aqp_docs/metadata-cache.md`](../../aqp_docs/metadata-cache.md)
   new — key naming, prefetch lifecycle, write-through, TTL strategy,
   fallback behaviour.
 - [`.cursor/rules/datasets.mdc`](../../.cursor/rules/datasets.mdc)
   scopes the `BaseDataset` ABC + registry contract.
 - [`.cursor/rules/cache.mdc`](../../.cursor/rules/cache.mdc)
   scopes the cache key namespace and write-through requirement.
-- Update [`docs/index.md`](../../docs/index.md) to link the two new
+- Update [`aqp_docs/index.md`](../../aqp_docs/index.md) to link the two new
   docs.
 - Update [`AGENTS.md`](../../AGENTS.md):
   - Hard rule **29**: every catalog entry is a `BaseDataset`-derived

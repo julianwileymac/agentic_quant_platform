@@ -1,0 +1,6 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: questdb
+  namespace: aqp-timeseries
+$patch: delete

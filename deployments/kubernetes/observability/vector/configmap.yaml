@@ -1,0 +1,63 @@
+﻿apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vector-config
+  namespace: aqp-observability
+data:
+  vector.yaml: |
+    # =============================================================================
+    # Vector - backup log shipper (defense-in-depth alongside OTel Collector)
+    # =============================================================================
+    # The primary log path is the OTel Collector's `filelog` receiver -> Loki.
+    # Vector here tails the same /var/log/pods directory and ships to Loki under
+    # a dedicated `shipper="vector"` label so we always have a working pipeline
+    # even if the collector misbehaves (config error, OOM, version skew).
+    #
+    # Vector is purposefully run with conservative resources and only the kube
+    # log source -- it is not a replacement for OTel, just a fallback.
+    # =============================================================================
+    data_dir: /vector-data-dir
+
+    api:
+      enabled: true
+      address: 0.0.0.0:8686
+
+    sources:
+      kubernetes_logs:
+        type: kubernetes_logs
+        # Don't try to ship Vector's own logs back to itself
+        extra_field_selector: "metadata.namespace!=observability"
+
+    transforms:
+      enrich:
+        type: remap
+        inputs: [kubernetes_logs]
+        source: |
+          .cluster = "rpi-k8s-cluster"
+          .shipper = "vector"
+          # Loki labels - keep cardinality bounded
+          .labels.namespace = .kubernetes.pod_namespace
+          .labels.pod = .kubernetes.pod_name
+          .labels.container = .kubernetes.container_name
+          .labels.node = .kubernetes.pod_node_name
+
+    sinks:
+      loki:
+        type: loki
+        inputs: [enrich]
+        endpoint: http://loki.observability:3100
+        encoding:
+          codec: json
+        labels:
+          cluster: "{{ cluster }}"
+          shipper: "{{ shipper }}"
+          namespace: "{{ labels.namespace }}"
+          pod: "{{ labels.pod }}"
+          container: "{{ labels.container }}"
+          node: "{{ labels.node }}"
+        out_of_order_action: accept
+        remove_label_fields: true
+        compression: snappy
+        request:
+          retry_attempts: 5
+          retry_max_duration_secs: 30

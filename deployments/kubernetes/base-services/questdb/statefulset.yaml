@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: questdb
+  namespace: aqp-timeseries
+  labels:
+    app.kubernetes.io/name: questdb
+    app.kubernetes.io/instance: questdb
+    app.kubernetes.io/component: timeseries
+    app.kubernetes.io/part-of: aqp
+spec:
+  serviceName: questdb-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: questdb
+      app.kubernetes.io/instance: questdb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: questdb
+        app.kubernetes.io/instance: questdb
+        app.kubernetes.io/component: timeseries
+        app.kubernetes.io/part-of: aqp
+    spec:
+      nodeSelector:
+        # Pin to nodes with NVMe-class storage class so HOUR
+        # partitioning + ILP throughput stays within sizing bounds.
+        aqp.internal/storage-tier: nvme
+      tolerations:
+        - key: aqp.internal/storage-tier
+          operator: Equal
+          value: nvme
+          effect: NoSchedule
+      containers:
+        - name: questdb
+          image: questdb/questdb:8.4.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9000
+              protocol: TCP
+            - name: ilp-tcp
+              containerPort: 9009
+              protocol: TCP
+            - name: pgwire
+              containerPort: 8812
+              protocol: TCP
+          env:
+            - name: QDB_PG_USER
+              value: aqp
+            - name: QDB_PG_PASSWORD_FILE
+              value: /var/run/secrets/questdb/pg-password
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/questdb/db
+            - name: server-conf
+              mountPath: /opt/questdb/conf/server.conf
+              subPath: server.conf
+            - name: pg-secret
+              mountPath: /var/run/secrets/questdb
+              readOnly: true
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: server-conf
+          configMap:
+            name: questdb-config
+        - name: pg-secret
+          secret:
+            secretName: questdb-credentials
+            optional: true
+            items:
+              - key: pg-password
+                path: pg-password
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: questdb
+          app.kubernetes.io/component: timeseries
+          app.kubernetes.io/part-of: aqp
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: aqp-nvme
+        resources:
+          requests:
+            storage: 200Gi

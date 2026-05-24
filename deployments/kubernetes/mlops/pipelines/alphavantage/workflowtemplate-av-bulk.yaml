@@ -1,0 +1,95 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: av-bulk
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: alphavantage-bulk
+    app.kubernetes.io/component: orchestration
+    data-provider: alphavantage
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: run
+  arguments:
+    parameters:
+      - name: pipeline_image
+        value: ghcr.io/julianwiley/rpi-k8s-pipelines:latest
+      - name: category
+        value: timeseries
+      - name: symbols
+        value: "IBM,AAPL,MSFT"
+      - name: target_bucket
+        value: av-raw
+      - name: target_prefix
+        value: ""
+      - name: start_date
+        value: ""
+      - name: end_date
+        value: ""
+      - name: extra_params
+        value: "{}"
+      - name: cache_backend
+        value: memory
+  templates:
+    - name: run
+      inputs:
+        parameters:
+          - name: pipeline_image
+          - name: category
+          - name: symbols
+          - name: target_bucket
+          - name: target_prefix
+          - name: start_date
+          - name: end_date
+          - name: extra_params
+          - name: cache_backend
+      container:
+        image: "{{inputs.parameters.pipeline_image}}"
+        command:
+          - python
+          - -m
+          - pipelines.cli
+          - alphavantage-bulk
+        args:
+          - --category
+          - "{{inputs.parameters.category}}"
+          - --symbols
+          - "{{inputs.parameters.symbols}}"
+          - --target-bucket
+          - "{{inputs.parameters.target_bucket}}"
+          - --target-prefix
+          - "{{inputs.parameters.target_prefix}}"
+          - --start-date
+          - "{{inputs.parameters.start_date}}"
+          - --end-date
+          - "{{inputs.parameters.end_date}}"
+          - --extra-params
+          - "{{inputs.parameters.extra_params}}"
+          - --cache-backend
+          - "{{inputs.parameters.cache_backend}}"
+          - --api-key-file
+          - "/var/run/secrets/alphavantage/api-key"
+        envFrom:
+          - secretRef:
+              name: pipeline-sink-credentials
+        env:
+          - name: ALPHAVANTAGE_API_KEY_FILE
+            value: /var/run/secrets/alphavantage/api-key
+        volumeMounts:
+          - name: alphavantage-secret
+            mountPath: /var/run/secrets/alphavantage
+            readOnly: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+      volumes:
+        - name: alphavantage-secret
+          secret:
+            secretName: alphavantage-credentials
+            items:
+              - key: api-key
+                path: api-key

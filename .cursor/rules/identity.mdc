@@ -38,7 +38,7 @@ Phase 4 + Phase 6 of the multi-tenant rollout. Hard rules 27 + 31
   [`aqp.config.defaults`](mdc:aqp/config/defaults.py)).
 - Custom-claim namespace is :attr:`Settings.auth_claims_namespace`
   (default ``https://aqp/``). See
-  [docs/auth0-actions.md](mdc:docs/auth0-actions.md) for the
+  [aqp_docs/auth0-actions.md](mdc:aqp_docs/auth0-actions.md) for the
   Action snippet.
 
 ## Lazy provisioning
@@ -80,5 +80,5 @@ Phase 4 + Phase 6 of the multi-tenant rollout. Hard rules 27 + 31
   values from the verified JWT + tenancy headers (see
   [`build_mcp_router`](mdc:aqp/data/mcp/server.py)).
 
-Canonical doc: [docs/identity.md](mdc:docs/identity.md) + the new
-[docs/auth0-actions.md](mdc:docs/auth0-actions.md).
+Canonical doc: [aqp_docs/identity.md](mdc:aqp_docs/identity.md) + the new
+[aqp_docs/auth0-actions.md](mdc:aqp_docs/auth0-actions.md).

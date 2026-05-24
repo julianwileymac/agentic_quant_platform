@@ -1,0 +1,22 @@
+﻿# =============================================================================
+# Kustomization - Apicurio Schema Registry
+# =============================================================================
+# Usage: kubectl apply -k kubernetes/base-services/schema-registry/
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-streaming
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: apicurio-registry
+      app.kubernetes.io/component: schema-registry
+      app.kubernetes.io/part-of: aqp

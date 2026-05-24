@@ -1,0 +1,22 @@
+---
+description: Governance for AQP-specific Theia integration surfaces.
+globs:
+  - "theia-extensions/aqp/**"
+  - "applications/browser/package.json"
+  - "browser.Dockerfile"
+  - ".cursor/agents/aqp-theia-integration.md"
+alwaysApply: false
+---
+
+# Theia AQP integration rule
+
+When touching AQP integration surfaces:
+
+1. Treat `theia-extensions/aqp/README.md` as the canonical runbook.
+2. Keep browser-target scope explicit unless electron wiring is intentionally
+   added.
+3. Keep Auth0/AQP endpoint docs path-accurate and avoid stale script names.
+4. Use `docs/aqp-monorepo-paths.md` for AQP path references; never hardcode
+   local absolute paths.
+5. Prefer Tavily-backed research for external Auth0/Theia API guidance, then
+   run a docs reliability review before finalizing docs changes.

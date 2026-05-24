@@ -1,0 +1,389 @@
+﻿apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datahub-metadata-bridge
+  namespace: aqp-data-services
+  labels:
+    app.kubernetes.io/name: datahub
+    app.kubernetes.io/component: metadata-ingestion
+data:
+  push_metadata.py: |
+    from __future__ import annotations
+
+    import os
+    import sys
+    from typing import Iterable
+    from collections import OrderedDict
+
+    import requests
+
+    from datahub.metadata.schema_classes import (
+        DataFlowInfoClass,
+        DataFlowSnapshotClass,
+        DataJobInfoClass,
+        DataJobSnapshotClass,
+        DatasetPropertiesClass,
+        DatasetSnapshotClass,
+        MetadataChangeEventClass,
+    )
+
+    try:
+        from datahub.emitter.mcp import MetadataChangeProposalWrapper
+        from datahub.emitter.rest_emitter import DataHubRestEmitter
+
+        MODERN_EMITTER = True
+    except ImportError:
+        from datahub.emitter.rest_emitter import DatahubRestEmitter
+
+        MODERN_EMITTER = False
+
+
+    def restli_payload(obj):
+        if isinstance(obj, (dict, OrderedDict)):
+            if len(obj.keys()) == 1:
+                key = list(obj.keys())[0]
+                value = obj[key]
+                if "com.linkedin.pegasus2avro." in key:
+                    return {key.replace("com.linkedin.pegasus2avro.", "com.linkedin."): restli_payload(value)}
+            return {
+                key: restli_payload(value)
+                for key, value in obj.items()
+                if value is not None
+            }
+        if isinstance(obj, list):
+            return [restli_payload(item) for item in obj]
+        return obj
+
+
+    def parse_csv_env(name: str, default: str) -> list[str]:
+        value = os.getenv(name, default)
+        return [item.strip() for item in value.split(",") if item.strip()]
+
+
+    def data_flow_urn(orchestrator: str, flow_id: str, env: str) -> str:
+        return f"urn:li:dataFlow:({orchestrator},{flow_id},{env})"
+
+
+    def data_job_urn(flow_urn: str, job_id: str) -> str:
+        return f"urn:li:dataJob:({flow_urn},{job_id})"
+
+
+    def dataset_urn(platform: str, name: str, env: str) -> str:
+        return f"urn:li:dataset:(urn:li:dataPlatform:{platform},{name},{env})"
+
+
+    def build_emitter(gms_server: str, token: str | None):
+        if MODERN_EMITTER:
+            return DataHubRestEmitter(
+                gms_server=gms_server,
+                token=token,
+                connect_timeout_sec=15,
+                read_timeout_sec=30,
+            )
+        return DatahubRestEmitter(gms_server=gms_server)
+
+
+    def emit_legacy_snapshot(gms_server: str, token: str | None, resource: str, snapshot) -> None:
+        headers = {"X-RestLi-Protocol-Version": "2.0.0"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        snapshot_name = {
+            "dataFlows": "com.linkedin.metadata.snapshot.DataFlowSnapshot",
+            "dataJobs": "com.linkedin.metadata.snapshot.DataJobSnapshot",
+            "datasets": "com.linkedin.metadata.snapshot.DatasetSnapshot",
+        }[resource]
+        response = requests.post(
+            f"{gms_server}/entities?action=ingest",
+            headers=headers,
+            json={"entity": {"value": {snapshot_name: restli_payload(snapshot.to_obj())}}},
+            timeout=30,
+        )
+        response.raise_for_status()
+
+
+    def emit_aspect(emitter, entity_urn: str, aspect, gms_server: str, token: str | None) -> None:
+        if MODERN_EMITTER:
+            proposal = MetadataChangeProposalWrapper(entityUrn=entity_urn, aspect=aspect)
+            if hasattr(emitter, "emit_mcp"):
+                emitter.emit_mcp(proposal)
+            else:
+                emitter.emit(proposal)
+            return
+
+        if entity_urn.startswith("urn:li:dataFlow:"):
+            snapshot = DataFlowSnapshotClass(urn=entity_urn, aspects=[aspect])
+            emit_legacy_snapshot(gms_server, token, "dataFlows", snapshot)
+        elif entity_urn.startswith("urn:li:dataJob:"):
+            snapshot = DataJobSnapshotClass(urn=entity_urn, aspects=[aspect])
+            emit_legacy_snapshot(gms_server, token, "dataJobs", snapshot)
+        elif entity_urn.startswith("urn:li:dataset:"):
+            snapshot = DatasetSnapshotClass(urn=entity_urn, aspects=[aspect])
+            emit_legacy_snapshot(gms_server, token, "datasets", snapshot)
+        else:
+            raise ValueError(f"Unsupported entity URN for legacy emitter: {entity_urn}")
+
+
+    def emit_dataflow_and_jobs(
+        emitter: DataHubRestEmitter,
+        orchestrator: str,
+        flow_name: str,
+        jobs: Iterable[str],
+        env: str,
+        gms_server: str,
+        token: str | None,
+    ) -> None:
+        flow_urn = data_flow_urn(orchestrator=orchestrator, flow_id=flow_name, env=env)
+        emit_aspect(
+            emitter,
+            flow_urn,
+            DataFlowInfoClass(
+                name=flow_name,
+                description=f"{orchestrator} workflow metadata bridged by datahub-metadata-bridge",
+            ),
+            gms_server,
+            token,
+        )
+        for job in jobs:
+            emit_aspect(
+                emitter,
+                data_job_urn(flow_urn=flow_urn, job_id=job),
+                DataJobInfoClass(
+                    name=job,
+                    description=f"{orchestrator} job metadata bridged by datahub-metadata-bridge",
+                ),
+                gms_server,
+                token,
+            )
+
+
+    def emit_dataset(
+        emitter: DataHubRestEmitter,
+        platform: str,
+        name: str,
+        env: str,
+        description: str,
+        gms_server: str,
+        token: str | None,
+        properties: dict[str, str] | None = None,
+    ) -> None:
+        emit_aspect(
+            emitter,
+            dataset_urn(platform=platform, name=name, env=env),
+            DatasetPropertiesClass(
+                description=description,
+                customProperties={
+                    "metadata_source": "datahub-metadata-bridge",
+                    **(properties or {}),
+                },
+            ),
+            gms_server,
+            token,
+        )
+
+
+    def main() -> int:
+        gms_server = os.getenv(
+            "DATAHUB_GMS_SERVER",
+            "http://datahub-datahub-gms.aqp-data-services.svc.cluster.local:8080",
+        )
+        datahub_env = os.getenv("DATAHUB_ENV", "PROD")
+        token = os.getenv("DATAHUB_TOKEN") or None
+
+        argo_templates = parse_csv_env(
+            "ARGO_WORKFLOWTEMPLATES",
+            "pipeline-raw-ingest,pipeline-heavy-transform,pipeline-vector-sync,pipeline-cdc-sync",
+        )
+        argo_cronworkflows = parse_csv_env(
+            "ARGO_CRONWORKFLOWS",
+            "pipeline-raw-ingest-hourly,pipeline-cdc-sync-hourly",
+        )
+        dagster_assets = parse_csv_env(
+            "DAGSTER_ASSETS",
+            "minio_to_postgres_curated,vectorize_to_milvus_chroma,cdc_incremental_sync,hybrid_argo_heavy_transform",
+        )
+        prefect_flows = parse_csv_env(
+            "PREFECT_FLOWS",
+            "datahub-lakehouse-sync,datahub-mlflow-sync,datahub-platform-sync,datahub-api-sync",
+        )
+        flink_jobs = parse_csv_env(
+            "FLINK_JOBS",
+            "flink-trading-streams,flink-market-data-enrichment",
+        )
+        milvus_collections = parse_csv_env("MILVUS_COLLECTIONS", "pipeline_documents")
+        chroma_collections = parse_csv_env("CHROMA_COLLECTIONS", "pipeline_documents")
+
+        emitter = build_emitter(gms_server=gms_server, token=token)
+
+        failures = []
+
+        try:
+            emit_dataflow_and_jobs(
+                emitter=emitter,
+                orchestrator="argo",
+                flow_name="argo-workflows",
+                jobs=[*argo_templates, *argo_cronworkflows],
+                env=datahub_env,
+                gms_server=gms_server,
+                token=token,
+            )
+        except Exception as exc:
+            failures.append(f"argo metadata emit failed: {exc}")
+
+        try:
+            emit_dataflow_and_jobs(
+                emitter=emitter,
+                orchestrator="dagster",
+                flow_name="dagster-assets",
+                jobs=dagster_assets,
+                env=datahub_env,
+                gms_server=gms_server,
+                token=token,
+            )
+        except Exception as exc:
+            failures.append(f"dagster metadata emit failed: {exc}")
+
+        try:
+            emit_dataflow_and_jobs(
+                emitter=emitter,
+                orchestrator="prefect",
+                flow_name="prefect-flows",
+                jobs=prefect_flows,
+                env=datahub_env,
+                gms_server=gms_server,
+                token=token,
+            )
+        except Exception as exc:
+            failures.append(f"prefect metadata emit failed: {exc}")
+
+        try:
+            emit_dataflow_and_jobs(
+                emitter=emitter,
+                orchestrator="flink",
+                flow_name="flink-jobs",
+                jobs=flink_jobs,
+                env=datahub_env,
+                gms_server=gms_server,
+                token=token,
+            )
+        except Exception as exc:
+            failures.append(f"flink metadata emit failed: {exc}")
+
+        bridged_sources = [
+            (
+                "iceberg",
+                "rpi-kubernetes.iceberg",
+                "rpi_kubernetes Iceberg REST catalog backed by MinIO",
+                {
+                    "rest_uri": os.getenv("INGEST_ICEBERG_REST_URI", ""),
+                    "warehouse": os.getenv("INGEST_ICEBERG_WAREHOUSE", ""),
+                    "platform_instance": os.getenv("INGEST_ICEBERG_PLATFORM_INSTANCE", "rpi-kubernetes"),
+                },
+            ),
+            (
+                "iceberg",
+                "agentic-quant-platform.iceberg",
+                "agentic_quant_platform Iceberg data lake",
+                {
+                    "rest_uri": os.getenv("INGEST_AQP_ICEBERG_REST_URI", ""),
+                    "warehouse": os.getenv("INGEST_AQP_ICEBERG_WAREHOUSE", ""),
+                    "platform_instance": os.getenv("INGEST_AQP_ICEBERG_PLATFORM_INSTANCE", "agentic-quant-platform"),
+                },
+            ),
+            (
+                "mlflow",
+                "rpi-kubernetes.mlflow",
+                "rpi_kubernetes MLflow tracking service",
+                {"tracking_uri": os.getenv("INGEST_MLFLOW_TRACKING_URI", "")},
+            ),
+            (
+                "mlflow",
+                "agentic-quant-platform.mlflow",
+                "agentic_quant_platform MLflow tracking metadata",
+                {"tracking_uri": os.getenv("INGEST_AQP_MLFLOW_TRACKING_URI", "")},
+            ),
+            (
+                "kafka",
+                "rpi-kubernetes.kafka",
+                "rpi_kubernetes Strimzi Kafka cluster",
+                {
+                    "bootstrap": os.getenv("INGEST_KAFKA_BOOTSTRAP", ""),
+                    "schema_registry_url": os.getenv("INGEST_KAFKA_SCHEMA_REGISTRY_URL", ""),
+                },
+            ),
+            (
+                "s3",
+                "rpi-kubernetes.minio",
+                "rpi_kubernetes MinIO object storage",
+                {"endpoint": os.getenv("INGEST_MINIO_ENDPOINT", "")},
+            ),
+            (
+                "grafana",
+                "rpi-kubernetes.grafana",
+                "rpi_kubernetes Grafana dashboards",
+                {"url": os.getenv("INGEST_GRAFANA_URL", "")},
+            ),
+            (
+                "openapi",
+                "agentic-quant-platform.api",
+                "Agentic Quant Platform OpenAPI surface",
+                {
+                    "url": os.getenv("INGEST_AQP_OPENAPI_URL", ""),
+                    "swagger_file": os.getenv("INGEST_AQP_OPENAPI_SWAGGER_FILE", ""),
+                },
+            ),
+        ]
+
+        for platform, name, description, properties in bridged_sources:
+            try:
+                emit_dataset(
+                    emitter=emitter,
+                    platform=platform,
+                    name=name,
+                    env=datahub_env,
+                    description=description,
+                    gms_server=gms_server,
+                    token=token,
+                    properties=properties,
+                )
+            except Exception as exc:
+                failures.append(f"{platform} metadata emit failed for {name}: {exc}")
+
+        for collection in milvus_collections:
+            try:
+                emit_dataset(
+                    emitter=emitter,
+                    platform="milvus",
+                    name=f"milvus.{collection}",
+                    env=datahub_env,
+                    description="Milvus collection metadata bridged from platform config",
+                    gms_server=gms_server,
+                    token=token,
+                )
+            except Exception as exc:
+                failures.append(f"milvus metadata emit failed for {collection}: {exc}")
+
+        for collection in chroma_collections:
+            try:
+                emit_dataset(
+                    emitter=emitter,
+                    platform="chromadb",
+                    name=f"chromadb.{collection}",
+                    env=datahub_env,
+                    description="ChromaDB collection metadata bridged from platform config",
+                    gms_server=gms_server,
+                    token=token,
+                )
+            except Exception as exc:
+                failures.append(f"chromadb metadata emit failed for {collection}: {exc}")
+
+        if failures:
+            for message in failures:
+                print(message, file=sys.stderr)
+            return 1
+
+        print("Metadata bridge completed successfully.")
+        return 0
+
+
+    if __name__ == "__main__":
+        raise SystemExit(main())

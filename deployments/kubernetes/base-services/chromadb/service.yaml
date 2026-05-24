@@ -1,0 +1,40 @@
+﻿# =============================================================================
+# ChromaDB Service
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: chromadb
+  namespace: aqp-data-services
+  labels:
+    app: chromadb
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+  selector:
+    app: chromadb
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chromadb
+  namespace: aqp-data-services
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: chromadb.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: chromadb
+                port:
+                  number: 8000

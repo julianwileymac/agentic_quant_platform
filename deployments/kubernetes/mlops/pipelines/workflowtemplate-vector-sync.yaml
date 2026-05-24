@@ -1,0 +1,59 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: pipeline-vector-sync
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: pipeline-vector-sync
+    app.kubernetes.io/component: orchestration
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: vector-sync
+  arguments:
+    parameters:
+      - name: pipeline_image
+        value: ghcr.io/julianwiley/rpi-k8s-pipelines:latest
+      - name: source_key
+        value: processed/heavy/sample.json
+      - name: source_bucket
+        value: dagster-artifacts
+      - name: collection_name
+        value: pipeline_documents
+      - name: pipeline_name
+        value: vector-sync
+      - name: text_field
+        value: text
+  templates:
+    - name: vector-sync
+      metadata:
+        annotations:
+          pipelines.rpi-k8s.io/todo-model-versioning: "Replace deterministic embedding with managed model endpoint."
+      inputs:
+        parameters:
+          - name: pipeline_image
+          - name: source_key
+          - name: source_bucket
+          - name: collection_name
+          - name: pipeline_name
+          - name: text_field
+      container:
+        image: "{{inputs.parameters.pipeline_image}}"
+        command:
+          - python
+          - -m
+          - pipelines.cli
+          - vector-sync
+        args:
+          - --source-key
+          - "{{inputs.parameters.source_key}}"
+          - --source-bucket
+          - "{{inputs.parameters.source_bucket}}"
+          - --collection-name
+          - "{{inputs.parameters.collection_name}}"
+          - --pipeline-name
+          - "{{inputs.parameters.pipeline_name}}"
+          - --text-field
+          - "{{inputs.parameters.text_field}}"
+        envFrom:
+          - secretRef:
+              name: pipeline-sink-credentials

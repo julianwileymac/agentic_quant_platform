@@ -1,0 +1,18 @@
+# Redpanda Connect (formerly Benthos) — declarative streaming pipeline
+# from Redpanda topics into QuestDB ILP. Phase 2b of the AQP infra-
+# expansion plan. The QuestDB sink ships in Connect v4.37+.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-streaming
+
+commonLabels:
+  app.kubernetes.io/part-of: aqp
+  app.kubernetes.io/component: streaming
+  app.kubernetes.io/managed-by: kustomize
+  aqp.internal/cluster: streaming.redpanda
+
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml

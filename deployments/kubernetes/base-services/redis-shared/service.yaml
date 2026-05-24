@@ -1,0 +1,47 @@
+﻿# =============================================================================
+# Redis 8 Stack - Services
+# =============================================================================
+# Primary Service (`redis`) is the canonical endpoint for new consumers.
+# `ragflow-redis` is an alias Service with the same selector so the existing
+# RAGFlow configmap / secret hostnames (`ragflow-redis.aqp-data-services.svc...`)
+# continue to resolve after the Valkey deployment is removed.
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: aqp-data-services
+  labels:
+    app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+      protocol: TCP
+  selector:
+    app: redis
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ragflow-redis
+  namespace: aqp-data-services
+  labels:
+    app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+    compat: ragflow-alias
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+      protocol: TCP
+  selector:
+    app: redis

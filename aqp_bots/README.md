@@ -22,7 +22,7 @@ contains compatibility shims that re-export this package.
 | Celery tasks | `../aqp/tasks/bot_tasks.py` |
 | Persistence models | `../aqp/persistence/models_bots.py` |
 | Sample templates | `templates/` |
-| Canonical docs | `../docs/bots.md` |
+| Canonical docs | `../aqp_docs/bots.md` |
 
 ## Split Rule
 

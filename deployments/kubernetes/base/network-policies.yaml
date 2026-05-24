@@ -101,7 +101,18 @@ spec:
           protocol: UDP
         - port: 53
           protocol: TCP
-    # Allow https-out for the JWKS fetch + container image pulls handled at the node level.
+    # JWKS + external API calls (Auth0, Cloudflare, market data).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 443
+          protocol: TCP
+    # In-cluster HTTPS (control plane, ingress backends, etc.).
     - to:
         - namespaceSelector: {}
       ports:
@@ -115,16 +126,32 @@ spec:
       ports:
         - port: 6379
           protocol: TCP
-    # Shared Postgres in data-services (RPi cluster).
+    # AQP-owned Postgres (`aqp-data-services`). Namespace-only selector
+    # avoids kustomize label injection breaking cross-namespace matches.
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: data-services
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: postgresql
+              kubernetes.io/metadata.name: aqp-data-services
       ports:
         - port: 5432
+          protocol: TCP
+    # Control plane sidecar API.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: aqp-admin
+      ports:
+        - port: 9000
+          protocol: TCP
+    # OTel collector gateway (optional — readiness should not block on it).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: aqp-observability
+      ports:
+        - port: 4317
+          protocol: TCP
+        - port: 4318
           protocol: TCP
 ---
 apiVersion: networking.k8s.io/v1
@@ -157,12 +184,22 @@ spec:
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: data-services
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: postgresql
+              kubernetes.io/metadata.name: aqp-data-services
       ports:
         - port: 5432
+          protocol: TCP
+    # Kubernetes API (k3s apiserver on the LAN + service CIDR).
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+      ports:
+        - port: 443
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 192.168.0.0/16
+      ports:
+        - port: 6443
           protocol: TCP
     - to:
         - namespaceSelector:
@@ -171,6 +208,16 @@ spec:
       ports:
         - port: 53
           protocol: UDP
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 443
+          protocol: TCP
     - to:
         - namespaceSelector: {}
       ports:

@@ -62,6 +62,18 @@ const HALT_ENDPOINTS: ReadonlyArray<{ path: string; label: string }> = [
   // workload control. Refuses (503) when the Management Engine is not
   // enabled; other halt endpoints still fire.
   { path: "/workloads/halt", label: "workload runs (WorkloadRuntime dispatches)" },
+  // Phase 3 of the AQP infra-expansion plan — domain-scoped halts that
+  // sit in front of the new aqp_control_plane admin route groups so the
+  // kill-switch can fan out to streaming + lakehouse runs in addition
+  // to the global halt above. Both endpoints are idempotent.
+  { path: "/manage/streaming/halt", label: "streaming admin runs (Strimzi + Redpanda)" },
+  { path: "/manage/lakehouse/halt", label: "lakehouse runs (Iceberg + Hudi)" },
+  // Data Lab (foundation) — halts every active ``lab_runs`` row
+  // dispatched via :class:`LabRuntime` across all four modes
+  // (EDA / Testing / Evaluation / Simulation). Drops a per-run
+  // ``aqp:lab:halt:<run_id>`` Redis flag the inline-canvas / Celery
+  // task / Dagster sandbox dispatchers poll between nodes.
+  { path: "/lab/halt-all", label: "data lab runs (LabRuntime dispatches)" },
 ];
 
 /**

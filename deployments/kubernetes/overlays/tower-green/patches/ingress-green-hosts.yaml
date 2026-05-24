@@ -1,0 +1,65 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aqp-client
+  namespace: aqp
+spec:
+  tls:
+    - hosts:
+        - aqp-green.aqp.fund
+      secretName: aqp-client-green-tls
+  rules:
+    - host: aqp-green.aqp.fund
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aqp-client
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aqp-core
+  namespace: aqp
+spec:
+  tls:
+    - hosts:
+        - api-green.aqp.fund
+      secretName: aqp-core-green-tls
+  rules:
+    - host: api-green.aqp.fund
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aqp-core
+                port:
+                  number: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aqp-cp
+  namespace: aqp-admin
+spec:
+  tls:
+    - hosts:
+        - manage-green.aqp.fund
+      secretName: aqp-cp-green-tls
+  rules:
+    - host: manage-green.aqp.fund
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aqp-cp
+                port:
+                  number: 80

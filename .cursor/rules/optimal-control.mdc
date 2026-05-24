@@ -35,10 +35,10 @@ alwaysApply: false
 
 This rule scopes the JAX-compiled optimal-control core, the
 Lucic-Tse portfolio options market-maker, and the hftbacktest LOB
-engine. Narrative: [docs/optimal-control.md](mdc:docs/optimal-control.md),
-[docs/portfolio-options-mm.md](mdc:docs/portfolio-options-mm.md),
-[docs/hft-backtest.md](mdc:docs/hft-backtest.md),
-[docs/microstructure-toxicity.md](mdc:docs/microstructure-toxicity.md).
+engine. Narrative: [aqp_docs/optimal-control.md](mdc:aqp_docs/optimal-control.md),
+[aqp_docs/portfolio-options-mm.md](mdc:aqp_docs/portfolio-options-mm.md),
+[aqp_docs/hft-backtest.md](mdc:aqp_docs/hft-backtest.md),
+[aqp_docs/microstructure-toxicity.md](mdc:aqp_docs/microstructure-toxicity.md).
 
 ## Hard rules
 
@@ -121,7 +121,7 @@ engine. Narrative: [docs/optimal-control.md](mdc:docs/optimal-control.md),
 
 ## When in doubt
 
-1. Read [docs/optimal-control.md](mdc:docs/optimal-control.md) for the
+1. Read [aqp_docs/optimal-control.md](mdc:aqp_docs/optimal-control.md) for the
    math.
 2. Read the relevant scoped rule:
    - [AGENTS.md](mdc:AGENTS.md) hard rules — full list.

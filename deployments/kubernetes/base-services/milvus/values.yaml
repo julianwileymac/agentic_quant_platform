@@ -1,0 +1,132 @@
+﻿# =============================================================================
+# Milvus Helm Values
+# =============================================================================
+# Install with:
+#   helm repo add milvus https://milvus-io.github.io/milvus-helm
+#   helm repo update
+#   kubectl apply -k kubernetes/base-services/milvus/   # provisions the secret
+#   helm upgrade --install milvus milvus/milvus \
+#     --namespace data-services --create-namespace -f values.yaml
+# =============================================================================
+
+# Milvus Standalone mode (appropriate for RPi cluster)
+mode: standalone
+
+# Image configuration - Milvus only publishes amd64 images, so the standalone
+# pod and its embedded etcd MUST land on an amd64 node (see nodeSelector +
+# tolerations below).  The README documents the constraint.
+image:
+  repository: milvusdb/milvus
+  tag: v2.4.0
+  pullPolicy: IfNotPresent
+
+# Milvus configuration - includes OTLP tracing wired into the cluster collector.
+config:
+  common:
+    defaultPartitionName: "_default"
+    defaultIndexName: "_default_idx"
+    retentionDuration: 432000  # 5 days
+    entityExpiration: 432000
+    log:
+      level: info
+      path: /var/lib/milvus/logs
+      maxLogSize: 300
+      maxAge: 10
+      maxBackups: 20
+  trace:
+    exporter: otlp
+    sampleFraction: 1.0
+    otlp:
+      endpoint: otel-collector.aqp-observability.svc.cluster.local:4317
+      secure: false
+
+# Storage configuration
+persistence:
+  enabled: true
+  storageClass: local-path
+  size: 50Gi
+  accessMode: ReadWriteOnce
+
+# Disable bundled MinIO - we use the cluster-wide MinIO in data-services.
+minio:
+  enabled: false
+
+# External MinIO configuration.  Credentials are pulled from the milvus-minio
+# secret applied by `secret.yaml` (see Kustomize entry next to this file).
+externalS3:
+  enabled: true
+  host: minio.aqp-data-services.svc.cluster.local
+  port: 9000
+  accessKey: minioadmin
+  secretKey: minioadmin123
+  bucketName: milvus-bucket
+  useSSL: false
+  useIAM: false
+
+# etcd configuration (embedded for standalone).  Same amd64 constraint as the
+# Milvus standalone pod.
+etcd:
+  enabled: true
+  persistence:
+    enabled: true
+    storageClass: local-path
+    size: 10Gi
+    accessMode: ReadWriteOnce
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  nodeSelector:
+    kubernetes.io/arch: amd64
+  tolerations:
+    - key: amd64-only
+      operator: Exists
+      effect: NoSchedule
+
+# Milvus standalone resources.  Pin to the amd64 worker because Milvus
+# images are amd64-only - if scheduled on an arm64 node the pod will
+# CrashLoop with "exec format error".
+standalone:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  nodeSelector:
+    kubernetes.io/arch: amd64
+  tolerations:
+    - key: amd64-only
+      operator: Exists
+      effect: NoSchedule
+  extraEnv:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: http://otel-collector.aqp-observability.svc.cluster.local:4317
+    - name: OTEL_SERVICE_NAME
+      value: milvus-standalone
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 19530
+
+# Ingress
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hosts:
+    - host: milvus.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+# Metrics - ServiceMonitor created by the chart, picked up by the
+# kube-prometheus-stack via the cluster-wide selector.
+metrics:
+  serviceMonitor:
+    enabled: true
+    namespace: aqp-observability

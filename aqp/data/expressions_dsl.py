@@ -94,9 +94,148 @@ def _clip(x: pd.Series, low: float, high: float) -> pd.Series:
     return x.clip(lower=float(low), upper=float(high))
 
 
+# ---------------------------------------------------------------------------
+# WorldQuant BRAIN-style operator parity (Phase 2)
+# ---------------------------------------------------------------------------
+#
+# The blueprint requires these aliases so formulas written against
+# WorldQuant BRAIN's documented vocabulary translate verbatim. Each
+# helper mirrors BRAIN's documented semantics; cross-checked test
+# vectors live in ``tests/lab/test_alpha_formulaic_brain_parity.py``.
+
+
+def _ts_zscore(x: pd.Series, n: int) -> pd.Series:
+    """Rolling z-score over the last ``n`` observations.
+
+    Mirrors BRAIN's ``ts_zscore(x, n) = (x - ts_mean(x, n)) / ts_std(x, n)``.
+    Returns NaN when the rolling std is zero (BRAIN parity — never
+    propagates inf).
+    """
+    if not isinstance(x, pd.Series):
+        raise SymbolicAlphaError("ts_zscore() requires a Series as the first argument")
+    window = int(n)
+    if window < 2:
+        raise SymbolicAlphaError(f"ts_zscore window must be >= 2 (got {window})")
+    rolling = x.rolling(window=window, min_periods=window)
+    mean = rolling.mean()
+    std = rolling.std(ddof=1)
+    std = std.where(std > 0)
+    return (x - mean) / std
+
+
+def _ts_regression(y: pd.Series, x: pd.Series, n: int) -> pd.Series:
+    """Rolling slope of OLS regression of ``y`` on ``x`` over the last ``n`` bars.
+
+    Mirrors BRAIN's ``ts_regression(y, x, n)``. Returns NaN for windows
+    where ``var(x) == 0``.
+    """
+    if not isinstance(y, pd.Series) or not isinstance(x, pd.Series):
+        raise SymbolicAlphaError("ts_regression() requires Series arguments")
+    window = int(n)
+    if window < 2:
+        raise SymbolicAlphaError(f"ts_regression window must be >= 2 (got {window})")
+    aligned = pd.concat([y.rename("y"), x.rename("x")], axis=1).dropna()
+    if aligned.empty:
+        return pd.Series(index=y.index, dtype=float)
+    cov = aligned["y"].rolling(window=window, min_periods=window).cov(aligned["x"])
+    var_x = aligned["x"].rolling(window=window, min_periods=window).var(ddof=1)
+    slope = cov / var_x.where(var_x > 0)
+    return slope.reindex(y.index)
+
+
+def _trade_when(
+    entry_condition: pd.Series,
+    alpha: pd.Series,
+    exit_condition: pd.Series,
+) -> pd.Series:
+    """Gate ``alpha`` by entry / exit conditions (BRAIN ``trade_when``).
+
+    The resulting series:
+
+    - Holds ``alpha`` when ``entry_condition`` is True and we are not
+      currently exited.
+    - Sticks to the last alpha value when ``entry_condition`` is False
+      until an ``exit_condition`` flips it to NaN.
+
+    The exit condition takes precedence over the entry condition on
+    the same bar (BRAIN parity).
+    """
+    if not isinstance(alpha, pd.Series):
+        raise SymbolicAlphaError("trade_when() requires a Series alpha argument")
+    entry = entry_condition.astype(bool) if isinstance(entry_condition, pd.Series) else bool(entry_condition)
+    exit_ = exit_condition.astype(bool) if isinstance(exit_condition, pd.Series) else bool(exit_condition)
+    # Broadcast scalar conditions to alpha's index.
+    if not isinstance(entry, pd.Series):
+        entry = pd.Series(entry, index=alpha.index)
+    if not isinstance(exit_, pd.Series):
+        exit_ = pd.Series(exit_, index=alpha.index)
+    aligned_entry = entry.reindex(alpha.index, fill_value=False).astype(bool)
+    aligned_exit = exit_.reindex(alpha.index, fill_value=False).astype(bool)
+
+    result = pd.Series(index=alpha.index, dtype=float)
+    holding = False
+    last_value = float("nan")
+    for idx, (alpha_val, do_enter, do_exit) in enumerate(
+        zip(alpha.values, aligned_entry.values, aligned_exit.values, strict=True)
+    ):
+        if do_exit:
+            holding = False
+            last_value = float("nan")
+            result.iloc[idx] = float("nan")
+            continue
+        if do_enter:
+            holding = True
+            last_value = float(alpha_val) if alpha_val == alpha_val else float("nan")
+            result.iloc[idx] = last_value
+            continue
+        if holding:
+            result.iloc[idx] = last_value
+        else:
+            result.iloc[idx] = float("nan")
+    return result
+
+
+def _if_else(condition: Any, then_value: Any, else_value: Any) -> Any:
+    """BRAIN's ``if_else`` — alias of the existing ``If`` operator.
+
+    Implemented locally rather than re-exporting ``If`` so the
+    SymbolicAlphaError vocabulary message includes the BRAIN name
+    when the formula author misspells it.
+    """
+    if isinstance(condition, pd.Series):
+        mask = condition.astype(bool)
+        then_aligned = then_value if isinstance(then_value, pd.Series) else pd.Series(then_value, index=condition.index)
+        else_aligned = else_value if isinstance(else_value, pd.Series) else pd.Series(else_value, index=condition.index)
+        return then_aligned.where(mask, else_aligned)
+    return then_value if bool(condition) else else_value
+
+
+def _decay_linear(x: pd.Series, n: int) -> pd.Series:
+    """Linearly weighted decay over the last ``n`` observations.
+
+    Mirrors BRAIN's ``decay_linear(x, n)`` — weights ``1..n`` (newest
+    first) sum-to-one. The existing
+    :mod:`aqp.data.factor_expression` implementation does the same;
+    this lowercase alias surfaces the BRAIN name in the DSL too.
+    """
+    if not isinstance(x, pd.Series):
+        raise SymbolicAlphaError("decay_linear() requires a Series as the first argument")
+    window = int(n)
+    if window < 1:
+        raise SymbolicAlphaError(f"decay_linear window must be >= 1 (got {window})")
+    weights = np.arange(1, window + 1, dtype=float)
+    weights /= weights.sum()
+
+    def _weighted(values: np.ndarray) -> float:
+        return float(np.dot(values, weights))
+
+    return x.rolling(window=window, min_periods=window).apply(_weighted, raw=True)
+
+
 # Curated allow-list. The base OPERATORS map comes from
 # aqp.data.expressions and includes Ref/Delay/Mean/EMA/MACD/RSI/...;
-# we extend with a few LLM-friendly helpers above.
+# we extend with a few LLM-friendly helpers above plus the
+# WorldQuant BRAIN parity aliases.
 SYMBOLIC_OPERATORS: dict[str, Callable[..., Any]] = {
     **_BASE_OPERATORS,
     "Abs": _abs,
@@ -104,6 +243,12 @@ SYMBOLIC_OPERATORS: dict[str, Callable[..., Any]] = {
     "Log": _log,
     "Rank": _rank,
     "Clip": _clip,
+    # WorldQuant BRAIN parity (Phase 2).
+    "ts_zscore": _ts_zscore,
+    "ts_regression": _ts_regression,
+    "trade_when": _trade_when,
+    "if_else": _if_else,
+    "decay_linear": _decay_linear,
 }
 
 SYMBOLIC_FIELDS: tuple[str, ...] = (

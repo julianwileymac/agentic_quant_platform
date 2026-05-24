@@ -1,0 +1,26 @@
+﻿# =============================================================================
+# Apicurio Registry Service
+# =============================================================================
+# ClusterIP on port 8080 for in-cluster clients (producers, consumers,
+# Kafka Connect, management API). The Confluent compat endpoint is under
+# /apis/ccompat/v7 on the same port.
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: apicurio-registry
+  namespace: aqp-streaming
+  labels:
+    app: apicurio-registry
+    app.kubernetes.io/name: apicurio-registry
+    app.kubernetes.io/component: schema-registry
+spec:
+  type: ClusterIP
+  selector:
+    app: apicurio-registry
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

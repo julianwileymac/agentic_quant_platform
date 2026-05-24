@@ -1,0 +1,59 @@
+﻿apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: datahub-ingest-minio-s3
+  namespace: aqp-data-services
+  labels:
+    app.kubernetes.io/name: datahub
+    app.kubernetes.io/component: metadata-ingestion
+    datahub.ingestion/source: minio-s3
+spec:
+  schedule: "15 * * * *"
+  # Safe-by-default: enable after setting token/credentials.
+  suspend: true
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 1800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: datahub
+            app.kubernetes.io/component: metadata-ingestion
+            datahub.ingestion/source: minio-s3
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: ingest
+              image: acryldata/datahub-ingestion:latest
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: RECIPE_TEMPLATE
+                  value: /etc/datahub/recipes/recipe-minio-s3.yaml
+              envFrom:
+                - configMapRef:
+                    name: datahub-ingestion-settings
+                - secretRef:
+                    name: datahub-ingestion-secrets
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  python - <<'PY'
+                  import os
+                  from pathlib import Path
+                  template_path = Path(os.environ["RECIPE_TEMPLATE"])
+                  rendered = os.path.expandvars(template_path.read_text())
+                  Path("/tmp/recipe.yaml").write_text(rendered)
+                  print(f"Rendered recipe from {template_path}")
+                  PY
+                  datahub ingest -c /tmp/recipe.yaml
+              volumeMounts:
+                - name: recipes
+                  mountPath: /etc/datahub/recipes
+                  readOnly: true
+          volumes:
+            - name: recipes
+              configMap:
+                name: datahub-ingestion-recipes

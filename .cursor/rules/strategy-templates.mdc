@@ -62,4 +62,4 @@ Phase 7 of the multi-tenant rollout. Hard rule 35 in
 - Don't translate inside the ingester — translation is the user's
   opt-in choice at clone time.
 
-Canonical doc: [docs/strategy-templates.md](mdc:docs/strategy-templates.md).
+Canonical doc: [aqp_docs/strategy-templates.md](mdc:aqp_docs/strategy-templates.md).

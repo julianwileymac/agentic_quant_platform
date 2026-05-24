@@ -1,0 +1,180 @@
+﻿# =============================================================================
+# Ray Cluster Configuration
+# =============================================================================
+# Ray is deployed via the KubeRay operator. Install the operator first:
+#
+#   helm repo add kuberay https://ray-project.github.io/kuberay-helm/
+#   helm upgrade --install kuberay-operator kuberay/kuberay-operator --namespace ml-platform
+#
+# Then apply this RayCluster resource.
+# =============================================================================
+
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: ray-cluster
+  namespace: aqp-elt
+  labels:
+    app: ray
+spec:
+  rayVersion: '2.9.0'
+  
+  # Head node configuration
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: '0.0.0.0'
+      block: 'true'
+    
+    template:
+      metadata:
+        labels:
+          app: ray
+          component: head
+      spec:
+        containers:
+          - name: ray-head
+            image: rayproject/ray:2.9.0
+            ports:
+              - name: client
+                containerPort: 10001
+                protocol: TCP
+              - name: dashboard
+                containerPort: 8265
+                protocol: TCP
+              - name: gcs
+                containerPort: 6379
+                protocol: TCP
+            resources:
+              requests:
+                cpu: 500m
+                memory: 1Gi
+              limits:
+                cpu: 2000m
+                memory: 2Gi
+            volumeMounts:
+              - name: ray-logs
+                mountPath: /tmp/ray
+        volumes:
+          - name: ray-logs
+            emptyDir: {}
+        # Schedule head on control plane
+        affinity:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                    - key: node.kubernetes.io/role
+                      operator: In
+                      values:
+                        - control-plane
+  
+  # Worker nodes configuration
+  workerGroupSpecs:
+    - groupName: workers
+      replicas: 4
+      minReplicas: 2
+      maxReplicas: 8
+      
+      rayStartParams:
+        block: 'true'
+      
+      template:
+        metadata:
+          labels:
+            app: ray
+            component: worker
+        spec:
+          containers:
+            - name: ray-worker
+              image: rayproject/ray:2.9.0
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 1Gi
+                limits:
+                  cpu: 2000m
+                  memory: 2Gi
+              volumeMounts:
+                - name: ray-logs
+                  mountPath: /tmp/ray
+          volumes:
+            - name: ray-logs
+              emptyDir: {}
+          # Spread workers across RPi nodes
+          affinity:
+            podAntiAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  podAffinityTerm:
+                    labelSelector:
+                      matchLabels:
+                        app: ray
+                        component: worker
+                    topologyKey: kubernetes.io/hostname
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                      - key: hardware/type
+                        operator: In
+                        values:
+                          - raspberry-pi
+---
+# Service for Ray head
+apiVersion: v1
+kind: Service
+metadata:
+  name: ray-head
+  namespace: aqp-elt
+spec:
+  type: ClusterIP
+  ports:
+    - name: client
+      port: 10001
+      targetPort: 10001
+    - name: dashboard
+      port: 8265
+      targetPort: 8265
+    - name: gcs
+      port: 6379
+      targetPort: 6379
+  selector:
+    app: ray
+    component: head
+---
+# LoadBalancer for Ray dashboard
+apiVersion: v1
+kind: Service
+metadata:
+  name: ray-dashboard-external
+  namespace: aqp-elt
+spec:
+  type: LoadBalancer
+  ports:
+    - name: dashboard
+      port: 8265
+      targetPort: 8265
+  selector:
+    app: ray
+    component: head
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ray-dashboard
+  namespace: aqp-elt
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ray.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ray-head
+                port:
+                  number: 8265

@@ -13,8 +13,8 @@ alwaysApply: false
 # Data pipelines (Iceberg ingestion)
 
 Rules that apply when working on the discovery → director → materialise
-→ verify → annotate pipeline. See [docs/data-catalog.md](mdc:docs/data-catalog.md)
-for the prose walkthrough and [docs/flows.md#1-generic-file--iceberg-ingestion](mdc:docs/flows.md)
+→ verify → annotate pipeline. See [aqp_docs/data-catalog.md](mdc:aqp_docs/data-catalog.md)
+for the prose walkthrough and [aqp_docs/flows.md#1-generic-file--iceberg-ingestion](mdc:aqp_docs/flows.md)
 for the canonical sequence diagram.
 
 ## Pipeline contract

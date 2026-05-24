@@ -1,0 +1,178 @@
+# Gateway-mode OpenTelemetryCollector. Receives OTLP from agents +
+# applications, routes:
+#  - any span with attribute openinference.span.kind  -> Phoenix
+#  - everything else                                   -> Tempo
+#  - metrics  -> Prometheus remote_write
+#  - logs     -> Loki via otlphttp
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-gateway
+  namespace: aqp-observability
+  labels:
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/component: observability
+spec:
+  mode: deployment
+  replicas: 2
+  serviceAccount: otel-collector
+  image: otel/opentelemetry-collector-contrib:0.110.0
+  resources:
+    requests:
+      cpu: "200m"
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  env:
+    - name: GOMEMLIMIT
+      value: "1800MiB"
+    - name: PHOENIX_PROJECT_HEADER
+      value: aqp
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: aqp-services
+              kubernetes_sd_configs:
+                - role: pod
+              relabel_configs:
+                - source_labels: [__meta_kubernetes_namespace]
+                  regex: aqp.*
+                  action: keep
+                - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                  regex: true
+                  action: keep
+
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: 1500
+        spike_limit_mib: 256
+      batch:
+        send_batch_size: 8192
+        timeout: 1s
+      resourcedetection:
+        detectors: [env, system]
+      k8sattributes:
+        auth_type: serviceAccount
+        passthrough: false
+        extract:
+          metadata:
+            - k8s.namespace.name
+            - k8s.deployment.name
+            - k8s.pod.name
+            - k8s.node.name
+            - k8s.pod.uid
+      transform/ai_route:
+        trace_statements:
+          - context: span
+            statements:
+              - set(resource.attributes["aqp.ai_trace"], "true") where attributes["openinference.span.kind"] != nil
+              - set(resource.attributes["aqp.ai_trace"], "true") where attributes["llm.model_name"] != nil
+              - set(resource.attributes["aqp.ai_trace"], "true") where attributes["agent.name"] != nil
+      attributes/redact:
+        actions:
+          - action: delete
+            key: http.request.header.authorization
+          - action: delete
+            key: http.request.header.cookie
+          - action: hash
+            key: enduser.id
+      tail_sampling:
+        decision_wait: 10s
+        num_traces: 50000
+        expected_new_traces_per_sec: 500
+        policies:
+          - name: errors
+            type: status_code
+            status_code:
+              status_codes: [ERROR]
+          - name: ai_traces
+            type: string_attribute
+            string_attribute:
+              key: openinference.span.kind
+              values: [".+"]
+              enabled_regex_matching: true
+          - name: probabilistic_baseline
+            type: probabilistic
+            probabilistic:
+              sampling_percentage: 1.0
+
+    exporters:
+      otlp/tempo:
+        endpoint: tempo.aqp-observability.svc.cluster.local:4317
+        tls:
+          insecure: true
+      otlp/phoenix:
+        endpoint: phoenix.aqp-observability.svc.cluster.local:4317
+        tls:
+          insecure: true
+        headers:
+          x-project-name: aqp
+      prometheusremotewrite:
+        endpoint: http://prometheus-operated.aqp-observability.svc.cluster.local:9090/api/v1/write
+        tls:
+          insecure: true
+        resource_to_telemetry_conversion:
+          enabled: true
+      otlphttp/loki:
+        endpoint: http://loki.aqp-observability.svc.cluster.local:3100/otlp
+        tls:
+          insecure: true
+
+    service:
+      telemetry:
+        logs:
+          level: info
+        metrics:
+          level: detailed
+      pipelines:
+        traces/ai:
+          receivers: [otlp]
+          processors:
+            [memory_limiter, resourcedetection, k8sattributes, transform/ai_route, attributes/redact, batch, tail_sampling]
+          exporters: [otlp/phoenix]
+        traces/infra:
+          receivers: [otlp]
+          processors:
+            [memory_limiter, resourcedetection, k8sattributes, attributes/redact, batch, tail_sampling]
+          exporters: [otlp/tempo]
+        metrics:
+          receivers: [otlp, prometheus]
+          processors: [memory_limiter, resourcedetection, batch]
+          exporters: [prometheusremotewrite]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, resourcedetection, attributes/redact, batch]
+          exporters: [otlphttp/loki]
+---
+# Stable Service alias matching topology.yaml endpoints (otel-gateway:4317).
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-gateway
+  namespace: aqp-observability
+  labels:
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/component: observability
+spec:
+  selector:
+    app.kubernetes.io/component: opentelemetry-collector
+    app.kubernetes.io/instance: aqp-observability.otel-gateway
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP

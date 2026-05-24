@@ -1,0 +1,36 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: av-fx-backfill
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: alphavantage-fx-backfill
+    data-provider: alphavantage
+spec:
+  serviceAccountName: argo-workflow
+  entrypoint: run
+  arguments:
+    parameters:
+      - name: pairs
+        value: "EUR/USD,USD/JPY,GBP/USD"
+      - name: target_bucket
+        value: av-raw
+  templates:
+    - name: run
+      inputs:
+        parameters:
+          - name: pairs
+          - name: target_bucket
+      steps:
+        - - name: load
+            templateRef:
+              name: av-bulk
+              template: run
+            arguments:
+              parameters:
+                - name: category
+                  value: fx
+                - name: symbols
+                  value: "{{inputs.parameters.pairs}}"
+                - name: target_bucket
+                  value: "{{inputs.parameters.target_bucket}}"

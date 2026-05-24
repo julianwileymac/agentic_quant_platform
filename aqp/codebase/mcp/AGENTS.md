@@ -22,7 +22,7 @@ dependency slices, and bounded elaboration.
 
 ## Repository Split Context
 
-Use `docs/repository-split.md` and `docs/code-index-governance.md` when
+Use `aqp_docs/repository-split.md` and `aqp_docs/code-index-governance.md` when
 adding new index categories. Future domain roots such as `aqp_client/`,
 `aqp_snippets/`, and `aqp_bots/` should be first-class index scopes, not
 afterthoughts under the monolith.

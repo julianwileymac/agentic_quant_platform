@@ -1,0 +1,21 @@
+﻿# =============================================================================
+# redis_exporter - Service
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-exporter
+  namespace: aqp-data-services
+  labels:
+    app: redis-exporter
+    app.kubernetes.io/name: redis-exporter
+    app.kubernetes.io/component: metrics-exporter
+spec:
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: 9121
+      targetPort: 9121
+      protocol: TCP
+  selector:
+    app: redis-exporter

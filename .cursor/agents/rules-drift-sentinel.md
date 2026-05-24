@@ -15,7 +15,7 @@ Keep governance artifacts internally consistent:
 - `.cursor/agents/*.md`
 - `WORKFLOW.md`
 - `CONTRIBUTING.md`
-- `docs/index.md`
+- `aqp_docs/index.md`
 
 ## Required checks
 

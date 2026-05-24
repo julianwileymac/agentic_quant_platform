@@ -34,6 +34,22 @@ interface WorkflowEditorProps {
   onSave?: (graph: FlowGraph) => Promise<void> | void;
   /** Optional Run quick action (e.g. start a backtest from the spec). */
   onRun?: (graph: FlowGraph) => Promise<void> | void;
+  /**
+   * Optional callback fired whenever the canvas selection changes.
+   * The Data Lab Testing route uses this to mount the RJSF typed
+   * inspector in the shell's right rail without replacing the
+   * built-in JSON drawer (so other domains keep working).
+   */
+  onNodeSelected?: (node: AqpNode | null) => void;
+  /**
+   * Optional callback fired whenever the canvas graph changes
+   * (nodes / edges added, moved, deleted, or params edited via
+   * the built-in drawer). Used by the Data Lab to mirror node
+   * updates back to the LabGraph store + the right-rail inspector
+   * so the inspector reflects the latest params after a drawer
+   * save.
+   */
+  onGraphChange?: (graph: FlowGraph) => void;
   /** Optional toolbar buttons rendered next to Save / Run. */
   toolbarExtras?: ReactNode;
   /** Disable Save / Run buttons. */
@@ -54,6 +70,8 @@ export function WorkflowEditor({
   initialGraph,
   onSave,
   onRun,
+  onNodeSelected,
+  onGraphChange,
   toolbarExtras,
   saving = false,
 }: WorkflowEditorProps) {
@@ -82,6 +100,13 @@ export function WorkflowEditor({
     setEdges(hydrated.edges);
     idSeq.current = hydrated.nodes.length;
   }, [initialGraph]);
+
+  // Notify parent on any graph change (nodes / edges) so Lab can
+  // mirror the canvas state back to the LabGraph store.
+  useEffect(() => {
+    if (!onGraphChange) return;
+    onGraphChange(toFlowGraph(domain, nodes, edges));
+  }, [onGraphChange, domain, nodes, edges]);
 
   const handlePaletteDrop = useCallback(
     (payload: PaletteDragPayload, position: { x: number; y: number }) => {
@@ -273,6 +298,7 @@ export function WorkflowEditor({
               onNodeClick={(node) => {
                 setSelectedPaletteItem(null);
                 setDrawerNode(node);
+                onNodeSelected?.(node);
               }}
               onNodeContextMenu={(node, pos) =>
                 setMenu({ open: true, position: { x: pos.clientX, y: pos.clientY }, nodeId: node.id })

@@ -1,4 +1,4 @@
-apiVersion: v1
+﻿apiVersion: v1
 kind: ConfigMap
 metadata:
   name: aqp-config
@@ -15,9 +15,15 @@ data:
   AQP_MCP_URL: http://aqp-mcp:8002
   AQP_REDIS_URL: redis://redis-master:6379
   AQP_CONTROL_PLANE_URL: http://aqp-cp.aqp-admin.svc.cluster.local:9000
+  # tower-green overlay patches these to green-lane hosts during cutover.
   AQP_INGRESS_BASE_URL: https://aqp.fund
   AQP_CONTROL_PLANE_M2M_AUDIENCE: https://api.aqp.internal/manage
-  AQP_DATABASE_URL: postgresql+psycopg://aqp:aqp@postgresql.data-services.svc.cluster.local:5432/aqp
+  # Postgres lives in AQP-owned `aqp-data-services` namespace
+  # (`deployments/kubernetes/base-services/postgres-shared/`). Settings
+  # reads ``postgres_dsn`` -> env ``AQP_POSTGRES_DSN`` (not AQP_DATABASE_URL).
+  AQP_POSTGRES_DSN: postgresql+psycopg2://aqp:aqp@postgresql.aqp-data-services.svc.cluster.local:5432/aqp
+  AQP_POSTGRES_ASYNC_DSN: postgresql+asyncpg://aqp:aqp@postgresql.aqp-data-services.svc.cluster.local:5432/aqp
+  AQP_DATABASE_URL: postgresql+psycopg://aqp:aqp@postgresql.aqp-data-services.svc.cluster.local:5432/aqp
   AQP_CELERY_BROKER_URL: redis://redis-master:6379/0
   AQP_CELERY_RESULT_URL: redis://redis-master:6379/1
   AQP_AUTH_PROVIDER: auth0
@@ -33,6 +39,14 @@ data:
   AQP_CP_PROVIDER: docker_compose
   AQP_CP_KUBECONFIG_PATH: ''
   AQP_CP_TELEMETRY_INTERVAL_SECONDS: '10'
+  # Phase 4 of the AQP infra-expansion plan: flip the default. The
+  # cluster-mgmt URL now points at aqp_control_plane (the canonical
+  # /manage/* surface); the deprecated legacy fallback to
+  # rpi-k8s-management is OFF by default. Re-enable per-environment
+  # by setting AQP_CONTROL_PLANE_LEGACY_FALLBACK=true on the secret /
+  # ConfigMap overlay during a rollback.
+  AQP_CLUSTER_MGMT_URL: http://aqp-cp.aqp-admin.svc.cluster.local:9000
+  AQP_CONTROL_PLANE_LEGACY_FALLBACK: 'false'
   AWS_REGION: us-east-1
   AWS_ROLE_ARN: ''
   AZURE_TENANT_ID: ''
@@ -40,8 +54,12 @@ data:
   AZURE_SUBSCRIPTION_ID: ''
   GOOGLE_APPLICATION_CREDENTIALS: ''
   GOOGLE_CLOUD_PROJECT: ''
-  AQP_OTEL_COLLECTOR_URL: http://otel-collector:4317
-  AQP_JAEGER_UI_URL: http://jaeger:16686
+  # AQP-owned observability stack lives in the `aqp-observability`
+  # namespace. The OTel Collector gateway routes infrastructure spans
+  # to Tempo + Jaeger and AI/LLM spans to Phoenix per
+  # `deployments/kubernetes/observability/opentelemetry-collector-gateway/`.
+  AQP_OTEL_COLLECTOR_URL: http://otel-collector.aqp-observability.svc.cluster.local:4317
+  AQP_JAEGER_UI_URL: http://jaeger.aqp-observability.svc.cluster.local:16686
   VITE_AUTH_REQUIRED: 'true'
   VITE_AQP_API_BASE_URL: /api
   VITE_API_URL: https://api.aqp.fund

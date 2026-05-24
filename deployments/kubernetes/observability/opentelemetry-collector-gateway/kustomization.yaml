@@ -1,0 +1,19 @@
+# Centralized OpenTelemetry Collector gateway. Routes:
+#   AI / agent / RAG / LLM spans (openinference.span.kind set)  -> Phoenix
+#   everything else                                              -> Tempo
+# Metrics -> Prometheus remote_write; Logs -> Loki.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-observability
+
+commonLabels:
+  app.kubernetes.io/part-of: aqp
+  app.kubernetes.io/component: observability
+  app.kubernetes.io/managed-by: kustomize
+
+resources:
+  - rbac.yaml
+  - collector-gateway.yaml
+  - collector-agent.yaml
+  - instrumentation.yaml

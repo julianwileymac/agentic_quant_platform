@@ -141,6 +141,358 @@ services:
     restartable: false
     logs_enabled: true
 
+  # =========================================================================
+  # Phase 1 of the AQP infra-expansion plan: lift-and-shift declaration of
+  # AQP-owned shared cluster services. Workload manifests fill in during
+  # Phase 2 (additive: redpanda, questdb, phoenix, hudi, kube-prom-stack,
+  # opentelemetry-operator) and Phase 5 (legacy lift-and-shift from
+  # rpi_kubernetes/kubernetes/{base-services,observability,mlops}/).
+  # The namespace + endpoints fields make these the canonical addresses
+  # that aqp.config.topology_fallback resolves to when AQP_* env vars are
+  # unset on URL-typed Settings fields.
+  # =========================================================================
+
+  # --- Streaming (Strimzi + Redpanda side-by-side per plan question 2) ----
+  - id: kafka
+    aliases: [kafka-strimzi, strimzi]
+    label: Strimzi Kafka
+    role: streaming
+    workload: statefulset
+    app_label: trading-kafka
+    cluster: streaming.strimzi
+    namespace: aqp-streaming
+    port: 9092
+    storage: 50Gi
+    restartable: false
+    logs_enabled: true
+    protocols:
+      kafka: 9092
+      kafka_tls: 9093
+      kafka_external: 9094
+    endpoints:
+      bootstrap: trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9092
+      admin_bootstrap: trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9092
+  - id: schema-registry
+    label: Apicurio Schema Registry
+    role: streaming
+    workload: deployment
+    app_label: apicurio-registry
+    cluster: streaming.strimzi
+    namespace: aqp-streaming
+    port: 8080
+    restartable: false
+    logs_enabled: true
+    endpoints:
+      ccompat: http://apicurio-registry.aqp-streaming.svc.cluster.local:8080/apis/ccompat/v7
+  - id: redpanda
+    label: Redpanda
+    role: streaming
+    workload: statefulset
+    app_label: redpanda
+    cluster: streaming.redpanda
+    namespace: aqp-streaming
+    port: 9092
+    storage: 100Gi
+    restartable: false
+    logs_enabled: true
+    protocols:
+      kafka: 9092
+      admin: 9644
+      schema_registry: 8081
+      pandaproxy: 8082
+    endpoints:
+      bootstrap: redpanda.aqp-streaming.svc.cluster.local:9092
+      admin: http://redpanda.aqp-streaming.svc.cluster.local:9644
+      schema_registry: http://redpanda.aqp-streaming.svc.cluster.local:8081
+  - id: redpanda-connect
+    label: Redpanda Connect
+    role: streaming
+    workload: deployment
+    app_label: redpanda-connect
+    cluster: streaming.redpanda
+    namespace: aqp-streaming
+    port: 4195
+    restartable: true
+    logs_enabled: true
+    endpoints:
+      ui: http://redpanda-connect.aqp-streaming.svc.cluster.local:4195
+  - id: flink
+    label: Apache Flink Session Cluster
+    role: streaming
+    workload: deployment
+    app_label: flink-trading
+    cluster: streaming.flink
+    namespace: aqp-streaming
+    port: 8081
+    restartable: false
+    logs_enabled: true
+    endpoints:
+      rest: http://flink-trading-rest.aqp-streaming.svc.cluster.local:8081
+
+  # --- Time-series database (Phase 2 - new) -------------------------------
+  - id: questdb
+    label: QuestDB
+    role: timeseries
+    workload: statefulset
+    app_label: questdb
+    cluster: timeseries.questdb
+    namespace: aqp-timeseries
+    port: 9000
+    storage: 200Gi
+    restartable: false
+    logs_enabled: true
+    protocols:
+      http: 9000
+      ilp_tcp: 9009
+      pgwire: 8812
+    endpoints:
+      http: http://questdb.aqp-timeseries.svc.cluster.local:9000
+      ilp_tcp: questdb.aqp-timeseries.svc.cluster.local:9009
+      pgwire: postgresql://aqp:aqp@questdb.aqp-timeseries.svc.cluster.local:8812/qdb
+
+  # --- Lakehouse (Iceberg canonical + Hudi additive per plan section D) ---
+  - id: polaris
+    label: Polaris Iceberg Catalog
+    role: lakehouse
+    workload: deployment
+    app_label: polaris
+    cluster: lakehouse.iceberg
+    namespace: aqp-lakehouse
+    port: 8181
+    restartable: false
+    logs_enabled: true
+    endpoints:
+      rest: http://polaris.aqp-lakehouse.svc.cluster.local:8181
+      iceberg_rest: http://polaris.aqp-lakehouse.svc.cluster.local:8181/api/catalog/v1
+  - id: hudi
+    label: Apache Hudi (additive)
+    role: lakehouse
+    workload: external
+    app_label: hudi
+    cluster: lakehouse.hudi
+    namespace: aqp-lakehouse
+    restartable: false
+    logs_enabled: false
+    endpoints:
+      warehouse: s3://aqp-lakehouse/hudi/
+      metastore: thrift://polaris.aqp-lakehouse.svc.cluster.local:9083
+  - id: spark-operator
+    label: Spark Operator (Hudi writer host)
+    role: lakehouse
+    workload: deployment
+    app_label: spark-operator
+    cluster: lakehouse.hudi
+    namespace: aqp-mlops
+    port: 8443
+    restartable: true
+    logs_enabled: true
+
+  # --- Observability (kube-prometheus-stack + OTel + Phoenix - Phase 2) ---
+  - id: prometheus
+    label: Prometheus (kube-prometheus-stack)
+    role: observability
+    workload: statefulset
+    app_label: prometheus
+    cluster: observability.metrics
+    namespace: aqp-observability
+    port: 9090
+    storage: 100Gi
+    restartable: false
+    logs_enabled: true
+    endpoints:
+      query: http://prometheus-operated.aqp-observability.svc.cluster.local:9090
+      remote_write: http://prometheus-operated.aqp-observability.svc.cluster.local:9090/api/v1/write
+  - id: grafana
+    label: Grafana
+    role: observability
+    workload: deployment
+    app_label: grafana
+    cluster: observability.metrics
+    namespace: aqp-observability
+    port: 3000
+    restartable: true
+    logs_enabled: true
+    endpoints:
+      ui: http://grafana.aqp-observability.svc.cluster.local:3000
+  - id: tempo
+    label: Grafana Tempo
+    role: tracing
+    workload: statefulset
+    app_label: tempo
+    cluster: observability.tracing
+    namespace: aqp-observability
+    port: 3200
+    storage: 100Gi
+    restartable: false
+    logs_enabled: true
+    protocols:
+      http: 3200
+      otlp_grpc: 4317
+      otlp_http: 4318
+    endpoints:
+      query: http://tempo.aqp-observability.svc.cluster.local:3200
+      otlp_grpc: tempo.aqp-observability.svc.cluster.local:4317
+      otlp_http: http://tempo.aqp-observability.svc.cluster.local:4318
+  - id: loki
+    label: Grafana Loki
+    role: logging
+    workload: statefulset
+    app_label: loki
+    cluster: observability.logging
+    namespace: aqp-observability
+    port: 3100
+    storage: 200Gi
+    restartable: false
+    logs_enabled: true
+    endpoints:
+      push: http://loki.aqp-observability.svc.cluster.local:3100/loki/api/v1/push
+      query: http://loki.aqp-observability.svc.cluster.local:3100
+  - id: phoenix
+    label: Arize Phoenix (LLM/agent/RAG observability)
+    role: observability
+    workload: deployment
+    app_label: phoenix
+    cluster: observability.ai
+    namespace: aqp-observability
+    port: 6006
+    storage: 16Gi
+    restartable: true
+    logs_enabled: true
+    protocols:
+      ui_http: 6006
+      otlp_grpc: 4317
+    endpoints:
+      ui: http://phoenix.aqp-observability.svc.cluster.local:6006
+      otlp_http: http://phoenix.aqp-observability.svc.cluster.local:6006
+      otlp_grpc: phoenix.aqp-observability.svc.cluster.local:4317
+  - id: phoenix-postgres
+    label: Phoenix Postgres backend
+    role: database
+    workload: statefulset
+    app_label: phoenix-postgresql
+    cluster: observability.ai
+    namespace: aqp-observability
+    port: 5432
+    storage: 16Gi
+    restartable: false
+    logs_enabled: true
+
+  # --- Data services (lift-and-shift; canonical owner now AQP) ------------
+  - id: postgres-shared
+    label: Shared PostgreSQL
+    role: database
+    workload: statefulset
+    app_label: postgresql
+    cluster: data-services
+    namespace: aqp-data-services
+    port: 5432
+    storage: 50Gi
+    restartable: false
+    logs_enabled: true
+    endpoints:
+      dsn: postgresql+psycopg2://aqp:aqp@postgresql.aqp-data-services.svc.cluster.local:5432/aqp
+      async_dsn: postgresql+asyncpg://aqp:aqp@postgresql.aqp-data-services.svc.cluster.local:5432/aqp
+  - id: redis-shared
+    label: Shared Redis (cache + RAG)
+    role: cache
+    workload: statefulset
+    app_label: redis
+    cluster: data-services
+    namespace: aqp-data-services
+    port: 6379
+    storage: 8Gi
+    restartable: false
+    logs_enabled: true
+    endpoints:
+      url: redis://redis.aqp-data-services.svc.cluster.local:6379/0
+      pubsub_url: redis://redis.aqp-data-services.svc.cluster.local:6379/1
+      cache_url: redis://redis.aqp-data-services.svc.cluster.local:6379/2
+  - id: minio
+    label: MinIO (S3-compatible object storage)
+    role: storage
+    workload: statefulset
+    app_label: minio
+    cluster: data-services
+    namespace: aqp-data-services
+    port: 9000
+    storage: 500Gi
+    restartable: false
+    logs_enabled: true
+    protocols:
+      s3: 9000
+      console: 9001
+    endpoints:
+      endpoint: http://minio.aqp-data-services.svc.cluster.local:9000
+      console: http://minio.aqp-data-services.svc.cluster.local:9001
+
+  # --- MLOps (lift-and-shift Phase 5) -------------------------------------
+  - id: mlflow
+    label: MLflow Tracking Server
+    role: mlops
+    workload: deployment
+    app_label: mlflow
+    cluster: mlops.tracking
+    namespace: aqp-mlops
+    port: 5000
+    restartable: true
+    logs_enabled: true
+    endpoints:
+      tracking: http://mlflow.aqp-mlops.svc.cluster.local:5000
+  - id: dagster
+    label: Dagster Webserver
+    role: orchestration
+    workload: deployment
+    app_label: dagster-webserver
+    cluster: mlops.orchestration
+    namespace: aqp-mlops
+    port: 80
+    restartable: true
+    logs_enabled: true
+    endpoints:
+      webserver: http://dagster-dagster-webserver.aqp-mlops.svc.cluster.local
+      graphql: http://dagster-dagster-webserver.aqp-mlops.svc.cluster.local/graphql
+
+  # --- ELT (lift-and-shift Phase 5) ---------------------------------------
+  - id: airbyte
+    label: Airbyte (visual builder + workspace)
+    role: elt
+    workload: deployment
+    app_label: airbyte-server
+    cluster: elt.airbyte
+    namespace: aqp-elt
+    port: 8001
+    restartable: true
+    logs_enabled: true
+    endpoints:
+      ui: http://airbyte-server-svc.aqp-elt.svc.cluster.local:8001
+      api: http://airbyte-server-svc.aqp-elt.svc.cluster.local:8001/api/v1
+
+  # --- Vector + metadata stores (lift-and-shift Phase 5) ------------------
+  - id: chromadb
+    label: ChromaDB (lightweight vector store)
+    role: vector-store
+    workload: deployment
+    app_label: chromadb
+    cluster: data-services
+    namespace: aqp-data-services
+    port: 8000
+    restartable: false
+    logs_enabled: true
+    endpoints:
+      host: http://chromadb.aqp-data-services.svc.cluster.local:8000
+  - id: datahub
+    label: DataHub GMS
+    role: metadata
+    workload: deployment
+    app_label: datahub-datahub-gms
+    cluster: data-services
+    namespace: aqp-data-services
+    port: 8080
+    restartable: true
+    logs_enabled: true
+    endpoints:
+      gms: http://datahub-datahub-gms.aqp-data-services.svc.cluster.local:8080
+
 targets:
   local:
     id: local
@@ -201,6 +553,110 @@ targets:
       - mlflow
       - otel-collector
       - jaeger
+      # Phase 1 of the infra-expansion plan: AQP-owned shared infra services
+      # (declarations only - workload manifests fill in Phase 2 + Phase 5).
+      - kafka
+      - schema-registry
+      - redpanda
+      - redpanda-connect
+      - flink
+      - questdb
+      - polaris
+      - hudi
+      - spark-operator
+      - prometheus
+      - grafana
+      - tempo
+      - loki
+      - phoenix
+      - phoenix-postgres
+      - postgres-shared
+      - redis-shared
+      - minio
+      - dagster
+      - airbyte
+      - datahub
+
+  tower:
+    id: tower
+    label: AQP two-node tower+laptop
+    kind: kubernetes
+    environment: tower
+    cloud_provider: rpi_cluster
+    namespace: aqp
+    adapter_preference:
+      - in_cluster
+      - rpi_cluster
+    terraform:
+      stack_slug: aqp-tower
+      spec_path: configs/terraform/tower.yaml
+      environment_dir: terraform/environments/tower
+      tfvars_path: terraform/environments/tower/terraform.tfvars
+      backend_state_path: data/terraform/state/tower.tfstate
+    cluster:
+      name: aqp-two-node
+      kubeconfig_path: ~/.kube/aqp-tower.config
+      kube_context: ""
+      ingress_class: nginx
+      ingress_host: aqp.fund
+    endpoints:
+      frontend: https://aqp.fund
+      api: https://api.aqp.fund
+      manage: https://manage.aqp.fund
+    images:
+      registry: docker.io/julian0215
+      app_version: dev
+      build_locally: false
+      services:
+        api: aqp-core
+        worker: aqp-worker
+        beat: aqp-beat
+        frontend: aqp-client
+        cp: aqp-cp
+    auth:
+      provider: auth0
+      required: true
+      oidc_issuer: https://aqp-fund.us.auth0.com/
+      audience: https://api.aqp.internal/manage
+      client_id: ZwJvVAYGRj6drndJhpKlvyLv18Jybavz
+      scim_enabled: true
+      secret_refs:
+        client_secret: auth0-client-secret
+        scim_bearer_token_hash: auth0-scim-bearer-token-hash
+    services:
+      - aqp-core
+      - aqp-worker
+      - aqp-beat
+      - aqp-client
+      - aqp-cp
+      - postgres
+      - redis
+      - neo4j
+      - chromadb
+      - mlflow
+      - otel-collector
+      - jaeger
+      - kafka
+      - schema-registry
+      - redpanda
+      - redpanda-connect
+      - flink
+      - questdb
+      - polaris
+      - hudi
+      - spark-operator
+      - prometheus
+      - grafana
+      - tempo
+      - loki
+      - phoenix
+      - phoenix-postgres
+      - postgres-shared
+      - redis-shared
+      - minio
+      - dagster
+      - airbyte
+      - datahub
 
   rpi:
     id: rpi
@@ -260,3 +716,26 @@ targets:
       - mlflow
       - otel-collector
       - jaeger
+      # Phase 1 of the infra-expansion plan: AQP-owned shared infra services
+      # (declarations only - workload manifests fill in Phase 2 + Phase 5).
+      - kafka
+      - schema-registry
+      - redpanda
+      - redpanda-connect
+      - flink
+      - questdb
+      - polaris
+      - hudi
+      - spark-operator
+      - prometheus
+      - grafana
+      - tempo
+      - loki
+      - phoenix
+      - phoenix-postgres
+      - postgres-shared
+      - redis-shared
+      - minio
+      - dagster
+      - airbyte
+      - datahub

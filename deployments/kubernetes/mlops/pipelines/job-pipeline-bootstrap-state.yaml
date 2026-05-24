@@ -1,0 +1,32 @@
+﻿apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pipeline-bootstrap-state
+  namespace: aqp-mlops
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: bootstrap
+          image: postgres:16
+          env:
+            - name: PIPELINE_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: pipeline-sink-credentials
+                  key: PIPELINE_POSTGRES_DSN
+          command:
+            - sh
+            - -c
+            - psql "$PIPELINE_POSTGRES_DSN" -f /sql/bootstrap.sql
+          volumeMounts:
+            - name: bootstrap-sql
+              mountPath: /sql
+      volumes:
+        - name: bootstrap-sql
+          configMap:
+            name: pipeline-bootstrap-sql
+

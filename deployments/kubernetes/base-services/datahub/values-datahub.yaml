@@ -1,0 +1,200 @@
+﻿# =============================================================================
+# DataHub - Helm Values
+# =============================================================================
+# Helm values for datahub/datahub chart.
+# Configures DataHub to use existing PostgreSQL and MinIO, enables Iceberg.
+#
+# Install:
+#   helm install datahub datahub/datahub \
+#     --namespace data-services \
+#     -f values-datahub.yaml
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Global Configuration
+# ---------------------------------------------------------------------------
+global:
+  sql:
+    datasource:
+      host: "postgresql.aqp-data-services.svc.cluster.local:5432"
+      hostForpostgresqlClient: "postgresql.aqp-data-services.svc.cluster.local"
+      port: "5432"
+      url: "jdbc:postgresql://postgresql.aqp-data-services.svc.cluster.local:5432/datahub"
+      driver: "org.postgresql.Driver"
+      username: "datahub"
+      password:
+        secretRef: datahub-postgresql-secrets
+        secretKey: postgres-password
+
+  elasticsearch:
+    host: "elasticsearch-master"
+    port: "9200"
+    skipcheck: "false"
+
+  kafka:
+    bootstrap:
+      server: "prerequisites-kafka:9092"
+    schemaregistry:
+      url: "http://prerequisites-cp-schema-registry:8081"
+
+  graph_service_impl: elasticsearch
+
+  datahub_analytics_enabled: false
+
+# ---------------------------------------------------------------------------
+# DataHub GMS (Generalized Metadata Service)
+# ---------------------------------------------------------------------------
+datahub-gms:
+  enabled: true
+  replicaCount: 1
+
+  service:
+    type: ClusterIP
+
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "1Gi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+
+  nodeSelector:
+    kubernetes.io/arch: amd64
+
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+  extraEnvs:
+    # Iceberg REST catalog support is served by Apache Polaris. DataHub remains
+    # a metadata consumer / lineage publisher rather than the authoritative
+    # Iceberg catalog endpoint.
+    - name: DH_ICEBERG_ENABLED
+      value: "false"
+    - name: DH_ICEBERG_DATA_ROOT
+      value: "s3://iceberg-warehouse/"
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: datahub-minio-secrets
+          key: access-key
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: datahub-minio-secrets
+          key: secret-key
+    - name: AWS_REGION
+      value: "us-east-1"
+    - name: AWS_S3_ENDPOINT
+      value: "http://minio.aqp-data-services.svc.cluster.local:9000"
+    - name: AWS_S3_PATH_STYLE_ACCESS
+      value: "true"
+
+# ---------------------------------------------------------------------------
+# DataHub Frontend
+# ---------------------------------------------------------------------------
+datahub-frontend:
+  enabled: true
+  replicaCount: 1
+
+  service:
+    type: ClusterIP
+    port: 9002
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "512Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+
+  nodeSelector:
+    kubernetes.io/arch: amd64
+
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+  extraEnvs:
+    - name: AUTH_OIDC_ENABLED
+      value: "false"
+
+# ---------------------------------------------------------------------------
+# MAE Consumer (Metadata Audit Event)
+# ---------------------------------------------------------------------------
+datahub-mae-consumer:
+  enabled: true
+  replicaCount: 1
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  nodeSelector:
+    kubernetes.io/arch: amd64
+
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# ---------------------------------------------------------------------------
+# MCE Consumer (Metadata Change Event)
+# ---------------------------------------------------------------------------
+datahub-mce-consumer:
+  enabled: true
+  replicaCount: 1
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  nodeSelector:
+    kubernetes.io/arch: amd64
+
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# ---------------------------------------------------------------------------
+# System Update Job
+# ---------------------------------------------------------------------------
+datahubSystemUpdate:
+  enabled: true
+  nodeSelector:
+    kubernetes.io/arch: amd64
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# ---------------------------------------------------------------------------
+# Setup Jobs -- use system-update instead
+# ---------------------------------------------------------------------------
+elasticsearchSetupJob:
+  enabled: false
+
+mysqlSetupJob:
+  enabled: false
+
+postgresqlSetupJob:
+  enabled: false
+
+# ---------------------------------------------------------------------------
+# Actions Framework -- disabled (requires Acryl Cloud license)
+# ---------------------------------------------------------------------------
+acryl-datahub-actions:
+  enabled: false

@@ -5,7 +5,7 @@ the matching [`/discovery/*`](mdc:aqp/api/routes/discovery.py) REST
 surface + [`data.discovery.*`](mdc:aqp/data/mcp/tools/discovery.py)
 DataMCPTools.
 
-Narrative: [docs/data-discovery.md](mdc:docs/data-discovery.md).
+Narrative: [aqp_docs/data-discovery.md](mdc:aqp_docs/data-discovery.md).
 Phase plan:
 [.cursor/plans/data-self-service-phase-1.plan.md](mdc:.cursor/plans/data-self-service-phase-1.plan.md).
 

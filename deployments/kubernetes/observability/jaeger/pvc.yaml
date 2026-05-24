@@ -1,0 +1,16 @@
+﻿# =============================================================================
+# PersistentVolumeClaim for Jaeger Badger Storage
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jaeger-data
+  namespace: aqp-observability
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi

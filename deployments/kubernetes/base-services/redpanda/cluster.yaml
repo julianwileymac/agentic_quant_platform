@@ -1,0 +1,89 @@
+# Redpanda cluster custom resource (cluster.redpanda.com/v1alpha2).
+# Side-by-side with the existing Strimzi Kafka cluster per the AQP
+# infra-expansion plan (question 2 = side_by_side). Installed via the
+# Redpanda Operator Helm chart; the operator chart itself lives at
+# deployments/kubernetes/base-services/redpanda-operator/ (Phase 4 helm
+# install). Defaults match docs.redpanda.com/current/reference/k-redpanda-helm-spec/.
+#
+# Storage: 3 replicas with hard pod-anti-affinity, NVMe-class
+# StorageClass, retain reclaim policy. Tiered storage offload to MinIO
+# at s3://redpanda-offload/ (configured via redpanda-tiered-storage-secret).
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: Redpanda
+metadata:
+  name: redpanda
+  namespace: aqp-streaming
+  labels:
+    app.kubernetes.io/name: redpanda
+    app.kubernetes.io/component: streaming
+    app.kubernetes.io/part-of: aqp
+spec:
+  chartRef:
+    chartVersion: ""  # operator default; pinned in Phase 4 install script
+  clusterSpec:
+    statefulset:
+      replicas: 3
+      podAntiAffinity:
+        type: hard
+      budget:
+        maxUnavailable: 1
+      sideCars:
+        configWatcher:
+          enabled: true
+    image:
+      repository: docker.redpanda.com/redpandadata/redpanda
+      tag: ""  # operator default; pinned in Phase 4
+    resources:
+      cpu:
+        cores: 4
+      memory:
+        container:
+          max: 10Gi
+        redpanda:
+          memory: 8Gi
+          reserveMemory: 2Gi
+    storage:
+      persistentVolume:
+        enabled: true
+        size: 100Gi
+        storageClass: aqp-nvme  # provisioned by the rpi cluster bootstrap
+      tieredStoragePersistentVolume:
+        enabled: true
+        size: 50Gi
+        storageClass: aqp-ssd
+      tieredConfig:
+        cloud_storage_enabled: true
+        cloud_storage_api_endpoint: http://minio.aqp-data-services.svc.cluster.local:9000
+        cloud_storage_bucket: redpanda-offload
+        cloud_storage_region: aqp
+        cloud_storage_credentials_source: config_file
+        cloud_storage_segment_max_upload_interval_sec: 3600
+        cloud_storage_spillover_manifest_size: 67108864
+    listeners:
+      kafka:
+        port: 9092
+        external:
+          default:
+            advertisedPorts: [31092]
+            tls:
+              enabled: false
+      admin:
+        port: 9644
+      schemaRegistry:
+        port: 8081
+      pandaproxy:
+        port: 8082
+    auth:
+      sasl:
+        enabled: false
+        mechanism: SCRAM-SHA-512
+    monitoring:
+      enabled: true
+    tls:
+      enabled: true
+      certs:
+        default:
+          caEnabled: true
+    enable_memory_locking: true
+    tuning:
+      tune_aio_events: true

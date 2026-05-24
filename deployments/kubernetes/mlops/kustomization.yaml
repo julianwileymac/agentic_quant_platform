@@ -1,0 +1,33 @@
+# AQP-owned ML / lakehouse / orchestration stack. Self-contained:
+# every workload runs under `aqp-mlops`, `aqp-lakehouse`, or `aqp-bots`,
+# lifted from `rpi_kubernetes/kubernetes/mlops/` and
+# `rpi_kubernetes/kubernetes/base-services/mlflow/` during the
+# rpi <-> AQP decoupling.
+#
+# Iceberg remains the canonical lakehouse writer (rule 3); Hudi is
+# additive for upsert-heavy paths only (rule 46).
+#
+# `bots/` is opt-in (it ships an Argo WorkflowTemplate for AQP bot
+# deploys; only meaningful when Argo Workflows is also installed),
+# so apply it explicitly when bot orchestration is needed.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+commonLabels:
+  app.kubernetes.io/part-of: aqp
+  app.kubernetes.io/component: mlops
+  app.kubernetes.io/managed-by: kustomize
+  aqp.internal/canonical-owner: agentic_quant_platform
+
+resources:
+  - spark-operator/
+  - hudi/
+  - argo-workflows/
+  - argo-events/
+  - bentoml/
+  - kserve/
+  - pipelines/
+  - dagster/
+  # MLflow lives in `../base-services/mlflow/` (still in the `aqp-mlops`
+  # namespace; routed through the base-services aggregator).
+  # bots/ is intentionally opt-in: depends on Argo Workflows being installed.

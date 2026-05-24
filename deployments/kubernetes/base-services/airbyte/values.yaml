@@ -1,0 +1,49 @@
+﻿global:
+  edition: community
+  serviceAccountName: airbyte-admin
+
+fullnameOverride: airbyte
+
+webapp:
+  service:
+    type: ClusterIP
+
+server:
+  service:
+    type: ClusterIP
+  extraEnv:
+    - name: AIRBYTE_ROLE
+      value: "server"
+
+worker:
+  extraEnv:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: "http://otel-collector.aqp-observability.svc.cluster.local:4317"
+    - name: OTEL_SERVICE_NAME
+      value: "airbyte-worker"
+    - name: AIRBYTE_STAGING_ROOT
+      value: "s3://aqp-datasets/airbyte"
+
+postgresql:
+  enabled: false
+
+externalDatabase:
+  host: postgresql.aqp-data-services.svc.cluster.local
+  port: 5432
+  database: airbyte
+  user: airbyte
+  existingSecret: airbyte-secrets
+  existingSecretPasswordKey: AIRBYTE_DATABASE_PASSWORD
+
+minio:
+  enabled: false
+
+logs:
+  s3:
+    enabled: true
+    bucket: aqp-datasets
+    bucketRegion: us-east-1
+    endpoint: http://minio.aqp-data-services.svc.cluster.local:9000
+
+ingress:
+  enabled: false

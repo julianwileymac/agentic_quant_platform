@@ -1,0 +1,69 @@
+# =============================================================================
+# In-cluster Helm Job: install or upgrade Airbyte.
+# =============================================================================
+# Jobs are intentionally not referenced by the helm-runner kustomization so
+# `kubectl apply -k kubernetes/` will not re-run the Airbyte install.
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: airbyte-upgrade
+  namespace: helm-runner
+  labels:
+    app.kubernetes.io/component: helm-bootstrap
+    app.kubernetes.io/managed-by: rpi-k8s-platform
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: airbyte-upgrade
+    spec:
+      restartPolicy: Never
+      serviceAccountName: helm-runner
+      containers:
+        - name: helm
+          image: alpine/k8s:1.29.0
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              set -euo pipefail
+              echo "==> Adding airbyte repo"
+              helm repo add airbyte https://airbytehq.github.io/helm-charts/
+              helm repo update airbyte
+
+              echo "==> Upgrading airbyte release in elt namespace"
+              helm upgrade --install airbyte airbyte/airbyte \
+                --namespace elt --create-namespace \
+                --values /etc/helm-values/values-airbyte.yaml \
+                --wait --timeout 20m
+
+              echo "==> Listing pods"
+              kubectl get pods -n elt -l app.kubernetes.io/instance=airbyte
+          volumeMounts:
+            - name: helm-values
+              mountPath: /etc/helm-values
+              readOnly: true
+            - name: helm-cache
+              mountPath: /root/.cache
+            - name: helm-config
+              mountPath: /root/.config
+      volumes:
+        - name: helm-values
+          configMap:
+            name: helm-runner-values
+        - name: helm-cache
+          emptyDir: {}
+        - name: helm-config
+          emptyDir: {}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["amd64"]

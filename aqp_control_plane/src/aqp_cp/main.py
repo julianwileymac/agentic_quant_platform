@@ -91,6 +91,7 @@ def _register_root(app: FastAPI) -> None:
             "version": "0.1.0",
             "provider": settings.provider,
             "auth_enabled": settings.auth_enabled,
+            "legacy_fallback_enabled": settings.legacy_fallback,
             "endpoints": {
                 "health": "/manage/health",
                 "openapi": "/manage/openapi.json",
@@ -101,6 +102,12 @@ def _register_root(app: FastAPI) -> None:
                 "config": "/manage/config/{service_id}",
                 "workloads_halt": "/manage/workloads/halt",
                 "workloads_halt_status": "/manage/workloads/halt/status",
+                "topology": "/manage/topology",
+                "streaming": "/manage/streaming/clusters",
+                "observability": "/manage/observability/prometheus/query",
+                "lakehouse": "/manage/lakehouse/clusters",
+                "timeseries": "/manage/timeseries/questdb/status",
+                "data_plane": "/manage/data-plane/services",
             },
         }
 
@@ -131,6 +138,15 @@ def _register_routers(app: FastAPI) -> None:
         ("aqp_cp.api.routers.config", "router"),
         ("aqp_cp.api.routers.secrets", "router"),
         ("aqp_cp.api.routers.workloads", "router"),
+        ("aqp_cp.api.routers.topology", "router"),
+        # Phase 3 of the AQP infra-expansion plan: domain-scoped admin
+        # routers for the new infra services. Read-only first; Phase 4
+        # adds the mutation surfaces.
+        ("aqp_cp.api.routers.streaming", "router"),
+        ("aqp_cp.api.routers.observability", "router"),
+        ("aqp_cp.api.routers.lakehouse", "router"),
+        ("aqp_cp.api.routers.timeseries", "router"),
+        ("aqp_cp.api.routers.data_plane", "router"),
     ):
         try:
             module = __import__(module_name, fromlist=[attr])

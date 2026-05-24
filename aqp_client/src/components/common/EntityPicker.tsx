@@ -85,6 +85,13 @@ const PLACEHOLDER_LABEL: Record<CacheCategory, string> = {
   k8s_clusters: "Select Kubernetes cluster...",
   k8s_namespaces: "Select Kubernetes namespace...",
   entra_tenants: "Select Entra tenant link...",
+  // Phase 3 of the AQP infra-expansion plan
+  streaming_clusters: "Select streaming cluster (Strimzi / Redpanda)...",
+  timeseries_databases: "Select time-series database (QuestDB)...",
+  phoenix_projects: "Select Phoenix project...",
+  grafana_dashboards: "Select Grafana dashboard...",
+  lakehouse_tables: "Select lakehouse table (Iceberg / Hudi)...",
+  topology_services: "Select topology service...",
 };
 
 /**

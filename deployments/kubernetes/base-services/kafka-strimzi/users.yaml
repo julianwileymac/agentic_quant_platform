@@ -1,0 +1,274 @@
+﻿# =============================================================================
+# Kafka Users (Strimzi) with SCRAM-SHA-512 + per-topic ACLs
+# =============================================================================
+# These users drive the scram listener on port 9094. Strimzi's User Operator
+# creates a Kubernetes Secret named after each KafkaUser with the generated
+# password, which the management API and client templates consume.
+#
+# Role matrix:
+#   producer-market        produce to market.* topics + deadletter
+#   producer-features      produce to features.* topics (Flink jobs)
+#   consumer-flink         consume market.* + features.* (all), commit
+#   consumer-management    read-only consume for the management API UI
+#   connect-sinks          read features.* for Kafka Connect sink connectors
+#   admin-sdk              full admin for the Python SDK (super-user)
+#   bridge-gateway         produce/consume for KafkaBridge HTTP gateway
+# =============================================================================
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: producer-market
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    role: producer
+    scope: market
+spec:
+  authentication:
+    type: scram-sha-512
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: market.
+          patternType: prefix
+        operations: [Describe, Write, Create]
+        host: "*"
+      - resource:
+          type: cluster
+        operations: [DescribeConfigs]
+        host: "*"
+      - resource:
+          type: topic
+          name: market.deadletter.v1
+        operations: [Describe, Write]
+        host: "*"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: producer-features
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    role: producer
+    scope: features
+spec:
+  authentication:
+    type: scram-sha-512
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: features.
+          patternType: prefix
+        operations: [Describe, Write, Create]
+        host: "*"
+      - resource:
+          type: cluster
+        operations: [DescribeConfigs]
+        host: "*"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: consumer-flink
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    role: consumer
+    scope: flink
+spec:
+  authentication:
+    type: scram-sha-512
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: market.
+          patternType: prefix
+        operations: [Describe, Read]
+        host: "*"
+      - resource:
+          type: topic
+          name: features.
+          patternType: prefix
+        operations: [Describe, Read, Write, Create]
+        host: "*"
+      - resource:
+          type: group
+          name: flink-
+          patternType: prefix
+        operations: [Describe, Read]
+        host: "*"
+      - resource:
+          type: transactionalId
+          name: flink-
+          patternType: prefix
+        operations: [Describe, Write]
+        host: "*"
+      - resource:
+          type: cluster
+        operations: [DescribeConfigs, IdempotentWrite]
+        host: "*"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: consumer-management
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    role: consumer
+    scope: management
+spec:
+  authentication:
+    type: scram-sha-512
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: ""
+          patternType: literal
+        operations: [Describe]
+        host: "*"
+      - resource:
+          type: topic
+          name: market.
+          patternType: prefix
+        operations: [Describe, Read]
+        host: "*"
+      - resource:
+          type: topic
+          name: features.
+          patternType: prefix
+        operations: [Describe, Read]
+        host: "*"
+      - resource:
+          type: group
+          name: management-
+          patternType: prefix
+        operations: [Describe, Read]
+        host: "*"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: connect-sinks
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    role: connector
+    scope: sinks
+spec:
+  authentication:
+    type: scram-sha-512
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: features.
+          patternType: prefix
+        operations: [Describe, Read]
+        host: "*"
+      - resource:
+          type: topic
+          name: connect-
+          patternType: prefix
+        operations: [Describe, Read, Write, Create]
+        host: "*"
+      - resource:
+          type: group
+          name: connect-
+          patternType: prefix
+        operations: [Describe, Read]
+        host: "*"
+      - resource:
+          type: cluster
+        operations: [DescribeConfigs]
+        host: "*"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: bridge-gateway
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    role: gateway
+    scope: bridge
+spec:
+  authentication:
+    type: scram-sha-512
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: market.
+          patternType: prefix
+        operations: [Describe, Read, Write]
+        host: "*"
+      - resource:
+          type: topic
+          name: features.
+          patternType: prefix
+        operations: [Describe, Read, Write]
+        host: "*"
+      - resource:
+          type: group
+          name: bridge-
+          patternType: prefix
+        operations: [Describe, Read]
+        host: "*"
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: admin-sdk
+  namespace: aqp-streaming
+  labels:
+    strimzi.io/cluster: trading-kafka
+    role: admin
+    scope: sdk
+spec:
+  authentication:
+    type: scram-sha-512
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: ""
+          patternType: literal
+        operations: [All]
+        host: "*"
+      - resource:
+          type: group
+          name: ""
+          patternType: literal
+        operations: [All]
+        host: "*"
+      - resource:
+          type: cluster
+        operations: [All]
+        host: "*"
+      - resource:
+          type: transactionalId
+          name: ""
+          patternType: literal
+        operations: [All]
+        host: "*"

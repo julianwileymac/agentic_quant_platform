@@ -40,15 +40,15 @@ export default function DocsPage() {
       </Row>
       <Card title="Project docs" style={{ marginTop: 16 }}>
         <Paragraph>
-          The repository ships canonical docs under <code>docs/</code>. Highlights worth bookmarking:
+          The repository ships canonical docs under <code>aqp_docs/</code>. Highlights worth bookmarking:
         </Paragraph>
         <ul>
-          <li><code>docs/data-plane.md</code> — sources, identifier graph, FRED/SEC/GDelt</li>
-          <li><code>docs/backtest-engines.md</code> — event vs vectorbt vs backtesting.py</li>
-          <li><code>docs/ml-framework.md</code> — Qlib-style ML stack</li>
-          <li><code>docs/factor-research.md</code> — factor evaluation + Alphalens-style charts</li>
-          <li><code>docs/strategy-lifecycle.md</code> — versioned strategies + diff</li>
-          <li><code>docs/observability.md</code> — OpenTelemetry wiring</li>
+          <li><code>aqp_docs/data-plane.md</code> — sources, identifier graph, FRED/SEC/GDelt</li>
+          <li><code>aqp_docs/backtest-engines.md</code> — event vs vectorbt vs backtesting.py</li>
+          <li><code>aqp_docs/ml-framework.md</code> — Qlib-style ML stack</li>
+          <li><code>aqp_docs/factor-research.md</code> — factor evaluation + Alphalens-style charts</li>
+          <li><code>aqp_docs/strategy-lifecycle.md</code> — versioned strategies + diff</li>
+          <li><code>aqp_docs/observability.md</code> — OpenTelemetry wiring</li>
         </ul>
       </Card>
     </PageContainer>

@@ -73,4 +73,4 @@ Management Engine (Phase D of the `aqp_management_engine` plan).
   [`KubernetesAdapter`](mdc:aqp/kubernetes/protocol.py) — the
   pod-level exec / log / archive ops MUST keep working.
 
-Canonical doc: [docs/management-engine.md](mdc:docs/management-engine.md).
+Canonical doc: [aqp_docs/management-engine.md](mdc:aqp_docs/management-engine.md).

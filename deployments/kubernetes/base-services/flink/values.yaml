@@ -1,0 +1,72 @@
+# =============================================================================
+# Flink Kubernetes Operator - Helm Values
+# =============================================================================
+# Helm install command:
+#   helm repo add flink-operator-repo \
+#     https://downloads.apache.org/flink/flink-kubernetes-operator-1.14.0/
+#   helm install flink-kubernetes-operator \
+#     flink-operator-repo/flink-kubernetes-operator \
+#     --namespace flink --create-namespace \
+#     -f kubernetes/base-services/flink/values.yaml
+# =============================================================================
+
+image:
+  repository: ghcr.io/apache/flink-kubernetes-operator
+  pullPolicy: IfNotPresent
+  tag: "1.14.0"
+
+replicas: 1
+strategy:
+  type: Recreate
+
+watchNamespaces:
+  - flink
+
+rbac:
+  create: true
+  nodesRule:
+    create: false
+
+operatorServiceAccount:
+  create: true
+  name: "flink-operator"
+
+jobServiceAccount:
+  create: true
+  name: "flink"
+
+operatorPod:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: "true"
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+  env:
+    - name: FLINK_OPERATOR_WATCH_NAMESPACES
+      value: "flink"
+
+defaultConfiguration:
+  create: true
+  flink-conf.yaml: |
+    kubernetes.operator.metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+    kubernetes.operator.metrics.reporter.prom.port: "9999"
+    kubernetes.operator.reconcile.interval: 60s
+    kubernetes.operator.retry.initial.interval: 5s
+    kubernetes.operator.retry.max.attempts: 3
+  log4j-operator.properties: |
+    rootLogger.level = INFO
+    rootLogger.appenderRef.console.ref = ConsoleAppender
+    appender.console.name = ConsoleAppender
+    appender.console.type = Console
+    appender.console.layout.type = PatternLayout
+    appender.console.layout.pattern = %d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%t] %c{1} - %msg%n
+    logger.operator.name = org.apache.flink.kubernetes.operator
+    logger.operator.level = DEBUG

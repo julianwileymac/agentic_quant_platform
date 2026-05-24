@@ -1,0 +1,44 @@
+﻿# =============================================================================
+# Flink Services
+# =============================================================================
+# REST API service (Flink Web UI) and metrics service for Prometheus scraping.
+# The Flink Operator creates internal services for JM/TM communication;
+# these are additional services for external access and monitoring.
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-trading-rest
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+    component: rest
+spec:
+  type: ClusterIP
+  selector:
+    app: flink-trading-session
+    component: jobmanager
+  ports:
+    - name: rest
+      port: 8081
+      targetPort: 8081
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-trading-metrics
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+    component: metrics
+spec:
+  type: ClusterIP
+  selector:
+    app: flink-trading-session
+  ports:
+    - name: metrics
+      port: 9249
+      targetPort: 9249
+      protocol: TCP

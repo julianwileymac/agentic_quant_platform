@@ -1,0 +1,31 @@
+﻿apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-data-services
+
+resources:
+  - secrets.yaml
+  - secret-ingestion-secrets.yaml
+  - ingress.yaml
+  - configmap-ingestion-settings.yaml
+  - configmap-ingestion-recipes.yaml
+  - configmap-metadata-bridge.yaml
+  - rbac-argo-datahub-ingestion.yaml
+  - cronjob-ingest-postgres.yaml
+  - cronjob-ingest-minio-s3.yaml
+  - cronjob-ingest-mlflow.yaml
+  - cronjob-ingest-iceberg.yaml
+  - cronjob-ingest-aqp-iceberg.yaml
+  - cronjob-ingest-aqp-mlflow.yaml
+  - cronjob-ingest-kafka.yaml
+  - cronjob-ingest-grafana.yaml
+  - cronjob-ingest-aqp-openapi.yaml
+  - cronjob-ingest-airbyte.yaml
+  - cronjob-metadata-bridge.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: datahub
+      app.kubernetes.io/component: data-catalog
+      app.kubernetes.io/part-of: rpi-k8s-platform

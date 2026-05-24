@@ -1,0 +1,36 @@
+﻿# =============================================================================
+# FlinkSessionJob - Scanner Alert Correlator
+# =============================================================================
+# Joins IBKR market.scanner.v1 rows with recent bars from market.bar.v1
+# and emits alignment-based trading signals into features.signals.v1.
+#
+# Job source: rpi_kubernetes/flink-jobs/jobs/scanner_alert.py
+# =============================================================================
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkSessionJob
+metadata:
+  name: scanner-alert
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+    job: scanner-alert
+    pipeline-stage: signal
+spec:
+  deploymentName: flink-trading-session
+  job:
+    jarURI: s3://flink-jobs/scanner_alert.py
+    entryClass: org.apache.flink.client.python.PythonDriver
+    args:
+      - "--python"
+      - "/opt/aqp-flink-jobs/jobs/scanner_alert.py"
+      - "--pyFiles"
+      - "/opt/aqp-flink-jobs/jobs"
+      - "--kafka.bootstrap.servers"
+      - "trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9092"
+      - "--kafka.group.id"
+      - "flink-scanner-alert"
+      - "--kafka.sink.topic"
+      - "features.signals.v1"
+    parallelism: 1
+    upgradeMode: savepoint
+    state: suspended

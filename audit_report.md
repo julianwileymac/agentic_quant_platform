@@ -1,6 +1,6 @@
 > Archived context note: point-in-time audit output retained for traceability.  
 > Use current rules and runbooks for active decisions. See
-> `docs/archive/README.md`.
+> `aqp_docs/archive/README.md`.
 
 # AQP Metadata & Lineage Consolidation Hard-Rules Audit
 

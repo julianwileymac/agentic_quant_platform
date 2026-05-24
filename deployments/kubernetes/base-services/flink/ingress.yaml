@@ -1,0 +1,30 @@
+﻿# =============================================================================
+# Flink Ingress
+# =============================================================================
+# Exposes the Flink Web UI at flink.local via ingress-nginx.
+# =============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flink-ui
+  namespace: aqp-streaming
+  labels:
+    app: flink-trading-session
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: flink.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: flink-trading-rest
+                port:
+                  number: 8081

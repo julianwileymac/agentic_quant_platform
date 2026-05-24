@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# AQP bot orchestration scaffold (companion to aqp.bots.deploy.KubernetesTarget).
+#
+# - workflowtemplate-bot-deploy.yaml
+#                           - Argo WorkflowTemplate that renders the
+#                             manifest from inside the cluster (using
+#                             the AQP image) and applies it via kubectl.
+#
+# The aqp-bots namespace is provisioned centrally by
+# `deployments/kubernetes/base/namespaces-shared.yaml`.
+#
+# This kustomization is intentionally NOT wired into the mlops aggregator
+# by default — bot orchestration is opt-in. Apply explicitly:
+#
+#   kubectl apply -k deployments/kubernetes/mlops/bots/
+
+namespace: aqp-bots
+
+resources:
+  - workflowtemplate-bot-deploy.yaml

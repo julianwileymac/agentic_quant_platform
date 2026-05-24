@@ -11,9 +11,9 @@ Scoped rule for the Phase 2 (migration 0041) unification of the legacy
 :class:`aqp.core.domain.orders.DomainOrder` hierarchy.
 
 Narrative walkthrough lives in
-[docs/order-types.md](mdc:docs/order-types.md),
-[docs/contingency-graphs.md](mdc:docs/contingency-graphs.md), and
-[docs/execution-paths.md](mdc:docs/execution-paths.md).
+[aqp_docs/order-types.md](mdc:aqp_docs/order-types.md),
+[aqp_docs/contingency-graphs.md](mdc:aqp_docs/contingency-graphs.md), and
+[aqp_docs/execution-paths.md](mdc:aqp_docs/execution-paths.md).
 
 ## Hard rules
 

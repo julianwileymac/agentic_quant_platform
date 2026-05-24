@@ -1,0 +1,27 @@
+﻿apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: av-universe-sync-hourly
+  namespace: aqp-mlops
+  labels:
+    app.kubernetes.io/name: alphavantage-universe-sync
+    data-provider: alphavantage
+spec:
+  # Hourly roll-up of LISTING_STATUS + IPO_CALENDAR into MinIO av-raw.
+  schedule: "15 * * * *"
+  timezone: "UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  suspend: false
+  startingDeadlineSeconds: 300
+  workflowSpec:
+    workflowTemplateRef:
+      name: av-universe-sync
+    serviceAccountName: argo-workflow
+    arguments:
+      parameters:
+        - name: state
+          value: "active"
+        - name: target_bucket
+          value: "av-raw"

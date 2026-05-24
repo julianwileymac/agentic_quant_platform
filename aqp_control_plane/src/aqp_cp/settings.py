@@ -25,6 +25,15 @@ class ControlPlaneSettings(BaseSettings):
             "'docker_compose', 'kubernetes', 'aws', 'azure', 'gcp'."
         ),
     )
+    topology_target_id: str = Field(
+        default="",
+        alias="AQP_CP_TOPOLOGY_TARGET_ID",
+        description=(
+            "Optional explicit deployment target id from "
+            "configs/deployment/topology.yaml. When set, this overrides "
+            "provider-based target inference."
+        ),
+    )
 
     # --- Auth ------------------------------------------------------------
     auth_required: bool = Field(
@@ -118,6 +127,21 @@ class ControlPlaneSettings(BaseSettings):
         description=(
             "Optional path for a JSONL audit log written on top of structured "
             "logging. Empty disables file-based audit (relies on stdout)."
+        ),
+    )
+
+    # --- Legacy rpi-k8s-management fallback ------------------------------
+    legacy_fallback: bool = Field(
+        default=False,
+        alias="AQP_CONTROL_PLANE_LEGACY_FALLBACK",
+        description=(
+            "Emergency rollback flag for the deprecated rpi-k8s-management "
+            "API. Default False - AQP is decoupled from rpi_kubernetes; "
+            "the canonical surface is /manage/streaming/*, "
+            "/manage/observability/*, /manage/lakehouse/*, "
+            "/manage/timeseries/*, and /manage/data-plane/*. Only set True "
+            "to re-enable the passthrough to the v1-final image pinned in "
+            "rpi_kubernetes/kubernetes/legacy-management/ during a rollback."
         ),
     )
 

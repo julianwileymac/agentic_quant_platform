@@ -1,0 +1,28 @@
+﻿apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: mlops-pipelines
+
+namespace: aqp-mlops
+
+resources:
+  - configmap-pipeline-settings.yaml
+  - configmap-pipeline-sources.yaml
+  - configmap-pipeline-bootstrap-sql.yaml
+  - secret-pipeline-source-credentials.yaml
+  - secret-pipeline-sink-credentials.yaml
+  - job-pipeline-bootstrap-state.yaml
+  - workflowtemplate-raw-ingest.yaml
+  - cronworkflow-raw-ingest-hourly.yaml
+  - workflowtemplate-heavy-transform.yaml
+  - workflowtemplate-vector-sync.yaml
+  - workflowtemplate-document-ingest.yaml
+  - workflowtemplate-graphrag-build.yaml
+  - workflowtemplate-cdc-sync.yaml
+  - cronworkflow-cdc-sync-hourly.yaml
+  - workflowtemplate-datahub-ingestion.yaml
+  - cronworkflow-datahub-ingestion-daily.yaml
+  - rbac-dagster-argo.yaml
+  - alphavantage/
+
