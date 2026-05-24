@@ -1,6 +1,23 @@
 # Bots
 
 > The smallest self-contained, deployable unit on AQP.
+>
+> **QuantBot Platform v0.2.0** layered an enterprise-grade Kubernetes
+> control plane on top of the legacy `BotRuntime` path without breaking
+> any existing bots. See the new ADRs:
+>
+> - [ADR 006 — QuantBot Operator Pattern](architecture/decisions/006-quantbot-operator-pattern.md)
+> - [ADR 007 — QuantBot Latency Classes](architecture/decisions/007-quantbot-latency-classes.md)
+> - [ADR 008 — Bot Event Sourcing](architecture/decisions/008-quantbot-event-sourcing.md)
+> - [ADR 009 — RTS 6 / SEC 15c3-5 Conformance](architecture/decisions/009-quantbot-rts6-conformance.md)
+> - [ADR 010 — Canary PnL Gates](architecture/decisions/010-quantbot-canary-pnl-gates.md)
+>
+> Runbooks:
+>
+> - [HFT Node Onboarding](operations/hft-node-onboarding.md)
+> - [Bot Canary Rollout Playbook](operations/bot-canary-rollout-playbook.md)
+> - [RTS 6 Validation Report Generation](operations/rts6-validation-report-generation.md)
+> - [Kill Switch Incident Response](operations/kill-switch-incident-response.md)
 
 A **Bot** aggregates everything required to research, evaluate, and
 deploy an algorithmic trading automation:
