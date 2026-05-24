@@ -1,0 +1,9 @@
+# AQP rate-limit policy template — FRED.
+
+policies:
+  - service: fred.series
+    tier: free
+    capacity: 120
+    refill_rate: 2.0           # 120 reqs/min
+    refill_interval_ms: 1000
+    window_ms: 60000

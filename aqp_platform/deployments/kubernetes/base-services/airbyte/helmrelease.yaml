@@ -1,0 +1,97 @@
+---
+# AQP Airbyte HelmRelease (Phase 1 — plan section 5).
+#
+# Layers on top of the existing aqp_platform/deployments/kubernetes/base-services/airbyte/
+# kustomization that already ships the secret + ingress overlays.
+# Reconciled by Flux v2 (HelmController). Operators without Flux can
+# render this to a static manifest with `helm template` and apply
+# directly.
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: HelmRepository
+metadata:
+  name: airbyte
+  namespace: aqp-elt
+spec:
+  interval: 12h
+  url: https://airbytehq.github.io/helm-charts
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta2
+kind: HelmRelease
+metadata:
+  name: airbyte
+  namespace: aqp-elt
+spec:
+  interval: 30m
+  install:
+    timeout: 20m
+    createNamespace: false
+  upgrade:
+    timeout: 20m
+    cleanupOnFail: true
+  chart:
+    spec:
+      chart: airbyte
+      sourceRef:
+        kind: HelmRepository
+        name: airbyte
+      version: ">=1.6.0 <2.0.0"
+  values:
+    global:
+      edition: community
+      database:
+        # Shared aqp-data-services Postgres (per existing AQP topology
+        # contract in aqp_platform/configs/deployment/topology.yaml).
+        host: postgresql.aqp-data-services.svc.cluster.local
+        port: 5432
+        database: airbyte
+        secretName: airbyte-secrets
+      storage:
+        # Shared aqp-data-services MinIO bucket aqp-datasets/airbyte.
+        type: s3
+        bucket:
+          log: aqp-datasets
+          state: aqp-datasets
+          workloadOutput: aqp-datasets
+        secretName: airbyte-secrets
+      jobs:
+        # Mount the AQP rate-limit forward proxy on every worker pod
+        # so all outbound vendor HTTP calls are metered against the
+        # caller's (user_id, service, key_id) bucket. The Envoy
+        # service runs in aqp-system.
+        kube:
+          env:
+            - name: HTTPS_PROXY
+              value: "http://rl-proxy.aqp-system.svc.cluster.local:8080"
+            - name: HTTP_PROXY
+              value: "http://rl-proxy.aqp-system.svc.cluster.local:8080"
+            - name: NO_PROXY
+              value: ".aqp-elt.svc,.aqp-data-services.svc,.aqp-system.svc,127.0.0.1,localhost"
+    server:
+      replicaCount: 2
+      env:
+        - name: HTTPS_PROXY
+          value: "http://rl-proxy.aqp-system.svc.cluster.local:8080"
+    worker:
+      replicaCount: 4
+      env:
+        - name: HTTPS_PROXY
+          value: "http://rl-proxy.aqp-system.svc.cluster.local:8080"
+      autoscaling:
+        # KEDA scales worker pods on queue depth; the Phase 1 default
+        # is 4-16 pods per worker deployment.
+        enabled: true
+        minReplicas: 4
+        maxReplicas: 16
+    postgresql:
+      enabled: false   # we use the shared aqp-data-services Postgres
+    minio:
+      enabled: false   # we use the shared aqp-data-services MinIO
+    temporal:
+      replicaCount: 2
+    connector-builder-server:
+      # The visual builder lives behind the AQP Vite UI; the Airbyte
+      # connector-builder-server is enabled so the builder can run
+      # `streams_infer` previews against live endpoints.
+      enabled: true
+    webapp:
+      replicaCount: 1

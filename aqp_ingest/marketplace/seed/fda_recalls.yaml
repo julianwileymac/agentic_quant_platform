@@ -1,0 +1,16 @@
+slug: fda-recalls
+display_name: openFDA — Drug Recalls
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: fda.recalls
+default_sync_mode: incremental_append
+doc_url: https://open.fda.gov/apis/drug/enforcement/
+spec:
+  base_url: https://api.fda.gov
+  endpoint: /drug/enforcement.json
+  auth:
+    kind: none
+  primary_key: ["recall_number"]
+  cursor_field: report_date
+extras:
+  bronze_namespace: aqp_bronze_airbyte_fda_recalls

@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  generateName: aqp-kernel-py311-cpu-
+  labels:
+    app.kubernetes.io/name: aqp-kernel
+    app.kubernetes.io/component: kernel
+    app.kubernetes.io/part-of: aqp-kernels
+    aqp.io/stack: py311-cpu
+spec:
+  restartPolicy: Never
+  serviceAccountName: aqp-kernel
+  containers:
+    - name: kernel
+      image: ghcr.io/aqp/quant-research:py311-cpu
+      imagePullPolicy: IfNotPresent
+      resources:
+        requests:
+          cpu: '2'
+          memory: 8Gi
+        limits:
+          cpu: '4'
+          memory: 16Gi
+      env:
+        - name: HTTPS_PROXY
+          value: http://rl-proxy.aqp-system.svc.cluster.local:8080
+        - name: HTTP_PROXY
+          value: http://rl-proxy.aqp-system.svc.cluster.local:8080
+        - name: AQP_KERNEL_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+      volumeMounts:
+        - name: secret-broker
+          mountPath: /var/run
+    - name: secret-broker
+      image: ghcr.io/aqp/secret-broker:0.1.0
+      env:
+        - name: AQP_USER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['aqp.io/user-id']
+      volumeMounts:
+        - name: secret-broker
+          mountPath: /var/run
+      securityContext:
+        runAsUser: 65532
+        runAsGroup: 65532
+        readOnlyRootFilesystem: true
+  volumes:
+    - name: secret-broker
+      emptyDir: {}

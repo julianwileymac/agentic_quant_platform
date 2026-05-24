@@ -1,0 +1,16 @@
+slug: iex-cloud-snapshots
+display_name: IEX Cloud — Quote Snapshots
+kind: python_cdk
+vendor_tier: free
+rate_limit_class: iex.snapshots
+default_sync_mode: full_refresh_per_call
+doc_url: https://iexcloud.io/docs/api/#quote
+spec:
+  connector_module: aqp_ingest.connectors.iex.snapshots
+  connector_class: IEXCloudSnapshotsStream
+  primary_key: ["symbol", "snapshot_at"]
+  cursor_field: snapshot_at
+  required_params:
+    - symbols
+extras:
+  bronze_namespace: aqp_bronze_airbyte_iex_snapshots

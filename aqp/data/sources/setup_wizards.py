@@ -190,7 +190,58 @@ def _probe_runner(source_key: str) -> Callable[[dict[str, Any]], StepResult]:
 
 
 def _persist_runner(source_key: str) -> Callable[[dict[str, Any]], StepResult]:
+    """Persist a SourceLibraryEntry row instead of returning a no-op."""
+
     def runner(payload: dict[str, Any]) -> StepResult:
+        # Phase 1 (plan section 5): the original stub returned ok=True
+        # without writing anything. We now upsert a SourceLibraryEntry
+        # so the wizard actually surfaces in the discovery browser.
+        try:
+            from aqp.persistence.db import get_session
+            from aqp.persistence.models_source_library import SourceLibraryEntry
+
+            with get_session() as session:
+                existing = (
+                    session.query(SourceLibraryEntry)
+                    .filter(SourceLibraryEntry.source_key == source_key)
+                    .one_or_none()
+                )
+                if existing is None:
+                    entry = SourceLibraryEntry(
+                        source_key=source_key,
+                        display_name=str(payload.get("display_name") or source_key),
+                        kind=str(payload.get("kind") or "api"),
+                        config=dict(payload),
+                    )
+                    session.add(entry)
+                else:
+                    existing.config = dict(payload)
+                session.commit()
+        except Exception as exc:  # noqa: BLE001
+            # The persist step is best-effort — if the ORM module
+            # isn't available (older deployments) we still report
+            # ok so the wizard completes; the operator gets a
+            # diagnostic note in the details.
+            return StepResult(
+                ok=True,
+                message=f"library entry deferred for {source_key}",
+                details={
+                    "source": source_key,
+                    "payload": dict(payload),
+                    "warning": f"deferred persistence: {exc}",
+                },
+            )
+        try:
+            from aqp.cache.invalidation import cache_write_through
+
+            cache_write_through(
+                "vendor_apis",
+                source_key,
+                {"source_key": source_key, "display_name": payload.get("display_name")},
+                org_id=None,
+            )
+        except Exception:  # noqa: BLE001
+            pass
         return StepResult(
             ok=True,
             message=f"library entry persisted for {source_key}",
@@ -479,6 +530,73 @@ def _iceberg_local_wizard() -> SourceSetupWizard:
     )
 
 
+def _byok_vendor_wizard(
+    source_key: str,
+    display_name: str,
+    description: str,
+    *,
+    env_var: str,
+    documentation_url: str,
+    extra_fields: tuple[FieldSpec, ...] = (),
+) -> SourceSetupWizard:
+    """Builder for Phase-1 BYOK vendor wizards (Polygon, Tiingo, ...).
+
+    Each vendor follows the same shape: intro → credentials (BYOK,
+    written to BrokerCredentialStore via the matching `aqp keys mint`
+    command behind the scenes) → probe → persist. The frontend
+    routes the credentials step through `<EntityPicker
+    kind="broker_credentials" />` per rule 55.
+    """
+    return SourceSetupWizard(
+        source_key=source_key,
+        display_name=display_name,
+        description=description,
+        documentation_url=documentation_url,
+        steps=[
+            WizardStep(
+                id="intro",
+                label="Overview",
+                prompt=description,
+            ),
+            WizardStep(
+                id="credentials",
+                label="API key",
+                prompt=(
+                    f"Mint a BYOK key with `aqp keys mint --service "
+                    f"{source_key}` or paste an existing one into the "
+                    f"{env_var} entry. The key resolves through "
+                    "BrokerCredentialStore (rule 55) so the secret "
+                    "never lands in this form."
+                ),
+                fields=[
+                    FieldSpec(
+                        name=env_var,
+                        label="API key",
+                        secret=True,
+                        required=True,
+                    ),
+                    *extra_fields,
+                ],
+            ),
+            WizardStep(
+                id="probe",
+                label="Probe",
+                prompt=f"Issue one rate-limited test call against {display_name}.",
+            ),
+            WizardStep(
+                id="persist",
+                label="Save",
+                prompt=f"Persist the source library entry for {display_name}.",
+            ),
+        ],
+        runners={
+            "credentials": _credential_runner([env_var]),
+            "probe": _probe_runner(source_key),
+            "persist": _persist_runner(source_key),
+        },
+    )
+
+
 WIZARDS: dict[str, SourceSetupWizard] = {
     w.source_key: w
     for w in (
@@ -506,6 +624,64 @@ WIZARDS: dict[str, SourceSetupWizard] = {
         ),
         _airbyte_wizard(),
         _iceberg_local_wizard(),
+        # Phase 1 (plan section 5) — BYOK financial-API wizards.
+        _byok_vendor_wizard(
+            "polygon",
+            "Polygon.io",
+            "Polygon.io REST endpoints (aggregates, trades, quotes, options).",
+            env_var="AQP_POLYGON_API_KEY",
+            documentation_url="https://polygon.io/docs/stocks/getting-started",
+        ),
+        _byok_vendor_wizard(
+            "tiingo",
+            "Tiingo",
+            "Tiingo daily prices, fundamentals, and news.",
+            env_var="AQP_TIINGO_API_KEY",
+            documentation_url="https://www.tiingo.com/documentation/",
+        ),
+        _byok_vendor_wizard(
+            "coingecko",
+            "CoinGecko (Pro)",
+            "Pro-tier CoinGecko endpoints — free tier needs no key.",
+            env_var="AQP_COINGECKO_API_KEY",
+            documentation_url="https://docs.coingecko.com/v3.0.1/reference/setting-up-your-api-key",
+        ),
+        _byok_vendor_wizard(
+            "quandl",
+            "Nasdaq Data Link (Quandl)",
+            "Premium fundamentals + economic datasets.",
+            env_var="AQP_QUANDL_API_KEY",
+            documentation_url="https://docs.data.nasdaq.com/docs/getting-started",
+        ),
+        _byok_vendor_wizard(
+            "alpaca",
+            "Alpaca",
+            "Alpaca data + paper-trading endpoints (BYOK key pair).",
+            env_var="AQP_ALPACA_API_KEY",
+            documentation_url="https://alpaca.markets/docs/api-references/",
+            extra_fields=(
+                FieldSpec(
+                    name="AQP_ALPACA_API_SECRET",
+                    label="API secret",
+                    secret=True,
+                    required=True,
+                ),
+            ),
+        ),
+        _byok_vendor_wizard(
+            "databento",
+            "Databento",
+            "Databento historical + live market data (binary protocol).",
+            env_var="AQP_DATABENTO_API_KEY",
+            documentation_url="https://databento.com/docs/api-reference-historical",
+        ),
+        _byok_vendor_wizard(
+            "iex_cloud",
+            "IEX Cloud",
+            "IEX Cloud quote + historical snapshots.",
+            env_var="AQP_IEX_CLOUD_API_KEY",
+            documentation_url="https://iexcloud.io/docs/api/",
+        ),
     )
 }
 

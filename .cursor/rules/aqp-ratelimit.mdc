@@ -1,0 +1,80 @@
+---
+description: Rate-limit subsystem boundary. Owns IngestionRateLimitStrategy ABC, Redis Lua token bucket, Go RLS service, Envoy descriptor filter, replay cache, and data.ratelimit.* MCP tools.
+globs:
+  - "aqp_ratelimit/**"
+  - "aqp/data/mcp/tools/ratelimit.py"
+  - "aqp/api/routes/ratelimit.py"
+  - "aqp/persistence/models_ratelimit.py"
+  - "tests/ratelimit/**"
+alwaysApply: false
+---
+
+# AQP Rate-Limit
+
+- [aqp_ratelimit/](mdc:aqp_ratelimit/) owns the per-(user, service,
+  key_id) rate-limit accounting subsystem: the
+  [`IngestionRateLimitStrategy`](mdc:aqp_ratelimit/src/aqp_ratelimit/strategies/base.py)
+  ABC + `IngestionRateLimitMeta` metaclass, every concrete strategy
+  under [`strategies/`](mdc:aqp_ratelimit/src/aqp_ratelimit/strategies/),
+  the Redis Lua token-bucket script
+  ([`lua/token_bucket.lua`](mdc:aqp_ratelimit/lua/token_bucket.lua)),
+  the Go RLS binary ([`go-rls/`](mdc:aqp_ratelimit/go-rls/)) speaking
+  gRPC + REST, the Envoy descriptor filter
+  ([`envoy/`](mdc:aqp_ratelimit/envoy/)), the Python sync + async
+  clients ([`src/aqp_ratelimit/client.py`](mdc:aqp_ratelimit/src/aqp_ratelimit/client.py)),
+  and the optional replay cache
+  ([`src/aqp_ratelimit/replay_cache/`](mdc:aqp_ratelimit/src/aqp_ratelimit/replay_cache/)).
+- Every concrete `IngestionRateLimitStrategy` registers via the
+  [`IngestionRateLimitMeta`](mdc:aqp_ratelimit/src/aqp_ratelimit/strategies/base.py)
+  metaclass. Set `strategy_kind` (one of `redis_token_bucket`,
+  `in_memory`, `leaky_bucket`, `per_agent`, `replay_cache`) and
+  `strategy_alias`. Don't decorate with `@register` manually.
+- All bucket reads / decrements go through the strategy's
+  `check()` / `reserve()` / `release()` methods. Never `HMGET`/`HSET`
+  the Redis bucket key directly outside
+  [`strategies/redis_token_bucket.py`](mdc:aqp_ratelimit/src/aqp_ratelimit/strategies/redis_token_bucket.py)
+  — the Lua atomicity contract assumes it owns the key namespace
+  `aqp:rl:{user_id}:{service}:{key_id}`.
+- The `rl_policies`, `rl_keys`, `rl_ledger`, `user_tiers`,
+  `template_catalog`, and `audit_log` Postgres tables are workspace-
+  scoped and registered in [`aqp.tenancy.rls_policies.RLS_TABLES`](mdc:aqp/tenancy/rls_policies.py).
+  ORM lives at [`aqp/persistence/models_ratelimit.py`](mdc:aqp/persistence/models_ratelimit.py).
+  Migrations 0066-0069. Migrations are immutable once committed
+  (root AGENTS.md rule 6).
+- All four data.ratelimit.* MCP tools live at
+  [`aqp/data/mcp/tools/ratelimit.py`](mdc:aqp/data/mcp/tools/ratelimit.py).
+  Mutating tools (`data.ratelimit.reserve`, `data.ratelimit.policy.update`)
+  set `mutates=True` and the matching FastAPI route attaches
+  `Depends(require_step_up(max_age_seconds=180))` (root AGENTS.md rule 52).
+- Every credential-resolution chokepoint that consumes vendor quota
+  (Airbyte CDK `RateLimitedHttpStream`, `Fetcher._throttle`, Dagster
+  asset sensors that gate partitioned backfills) MUST call the
+  active strategy via the singleton client at
+  [`get_ratelimit_client()`](mdc:aqp_ratelimit/src/aqp_ratelimit/client.py)
+  — never inline a counter, never bypass.
+- The Envoy forward-proxy is the inline enforcement mechanism for
+  HTTP transports; non-HTTP transports (Bloomberg BPIPE,
+  Refinitiv RFA) integrate at the Python SDK level by calling the
+  same strategy client.
+- The Lua script at
+  [`lua/token_bucket.lua`](mdc:aqp_ratelimit/lua/token_bucket.lua)
+  is the verbatim Redis token-bucket pattern from the blueprint;
+  loaded once via `SCRIPT LOAD` and invoked via `EVALSHA` so the
+  rate check sits on the synchronous request path without adding
+  meaningful delay even at millions of QPS.
+- Per-agent buckets (`strategy_kind="per_agent"`) sit alongside
+  per-user buckets so an autonomous agent (root AGENTS.md rule 54)
+  can never spend the user's budget without also drawing down its
+  own small ceiling. The bridge in
+  [`bridges/agent_bridge.py`](mdc:aqp_ratelimit/src/aqp_ratelimit/bridges/agent_bridge.py)
+  reads `MCPToolContext.actor_kind="agent"` and dual-debits.
+
+Validation:
+
+```bash
+cd aqp_ratelimit
+pip install -e .
+pytest -ra
+ruff check src tests
+cd go-rls && go test ./...
+```

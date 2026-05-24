@@ -1,0 +1,18 @@
+slug: tiingo-news
+display_name: Tiingo — News
+kind: low_code_yaml
+vendor_tier: starter
+rate_limit_class: tiingo.news
+default_sync_mode: incremental_append
+doc_url: https://www.tiingo.com/documentation/news
+spec:
+  base_url: https://api.tiingo.com
+  endpoint: /tiingo/news
+  auth:
+    kind: header
+    header_name: Authorization
+    header_template: "Token {token}"
+  primary_key: ["id"]
+  cursor_field: published_date
+extras:
+  bronze_namespace: aqp_bronze_airbyte_tiingo_news

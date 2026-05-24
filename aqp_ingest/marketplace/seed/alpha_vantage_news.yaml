@@ -1,0 +1,17 @@
+slug: alpha-vantage-news
+display_name: Alpha Vantage — News & Sentiment
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: alpha_vantage.query
+default_sync_mode: incremental_append
+doc_url: https://www.alphavantage.co/documentation/#news-sentiment
+spec:
+  base_url: https://www.alphavantage.co
+  endpoint: /query
+  auth:
+    kind: query
+    param: apikey
+  primary_key: ["url"]
+  cursor_field: time_published
+extras:
+  bronze_namespace: aqp_bronze_airbyte_alpha_vantage_news

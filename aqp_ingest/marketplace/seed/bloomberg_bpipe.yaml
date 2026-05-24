@@ -1,0 +1,21 @@
+slug: bloomberg-bpipe
+display_name: Bloomberg BPIPE — Single-User
+kind: python_cdk
+vendor_tier: enterprise
+rate_limit_class: bloomberg.bpipe
+default_sync_mode: subscribed_refresh
+doc_url: https://developer.bloomberg.com/portal/documents
+spec:
+  connector_module: aqp_ingest.connectors.bloomberg.bpipe
+  connector_class: BloombergBpipeAdapter
+  primary_key: ["security", "field", "ts"]
+  cursor_field: ts
+  required_params:
+    - securities
+    - fields
+  notes: >
+    Single-User entitlement mode per the BLPAPI Developer's Guide
+    §6.7.1. The adapter runs out-of-process so the BLPAPI session
+    lifecycle stays isolated from the Airbyte worker.
+extras:
+  bronze_namespace: aqp_bronze_airbyte_bloomberg_bpipe

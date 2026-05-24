@@ -1,0 +1,15 @@
+slug: mongo-cdc
+display_name: MongoDB — CDC (Change Streams)
+kind: cdc
+vendor_tier: starter
+rate_limit_class: cdc.mongo
+default_sync_mode: incremental_append
+doc_url: https://docs.airbyte.com/integrations/sources/mongodb-internal-poc
+spec:
+  base_url: ""
+  endpoint: ""
+  cdc:
+    kind: mongodb
+  primary_key: ["_id"]
+extras:
+  bronze_namespace: aqp_bronze_airbyte_mongo_cdc

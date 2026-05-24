@@ -1,0 +1,16 @@
+slug: fda-applications
+display_name: openFDA — Drug Applications
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: fda.applications
+default_sync_mode: incremental_append
+doc_url: https://open.fda.gov/apis/drug/drugsfda/
+spec:
+  base_url: https://api.fda.gov
+  endpoint: /drug/drugsfda.json
+  auth:
+    kind: none
+  primary_key: ["application_number"]
+  cursor_field: submission_date
+extras:
+  bronze_namespace: aqp_bronze_airbyte_fda_apps

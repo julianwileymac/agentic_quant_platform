@@ -1,0 +1,18 @@
+slug: sec-edgar-filings
+display_name: SEC EDGAR — Filings
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: sec_edgar.filings
+default_sync_mode: incremental_append
+doc_url: https://www.sec.gov/os/accessing-edgar-data
+spec:
+  base_url: https://data.sec.gov
+  endpoint: /submissions/CIK{cik}.json
+  auth:
+    kind: header
+    header_name: User-Agent
+    header_template: "{identity}"
+  primary_key: ["cik", "accessionNumber"]
+  cursor_field: filingDate
+extras:
+  bronze_namespace: aqp_bronze_airbyte_sec_edgar_filings

@@ -1,0 +1,32 @@
+aqp_questdb:
+  target: questdb_dev
+  outputs:
+    questdb_dev:
+      type: postgres
+      host: "{{ env_var('AQP_QUESTDB_PGWIRE_HOST', 'questdb.aqp-data-services.svc.cluster.local') }}"
+      port: "{{ env_var('AQP_QUESTDB_PGWIRE_PORT', '8812') | int }}"
+      user: "{{ env_var('AQP_QUESTDB_PGWIRE_USER', 'admin') }}"
+      password: "{{ env_var('AQP_QUESTDB_PGWIRE_PASSWORD', 'quest') }}"
+      dbname: "{{ env_var('AQP_QUESTDB_DBNAME', 'qdb') }}"
+      schema: public
+      threads: 4
+      keepalives_idle: 0
+      sslmode: prefer
+    questdb_prod:
+      type: postgres
+      host: "{{ env_var('AQP_QUESTDB_PGWIRE_HOST', 'questdb.aqp-data-services.svc.cluster.local') }}"
+      port: "{{ env_var('AQP_QUESTDB_PGWIRE_PORT', '8812') | int }}"
+      user: "{{ env_var('AQP_QUESTDB_PGWIRE_USER', 'admin') }}"
+      password: "{{ env_var('AQP_QUESTDB_PGWIRE_PASSWORD', 'quest') }}"
+      dbname: "{{ env_var('AQP_QUESTDB_DBNAME', 'qdb') }}"
+      schema: public
+      threads: 8
+      keepalives_idle: 0
+      sslmode: require
+
+# QuestDB implements the PostgreSQL wire protocol on port 8812
+# (PGWire), so dbt-postgres can connect to it as if it were a
+# standard PostgreSQL instance. Custom materializations in
+# macros/questdb_*.sql produce the PARTITION BY + WAL + DEDUP
+# UPSERT KEYS DDL that QuestDB requires for concurrent writers
+# (per the QuestDB docs: "Non-partitioned tables cannot use WAL").

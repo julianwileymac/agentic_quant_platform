@@ -1,0 +1,71 @@
+---
+description: Ingestion plane boundary. Owns aqp_ingest_cdk extensions (RateLimitedHttpStream, QuestDBDestination, PointInTimeIncrementalCursor), custom financial connectors (Polygon, Databento, Alpaca, IEX, Bloomberg, Refinitiv), Airbyte controller, dbt-loom registry sidecar, connector marketplace.
+globs:
+  - "aqp_ingest/**"
+  - "aqp/data/datasets/kinds/airbyte.py"
+  - "aqp/api/routes/airbyte_webhooks.py"
+  - "tests/ingest/**"
+alwaysApply: false
+---
+
+# AQP Ingest
+
+- [aqp_ingest/](mdc:aqp_ingest/) owns the customer-facing self-service
+  ingestion plane: the [`aqp_ingest_cdk`](mdc:aqp_ingest/src/aqp_ingest_cdk/)
+  Airbyte CDK extensions (`RateLimitedHttpStream`,
+  `PointInTimeIncrementalCursor`, `QuestDBDestination`), every
+  curated financial connector under
+  [`connectors/`](mdc:aqp_ingest/connectors/), the Airbyte
+  controller ([`controller/`](mdc:aqp_ingest/controller/)) that
+  manages workspaces + connections via the Terraform provider, the
+  connector marketplace ([`marketplace/`](mdc:aqp_ingest/marketplace/))
+  that backs the Phase 5 Vite catalog UI, and the dbt-loom registry
+  sidecar ([`dbt_loom/`](mdc:aqp_ingest/dbt_loom/)).
+- **All vendor API credentials resolve through `CredentialResolver`**
+  (root AGENTS.md rule 26). Connectors call
+  `get_resolver().resolve(CredentialKey(f"{provider}:{label}", "broker"))`
+  to draw from the BYOK BrokerCredentialStore (priority 4); they
+  NEVER read `settings.X_api_key` directly.
+- **All connectors that hit a rate-limited vendor MUST inherit from
+  [`RateLimitedHttpStream`](mdc:aqp_ingest/src/aqp_ingest_cdk/streams.py)**
+  (NOT raw `airbyte_cdk.HttpStream`). The base wraps `_send_request`
+  with a `get_ratelimit_client().check()` call from the
+  [`aqp_ratelimit`](mdc:aqp_ratelimit/) subsystem before every
+  outbound request. Generated `aqp/data/fetchers/userland/` stubs
+  preserve this contract.
+- **Airbyte-synced raw data lands in `aqp_bronze_airbyte_<connector_slug>`**
+  Iceberg namespaces (root AGENTS.md rule 21 + the new convention
+  validated in [`aqp/data/iceberg_catalog.py`](mdc:aqp/data/iceberg_catalog.py)).
+  The `connector_slug` is the lowercase, underscore-separated form
+  of the connector id (e.g. `polygon_aggregates`).
+- **The Airbyte controller never imports `aqp.*` ORM models
+  directly.** It speaks only Terraform + Airbyte HTTP API + the
+  per-team `Organization.airbyte_workspace_id` column added by
+  Alembic 0070.
+- **Custom Python connectors stay under
+  [`aqp_ingest/connectors/`](mdc:aqp_ingest/connectors/)** (curated)
+  or [`aqp/data/fetchers/userland/`](mdc:aqp/data/fetchers/userland/)
+  (operator-generated via the builder). The two paths preserve
+  rule 31's `AIRBYTE_ENABLE_UNSAFE_CODE`-free posture; neither
+  accepts free-text Python that an agent or operator typed into a
+  web form.
+- **`AirbyteDataset` is the typed `BaseDataset` kind for Airbyte-
+  synced data** (root AGENTS.md rule 29). The discriminator is
+  `dataset_kind="airbyte"` on `dataset_catalogs`; the spec carries
+  the workspace, connection, and stream identifiers + the bronze
+  Iceberg namespace where the data lands.
+- **Dagster integration goes through the
+  [`load_assets_from_airbyte_instance`](mdc:aqp/dagster/assets/airbyte_assets.py)
+  wrapper** so every Airbyte stream becomes a Dagster SDA without
+  hand-defining `@asset` per stream. The wrapper installs the
+  `vendor:<service>` Dagster concurrency pool and the
+  rate-limit sensor preflight.
+
+Validation:
+
+```bash
+cd aqp_ingest
+pip install -e .
+pytest -ra
+ruff check src tests
+```

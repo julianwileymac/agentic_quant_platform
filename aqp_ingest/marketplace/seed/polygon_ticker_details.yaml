@@ -1,0 +1,16 @@
+slug: polygon-ticker-details
+display_name: Polygon.io — Ticker Details
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: polygon.reference
+default_sync_mode: full_refresh_per_call
+doc_url: https://polygon.io/docs/stocks/get_v3_reference_tickers__ticker
+spec:
+  base_url: https://api.polygon.io
+  endpoint: /v3/reference/tickers/{symbol}
+  auth:
+    kind: query
+    param: apiKey
+  primary_key: ["ticker"]
+extras:
+  bronze_namespace: aqp_bronze_airbyte_polygon_ticker_details

@@ -1,0 +1,16 @@
+slug: cfpb-complaints
+display_name: CFPB — Consumer Complaint Database
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: cfpb.complaints
+default_sync_mode: incremental_append
+doc_url: https://cfpb.github.io/api/ccdb/
+spec:
+  base_url: https://www.consumerfinance.gov
+  endpoint: /data-research/consumer-complaints/search/api/v1/
+  auth:
+    kind: none
+  primary_key: ["complaint_id"]
+  cursor_field: date_received
+extras:
+  bronze_namespace: aqp_bronze_airbyte_cfpb_complaints

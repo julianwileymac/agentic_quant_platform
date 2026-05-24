@@ -1,0 +1,19 @@
+slug: alpaca-account-activities
+display_name: Alpaca — Account Activities
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: alpaca.broker
+default_sync_mode: incremental_append
+doc_url: https://alpaca.markets/docs/api-references/trading-api/account-activities/
+spec:
+  base_url: https://api.alpaca.markets
+  endpoint: /v2/account/activities
+  auth:
+    kind: headers
+    headers:
+      - APCA-API-KEY-ID
+      - APCA-API-SECRET-KEY
+  primary_key: ["id"]
+  cursor_field: transaction_time
+extras:
+  bronze_namespace: aqp_bronze_airbyte_alpaca_account_activities

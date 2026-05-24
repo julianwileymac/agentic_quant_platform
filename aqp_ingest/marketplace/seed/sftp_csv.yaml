@@ -1,0 +1,16 @@
+slug: sftp-csv
+display_name: SFTP — CSV Files
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: storage.sftp
+default_sync_mode: full_refresh
+doc_url: https://docs.airbyte.com/integrations/sources/sftp
+spec:
+  base_url: ""
+  endpoint: ""
+  storage:
+    kind: sftp
+    format: csv
+  primary_key: []
+extras:
+  bronze_namespace: aqp_bronze_airbyte_sftp_csv

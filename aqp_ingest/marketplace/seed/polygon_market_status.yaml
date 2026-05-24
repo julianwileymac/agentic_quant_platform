@@ -1,0 +1,17 @@
+slug: polygon-market-status
+display_name: Polygon.io — Market Status & Holidays
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: polygon.reference
+default_sync_mode: full_refresh
+doc_url: https://polygon.io/docs/stocks/get_v1_marketstatus_now
+spec:
+  base_url: https://api.polygon.io
+  endpoint: /v1/marketstatus/upcoming
+  auth:
+    kind: query
+    param: apiKey
+  primary_key: ["date", "exchange"]
+  cursor_field: date
+extras:
+  bronze_namespace: aqp_bronze_airbyte_polygon_market_status

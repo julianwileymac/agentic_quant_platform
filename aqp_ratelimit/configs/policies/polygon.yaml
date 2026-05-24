@@ -1,0 +1,54 @@
+# AQP rate-limit policy template — Polygon.io.
+#
+# Loaded by the Phase 1 `aqp ingest seed-policies` admin command,
+# which upserts each entry into the `rl_policies` table. The
+# `service` field is the dispatch key the Lua script + Envoy
+# filter use to route a per-call check to the right capacity /
+# refill_rate.
+
+policies:
+  - service: polygon.aggregates
+    tier: free
+    capacity: 5
+    refill_rate: 0.0833        # 5 requests per minute
+    refill_interval_ms: 1000
+    window_ms: 60000
+    notes: "Polygon free tier; 5 reqs/min on /v2/aggs"
+
+  - service: polygon.aggregates
+    tier: starter
+    capacity: 100
+    refill_rate: 1.67          # 100 reqs/min
+    refill_interval_ms: 1000
+    window_ms: 60000
+    notes: "Polygon Starter tier"
+
+  - service: polygon.aggregates
+    tier: advanced
+    capacity: 1000
+    refill_rate: 16.67         # 1000 reqs/min
+    refill_interval_ms: 1000
+    window_ms: 60000
+    notes: "Polygon Advanced tier"
+
+  - service: polygon.trades
+    tier: starter
+    capacity: 100
+    refill_rate: 1.67
+    refill_interval_ms: 1000
+    window_ms: 60000
+    notes: "Polygon Starter — tick endpoints"
+
+  - service: polygon.quotes
+    tier: starter
+    capacity: 100
+    refill_rate: 1.67
+    refill_interval_ms: 1000
+    window_ms: 60000
+
+  - service: polygon.options
+    tier: advanced
+    capacity: 1000
+    refill_rate: 16.67
+    refill_interval_ms: 1000
+    window_ms: 60000

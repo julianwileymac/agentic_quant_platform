@@ -1,0 +1,16 @@
+slug: polygon-quotes
+display_name: Polygon.io — NBBO Quotes
+kind: python_cdk
+vendor_tier: advanced
+rate_limit_class: polygon.quotes
+default_sync_mode: incremental_append
+doc_url: https://polygon.io/docs/stocks/get_v3_quotes__stockticker
+spec:
+  connector_module: aqp_ingest.connectors.polygon.quotes
+  connector_class: PolygonQuotesStream
+  primary_key: ["symbol", "sip_timestamp", "sequence_number"]
+  cursor_field: sip_timestamp
+  required_params:
+    - symbols
+extras:
+  bronze_namespace: aqp_bronze_airbyte_polygon_quotes

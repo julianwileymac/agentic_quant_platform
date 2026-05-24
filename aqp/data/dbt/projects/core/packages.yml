@@ -1,0 +1,10 @@
+packages:
+  - package: metaplane/dbt_expectations
+    version: 0.10.9
+  - package: dbt-labs/dbt_utils
+    version: 1.2.0
+
+# Note: the upstream `calogica/dbt-expectations` package is, per
+# Metaplane's December 2024 announcement, no longer actively
+# maintained. The metaplane fork is the canonical successor;
+# pin `0.10.9` (root AGENTS.md plan section 6).

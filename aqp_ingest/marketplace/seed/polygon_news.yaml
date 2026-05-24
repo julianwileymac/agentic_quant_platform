@@ -1,0 +1,17 @@
+slug: polygon-news
+display_name: Polygon.io — News
+kind: low_code_yaml
+vendor_tier: starter
+rate_limit_class: polygon.news
+default_sync_mode: incremental_append
+doc_url: https://polygon.io/docs/stocks/get_v2_reference_news
+spec:
+  base_url: https://api.polygon.io
+  endpoint: /v2/reference/news
+  auth:
+    kind: query
+    param: apiKey
+  primary_key: ["id"]
+  cursor_field: published_utc
+extras:
+  bronze_namespace: aqp_bronze_airbyte_polygon_news

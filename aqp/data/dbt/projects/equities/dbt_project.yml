@@ -1,0 +1,25 @@
+name: aqp_dbt_equities
+version: '0.1.0'
+config-version: 2
+profile: aqp_questdb
+
+model-paths: ['models']
+test-paths: ['tests']
+macro-paths: ['macros']
+target-path: 'target'
+
+# dbt-loom dependency on the shared core project. The loom config
+# in `loom.yml` resolves the manifest.json from the S3 registry
+# sidecar that `aqp.data.dbt.loom_registry` populates.
+require-dbt-version: ['>=1.9.0', '<2.0.0']
+
+models:
+  aqp_dbt_equities:
+    intermediate:
+      +materialized: ephemeral
+      +schema: equities_int
+      +access: protected
+    marts:
+      +materialized: questdb_table
+      +schema: equities_marts
+      +access: protected

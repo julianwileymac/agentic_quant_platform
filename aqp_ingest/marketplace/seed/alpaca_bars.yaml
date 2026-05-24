@@ -1,0 +1,16 @@
+slug: alpaca-bars
+display_name: Alpaca — Bars
+kind: python_cdk
+vendor_tier: free
+rate_limit_class: alpaca.bars
+default_sync_mode: incremental_append_dedup
+doc_url: https://alpaca.markets/docs/api-references/market-data-api/stock-pricing-data/historical/
+spec:
+  connector_module: aqp_ingest.connectors.alpaca.bars
+  connector_class: AlpacaBarsStream
+  primary_key: ["symbol", "t"]
+  cursor_field: t
+  required_params:
+    - symbols
+extras:
+  bronze_namespace: aqp_bronze_airbyte_alpaca_bars

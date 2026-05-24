@@ -1,0 +1,16 @@
+slug: gdelt-gkg
+display_name: GDELT — Knowledge Graph (GKG v2.1)
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: gdelt.gkg
+default_sync_mode: incremental_append
+doc_url: https://www.gdeltproject.org/data.html
+spec:
+  base_url: http://data.gdeltproject.org
+  endpoint: /gdeltv2/{date}.gkg.csv.zip
+  auth:
+    kind: none
+  primary_key: ["GKGRECORDID"]
+  cursor_field: V2.1DATE
+extras:
+  bronze_namespace: aqp_bronze_airbyte_gdelt_gkg

@@ -1,0 +1,44 @@
+version: 2
+
+models:
+  - name: fct_equity_minute_bars
+    description: |
+      Source-of-truth minute OHLCV bars adjusted for splits,
+      dividends, and corporate actions. Survivorship-bias-free
+      thanks to the snap_corporate_actions SCD2 join.
+    access: public
+    config:
+      contract: { enforced: true }
+    columns:
+      - name: ts
+        data_type: timestamp
+        constraints: [{ type: not_null }]
+      - name: symbol
+        data_type: text
+        constraints: [{ type: not_null }]
+      - name: open
+        data_type: double precision
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              strictly: true
+      - name: high
+        data_type: double precision
+      - name: low
+        data_type: double precision
+      - name: close
+        data_type: double precision
+      - name: volume
+        data_type: double precision
+      - name: vwap
+        data_type: double precision
+
+    tests:
+      - dbt_expectations.expect_grouped_row_values_to_have_recent_data:
+          group_by: [symbol]
+          timestamp_column: ts
+          datepart: minute
+          interval: 5
+      - dbt_expectations.expect_row_values_to_have_data_for_every_n_datepart:
+          date_col: ts
+          date_part: minute

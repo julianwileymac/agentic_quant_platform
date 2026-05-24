@@ -1,0 +1,16 @@
+slug: postgres-cdc
+display_name: Postgres — CDC (Debezium)
+kind: cdc
+vendor_tier: starter
+rate_limit_class: cdc.postgres
+default_sync_mode: incremental_append
+doc_url: https://docs.airbyte.com/integrations/sources/postgres
+spec:
+  base_url: ""
+  endpoint: ""
+  cdc:
+    plugin: pgoutput
+    publication_name: airbyte_publication
+  primary_key: []
+extras:
+  bronze_namespace: aqp_bronze_airbyte_postgres_cdc

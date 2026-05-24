@@ -1,0 +1,20 @@
+slug: polygon-aggregates
+display_name: Polygon.io — Aggregates (OHLCV)
+kind: python_cdk
+vendor_tier: starter
+rate_limit_class: polygon.aggregates
+default_sync_mode: incremental_append_dedup
+doc_url: https://polygon.io/docs/stocks/get_v2_aggs_ticker__stocksticker__range__multiplier___timespan___from___to
+spec:
+  connector_module: aqp_ingest.connectors.polygon.aggregates
+  connector_class: PolygonAggregatesStream
+  primary_key: ["ticker", "t"]
+  cursor_field: t
+  required_params:
+    - tickers
+  optional_params:
+    timespan: minute
+    multiplier: 1
+    lookback_days: 30
+extras:
+  bronze_namespace: aqp_bronze_airbyte_polygon_aggregates

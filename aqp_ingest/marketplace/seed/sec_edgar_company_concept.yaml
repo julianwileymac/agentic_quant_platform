@@ -1,0 +1,18 @@
+slug: sec-edgar-company-concept
+display_name: SEC EDGAR — Company Concept
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: sec_edgar.xbrl
+default_sync_mode: incremental_append
+doc_url: https://data.sec.gov/api/xbrl/companyconcept
+spec:
+  base_url: https://data.sec.gov
+  endpoint: /api/xbrl/companyconcept/CIK{cik}/{taxonomy}/{tag}.json
+  auth:
+    kind: header
+    header_name: User-Agent
+    header_template: "{identity}"
+  primary_key: ["cik", "tag", "end"]
+  cursor_field: filed
+extras:
+  bronze_namespace: aqp_bronze_airbyte_sec_edgar_concept

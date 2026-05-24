@@ -1,0 +1,16 @@
+slug: generic-rest-basic
+display_name: Generic REST API (Basic Auth)
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: generic.rest
+default_sync_mode: incremental_append
+doc_url: https://docs.airbyte.com/connector-development/connector-builder-ui/authentication
+spec:
+  base_url: ""
+  endpoint: ""
+  auth:
+    kind: basic
+  primary_key: ["id"]
+  cursor_field: updated_at
+extras:
+  bronze_namespace: aqp_bronze_airbyte_generic_basic

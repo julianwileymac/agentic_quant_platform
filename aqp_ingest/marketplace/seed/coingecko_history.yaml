@@ -1,0 +1,18 @@
+slug: coingecko-history
+display_name: CoinGecko — Historical OHLC
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: coingecko.history
+default_sync_mode: incremental_append_dedup
+doc_url: https://docs.coingecko.com/v3.0.1/reference/coins-id-ohlc
+spec:
+  base_url: https://api.coingecko.com/api/v3
+  endpoint: /coins/{id}/ohlc
+  auth:
+    kind: header
+    header_name: x-cg-pro-api-key
+    optional: true
+  primary_key: ["id", "ts"]
+  cursor_field: ts
+extras:
+  bronze_namespace: aqp_bronze_airbyte_coingecko_history

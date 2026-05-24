@@ -1,0 +1,18 @@
+slug: tiingo-fundamentals
+display_name: Tiingo — Fundamentals
+kind: low_code_yaml
+vendor_tier: advanced
+rate_limit_class: tiingo.fundamentals
+default_sync_mode: incremental_append_dedup
+doc_url: https://www.tiingo.com/documentation/fundamentals
+spec:
+  base_url: https://api.tiingo.com
+  endpoint: /tiingo/fundamentals/{symbol}/statements
+  auth:
+    kind: header
+    header_name: Authorization
+    header_template: "Token {token}"
+  primary_key: ["symbol", "fiscalDate"]
+  cursor_field: fiscalDate
+extras:
+  bronze_namespace: aqp_bronze_airbyte_tiingo_fundamentals

@@ -1,0 +1,17 @@
+slug: alpha-vantage-fundamentals
+display_name: Alpha Vantage — Fundamentals (Income / Balance / Cashflow)
+kind: low_code_yaml
+vendor_tier: starter
+rate_limit_class: alpha_vantage.query
+default_sync_mode: incremental_append_dedup
+doc_url: https://www.alphavantage.co/documentation/#fundamentals
+spec:
+  base_url: https://www.alphavantage.co
+  endpoint: /query
+  auth:
+    kind: query
+    param: apikey
+  primary_key: ["symbol", "fiscalDateEnding"]
+  cursor_field: fiscalDateEnding
+extras:
+  bronze_namespace: aqp_bronze_airbyte_alpha_vantage_fundamentals

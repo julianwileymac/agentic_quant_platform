@@ -1,0 +1,16 @@
+slug: fda-adverse-events
+display_name: openFDA — Drug Adverse Events
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: fda.adverse_events
+default_sync_mode: incremental_append
+doc_url: https://open.fda.gov/apis/drug/event/
+spec:
+  base_url: https://api.fda.gov
+  endpoint: /drug/event.json
+  auth:
+    kind: none
+  primary_key: ["safetyreportid"]
+  cursor_field: receivedate
+extras:
+  bronze_namespace: aqp_bronze_airbyte_fda_adverse

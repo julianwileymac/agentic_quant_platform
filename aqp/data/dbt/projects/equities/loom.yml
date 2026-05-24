@@ -1,0 +1,8 @@
+manifests:
+  - name: aqp_dbt_core
+    type: s3
+    config:
+      bucket: "{{ env_var('AQP_DBT_LOOM_BUCKET', 'aqp-dbt-manifests') }}"
+      object_key: "prod/aqp_dbt_core/manifest.json"
+      region: "{{ env_var('AWS_DEFAULT_REGION', 'us-east-1') }}"
+    access: public

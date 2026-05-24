@@ -1,0 +1,18 @@
+slug: coingecko-market
+display_name: CoinGecko — Crypto Market Data
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: coingecko.market
+default_sync_mode: incremental_append_dedup
+doc_url: https://docs.coingecko.com/v3.0.1/reference/coins-markets
+spec:
+  base_url: https://api.coingecko.com/api/v3
+  endpoint: /coins/markets
+  auth:
+    kind: header
+    header_name: x-cg-pro-api-key
+    optional: true
+  primary_key: ["id", "last_updated"]
+  cursor_field: last_updated
+extras:
+  bronze_namespace: aqp_bronze_airbyte_coingecko_market

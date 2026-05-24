@@ -95,6 +95,28 @@ RLS_TABLES: tuple[RlsTable, ...] = (
     # running ``rls_policies.is_rls_enabled(...)`` see the table in
     # the canonical list.
     RlsTable(name="broker_credentials"),
+    # Rate-limit subsystem (Phase 0 — Foundations, plan section 4).
+    # Migrations 0066-0069 ship the matching policy DDL. All six tables
+    # are workspace-scoped per AGENTS rule 51.
+    RlsTable(name="rl_policies"),
+    RlsTable(name="rl_keys"),
+    RlsTable(name="rl_ledger"),
+    RlsTable(name="user_tiers"),
+    RlsTable(name="template_catalog"),
+    RlsTable(name="audit_log"),
+    # dbt mesh project registry (Phase 2 — plan section 6). Migration
+    # 0073 ships the matching policy DDL.
+    RlsTable(name="dbt_mesh_projects"),
+    # Kernel sessions (Phase 3 — Hybrid DX, plan section 7). Migration
+    # 0074 ships the matching policy DDL.
+    RlsTable(name="kernel_sessions"),
+    # Phase 4 — DataMCP + agent integration (plan section 8).
+    # Migrations 0075 + 0076 ship the matching policy DDL.
+    RlsTable(name="ingestion_approvals"),
+    RlsTable(name="agent_rl_buckets"),
+    # Phase 6 — Hardening (plan section 10). Replay cache catalog
+    # (Alembic 0078) is workspace-scoped.
+    RlsTable(name="replay_cache_entries"),
 )
 
 

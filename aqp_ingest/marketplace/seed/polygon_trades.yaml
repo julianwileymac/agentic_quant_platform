@@ -1,0 +1,18 @@
+slug: polygon-trades
+display_name: Polygon.io — Trades (Tick-Level)
+kind: python_cdk
+vendor_tier: advanced
+rate_limit_class: polygon.trades
+default_sync_mode: incremental_append
+doc_url: https://polygon.io/docs/stocks/get_v3_trades__stockticker
+spec:
+  connector_module: aqp_ingest.connectors.polygon.trades
+  connector_class: PolygonTradesStream
+  primary_key: ["symbol", "sip_timestamp", "sequence_number"]
+  cursor_field: sip_timestamp
+  required_params:
+    - symbols
+  optional_params:
+    lookback_days: 1
+extras:
+  bronze_namespace: aqp_bronze_airbyte_polygon_trades

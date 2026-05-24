@@ -1,0 +1,86 @@
+# Envoy ratelimit filter descriptors mapping destination HTTP request
+# paths to AQP rate-limit policy classes.
+#
+# The Go RLS service consults this map to find the canonical
+# `(service, tier)` for the incoming request before invoking the
+# Redis Lua bucket script.
+#
+# Order matters — earlier matches win.
+
+domain: aqp_outbound
+
+descriptors:
+  # Polygon REST
+  - key: destination_host
+    value: api.polygon.io
+    descriptors:
+      - key: path_prefix
+        value: /v2/aggs/
+        rate_limit:
+          unit: SECOND
+          requests_per_unit: 5
+      - key: path_prefix
+        value: /v3/quotes/
+        rate_limit:
+          unit: SECOND
+          requests_per_unit: 5
+
+  # Databento historical
+  - key: destination_host
+    value: hist.databento.com
+    descriptors:
+      - key: path_prefix
+        value: /v0/
+        rate_limit:
+          unit: SECOND
+          requests_per_unit: 10
+
+  # Alpaca data REST
+  - key: destination_host
+    value: data.alpaca.markets
+    descriptors:
+      - key: path_prefix
+        value: /v2/stocks/
+        rate_limit:
+          unit: MINUTE
+          requests_per_unit: 200
+
+  # IEX Cloud
+  - key: destination_host
+    value: cloud.iexapis.com
+    descriptors:
+      - key: path_prefix
+        value: /stable/
+        rate_limit:
+          unit: SECOND
+          requests_per_unit: 50
+
+  # FRED
+  - key: destination_host
+    value: api.stlouisfed.org
+    descriptors:
+      - key: path_prefix
+        value: /fred/series/
+        rate_limit:
+          unit: MINUTE
+          requests_per_unit: 120
+
+  # Alpha Vantage (always per-second; daily caps enforced at the user-tier layer)
+  - key: destination_host
+    value: www.alphavantage.co
+    descriptors:
+      - key: path_prefix
+        value: /query
+        rate_limit:
+          unit: MINUTE
+          requests_per_unit: 75
+
+  # CoinGecko
+  - key: destination_host
+    value: api.coingecko.com
+    descriptors:
+      - key: path_prefix
+        value: /api/v3/
+        rate_limit:
+          unit: MINUTE
+          requests_per_unit: 50

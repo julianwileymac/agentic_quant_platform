@@ -1,0 +1,16 @@
+# AQP rate-limit policy template — IEX Cloud.
+
+policies:
+  - service: iex.snapshots
+    tier: free
+    capacity: 50
+    refill_rate: 50.0          # ~50 reqs/sec hard cap
+    refill_interval_ms: 1000
+    window_ms: 1000
+
+  - service: iex.historical
+    tier: free
+    capacity: 50
+    refill_rate: 10.0
+    refill_interval_ms: 1000
+    window_ms: 1000

@@ -1,0 +1,16 @@
+slug: gs-csv
+display_name: Google Cloud Storage — CSV
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: storage.gs
+default_sync_mode: full_refresh
+doc_url: https://docs.airbyte.com/integrations/sources/gcs
+spec:
+  base_url: ""
+  endpoint: ""
+  storage:
+    kind: gcs
+    format: csv
+  primary_key: []
+extras:
+  bronze_namespace: aqp_bronze_airbyte_gs_csv

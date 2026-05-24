@@ -103,6 +103,15 @@ KNOWN_BROKER_PROVIDERS: frozenset[str] = frozenset(
         "tradovate",
         "ftx",   # disabled by default but reserved
         "custom",  # operator-supplied custom provider
+        # Phase 1 (plan section 5) — data-vendor BYOK additions.
+        # Each carries a matching policy template under
+        # aqp_ratelimit/configs/policies/<vendor>.yaml.
+        "databento",
+        "tiingo",
+        "alpha_vantage",
+        "quandl",
+        "coingecko",
+        "fred",
     }
 )
 

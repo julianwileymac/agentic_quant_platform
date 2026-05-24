@@ -1,0 +1,16 @@
+slug: gdelt-events
+display_name: GDELT — Global Events (GKG)
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: gdelt.events
+default_sync_mode: incremental_append
+doc_url: https://www.gdeltproject.org/data.html
+spec:
+  base_url: http://data.gdeltproject.org
+  endpoint: /gdeltv2/{date}.export.CSV.zip
+  auth:
+    kind: none
+  primary_key: ["GlobalEventID"]
+  cursor_field: DATEADDED
+extras:
+  bronze_namespace: aqp_bronze_airbyte_gdelt_events

@@ -1,0 +1,32 @@
+version: 2
+
+sources:
+  - name: vendor
+    description: |
+      Read-only Airbyte-landed bronze sources. Every Airbyte
+      connection produces an aqp_bronze_airbyte_<slug>.<stream>
+      Iceberg table; the AirbyteDataset kind in
+      aqp/data/datasets/kinds/airbyte.py exposes them as typed
+      catalog entries (rule 29). Reference them here through dbt
+      sources so the dbt-loom + dagster-dbt lineage walks the
+      same graph.
+    schema: aqp_bronze_airbyte_polygon_aggregates
+    tables:
+      - name: polygon_aggregates_minute
+        description: Polygon.io minute bars; primary key (ticker, t).
+        loaded_at_field: ingestion_ts
+        freshness:
+          warn_after: { count: 30, period: minute }
+          error_after: { count: 60, period: minute }
+        meta:
+          dagster:
+            asset_key: ['raw', 'polygon', 'aggregates_minute']
+      - name: index_constituents_latest
+        description: Vendor-supplied index constituent snapshot (SP500, R3K).
+        loaded_at_field: ingestion_ts
+      - name: symbol_master_latest
+        description: Vendor symbol master with ticker / exchange / security_type.
+        loaded_at_field: ingestion_ts
+      - name: corporate_actions_latest
+        description: Splits, dividends, mergers, spin-offs (timestamp SCD2).
+        loaded_at_field: ingestion_ts

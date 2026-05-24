@@ -162,6 +162,85 @@ _PROVIDER_METADATA: dict[str, dict[str, Any]] = {
         ],
         "supports_environments": ["paper", "live"],
     },
+    # Phase 1 (plan section 5) — data-vendor BYOK metadata
+    # additions matching the new KNOWN_BROKER_PROVIDERS entries.
+    "iex_cloud": {
+        "display_name": "IEX Cloud",
+        "credential_kind": "api_key",
+        "payload_fields": [
+            {"name": "api_key", "label": "API Token", "secret": True},
+        ],
+        "meta_fields": [],
+        "supports_environments": ["sandbox", "live"],
+    },
+    "databento": {
+        "display_name": "Databento",
+        "credential_kind": "api_key",
+        "payload_fields": [
+            {"name": "api_key", "label": "API Key", "secret": True},
+        ],
+        "meta_fields": [
+            {"name": "default_dataset", "label": "Default dataset", "secret": False},
+        ],
+        "supports_environments": ["live"],
+    },
+    "tiingo": {
+        "display_name": "Tiingo",
+        "credential_kind": "api_key",
+        "payload_fields": [
+            {"name": "api_key", "label": "API Key", "secret": True},
+        ],
+        "meta_fields": [],
+        "supports_environments": ["live"],
+    },
+    "alpha_vantage": {
+        "display_name": "Alpha Vantage",
+        "credential_kind": "api_key",
+        "payload_fields": [
+            {"name": "api_key", "label": "API Key", "secret": True},
+        ],
+        "meta_fields": [],
+        "supports_environments": ["live"],
+    },
+    "quandl": {
+        "display_name": "Nasdaq Data Link (Quandl)",
+        "credential_kind": "api_key",
+        "payload_fields": [
+            {"name": "api_key", "label": "API Key", "secret": True},
+        ],
+        "meta_fields": [],
+        "supports_environments": ["live"],
+    },
+    "coingecko": {
+        "display_name": "CoinGecko (Pro)",
+        "credential_kind": "api_key",
+        "payload_fields": [
+            {"name": "api_key", "label": "Pro API Key", "secret": True},
+        ],
+        "meta_fields": [],
+        "supports_environments": ["live"],
+    },
+    "fred": {
+        "display_name": "FRED (Federal Reserve)",
+        "credential_kind": "api_key",
+        "payload_fields": [
+            {"name": "api_key", "label": "API Key", "secret": True},
+        ],
+        "meta_fields": [],
+        "supports_environments": ["live"],
+    },
+    "tradestation": {
+        "display_name": "TradeStation",
+        "credential_kind": "api_key_pair",
+        "payload_fields": [
+            {"name": "api_key", "label": "API Key", "secret": True},
+            {"name": "api_secret", "label": "API Secret", "secret": True},
+        ],
+        "meta_fields": [
+            {"name": "account_id", "label": "Account ID", "secret": False},
+        ],
+        "supports_environments": ["sandbox", "live"],
+    },
 }
 
 

@@ -1,0 +1,16 @@
+slug: azure-blob-csv
+display_name: Azure Blob Storage — CSV
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: storage.azure
+default_sync_mode: full_refresh
+doc_url: https://docs.airbyte.com/integrations/sources/azure-blob-storage
+spec:
+  base_url: ""
+  endpoint: ""
+  storage:
+    kind: azure_blob
+    format: csv
+  primary_key: []
+extras:
+  bronze_namespace: aqp_bronze_airbyte_azure_blob_csv

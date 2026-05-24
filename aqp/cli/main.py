@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import sys
 
 import typer
@@ -23,6 +24,35 @@ app.add_typer(config_app, name="config", help="Layered config inspection / mutat
 app.add_typer(cp_app, name="cp", help="AQP control-plane day-2 operations")
 app.add_typer(viz_app, name="viz", help="Visualization layer (Superset + Bokeh) operations")
 app.add_typer(deploy_app, name="deploy", help="Local stack lifecycle (Terraform + k3d)")
+
+# Phase 0 — Foundations. The rate-limit subsystem ships as a separate
+# top-level boundary (`aqp_ratelimit/`) but extends the monolithic CLI
+# so the operator UX matches the blueprint section 4.1.
+with contextlib.suppress(ImportError):  # pragma: no cover
+    from aqp_ratelimit.cli import keys_app, ratelimit_app
+
+    app.add_typer(
+        ratelimit_app,
+        name="ratelimit",
+        help="Inspect per-(user, service, key_id) rate-limit state",
+    )
+    app.add_typer(
+        keys_app,
+        name="keys",
+        help="Lifecycle management for per-user vendor API keys",
+    )
+
+# Phase 3 — Hybrid local-cloud DX. The kernels subsystem ships as a
+# separate top-level boundary (`aqp_kernels/`); the CLI extension is
+# the operator-facing entry point.
+with contextlib.suppress(ImportError):  # pragma: no cover
+    from aqp_kernels.cli import kernel_app
+
+    app.add_typer(
+        kernel_app,
+        name="kernel",
+        help="Provision + attach per-user Jupyter kernel pods",
+    )
 
 
 @app.callback()

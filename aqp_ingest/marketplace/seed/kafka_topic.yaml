@@ -1,0 +1,16 @@
+slug: kafka-topic
+display_name: Kafka — Topic Consumer
+kind: cdc
+vendor_tier: starter
+rate_limit_class: cdc.kafka
+default_sync_mode: incremental_append
+doc_url: https://docs.airbyte.com/integrations/sources/kafka
+spec:
+  base_url: ""
+  endpoint: ""
+  cdc:
+    kind: kafka
+    consumer_group: aqp_airbyte
+  primary_key: ["offset"]
+extras:
+  bronze_namespace: aqp_bronze_airbyte_kafka_topic

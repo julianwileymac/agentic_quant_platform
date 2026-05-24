@@ -6,6 +6,7 @@ namespace: aqp-elt
 resources:
   - secret.yaml
   - ingress.yaml
+  - helmrelease.yaml
 
 labels:
   - includeSelectors: false

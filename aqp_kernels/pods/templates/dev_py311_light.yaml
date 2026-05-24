@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  generateName: aqp-kernel-dev-light-
+  labels:
+    app.kubernetes.io/name: aqp-kernel
+    app.kubernetes.io/component: kernel
+    app.kubernetes.io/part-of: aqp-kernels
+    aqp.io/stack: dev-py311-light
+spec:
+  restartPolicy: Never
+  serviceAccountName: aqp-kernel
+  containers:
+    - name: kernel
+      image: ghcr.io/aqp/dev:py311-light
+      imagePullPolicy: IfNotPresent
+      resources:
+        requests:
+          cpu: '1'
+          memory: 2Gi
+        limits:
+          cpu: '2'
+          memory: 4Gi
+      env:
+        - name: HTTPS_PROXY
+          value: http://rl-proxy.aqp-system.svc.cluster.local:8080
+        - name: HTTP_PROXY
+          value: http://rl-proxy.aqp-system.svc.cluster.local:8080
+        - name: AQP_KERNEL_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+      volumeMounts:
+        - name: secret-broker
+          mountPath: /var/run
+    - name: secret-broker
+      image: ghcr.io/aqp/secret-broker:0.1.0
+      volumeMounts:
+        - name: secret-broker
+          mountPath: /var/run
+  volumes:
+    - name: secret-broker
+      emptyDir: {}

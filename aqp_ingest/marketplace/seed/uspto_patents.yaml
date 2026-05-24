@@ -1,0 +1,16 @@
+slug: uspto-patents
+display_name: USPTO PatentsView — Patents
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: uspto.patents
+default_sync_mode: incremental_append
+doc_url: https://patentsview.org/apis/api-endpoints
+spec:
+  base_url: https://api.patentsview.org
+  endpoint: /patents/query
+  auth:
+    kind: none
+  primary_key: ["patent_number"]
+  cursor_field: patent_date
+extras:
+  bronze_namespace: aqp_bronze_airbyte_uspto_patents

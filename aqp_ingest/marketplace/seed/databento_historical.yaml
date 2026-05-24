@@ -1,0 +1,18 @@
+slug: databento-historical
+display_name: Databento — Historical (MBO / MBP-1 / MBP-10)
+kind: python_cdk
+vendor_tier: starter
+rate_limit_class: databento.historical
+default_sync_mode: incremental_append
+doc_url: https://databento.com/docs/api-reference-historical
+spec:
+  connector_module: aqp_ingest.connectors.databento.historical
+  connector_class: DatabentoHistoricalStream
+  primary_key: ["ts_event", "instrument_id"]
+  cursor_field: ts_event
+  required_params:
+    - dataset
+    - schema
+    - symbols
+extras:
+  bronze_namespace: aqp_bronze_airbyte_databento_historical

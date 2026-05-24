@@ -38,19 +38,26 @@ class TiingoFetcher(RestApiFetcher):
         params: dict[str, Any] | None = None,
         api_key: str | None = None,
         chunk_rows: int = 5_000,
+        credential_label: str = "primary",
         **kwargs: Any,
     ) -> None:
-        from aqp.config import settings
+        from aqp.data.fetchers.api._resolver import resolve_vendor_api_key
 
         url = f"https://api.tiingo.com{path if path.startswith('/') else '/' + path}"
+        # Rule 26: resolve via CredentialResolver first.
+        resolved = api_key or resolve_vendor_api_key(
+            provider="tiingo",
+            label=credential_label,
+            settings_attr="tiingo_api_key",
+        )
         super().__init__(
             url=url,
             params=params,
             headers={
                 "Content-Type": "application/json",
-                "Authorization": f"Token {api_key or settings.tiingo_api_key}",
+                "Authorization": f"Token {resolved}",
             }
-            if (api_key or settings.tiingo_api_key)
+            if resolved
             else None,
             chunk_rows=chunk_rows,
             **kwargs,

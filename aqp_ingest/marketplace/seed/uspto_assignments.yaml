@@ -1,0 +1,16 @@
+slug: uspto-assignments
+display_name: USPTO PatentsView — Assignments
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: uspto.assignments
+default_sync_mode: incremental_append
+doc_url: https://patentsview.org/apis/api-endpoints
+spec:
+  base_url: https://api.patentsview.org
+  endpoint: /assignments/query
+  auth:
+    kind: none
+  primary_key: ["assignment_id"]
+  cursor_field: assignment_date
+extras:
+  bronze_namespace: aqp_bronze_airbyte_uspto_assignments

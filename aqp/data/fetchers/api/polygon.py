@@ -56,12 +56,20 @@ class PolygonFetcher(RestApiFetcher):
         api_key: str | None = None,
         max_pages: int = 10,
         chunk_rows: int = 5_000,
+        credential_label: str = "primary",
         **kwargs: Any,
     ) -> None:
-        from aqp.config import settings
+        from aqp.data.fetchers.api._resolver import resolve_vendor_api_key
 
         url = f"https://api.polygon.io{path if path.startswith('/') else '/' + path}"
-        api_key_value = api_key or settings.polygon_api_key
+        # Rule 26: resolve via CredentialResolver + BrokerCredentialStore
+        # first; fall back to the legacy settings field while the
+        # platform operator migrates global keys to per-user BYOK.
+        api_key_value = api_key or resolve_vendor_api_key(
+            provider="polygon",
+            label=credential_label,
+            settings_attr="polygon_api_key",
+        )
         super().__init__(
             url=url,
             params=params,

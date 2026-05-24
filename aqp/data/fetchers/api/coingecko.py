@@ -41,13 +41,18 @@ class CoingeckoFetcher(RestApiFetcher):
         params: dict[str, Any] | None = None,
         api_key: str | None = None,
         chunk_rows: int = 1_000,
+        credential_label: str = "primary",
         **kwargs: Any,
     ) -> None:
-        from aqp.config import settings
+        from aqp.data.fetchers.api._resolver import resolve_vendor_api_key
 
         url = f"https://api.coingecko.com/api/v3{path if path.startswith('/') else '/' + path}"
         headers: dict[str, str] = {}
-        token = api_key or settings.coingecko_api_key
+        token = api_key or resolve_vendor_api_key(
+            provider="coingecko",
+            label=credential_label,
+            settings_attr="coingecko_api_key",
+        )
         if token:
             headers["x-cg-pro-api-key"] = token
         super().__init__(

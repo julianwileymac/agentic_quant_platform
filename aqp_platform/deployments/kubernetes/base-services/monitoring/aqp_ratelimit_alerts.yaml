@@ -1,0 +1,95 @@
+---
+# Prometheus alerts for the per-(user, service, key_id) rate-limit
+# subsystem. Loaded by kube-prometheus-stack via the matching
+# PrometheusRule CRD.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aqp-ratelimit-alerts
+  namespace: aqp-monitoring
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: aqp_ratelimit.quota_exhaustion
+      interval: 30s
+      rules:
+        - alert: AQPRatelimitBucketAt80Percent
+          # Fires at 80% consumption — informational; the operator
+          # can act before the bucket is exhausted.
+          expr: |
+            (
+              rl_bucket_remaining{}
+              /
+              clamp_min(rl_bucket_remaining{} + on() group_left
+                       (rate(rl_tokens_consumed_total{decision="allow"}[5m]) * 300), 1)
+            ) < 0.2
+          for: 5m
+          labels:
+            severity: warning
+            component: ratelimit
+          annotations:
+            summary: "Rate-limit bucket at 80% consumption"
+            description: |
+              Bucket {{ $labels.user }}/{{ $labels.service }}/{{ $labels.key_id }}
+              has dropped below 20% of its expected capacity.
+              Runbook: aqp_docs/runbooks/quota-exhaustion.md
+
+        - alert: AQPRatelimitBucketAt95Percent
+          expr: rl_bucket_remaining{} < 0.05 * 60
+          for: 2m
+          labels:
+            severity: critical
+            component: ratelimit
+            pagerduty: aqp-ops
+          annotations:
+            summary: "Rate-limit bucket at 95% consumption"
+            description: |
+              Bucket {{ $labels.user }}/{{ $labels.service }}/{{ $labels.key_id }}
+              is about to deny. Investigate at /data/ratelimit.
+
+        - alert: AQPRatelimitBucketExhausted
+          expr: rl_bucket_remaining{} <= 0
+          for: 30s
+          labels:
+            severity: critical
+            component: ratelimit
+            pagerduty: aqp-ops
+          annotations:
+            summary: "Rate-limit bucket exhausted; connector backing off"
+            description: |
+              Bucket {{ $labels.user }}/{{ $labels.service }}/{{ $labels.key_id }}
+              is at zero. Connector pods are now seeing HTTP 429 from the
+              Envoy forward-proxy and surfacing UserDefinedBackoffException.
+
+    - name: aqp_ratelimit.service_health
+      interval: 30s
+      rules:
+        - alert: AQPRatelimitServiceP99TooHigh
+          expr: |
+            histogram_quantile(0.99, sum(rate(rl_check_duration_seconds_bucket[5m])) by (le)) > 0.020
+          for: 5m
+          labels:
+            severity: warning
+            component: ratelimit
+          annotations:
+            summary: "aqp-rls Check p99 above 20ms"
+            description: |
+              The blueprint phase-gate SLO is p99 < 5ms at 10K QPS. p99
+              has been above 20ms for 5 minutes; investigate Redis
+              load + Lua script SHA cache.
+
+        - alert: AQPRatelimitServiceDown
+          expr: up{job="aqp-rls"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            component: ratelimit
+            pagerduty: aqp-ops
+          annotations:
+            summary: "aqp-rls service is down"
+            description: |
+              At least one aqp-rls pod is down. With all pods down,
+              the inline forward-proxy fails closed (rule: never
+              silently grant quota during a backend outage).

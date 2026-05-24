@@ -1,0 +1,14 @@
+# Envoy HTTP rate-limit filter snippet — referenced by bootstrap.yaml
+# when the operator does NOT want to inline the entire HCM section.
+
+name: envoy.filters.http.ratelimit
+typed_config:
+  "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit
+  domain: aqp_outbound
+  failure_mode_deny: true
+  rate_limited_as_resource_exhausted: true
+  rate_limit_service:
+    grpc_service:
+      envoy_grpc:
+        cluster_name: aqp_rls_grpc
+    transport_api_version: V3

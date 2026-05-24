@@ -1,0 +1,15 @@
+slug: databento-definitions
+display_name: Databento — Instrument Definitions
+kind: python_cdk
+vendor_tier: starter
+rate_limit_class: databento.definitions
+default_sync_mode: full_refresh_per_call
+doc_url: https://databento.com/docs/standards-and-conventions/definition-schema
+spec:
+  connector_module: aqp_ingest.connectors.databento.historical
+  connector_class: DatabentoHistoricalStream
+  schema: definition
+  primary_key: ["instrument_id", "ts_event"]
+  cursor_field: ts_event
+extras:
+  bronze_namespace: aqp_bronze_airbyte_databento_definitions

@@ -1,0 +1,17 @@
+slug: alpha-vantage-fx
+display_name: Alpha Vantage — FX
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: alpha_vantage.query
+default_sync_mode: incremental_append_dedup
+doc_url: https://www.alphavantage.co/documentation/#fx
+spec:
+  base_url: https://www.alphavantage.co
+  endpoint: /query
+  auth:
+    kind: query
+    param: apikey
+  primary_key: ["from_symbol", "to_symbol", "date"]
+  cursor_field: date
+extras:
+  bronze_namespace: aqp_bronze_airbyte_alpha_vantage_fx

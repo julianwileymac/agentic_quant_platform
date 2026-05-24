@@ -74,6 +74,24 @@ CACHE_CATEGORIES: Final[tuple[str, ...]] = (
     # / etc.) with their credential_kind + payload-field metadata.
     # Read-only from the frontend's perspective.
     "broker_providers",
+    # Phase 0 — Foundations (plan section 4). The whitelist of vendor
+    # API services + per-(user, service, key_id) policy + key
+    # descriptors surfaced by the EntityPicker + Rate-Limit Dashboard.
+    # Secret values NEVER land in the cache.
+    "vendor_apis",
+    "rate_limit_policies",
+    "rate_limit_keys",
+    # Phase 2 — dbt plane (plan section 6). Model metadata pulled
+    # from the dbt-loom manifest registry — feeds the
+    # DbtModelsWorkbench Vite route + the data.dbt.* MCP tools.
+    "dbt_models",
+    # Phase 5 — Catalog + UI self-service (plan section 9). The
+    # template_catalog table (Alembic 0069 + 0077) drives the
+    # Vite ConnectorCatalogBrowser.
+    "connector_templates",
+    # Phase 5 — pending ingestion approvals (Alembic 0075)
+    # surfaced to the Vite approval queue.
+    "ingestion_approvals",
 )
 
 
@@ -99,6 +117,11 @@ ORG_SCOPED_CATEGORIES: Final[frozenset[str]] = frozenset(
         # AGENTS rule 55 — broker credentials are per-user but ALSO
         # per-org so RLS-style isolation is mirrored in the cache.
         "broker_credentials",
+        # Phase 0 rate-limit subsystem — per-user keys and policies
+        # are workspace-scoped, mirroring the RLS predicate in
+        # migration 0066-0069.
+        "rate_limit_policies",
+        "rate_limit_keys",
     }
 )
 

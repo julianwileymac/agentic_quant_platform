@@ -1,0 +1,25 @@
+# AQP rate-limit policy template — Databento.
+
+policies:
+  - service: databento.historical
+    tier: free
+    capacity: 10
+    refill_rate: 0.5           # 30 reqs/min
+    refill_interval_ms: 1000
+    window_ms: 60000
+    notes: "Databento historical free trial"
+
+  - service: databento.historical
+    tier: starter
+    capacity: 100
+    refill_rate: 5.0
+    refill_interval_ms: 1000
+    window_ms: 60000
+
+  - service: databento.live
+    tier: starter
+    capacity: 1
+    refill_rate: 1.0
+    refill_interval_ms: 1000
+    window_ms: 1000
+    notes: "One concurrent live subscription per starter key"

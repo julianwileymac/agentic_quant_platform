@@ -1,0 +1,16 @@
+slug: uspto-trademarks
+display_name: USPTO PatentsView — Trademarks
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: uspto.trademarks
+default_sync_mode: incremental_append
+doc_url: https://patentsview.org/apis/api-endpoints
+spec:
+  base_url: https://api.patentsview.org
+  endpoint: /trademarks/query
+  auth:
+    kind: none
+  primary_key: ["serial_number"]
+  cursor_field: filing_date
+extras:
+  bronze_namespace: aqp_bronze_airbyte_uspto_trademarks

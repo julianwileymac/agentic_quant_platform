@@ -41,16 +41,24 @@ class QuandlFetcher(RestApiFetcher):
         params: dict[str, Any] | None = None,
         api_key: str | None = None,
         chunk_rows: int = 5_000,
+        credential_label: str = "primary",
         **kwargs: Any,
     ) -> None:
-        from aqp.config import settings
+        from aqp.data.fetchers.api._resolver import resolve_vendor_api_key
 
         url = f"https://data.nasdaq.com/api/v3/datasets/{dataset}.{return_format}"
+        # Rule 26 compliant: resolve via CredentialResolver +
+        # BrokerCredentialStore first, fall back to legacy settings.
+        api_key_value = api_key or resolve_vendor_api_key(
+            provider="quandl",
+            label=credential_label,
+            settings_attr="quandl_api_key",
+        )
         super().__init__(
             url=url,
             params=params,
             api_key_param="api_key",
-            api_key_value=api_key or settings.quandl_api_key or None,
+            api_key_value=api_key_value or None,
             record_path=["dataset_data", "data"],
             chunk_rows=chunk_rows,
             **kwargs,

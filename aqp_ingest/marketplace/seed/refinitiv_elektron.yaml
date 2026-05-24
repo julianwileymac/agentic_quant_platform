@@ -1,0 +1,17 @@
+slug: refinitiv-elektron
+display_name: Refinitiv Elektron — Streaming
+kind: python_cdk
+vendor_tier: enterprise
+rate_limit_class: refinitiv.elektron
+default_sync_mode: subscribed_refresh
+doc_url: https://developers.refinitiv.com/en/api-catalog
+spec:
+  connector_module: aqp_ingest.connectors.refinitiv.elektron
+  connector_class: RefinitivElektronAdapter
+  primary_key: ["ric", "field", "ts"]
+  cursor_field: ts
+  required_params:
+    - rics
+    - fields
+extras:
+  bronze_namespace: aqp_bronze_airbyte_refinitiv_elektron

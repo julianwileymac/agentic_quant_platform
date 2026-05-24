@@ -1,0 +1,18 @@
+slug: sec-edgar-xbrl
+display_name: SEC EDGAR — XBRL Facts
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: sec_edgar.xbrl
+default_sync_mode: incremental_append
+doc_url: https://data.sec.gov/api/xbrl/
+spec:
+  base_url: https://data.sec.gov
+  endpoint: /api/xbrl/companyfacts/CIK{cik}.json
+  auth:
+    kind: header
+    header_name: User-Agent
+    header_template: "{identity}"
+  primary_key: ["cik", "concept", "period", "form"]
+  cursor_field: filed
+extras:
+  bronze_namespace: aqp_bronze_airbyte_sec_edgar_xbrl

@@ -1,0 +1,16 @@
+slug: polygon-options-chain
+display_name: Polygon.io — Options Chain Snapshots
+kind: python_cdk
+vendor_tier: advanced
+rate_limit_class: polygon.options
+default_sync_mode: incremental_append_dedup
+doc_url: https://polygon.io/docs/options/get_v3_snapshot_options__underlyingasset
+spec:
+  connector_module: aqp_ingest.connectors.polygon.options_chain
+  connector_class: PolygonOptionsChainStream
+  primary_key: ["underlying", "ticker", "snapshot_at"]
+  cursor_field: snapshot_at
+  required_params:
+    - underlyings
+extras:
+  bronze_namespace: aqp_bronze_airbyte_polygon_options

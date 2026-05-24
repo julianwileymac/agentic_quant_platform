@@ -1,0 +1,60 @@
+---
+description: Remote-kernel boundary. Owns Jupyter Enterprise Gateway integration, per-user kernel pod templates, aqp kernel CLI, secret-broker sidecar, Dagster Pipes wrappers.
+globs:
+  - "aqp_kernels/**"
+  - "aqp/persistence/models_kernels.py"
+  - "aqp/api/routes/kernels.py"
+  - "tests/kernels/**"
+alwaysApply: false
+---
+
+# AQP Kernels
+
+- [aqp_kernels/](mdc:aqp_kernels/) owns the hybrid local↔cloud DX
+  layer: Jupyter Enterprise Gateway with `KubernetesProcessProxy`
+  ([`gateway/`](mdc:aqp_kernels/gateway/)), per-user kernel pod
+  templates ([`pods/`](mdc:aqp_kernels/pods/)), the secret-broker
+  sidecar ([`secret_broker/`](mdc:aqp_kernels/secret_broker/)),
+  the Dagster Pipes wrappers ([`pipes/`](mdc:aqp_kernels/pipes/)),
+  and the SDK auto-injection middleware
+  ([`src/aqp_kernels/sdk_proxy.py`](mdc:aqp_kernels/src/aqp_kernels/sdk_proxy.py))
+  that monkey-patches `requests`/`httpx` to route through
+  `HTTPS_PROXY=http://rl-proxy.aqp-system:8080`.
+- **Every kernel pod is namespace-scoped to one user.** The
+  Jupyter Enterprise Gateway's `KubernetesProcessProxy` creates
+  pods in the user's `aqp-kernel-<uid>` namespace, never a
+  shared namespace. Network policies + ResourceQuotas isolate
+  resource usage.
+- **Secret resolution goes through the secret-broker sidecar.**
+  No vendor secret material is ever written to the kernel pod's
+  filesystem. The sidecar fetches per-user secrets from Vault at
+  `secret/data/users/<uid>/services/<svc>` (the path scheme
+  documented in [`aqp.credentials.vault_transit`](mdc:aqp/credentials/vault_transit.py))
+  and exposes them via a Unix domain socket.
+- **All outbound vendor HTTP from the kernel routes through the
+  AQP rate-limit forward proxy** (root AGENTS.md rules 26 + 55).
+  The kernel-startup hook in
+  [`src/aqp_kernels/sdk_proxy.py`](mdc:aqp_kernels/src/aqp_kernels/sdk_proxy.py)
+  sets `HTTPS_PROXY` + monkey-patches `requests.Session` and
+  `httpx.Client` so the patches survive even if the user
+  imports those libraries after kernel start.
+- **`kernel_sessions` is workspace-scoped + RLS-protected** per
+  AGENTS rule 51 (Alembic 0074). Each row tracks the launching
+  user, image, pod_name, kernel_id, start/end timestamps, and
+  the resource quota reference. The Phase 6 janitor reaps
+  expired rows.
+- **Branch deployments use `dagster-cloud branch-deployment
+  create-or-update`** in GitHub Actions
+  ([`.github/workflows/branch-deployment.yml`](mdc:.github/workflows/branch-deployment.yml)).
+  Each branch deployment carries a sandboxed rate-limit budget
+  reservation so a PR can never exhaust the shared monthly
+  quota.
+
+Validation:
+
+```bash
+cd aqp_kernels
+pip install -e .
+pytest -ra
+ruff check src tests
+```

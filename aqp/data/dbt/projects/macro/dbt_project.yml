@@ -1,0 +1,18 @@
+name: aqp_dbt_macro
+version: '0.1.0'
+config-version: 2
+profile: aqp_questdb
+
+model-paths: ['models']
+test-paths: ['tests']
+macro-paths: ['macros']
+target-path: 'target'
+
+require-dbt-version: ['>=1.9.0', '<2.0.0']
+
+models:
+  aqp_dbt_macro:
+    marts:
+      +materialized: questdb_table
+      +schema: macro_marts
+      +access: protected

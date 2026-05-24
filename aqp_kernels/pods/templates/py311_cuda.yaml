@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  generateName: aqp-kernel-py311-cuda-
+  labels:
+    app.kubernetes.io/name: aqp-kernel
+    app.kubernetes.io/component: kernel
+    app.kubernetes.io/part-of: aqp-kernels
+    aqp.io/stack: py311-cuda
+spec:
+  restartPolicy: Never
+  serviceAccountName: aqp-kernel
+  nodeSelector:
+    nvidia.com/gpu.present: 'true'
+  containers:
+    - name: kernel
+      image: ghcr.io/aqp/quant-research:py311-cuda
+      imagePullPolicy: IfNotPresent
+      resources:
+        requests:
+          cpu: '4'
+          memory: 32Gi
+          nvidia.com/gpu: '1'
+        limits:
+          cpu: '8'
+          memory: 64Gi
+          nvidia.com/gpu: '1'
+      env:
+        - name: HTTPS_PROXY
+          value: http://rl-proxy.aqp-system.svc.cluster.local:8080
+        - name: HTTP_PROXY
+          value: http://rl-proxy.aqp-system.svc.cluster.local:8080
+        - name: AQP_KERNEL_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+      volumeMounts:
+        - name: secret-broker
+          mountPath: /var/run
+    - name: secret-broker
+      image: ghcr.io/aqp/secret-broker:0.1.0
+      env:
+        - name: AQP_USER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['aqp.io/user-id']
+      volumeMounts:
+        - name: secret-broker
+          mountPath: /var/run
+  volumes:
+    - name: secret-broker
+      emptyDir: {}

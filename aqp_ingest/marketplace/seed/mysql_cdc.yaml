@@ -1,0 +1,15 @@
+slug: mysql-cdc
+display_name: MySQL — CDC (Binlog)
+kind: cdc
+vendor_tier: starter
+rate_limit_class: cdc.mysql
+default_sync_mode: incremental_append
+doc_url: https://docs.airbyte.com/integrations/sources/mysql
+spec:
+  base_url: ""
+  endpoint: ""
+  cdc:
+    kind: mysql
+  primary_key: []
+extras:
+  bronze_namespace: aqp_bronze_airbyte_mysql_cdc

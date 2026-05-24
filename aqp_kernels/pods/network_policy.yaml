@@ -1,0 +1,52 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aqp-kernel-isolation
+  namespace: aqp-kernel-template
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aqp-kernel
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: aqp-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: jupyter-enterprise-gateway
+  egress:
+    # All outbound vendor HTTP MUST go through the rate-limit proxy.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: aqp-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: rl-proxy
+    # Internal AQP services the kernel may talk to directly.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: aqp-data-services
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: aqp-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: aqp-rls
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53

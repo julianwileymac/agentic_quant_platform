@@ -1,0 +1,20 @@
+# AQP rate-limit policy template — Alpaca data + trading.
+
+policies:
+  - service: alpaca.bars
+    tier: free
+    capacity: 200
+    refill_rate: 3.33          # 200 reqs/min
+    refill_interval_ms: 1000
+    window_ms: 60000
+
+  - service: alpaca.trades
+    tier: free
+    capacity: 200
+    refill_rate: 3.33
+
+  - service: alpaca.broker
+    tier: free
+    capacity: 200
+    refill_rate: 3.33
+    notes: "Paper trading endpoints"

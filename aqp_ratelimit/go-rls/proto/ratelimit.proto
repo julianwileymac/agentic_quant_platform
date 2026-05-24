@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package aqp.ratelimit.v1;
+
+option go_package = "github.com/aqp/aqp_ratelimit/go-rls/internal/pb;pb";
+
+// RateLimit is the canonical AQP rate-limit service.
+//
+// Every outbound vendor API call across the AQP stack — Airbyte CDK
+// connectors, Dagster sensor-gated backfills, Jupyter kernel notebook
+// sessions, agent ingestion tools — calls the gRPC API here BEFORE
+// issuing the request. The 3-tuple identity (user_id, service,
+// key_id) is mandatory; n_tokens defaults to 1.
+service RateLimit {
+  // Atomic non-blocking token-bucket check + debit.
+  rpc Check(CheckRequest) returns (CheckResponse);
+  // Multi-token preflight reservation for partitioned backfills.
+  rpc Reserve(ReserveRequest) returns (ReserveResponse);
+  // Explicit release of a previously-reserved batch.
+  rpc Release(ReleaseRequest) returns (ReleaseResponse);
+  // Read-only bucket snapshot for the UI / CLI.
+  rpc Status(StatusRequest) returns (StatusResponse);
+}
+
+message CheckRequest {
+  string user_id = 1;
+  string service = 2;
+  string key_id = 3;
+  uint32 n_tokens = 4;
+  // Optional caller-provided policy override. The server resolves
+  // the canonical policy from Redis policy cache (refreshed by the
+  // refresh_policy_cache Celery beat task); only setting these
+  // fields forces a different shape for a single call.
+  optional uint32 override_capacity = 5;
+  optional double override_refill_rate = 6;
+}
+
+message CheckResponse {
+  bool allow = 1;
+  double remaining = 2;
+  double capacity = 3;
+  double refill_rate = 4;
+  uint32 retry_after_ms = 5;
+}
+
+message ReserveRequest {
+  string user_id = 1;
+  string service = 2;
+  string key_id = 3;
+  uint32 n_tokens = 4;
+  uint32 ttl_s = 5;
+}
+
+message ReserveResponse {
+  bool allow = 1;
+  string reservation_id = 2;
+  uint32 requested = 3;
+  double remaining = 4;
+  double capacity = 5;
+  uint32 ttl_s = 6;
+}
+
+message ReleaseRequest {
+  string reservation_id = 1;
+}
+
+message ReleaseResponse {
+  uint32 released_tokens = 1;
+}
+
+message StatusRequest {
+  string user_id = 1;
+  string service = 2;
+  string key_id = 3;
+}
+
+message StatusResponse {
+  bool allow = 1;
+  double remaining = 2;
+  double capacity = 3;
+  double refill_rate = 4;
+}

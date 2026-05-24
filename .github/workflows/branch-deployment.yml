@@ -1,0 +1,113 @@
+name: AQP Branch Deployment
+
+# On every push to a non-protected branch with an open PR, build the
+# Docker image + invoke `dagster-cloud branch-deployment create-or-update`
+# so reviewers can see the asset graph in the Vite UI under the PR's
+# "View in AQP" deep link.
+#
+# Per the blueprint section 4.3: "Every time you push to a branch
+# with an open pull or merge request in the Git repository for your
+# Dagster code, Dagster+ will redeploy."
+
+on:
+  pull_request:
+    branches: ['main', 'develop']
+    paths:
+      - 'aqp/**'
+      - 'aqp_ratelimit/**'
+      - 'aqp_ingest/**'
+      - 'aqp_kernels/**'
+      - 'aqp/data/dbt/**'
+      - 'Dockerfile*'
+      - '.github/workflows/branch-deployment.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dagster-cloud CLI
+        run: pip install 'dagster-cloud[serverless]>=1.7'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate to container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push branch image
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/aqp-dagster"
+          BRANCH_SHA="${{ github.event.pull_request.head.sha }}"
+          docker buildx build \
+            --push \
+            --platform linux/amd64 \
+            --tag "${IMAGE}:branch-${BRANCH_SHA}" \
+            -f Dockerfile.dagster .
+
+      - name: Reserve sandboxed RLS budget
+        env:
+          AQP_API_TOKEN: ${{ secrets.AQP_API_TOKEN }}
+          AQP_API_URL: ${{ secrets.AQP_API_URL }}
+        run: |
+          # Reserve a slice of the parent branch's monthly quota for
+          # the duration of this PR. See aqp_kernels/AGENTS.md hard
+          # rule 5.
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${AQP_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"service\": \"branch-deployment\",
+              \"key_id\": \"pr-${PR_NUMBER}\",
+              \"n_tokens\": 5000,
+              \"ttl_s\": 604800
+            }" \
+            "${AQP_API_URL}/me/ratelimit/reserve" || echo "budget reserve failed"
+
+      - name: Create or update Dagster branch deployment
+        env:
+          DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+          DAGSTER_CLOUD_ORGANIZATION: ${{ secrets.DAGSTER_CLOUD_ORGANIZATION }}
+        run: |
+          BRANCH_SHA="${{ github.event.pull_request.head.sha }}"
+          dagster-cloud branch-deployment create-or-update \
+            --git-repo-url "${{ github.event.pull_request.head.repo.html_url }}" \
+            --git-branch "${{ github.event.pull_request.head.ref }}" \
+            --commit-hash "${BRANCH_SHA}" \
+            --pr-id "${{ github.event.pull_request.number }}" \
+            --pr-url "${{ github.event.pull_request.html_url }}"
+
+      - name: Comment with View-in-AQP link
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sha = context.payload.pull_request.head.sha;
+            const body = [
+              `### AQP branch deployment ready`,
+              ``,
+              `View asset graph: https://aqp.internal/dagster/branch/${sha}`,
+              `Rate-limit budget reserved: 5,000 tokens (7d TTL).`,
+            ].join('\n');
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });

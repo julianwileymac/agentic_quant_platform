@@ -1,0 +1,24 @@
+# AQP rate-limit policy template — Alpha Vantage.
+
+policies:
+  - service: alpha_vantage.query
+    tier: free
+    capacity: 5
+    refill_rate: 0.0833        # 5 reqs/min
+    refill_interval_ms: 1000
+    window_ms: 60000
+    notes: "Alpha Vantage free; daily cap enforced by user_tiers"
+
+  - service: alpha_vantage.query
+    tier: starter
+    capacity: 75
+    refill_rate: 1.25          # 75 reqs/min
+    refill_interval_ms: 1000
+    window_ms: 60000
+
+  - service: alpha_vantage.query
+    tier: advanced
+    capacity: 1200
+    refill_rate: 20.0          # 1200 reqs/min
+    refill_interval_ms: 1000
+    window_ms: 60000

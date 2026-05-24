@@ -1,0 +1,9 @@
+packages:
+  - package: metaplane/dbt_expectations
+    version: 0.10.9
+  - package: dbt-loom
+    version: 0.9.4
+
+# `dbt_loom_config:` block lives in dbt_project.yml or
+# loom.yml — see aqp.data.dbt.loom_registry for the sidecar that
+# publishes the upstream manifest.json into S3.

@@ -1,0 +1,21 @@
+slug: alpha-vantage-intraday
+display_name: Alpha Vantage — Intraday
+kind: low_code_yaml
+vendor_tier: starter
+rate_limit_class: alpha_vantage.query
+default_sync_mode: incremental_append_dedup
+doc_url: https://www.alphavantage.co/documentation/#intraday
+spec:
+  base_url: https://www.alphavantage.co
+  endpoint: /query
+  auth:
+    kind: query
+    param: apikey
+  primary_key: ["symbol", "timestamp"]
+  cursor_field: timestamp
+  required_params:
+    - function
+    - symbol
+    - interval
+extras:
+  bronze_namespace: aqp_bronze_airbyte_alpha_vantage_intraday

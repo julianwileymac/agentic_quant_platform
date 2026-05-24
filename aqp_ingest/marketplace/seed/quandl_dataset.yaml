@@ -1,0 +1,17 @@
+slug: quandl-dataset
+display_name: Nasdaq Data Link (Quandl) — Dataset
+kind: low_code_yaml
+vendor_tier: starter
+rate_limit_class: quandl.dataset
+default_sync_mode: full_refresh_per_call
+doc_url: https://docs.data.nasdaq.com/docs/getting-started
+spec:
+  base_url: https://data.nasdaq.com/api/v3
+  endpoint: /datasets/{database_code}/{dataset_code}.json
+  auth:
+    kind: query
+    param: api_key
+  primary_key: ["dataset_code", "date"]
+  cursor_field: date
+extras:
+  bronze_namespace: aqp_bronze_airbyte_quandl

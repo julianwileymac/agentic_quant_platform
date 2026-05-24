@@ -1,0 +1,22 @@
+slug: fred-economic-series
+display_name: FRED — Economic Series Observations
+kind: low_code_yaml
+vendor_tier: free
+rate_limit_class: fred.series
+default_sync_mode: incremental_append
+doc_url: https://fred.stlouisfed.org/docs/api/fred/
+spec:
+  base_url: https://api.stlouisfed.org/fred
+  endpoint: /series/observations
+  auth:
+    kind: query
+    param: api_key
+  primary_key: ["series_id", "date"]
+  cursor_field: observation_start
+  pagination:
+    kind: page
+    page_param: offset
+    page_size_param: limit
+    page_size: 1000
+extras:
+  bronze_namespace: aqp_bronze_airbyte_fred_observations

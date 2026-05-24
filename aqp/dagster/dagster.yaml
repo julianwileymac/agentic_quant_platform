@@ -1,0 +1,46 @@
+# Dagster instance config — Phase 2 plan section 6.
+#
+# This file is consumed by `DAGSTER_HOME=<dir> dagster-webserver`;
+# the operator copies it into their DAGSTER_HOME at deploy time.
+#
+# Three classes of pool are declared:
+#
+# 1. `dbt_snapshots` (limit=1) — serialises ALL `dbt snapshot`
+#    invocations across every team project. Per the published Dagster
+#    docs, parallel snapshot runs against the same target schema can
+#    corrupt the SCD2 chronology; the limit=1 pool plus
+#    `free_slots_after_run_end_seconds=300` (run_monitoring below) is
+#    the canonical fix.
+# 2. `questdb_writer:<table>` — declared per-table by the dbt
+#    materializations so concurrent writers don't trip QuestDB's
+#    single-writer-per-table contract.
+# 3. `vendor:<service>` — global concurrency cap per vendor service
+#    (polygon.aggregates, databento.historical, ...). Acts as a
+#    backstop above the per-(user, service, key_id) rate-limit
+#    buckets.
+#
+# Defaults match the blueprint section 7.4 + the existing AQP
+# Dagster sandbox topology.
+
+concurrency:
+  pools:
+    granularity: 'op'
+    default_limit: 8
+    config:
+      dbt_snapshots:
+        limit: 1
+      questdb_writer:
+        limit: 1
+      vendor:
+        limit: 4
+
+run_monitoring:
+  enabled: true
+  # Critical: prevents the documented pathology where a single
+  # cancelled run permanently deadlocks all future runs for that
+  # pool. Five minutes is the standard recovery window.
+  free_slots_after_run_end_seconds: 300
+
+run_retries:
+  enabled: true
+  max_retries: 3

@@ -1,0 +1,74 @@
+# Envoy v3 bootstrap config for the AQP rate-limit forward proxy.
+#
+# Mounted in every connector / kernel / agent pod via HTTPS_PROXY.
+# The proxy terminates TLS, resolves the destination service from
+# the destination host + path, looks up the (user_id, service,
+# key_id) descriptor from the SPIFFE peer identity, and consults
+# the Go RLS service before forwarding the request upstream.
+#
+# Phase 1 finalises this config; the Phase 0 skeleton documents the
+# shape so the operator can review.
+
+admin:
+  access_log_path: /tmp/admin_access.log
+  address:
+    socket_address: { address: 0.0.0.0, port_value: 9901 }
+
+static_resources:
+  listeners:
+    - name: forward_proxy
+      address:
+        socket_address: { address: 0.0.0.0, port_value: 8080 }
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: aqp_rl_proxy
+                route_config:
+                  virtual_hosts:
+                    - name: default
+                      domains: ["*"]
+                      routes:
+                        - match: { prefix: "/" }
+                          route:
+                            cluster: dynamic_forward_proxy
+                http_filters:
+                  - name: envoy.filters.http.ratelimit
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit
+                      domain: aqp_outbound
+                      rate_limit_service:
+                        grpc_service:
+                          envoy_grpc:
+                            cluster_name: aqp_rls_grpc
+                  - name: envoy.filters.http.dynamic_forward_proxy
+                  - name: envoy.filters.http.router
+
+  clusters:
+    - name: aqp_rls_grpc
+      type: STRICT_DNS
+      load_assignment:
+        cluster_name: aqp_rls_grpc
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: aqp-rls.aqp-system.svc
+                      port_value: 50051
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          explicit_http_config:
+            http2_protocol_options: {}
+
+    - name: dynamic_forward_proxy
+      lb_policy: CLUSTER_PROVIDED
+      cluster_type:
+        name: envoy.clusters.dynamic_forward_proxy
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.clusters.dynamic_forward_proxy.v3.ClusterConfig
+          dns_cache_config:
+            name: dns_cache
+            dns_lookup_family: V4_ONLY
