@@ -1,0 +1,125 @@
+name: aqp-ui
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "aqp_ui/**"
+      - "aqp_platform/build/docker/aqp_ui/**"
+      - "aqp_platform/deployments/kubernetes/base/aqp-ui/**"
+      - ".github/workflows/aqp-ui.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "aqp_ui/**"
+      - "aqp_platform/build/docker/aqp_ui/**"
+      - "aqp_platform/deployments/kubernetes/base/aqp-ui/**"
+      - ".github/workflows/aqp-ui.yml"
+
+concurrency:
+  group: aqp-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: typecheck + lint + unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: aqp_ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: aqp_ui/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Boundary guard (no aqp.* imports)
+        run: |
+          if grep -RE "from ['\"]@aqp/|from ['\"]\.\./\.\./aqp" src 2>/dev/null; then
+            echo "AGENTS rule 1 violation: aqp_ui cannot import aqp.*"
+            exit 1
+          fi
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+
+  build:
+    name: production build
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: aqp_ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: aqp_ui/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+        env:
+          AQP_UI_BASE_URL: https://aqp.fund
+          AQP_CLAIMS_NAMESPACE: https://aqp.internal/
+
+  docker:
+    name: build multi-arch image
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: aqp_platform/build/docker/aqp_ui/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/aqp-ui:${{ github.sha }}
+            ${{ github.ref == 'refs/heads/main' && format('ghcr.io/{0}/aqp-ui:latest', github.repository_owner) || '' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            AQP_UI_BASE_URL=https://aqp.fund
+            AQP_CLAIMS_NAMESPACE=https://aqp.internal/
+            NEXT_PUBLIC_AQP_UI_VERSION=${{ github.sha }}

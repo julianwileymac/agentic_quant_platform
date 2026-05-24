@@ -1,0 +1,21 @@
+# Dedicated namespace for the cloud-hosted customer-facing UI.
+#
+# FinOps labels are required by the Kyverno require-finops-tags
+# ClusterPolicy that runs in the sibling rpi_kubernetes/policies tree
+# (see aqp_platform/deploy/k8s/base/namespace.yaml for the legacy
+# example). Without all four labels the admission webhook denies any
+# workload creation in the namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aqp-ui
+  labels:
+    # AQP topology labels
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: aqp-platform
+    app.kubernetes.io/environment: production
+    # FinOps governance labels (Kyverno-enforced)
+    project: aqp-ui
+    cost_center: quant-research-01
+    owner: platform-frontend
+    data_classification: customer-pii

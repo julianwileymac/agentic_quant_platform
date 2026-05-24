@@ -1,0 +1,84 @@
+---
+description: Cloud-hosted, multi-tenant PaaS frontend boundary (Next.js 14+ App Router).
+globs:
+  - "aqp_ui/**"
+alwaysApply: false
+---
+
+# AQP UI
+
+- `aqp_ui/` is the **customer-facing**, cloud-hosted Next.js 14+ App
+  Router frontend serving both B2B (Entra ID + `EntraTenantLink`) and
+  B2C (Auth0 Organizations) customers. It is NOT the local operator UI
+  (`aqp_client/`) and NOT the internal admin (`aqp_admin/`).
+- **Never import `aqp.*` or `aqp_control_plane.*`.** HTTP-only access
+  to the AQP monolith (`AQP_API_BASE`) and the control plane
+  (`AQP_CONTROL_PLANE_URL`). Types come from `src/lib/api/generated/`
+  (run `pnpm gen:api`).
+- **Identity** flows through the existing
+  [IdentityProvider](mdc:aqp/auth/providers/protocol.py) chain (AQP
+  rule 27). `aqp_ui` mints PKCE state, holds the unified JWE session
+  cookie, and forwards the access token via `Authorization: Bearer`.
+  Vendor SDKs (`@auth0/nextjs-auth0`, `@azure/msal-node`) MAY appear
+  only under `src/lib/auth/` and `src/app/api/auth/*`.
+- **Credentials** resolve through env-only variables synced by
+  External Secrets Operator from HashiCorp Vault. Never embed secrets
+  in client bundles. Never print tokens or kubeconfigs (always-on rule
+  [aqp-management-engine.mdc](mdc:.cursor/rules/aqp-management-engine.mdc)).
+- **Multi-tenancy**: every `/api/*` handler reads
+  `getSession()` from `src/lib/auth/session.ts`, extracts active
+  `org_id` / `workspace_id` / `project_id` / `lab_id` / `mode` claims,
+  and attaches `X-AQP-Org` / `X-AQP-Workspace` / `X-AQP-Project` /
+  `X-AQP-Lab` / `X-AQP-Mode` headers via `src/lib/api/tenancy.ts`.
+  Mirrors [aqp_client/src/lib/api/client.ts](mdc:aqp_client/src/lib/api/client.ts).
+- **Step-up MFA (RFC 9470)**: every BFF handler proxying a
+  step-up-gated upstream endpoint MUST bubble
+  `WWW-Authenticate: Bearer error="insufficient_user_authentication"`
+  back to the client unchanged. The client retries through
+  `src/hooks/useStepUp.ts`.
+- **Kill-switch fan-out**: `POST /api/kill-switch` fans out via
+  `Promise.allSettled` to `/portfolio/kill_switch`, `/agents/halt`,
+  `/paper/stop-all`, `/bots/halt-all`, `/rl/halt-all`,
+  `/workflows/halt`. Matches the existing
+  [KillSwitch.tsx](mdc:aqp_client/src/components/common/KillSwitch.tsx).
+- **EntityPicker** for every name/credential selection. Free-text is
+  reserved for descriptions and queries, never for the names of
+  datasets, namespaces, sink kinds, Airbyte connectors, projects,
+  credentials, broker credentials, etc. Use
+  `src/components/common/EntityPicker.tsx`.
+- **WebSocket frames** preserve `{task_id, stage, message, timestamp,
+  **extras}` per AQP rule 4.
+- **CVE-2025-29927 pinning**: Next.js pinned to `>=14.2.25`. NEVER
+  rely solely on `middleware.ts` for auth — every route handler MUST
+  re-check the session via `getSession()`.
+
+## Where changes go
+
+| Change | Location |
+| --- | --- |
+| Marketing page | `aqp_ui/src/app/(marketing)/<slug>/page.tsx` |
+| Auth screen | `aqp_ui/src/app/(auth)/<slug>/page.tsx` |
+| Protected dashboard page | `aqp_ui/src/app/(app)/<slug>/page.tsx` |
+| BFF route handler | `aqp_ui/src/app/api/<area>/route.ts` |
+| Unified session interface | `aqp_ui/src/lib/auth/session.ts` |
+| Typed HTTP client | `aqp_ui/src/lib/api/client.ts` |
+| Tenancy header builder | `aqp_ui/src/lib/api/tenancy.ts` |
+| Shared UI primitive | `aqp_ui/src/components/common/` |
+| Theme tokens | `aqp_ui/src/providers/AntdProvider.tsx` |
+
+## Validation
+
+```bash
+cd aqp_ui
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+
+# Boundary guard: must return nothing.
+rg --type ts --type tsx "from ['\"]@aqp/" src
+rg --type ts --type tsx "from ['\"]\.\./\.\./aqp" src
+```
+
+Consider these rules if they affect your changes.

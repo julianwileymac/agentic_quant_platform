@@ -1,0 +1,110 @@
+# Public Ingress for aqp_ui.
+#
+# Routes:
+#   https://aqp.fund/         -> aqp-ui (marketing + auth + dashboard)
+#   https://www.aqp.fund/     -> aqp-ui (alias)
+#   https://app.aqp.fund/     -> aqp-ui (vanity alias for the dashboard)
+#
+# Blue/green note: overlays/tower-green will patch hosts to
+# aqp-green.aqp.fund / app-green.aqp.fund for cutover validation.
+#
+# Coexistence with aqp-client: the existing aqp-client Ingress
+# currently owns aqp.fund. The Sprint 6 cutover plan retires the
+# aqp-client public Ingress (aqp_client is local-only per its
+# updated CUTOVER.md) and flips aqp.fund to aqp-ui.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aqp-ui
+  namespace: aqp-ui
+  labels:
+    app.kubernetes.io/part-of: aqp
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "8m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - aqp.fund
+        - www.aqp.fund
+        - app.aqp.fund
+      secretName: aqp-ui-tls
+  rules:
+    - host: aqp.fund
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aqp-ui
+                port:
+                  number: 80
+    - host: www.aqp.fund
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aqp-ui
+                port:
+                  number: 80
+    - host: app.aqp.fund
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aqp-ui
+                port:
+                  number: 80
+---
+# Dedicated Ingress for /api/ws-token-issued WebSocket connections to
+# the AQP core API. Sticky-session affinity ensures a client stays glued
+# to one upstream WS pod across reconnects.
+#
+# The aqp_ui itself does NOT terminate WebSocket connections — it mints
+# a short-lived ticket via /api/ws-token, then the client opens a direct
+# WSS connection to ws.aqp.fund (which routes to aqp-core).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aqp-ws
+  namespace: aqp
+  labels:
+    app.kubernetes.io/part-of: aqp
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/affinity-mode: "persistent"
+    nginx.ingress.kubernetes.io/session-cookie-name: "AQP_WS_SERVER_ID"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - ws.aqp.fund
+      secretName: aqp-ws-tls
+  rules:
+    - host: ws.aqp.fund
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aqp-core
+                port:
+                  number: 8000

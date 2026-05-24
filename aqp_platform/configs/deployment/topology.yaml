@@ -63,6 +63,22 @@ services:
     health_path: /
     restartable: true
     logs_enabled: true
+  - id: aqp-ui
+    aliases: [aqp-frontend-cloud, aqp-paas]
+    label: AQP UI (Cloud)
+    role: frontend
+    workload: deployment
+    app_label: aqp-ui
+    namespace: aqp-ui
+    container: ui
+    image_key: ui
+    port: 80
+    health_path: /api/healthz
+    restartable: true
+    logs_enabled: true
+    endpoints:
+      url: http://aqp-ui.aqp-ui.svc.cluster.local:80
+      public_url: https://aqp.fund
   - id: aqp-cp
     label: AQP Control Plane
     role: control-plane

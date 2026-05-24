@@ -1,0 +1,73 @@
+# Egress restriction for aqp-ui.
+#
+# Allowed egress:
+#   - aqp namespace (aqp-core API + WebSocket)
+#   - aqp-admin namespace (aqp-cp control plane)
+#   - kube-system (DNS via CoreDNS)
+#   - the public internet on 443 (Auth0, Microsoft Entra ID, Stripe)
+#
+# AGENTS rule 2: aqp_ui MUST NOT reach into data-services, ml-platform,
+# or any other internal namespace. Tenancy and broker credentials all
+# flow through the AQP API / control plane.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aqp-ui-egress
+  namespace: aqp-ui
+  labels:
+    app.kubernetes.io/part-of: aqp
+spec:
+  podSelector:
+    matchLabels:
+      app: aqp-ui
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow NGINX Ingress controller to reach pods on :http.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    # In-cluster: AQP API (port 8000) and control plane (port 80).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: aqp
+      ports:
+        - protocol: TCP
+          port: 8000
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: aqp-admin
+      ports:
+        - protocol: TCP
+          port: 80
+    # DNS.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Public internet on 443 — Auth0, Microsoft Entra ID, Stripe.
+    # Refine to specific FQDNs once the cluster has DNS-aware
+    # NetworkPolicy (Cilium) or a sidecar egress gateway.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443

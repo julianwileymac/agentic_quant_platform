@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+/* AQP design tokens shared with aqp_client/src/styles/tokens.css */
+:root,
+.dark {
+  --bg-app: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-elevated: #243042;
+  --text-primary: #e5e7eb;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-default: #334155;
+  --border-subtle: #1e293b;
+  --border-strong: #475569;
+  --accent-primary: #1677ff;
+  --accent-success: #10b981;
+  --pos-fg: #10b981;
+  --neg-fg: #ef4444;
+  --warn-fg: #f59e0b;
+  --info-fg: #3b82f6;
+}
+
+:root.light {
+  --bg-app: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --border-default: #e2e8f0;
+  --border-subtle: #f1f5f9;
+  --border-strong: #cbd5e1;
+}
+
+/* Sandbox / paper-trading visual indicator (matches aqp_client). */
+:root[data-mode="sandbox"],
+:root[data-mode="paper"] {
+  --sandbox-fg: #f59e0b;
+  --sandbox-bg: rgba(245, 158, 11, 0.08);
+  --sandbox-border: rgba(245, 158, 11, 0.4);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family:
+    "Inter",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Numeric tabular figures for dense data tables (matches aqp_client). */
+.tabular,
+[data-numeric="true"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sandbox mode outline around the whole shell. */
+:root[data-mode="sandbox"] body,
+:root[data-mode="paper"] body {
+  box-shadow: inset 0 0 0 2px var(--sandbox-border);
+}
+
+@theme inline {
+  --color-background: var(--bg-app);
+  --color-foreground: var(--text-primary);
+  --color-primary: var(--accent-primary);
+  --color-destructive: var(--neg-fg);
+  --color-border: var(--border-default);
+  --color-muted: var(--text-muted);
+}

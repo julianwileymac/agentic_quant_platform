@@ -13,8 +13,13 @@ Before editing, decide which boundary owns the request:
   `aqp_control_plane/`.
 - Shared value types, ABCs, auth/resource filters, topology, stable wire
   contracts: `aqp_platform_core/`.
-- Operator UI, client API wrappers, WebSocket client behavior:
-  `aqp_client/` under the `aqp_client/` boundary.
+- Operator UI, client API wrappers, WebSocket client behavior (local
+  power users): `aqp_client/` under the `aqp_client/` boundary.
+- Cloud-hosted customer-facing PaaS frontend (public marketing site +
+  auth-gated dashboard, dual Auth0/Entra identity, multi-tenant):
+  `aqp_ui/`. HTTP-only against `aqp_control_plane` and the AQP API.
+- Internal admin surface (AQP staff at `manage.aqp.fund`, audit-first):
+  `aqp_admin/`. HTTP-only against `aqp_control_plane` and the AQP API.
 - Curated external-code knowledge, prompts, rules, skills:
   `aqp_snippets/`, `extractions/`, or `.cursor/`.
 - Bot templates and samples: `aqp_bots/` and `aqp_bots/templates/`.

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base",
+    ":semanticCommits",
+    ":disableDependencyDashboard"
+  ],
+  "rangeStrategy": "pin",
+  "packageRules": [
+    {
+      "description": "Critical security-sensitive packages require manual approval (CVE-2025-29927 lesson).",
+      "matchPackageNames": [
+        "next",
+        "@auth0/nextjs-auth0",
+        "@azure/msal-node",
+        "@rjsf/antd",
+        "@ant-design/nextjs-registry",
+        "iron-session",
+        "jose"
+      ],
+      "dependencyDashboardApproval": true,
+      "automerge": false,
+      "schedule": ["before 6am on monday"]
+    },
+    {
+      "description": "antd minor bumps are usually safe; major bumps need testing.",
+      "matchPackageNames": ["antd"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    },
+    {
+      "description": "Devtools update freely.",
+      "matchPackagePatterns": ["^@biomejs/", "^@playwright/", "^@testing-library/", "vitest"],
+      "automerge": true
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"]
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 5am on monday"]
+  }
+}

@@ -1,0 +1,140 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aqp-ui
+  namespace: aqp-ui
+  labels:
+    app: aqp-ui
+    app.kubernetes.io/name: aqp-ui
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/component: frontend
+    project: aqp-ui
+    cost_center: quant-research-01
+    owner: platform-frontend
+    data_classification: customer-pii
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: aqp-ui
+  template:
+    metadata:
+      labels:
+        app: aqp-ui
+        app.kubernetes.io/name: aqp-ui
+        app.kubernetes.io/part-of: aqp
+        app.kubernetes.io/component: frontend
+        project: aqp-ui
+        cost_center: quant-research-01
+        owner: platform-frontend
+        data_classification: customer-pii
+    spec:
+      serviceAccountName: aqp-ui
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ui
+          image: ghcr.io/julianwiley/aqp-ui:dev
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: aqp-ui-secrets
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3000"
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            - name: AQP_UI_BASE_URL
+              value: "https://aqp.fund"
+            - name: AQP_API_BASE
+              value: "http://aqp-core.aqp.svc.cluster.local:8000"
+            - name: AQP_CONTROL_PLANE_URL
+              value: "http://aqp-cp.aqp-admin.svc.cluster.local:80"
+            - name: AQP_WS_URL
+              value: "ws://aqp-core.aqp.svc.cluster.local:8000"
+            - name: AQP_CLAIMS_NAMESPACE
+              value: "https://aqp.internal/"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+              ephemeral-storage: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+              ephemeral-storage: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: nextjs-cache
+              mountPath: /app/.next/cache
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: nextjs-cache
+          emptyDir: {}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: aqp-ui
+      # Multi-arch: schedule on arm64 (RPi5 edge) or amd64 (cloud nodes).
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["arm64", "amd64"]
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["arm64"]
