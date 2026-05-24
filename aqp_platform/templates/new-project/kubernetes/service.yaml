@@ -1,0 +1,41 @@
+# =============================================================================
+# __APP_NAME__ Services
+# =============================================================================
+# ClusterIP: internal cluster access
+# LoadBalancer: external access via MetalLB
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: __APP_NAME__
+  namespace: __APP_NAMESPACE__
+  labels:
+    app: __APP_NAME__
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: __APP_PORT__
+      targetPort: __APP_PORT__
+      protocol: TCP
+  selector:
+    app: __APP_NAME__
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: __APP_NAME__-external
+  namespace: __APP_NAMESPACE__
+  labels:
+    app: __APP_NAME__
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      port: __APP_PORT__
+      targetPort: __APP_PORT__
+      protocol: TCP
+  selector:
+    app: __APP_NAME__

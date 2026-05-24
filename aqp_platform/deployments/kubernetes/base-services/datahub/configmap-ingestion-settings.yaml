@@ -16,11 +16,11 @@ data:
   INGEST_MINIO_ENDPOINT: "minio.aqp-data-services.svc.cluster.local:9000"
   INGEST_MINIO_REGION: "us-east-1"
   INGEST_MLFLOW_TRACKING_URI: "http://mlflow.aqp-mlops.svc.cluster.local:5000"
-  INGEST_MLFLOW_PLATFORM_INSTANCE: "rpi-kubernetes"
+  INGEST_MLFLOW_PLATFORM_INSTANCE: "agentic-quant-platform"
   INGEST_MLFLOW_EXTERNAL_URL: "http://mlflow.local:5000"
   INGEST_ICEBERG_REST_URI: "http://polaris.aqp-lakehouse.svc.cluster.local:8181/api/catalog"
   INGEST_ICEBERG_WAREHOUSE: "quickstart_catalog"
-  INGEST_ICEBERG_PLATFORM_INSTANCE: "rpi-kubernetes"
+  INGEST_ICEBERG_PLATFORM_INSTANCE: "agentic-quant-platform"
 
   # Cross-repo lakehouse and MLflow source coordinates.
   INGEST_AQP_ICEBERG_REST_URI: "http://polaris.aqp-lakehouse.svc.cluster.local:8181/api/catalog"
@@ -33,14 +33,14 @@ data:
   # Platform service ingestion coordinates.
   INGEST_KAFKA_BOOTSTRAP: "trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9092"
   INGEST_KAFKA_SCHEMA_REGISTRY_URL: "http://apicurio-registry.aqp-streaming.svc.cluster.local:8080"
-  INGEST_KAFKA_PLATFORM_INSTANCE: "rpi-kubernetes"
+  INGEST_KAFKA_PLATFORM_INSTANCE: "agentic-quant-platform"
   INGEST_GRAFANA_URL: "http://prometheus-grafana.aqp-observability.svc.cluster.local:3000"
-  INGEST_GRAFANA_PLATFORM_INSTANCE: "rpi-kubernetes"
+  INGEST_GRAFANA_PLATFORM_INSTANCE: "agentic-quant-platform"
   INGEST_AQP_OPENAPI_NAME: "agentic-quant-platform-api"
   INGEST_AQP_OPENAPI_URL: "http://api.aqp.svc.cluster.local:8000"
   INGEST_AQP_OPENAPI_SWAGGER_FILE: "openapi.json"
   INGEST_AIRBYTE_URL: "http://airbyte-server-svc.elt.svc.cluster.local:8001"
-  INGEST_AIRBYTE_PLATFORM_INSTANCE: "rpi-kubernetes"
+  INGEST_AIRBYTE_PLATFORM_INSTANCE: "agentic-quant-platform"
 
   # Metadata bridge source lists.
   ARGO_WORKFLOWTEMPLATES: "pipeline-raw-ingest,pipeline-heavy-transform,pipeline-vector-sync,pipeline-cdc-sync,datahub-ingestion"

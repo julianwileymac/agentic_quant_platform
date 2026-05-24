@@ -6,7 +6,7 @@
 # ingest the same symbol, and re-publishes cleaned records to the same
 # topics with a dedupe marker.
 #
-# Job source: rpi_kubernetes/flink-jobs/jobs/dedupe.py -- uploaded by
+# Job source: aqp_platform/flink-jobs/jobs/dedupe.py -- uploaded by
 # bootstrap/scripts/build-flink-jobs.sh to s3://flink-jobs/dedupe.py.
 # =============================================================================
 apiVersion: flink.apache.org/v1beta1

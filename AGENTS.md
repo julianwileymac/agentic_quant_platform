@@ -606,7 +606,7 @@ These hold across the codebase. Any PR that violates one will be sent back.
  rollback-only - constructing it raises unless
  ``AQP_CONTROL_PLANE_LEGACY_FALLBACK=true`` is explicitly set, which
  only makes sense when the operator has just re-applied
- ``rpi_kubernetes/kubernetes/legacy-management/`` as an emergency
+ ``aqp_platform/deployments/kubernetes/rollback/legacy-management/`` as an emergency
  revert. Use
  [`AQPControlPlaneClient`](aqp/services/control_plane_client.py)
  for every new call site.

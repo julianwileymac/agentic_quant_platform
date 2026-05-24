@@ -1,0 +1,100 @@
+# =============================================================================
+# Alpha Vantage streaming producer - Deployment
+# =============================================================================
+# Single-replica poll-and-emit producer. Mounts:
+#   - Strimzi KafkaUser secret `producer-market` for SASL auth.
+#   - `trading-kafka-cluster-ca-cert` for TLS.
+#   - `alphavantage-credentials` secret (api-key) at /var/run/secrets/alphavantage.
+#   - `alphavantage-producer-universe` ConfigMap at /etc/alphavantage-producer.
+# Scaled to 0 by default so the API key is only consumed on demand. Use:
+#   kubectl scale deploy/alphavantage-producer --replicas=1 -n data-services
+# ... or toggle via POST /api/alphavantage/stream on the management API.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alphavantage-producer
+  namespace: aqp-streaming
+  labels:
+    app.kubernetes.io/name: alphavantage-producer
+    app.kubernetes.io/component: streaming-producer
+    app.kubernetes.io/part-of: rpi-k8s-platform
+    data-provider: alphavantage
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alphavantage-producer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alphavantage-producer
+        app.kubernetes.io/component: streaming-producer
+        data-provider: alphavantage
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9312"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: producer
+          image: ghcr.io/julianwiley/alphavantage-producer:0.1.0
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: alphavantage-producer-config
+          env:
+            - name: AV_PRODUCER_SASL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: producer-market
+                  key: password
+          ports:
+            - name: metrics
+              containerPort: 9312
+          volumeMounts:
+            - name: kafka-ca
+              mountPath: /etc/kafka/ca
+              readOnly: true
+            - name: alphavantage-secret
+              mountPath: /var/run/secrets/alphavantage
+              readOnly: true
+            - name: universe
+              mountPath: /etc/alphavantage-producer
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9312
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 9312
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: kafka-ca
+          secret:
+            secretName: trading-kafka-cluster-ca-cert
+            items:
+              - key: ca.crt
+                path: ca.crt
+        - name: alphavantage-secret
+          secret:
+            secretName: alphavantage-credentials
+            items:
+              - key: api-key
+                path: api-key
+        - name: universe
+          configMap:
+            name: alphavantage-producer-universe

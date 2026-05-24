@@ -271,12 +271,12 @@ data:
         bridged_sources = [
             (
                 "iceberg",
-                "rpi-kubernetes.iceberg",
+                "agentic-quant-platform.iceberg",
                 "rpi_kubernetes Iceberg REST catalog backed by MinIO",
                 {
                     "rest_uri": os.getenv("INGEST_ICEBERG_REST_URI", ""),
                     "warehouse": os.getenv("INGEST_ICEBERG_WAREHOUSE", ""),
-                    "platform_instance": os.getenv("INGEST_ICEBERG_PLATFORM_INSTANCE", "rpi-kubernetes"),
+                    "platform_instance": os.getenv("INGEST_ICEBERG_PLATFORM_INSTANCE", "agentic-quant-platform"),
                 },
             ),
             (
@@ -291,7 +291,7 @@ data:
             ),
             (
                 "mlflow",
-                "rpi-kubernetes.mlflow",
+                "agentic-quant-platform.mlflow",
                 "rpi_kubernetes MLflow tracking service",
                 {"tracking_uri": os.getenv("INGEST_MLFLOW_TRACKING_URI", "")},
             ),
@@ -303,7 +303,7 @@ data:
             ),
             (
                 "kafka",
-                "rpi-kubernetes.kafka",
+                "agentic-quant-platform.kafka",
                 "rpi_kubernetes Strimzi Kafka cluster",
                 {
                     "bootstrap": os.getenv("INGEST_KAFKA_BOOTSTRAP", ""),
@@ -312,13 +312,13 @@ data:
             ),
             (
                 "s3",
-                "rpi-kubernetes.minio",
+                "agentic-quant-platform.minio",
                 "rpi_kubernetes MinIO object storage",
                 {"endpoint": os.getenv("INGEST_MINIO_ENDPOINT", "")},
             ),
             (
                 "grafana",
-                "rpi-kubernetes.grafana",
+                "agentic-quant-platform.grafana",
                 "rpi_kubernetes Grafana dashboards",
                 {"url": os.getenv("INGEST_GRAFANA_URL", "")},
             ),

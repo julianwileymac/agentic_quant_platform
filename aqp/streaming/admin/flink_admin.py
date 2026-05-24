@@ -8,7 +8,7 @@ Two surfaces are exposed:
 - :class:`FlinkSessionJobK8s` — kubernetes client wrapper that
   CRUDs the ``flink.apache.org/v1beta1.FlinkSessionJob`` custom
   resources used by the cluster Flink Operator (matches the YAMLs at
-  ``rpi_kubernetes/kubernetes/base-services/flink/jobs/*.yaml``).
+  ``aqp_platform/deployments/kubernetes/base-services/flink/jobs/*.yaml``).
 
 Both classes degrade gracefully: missing SDKs raise
 :class:`FlinkAdminUnavailableError` and the route module falls back

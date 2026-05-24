@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "MarketSnapshotV1",
+  "namespace": "aqp.streaming.market",
+  "doc": "IBKR reqMktData snapshot. The tick_map holds tickTypeId -> value pairs (delayed and live tick types).",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "vt_symbol", "type": "string"},
+    {"name": "market_data_type", "type": "int", "doc": "1 live, 2 frozen, 3 delayed, 4 delayed-frozen"},
+    {"name": "tick_map", "type": {"type": "map", "values": "double"}, "doc": "e.g. '1': bid, '2': ask, '4': last, '66': delayed-bid"},
+    {"name": "generic_ticks", "type": {"type": "array", "items": "string"}, "default": []},
+    {"name": "venue_source", "type": {"type": "enum", "name": "VenueSource", "symbols": ["ibkr", "alpaca", "simulated"]}},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

@@ -3,19 +3,10 @@
 # Build + publish the flink-trading (PyFlink) image and upload jobs to MinIO.
 # =============================================================================
 # For the Java TA-Lib job bundle, use
-# ``bootstrap/scripts/build-flink-jobs-java.sh`` instead (separate image +
-# per-category shadow JARs uploaded to ``s3://flink-jobs/java/``).
-#
-# Prerequisites:
-#   * Docker Buildx with a multi-arch builder configured
-#     (``docker buildx create --name aqp --use`` once).
-#   * ``mc`` (MinIO client) configured with an ``aqp`` alias pointed at the
-#     in-cluster MinIO, e.g. via port-forward:
-#       kubectl port-forward -n aqp-data-services svc/minio 9000:9000 &
-#       mc alias set aqp http://localhost:9000 minioadmin minioadmin123
+# ``aqp_platform/scripts/cluster_install/build-flink-jobs-java.sh`` instead
 #
 # Usage:
-#   bash bootstrap/scripts/build-flink-jobs.sh \
+#   bash aqp_platform/scripts/cluster_install/build-flink-jobs.sh \
 #     --image ghcr.io/julianwiley/flink-trading:1.20 \
 #     [--push] \
 #     [--skip-jobs]
@@ -51,8 +42,9 @@ done
 
 echo "[build-flink-jobs] image=${IMAGE} push=${PUSH} skip-jobs=${SKIP_JOBS}"
 
-# Sync schemas from aqp (ensures the Flink image ships the same contract).
-AQP_SCHEMAS="${REPO_ROOT}/../agentic_quant_platform/aqp/streaming/schemas"
+# Sync schemas from the monolith (ensures the Flink image ships the same contract).
+MONO_ROOT="$(cd "${REPO_ROOT}/.." && pwd)"
+AQP_SCHEMAS="${MONO_ROOT}/aqp/streaming/schemas"
 if [[ -d "${AQP_SCHEMAS}" ]]; then
     echo "[build-flink-jobs] syncing Avro schemas from ${AQP_SCHEMAS}"
     mkdir -p "${JOBS_DIR}/jobs/schemas"

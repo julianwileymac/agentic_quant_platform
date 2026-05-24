@@ -1,0 +1,60 @@
+plugins {
+    id 'application'
+    id 'com.gradleup.shadow' version '8.3.0'
+    id 'java'
+}
+
+group = 'io.rpi.kafka.sample'
+version = '0.1.0'
+
+sourceCompatibility = JavaVersion.VERSION_17
+targetCompatibility = JavaVersion.VERSION_17
+
+repositories {
+    mavenCentral()
+    maven { url 'https://packages.confluent.io/maven/' }
+}
+
+dependencies {
+    implementation "org.apache.kafka:kafka-clients:${kafkaVersion}"
+    implementation "io.apicurio:apicurio-registry-serdes-avro-serde:${apicurioVersion}"
+    implementation "org.apache.avro:avro:${avroVersion}"
+
+    implementation "info.picocli:picocli:${picocliVersion}"
+    implementation "io.micrometer:micrometer-core:${micrometerVersion}"
+    implementation "io.micrometer:micrometer-registry-prometheus:${micrometerVersion}"
+
+    implementation "io.opentelemetry:opentelemetry-api:${otelVersion}"
+    implementation "io.opentelemetry:opentelemetry-sdk:${otelVersion}"
+    implementation "io.opentelemetry:opentelemetry-exporter-otlp:${otelVersion}"
+    implementation "io.opentelemetry.semconv:opentelemetry-semconv:1.25.0-alpha"
+
+    implementation "org.slf4j:slf4j-api:${slf4jVersion}"
+    implementation "org.apache.logging.log4j:log4j-slf4j2-impl:${log4jVersion}"
+    implementation "org.apache.logging.log4j:log4j-api:${log4jVersion}"
+    implementation "org.apache.logging.log4j:log4j-core:${log4jVersion}"
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+application {
+    mainClass = 'io.rpi.kafka.sample.producer.ProducerApp'
+    applicationDefaultJvmArgs = [
+        '-javaagent:/opt/otel/opentelemetry-javaagent.jar',
+        '-Dotel.service.name=kafka-java-producer',
+        '-Dotel.exporter.otlp.endpoint=http://otel-collector.observability.svc.cluster.local:4317',
+        '-Dotel.metrics.exporter=none'
+    ]
+}
+
+shadowJar {
+    archiveClassifier.set('')
+    mergeServiceFiles()
+    manifest {
+        attributes 'Main-Class': 'io.rpi.kafka.sample.producer.ProducerApp'
+    }
+}

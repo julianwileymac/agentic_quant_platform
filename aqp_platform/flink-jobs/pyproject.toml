@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aqp-flink-jobs"
+version = "0.1.0"
+description = "PyFlink jobs for the AQP streaming platform (dedupe, indicators, normalize, scanner alerts)"
+requires-python = ">=3.11"
+
+# PyFlink pins Python <=3.11 for the wheels on pypi; Java runtime is
+# provided by the Flink image.
+dependencies = [
+    "apache-flink>=1.20,<1.21",
+    "fastavro>=1.9",
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "ruff>=0.3",
+]
+
+[tool.setuptools.packages.find]
+include = ["jobs*"]

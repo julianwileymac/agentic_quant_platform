@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-python-producer-template
+data:
+  KAFKA_PRODUCER_BOOTSTRAP_SERVERS: "trading-kafka-kafka-bootstrap.data-services.svc.cluster.local:9094"
+  KAFKA_PRODUCER_SECURITY_PROTOCOL: "SASL_SSL"
+  KAFKA_PRODUCER_SASL_MECHANISM: "SCRAM-SHA-512"
+  KAFKA_PRODUCER_SASL_USERNAME: "producer-market"
+  KAFKA_PRODUCER_SSL_CA_LOCATION: "/etc/kafka/ca/ca.crt"
+  KAFKA_PRODUCER_TOPIC: "market.trade.v1"
+  KAFKA_PRODUCER_DEADLETTER_TOPIC: "market.deadletter.v1"
+  KAFKA_PRODUCER_SCHEMA_NAME: "market_trade_v1"
+  KAFKA_PRODUCER_SCHEMA_REGISTRY_URL: "http://apicurio-registry.data-services.svc.cluster.local:8080/apis/registry/v2"
+  KAFKA_PRODUCER_OTEL_ENDPOINT: "http://otel-collector.observability.svc.cluster.local:4317"
+  KAFKA_PRODUCER_SERVICE_NAME: "kafka-python-producer-template"
+  KAFKA_PRODUCER_RATE_PER_SECOND: "10"
+  KAFKA_PRODUCER_METRICS_PORT: "9300"

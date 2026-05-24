@@ -1,0 +1,36 @@
+{
+  "type": "record",
+  "name": "AlphaVantageOptionsV1",
+  "namespace": "aqp.streaming.alphavantage",
+  "doc": "Realtime / historical options chain contract row. chain_kind flags the endpoint origin.",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "symbol", "type": "string"},
+    {"name": "chain_kind", "type": {
+      "type": "enum",
+      "name": "OptionChainKind",
+      "symbols": ["REALTIME", "HISTORICAL"]
+    }},
+    {"name": "contract_id", "type": ["null", "string"], "default": null},
+    {"name": "expiration", "type": ["null", "string"], "default": null},
+    {"name": "strike", "type": ["null", "double"], "default": null},
+    {"name": "type", "type": ["null", "string"], "default": null},
+    {"name": "last", "type": ["null", "double"], "default": null},
+    {"name": "mark", "type": ["null", "double"], "default": null},
+    {"name": "bid", "type": ["null", "double"], "default": null},
+    {"name": "bid_size", "type": ["null", "int"], "default": null},
+    {"name": "ask", "type": ["null", "double"], "default": null},
+    {"name": "ask_size", "type": ["null", "int"], "default": null},
+    {"name": "volume", "type": ["null", "long"], "default": null},
+    {"name": "open_interest", "type": ["null", "long"], "default": null},
+    {"name": "date", "type": ["null", "string"], "default": null},
+    {"name": "implied_volatility", "type": ["null", "double"], "default": null},
+    {"name": "delta", "type": ["null", "double"], "default": null},
+    {"name": "gamma", "type": ["null", "double"], "default": null},
+    {"name": "theta", "type": ["null", "double"], "default": null},
+    {"name": "vega", "type": ["null", "double"], "default": null},
+    {"name": "rho", "type": ["null", "double"], "default": null},
+    {"name": "av_function", "type": "string"},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

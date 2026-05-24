@@ -1,0 +1,22 @@
+{
+  "type": "record",
+  "name": "AlphaVantageQuoteV1",
+  "namespace": "aqp.streaming.alphavantage",
+  "doc": "Alpha Vantage GLOBAL_QUOTE snapshot. Poll cadence is defined by the producer (default 60s per symbol).",
+  "fields": [
+    {"name": "ts_ns", "type": "long", "doc": "Quote timestamp (latest trading day normalized to midnight UTC) in epoch ns"},
+    {"name": "symbol", "type": "string"},
+    {"name": "open", "type": ["null", "double"], "default": null},
+    {"name": "high", "type": ["null", "double"], "default": null},
+    {"name": "low", "type": ["null", "double"], "default": null},
+    {"name": "price", "type": ["null", "double"], "default": null},
+    {"name": "volume", "type": ["null", "long"], "default": null},
+    {"name": "latest_trading_day", "type": ["null", "string"], "default": null},
+    {"name": "previous_close", "type": ["null", "double"], "default": null},
+    {"name": "change", "type": ["null", "double"], "default": null},
+    {"name": "change_percent", "type": ["null", "string"], "default": null},
+    {"name": "entitlement", "type": ["null", "string"], "default": null, "doc": "realtime/delayed/null for historical"},
+    {"name": "av_function", "type": "string", "default": "GLOBAL_QUOTE"},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

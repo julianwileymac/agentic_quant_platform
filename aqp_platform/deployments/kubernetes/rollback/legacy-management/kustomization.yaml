@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: management
+
+resources:
+  - namespace.yaml
+  - backend.yaml
+  - frontend.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: management
+      app.kubernetes.io/component: control-panel
+      app.kubernetes.io/part-of: rpi-k8s-platform

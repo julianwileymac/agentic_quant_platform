@@ -1,0 +1,242 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: management-api
+  namespace: management
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: management-api
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "pods", "services", "namespaces", "configmaps", "secrets", "persistentvolumeclaims", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  # Phase 7 patch — exec WebSocket endpoint requires pods/exec create.
+  # Previously the LogStream + PodTerminal frontend components would 403
+  # on exec attempts because this verb was missing.
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale", "deployments/status"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Metrics Server queries for the pod stats panel.
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: management-api
+subjects:
+  - kind: ServiceAccount
+    name: management-api
+    namespace: management
+roleRef:
+  kind: ClusterRole
+  name: management-api
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: management-api-config
+  namespace: management
+data:
+  APP_CLUSTER_NAME: "rpi-k8s-cluster"
+  APP_LOG_LEVEL: "INFO"
+  MLFLOW_TRACKING_URI: "http://mlflow.ml-platform.svc.cluster.local:5000"
+  MINIO_ENDPOINT: "http://minio.data-services.svc.cluster.local:9000"
+  OTEL_EXPORTER_ENDPOINT: "http://otel-collector.observability.svc.cluster.local:4317"
+  REDIS_HOST: "redis.data-services.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  REDIS_INDEX_PREFIX: "rpi"
+  REDIS_CACHE_TTL_SECONDS: "300"
+  REDIS_SEMANTIC_CACHE_THRESHOLD: "0.15"
+  DOCSTORE_BUCKET: "dagster-artifacts"
+  DOCSTORE_BUCKET_PREFIX: "documents/"
+  DOCSTORE_MAX_UPLOAD_MB: "50"
+  DOCSTORE_CHUNK_SIZE: "800"
+  DOCSTORE_CHUNK_OVERLAP: "100"
+  DOCSTORE_DEFAULT_COLLECTION: "general"
+  DOCSTORE_VECTOR_INDEX_NAME: "idx:chunks"
+  DOCSTORE_DOCUMENT_INDEX_NAME: "idx:documents"
+  DOCSTORE_ANNOTATION_INDEX_NAME: "idx:annotations"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: management-api-redis
+  namespace: management
+  labels:
+    app: management-api
+    compat: redis-credentials-mirror
+type: Opaque
+stringData:
+  REDIS_PASSWORD: "ragflow123"
+  REDIS_URL: "redis://:ragflow123@redis.data-services.svc.cluster.local:6379/0"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: management-api
+  namespace: management
+  labels:
+    app.kubernetes.io/name: management
+    app.kubernetes.io/component: control-panel
+    app.kubernetes.io/part-of: rpi-k8s-platform
+    app.kubernetes.io/managed-by: rpi-k8s-cluster
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: management-api
+      app.kubernetes.io/name: management
+      app.kubernetes.io/component: control-panel
+      app.kubernetes.io/part-of: rpi-k8s-platform
+      app.kubernetes.io/managed-by: rpi-k8s-cluster
+  template:
+    metadata:
+      labels:
+        app: management-api
+        app.kubernetes.io/name: management
+        app.kubernetes.io/component: control-panel
+        app.kubernetes.io/part-of: rpi-k8s-platform
+        app.kubernetes.io/managed-by: rpi-k8s-cluster
+    spec:
+      serviceAccountName: management-api
+      containers:
+        - name: api
+          # Phase 4 of the AQP infra-expansion plan: pinned to the
+          # frozen :v1-final tag. The legacy rpi-k8s-management API is
+          # rollback-only; new admin work goes to aqp_control_plane
+          # (see deployments/kubernetes/MIGRATION.md in the AQP repo).
+          image: rpi-k8s-management:v1-final
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: ALPHAVANTAGE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alphavantage-credentials
+                  key: api-key
+                  optional: true
+            - name: ALPHAVANTAGE_API_KEY_FILE
+              value: "/var/run/secrets/alphavantage/api-key"
+          envFrom:
+            - configMapRef:
+                name: management-api-config
+            - secretRef:
+                name: management-api-redis
+          volumeMounts:
+            - name: alphavantage-credentials
+              mountPath: /var/run/secrets/alphavantage
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              cpu: 750m
+              memory: 768Mi
+          livenessProbe:
+            httpGet:
+              path: /api/live
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: alphavantage-credentials
+          secret:
+            secretName: alphavantage-credentials
+            optional: true
+            items:
+              - key: api-key
+                path: api-key
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.kubernetes.io/role
+                    operator: In
+                    values:
+                      - control-plane
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: management-api
+  namespace: management
+  labels:
+    app.kubernetes.io/name: management
+    app.kubernetes.io/component: control-panel
+    app.kubernetes.io/part-of: rpi-k8s-platform
+    app.kubernetes.io/managed-by: rpi-k8s-cluster
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+    - name: metrics
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app: management-api
+    app.kubernetes.io/name: management
+    app.kubernetes.io/component: control-panel
+    app.kubernetes.io/part-of: rpi-k8s-platform
+    app.kubernetes.io/managed-by: rpi-k8s-cluster
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: management-api
+  namespace: observability
+  labels:
+    app: management-api
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+      - management
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: management
+      app.kubernetes.io/component: control-panel
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

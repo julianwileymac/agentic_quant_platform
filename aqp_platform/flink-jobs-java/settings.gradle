@@ -1,0 +1,13 @@
+rootProject.name = 'flink-jobs-java'
+
+include ':common'
+include ':indicators-overlap'
+include ':indicators-momentum'
+include ':indicators-volume'
+include ':indicators-volatility'
+include ':indicators-price-transform'
+include ':indicators-cycle'
+include ':indicators-statistic'
+include ':indicators-patterns'
+include ':indicators-math-transform'
+include ':indicators-math-operator'

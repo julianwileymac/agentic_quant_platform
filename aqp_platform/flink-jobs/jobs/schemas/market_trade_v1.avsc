@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "MarketTradeV1",
+  "namespace": "aqp.streaming.market",
+  "doc": "Tick-level trade from IBKR tickByTick(AllLast) or Alpaca trades WSS channel.",
+  "fields": [
+    {"name": "ts_ns", "type": "long", "doc": "Event timestamp in epoch nanoseconds"},
+    {"name": "vt_symbol", "type": "string", "doc": "Composite <ticker>.<exchange> identifier"},
+    {"name": "price", "type": "double"},
+    {"name": "size", "type": "double"},
+    {"name": "exchange_code", "type": ["null", "string"], "default": null},
+    {"name": "conditions", "type": {"type": "array", "items": "string"}, "default": []},
+    {"name": "trade_id", "type": ["null", "string"], "default": null},
+    {"name": "venue_source", "type": {"type": "enum", "name": "VenueSource", "symbols": ["ibkr", "alpaca", "simulated"]}},
+    {"name": "ingest_ts_ns", "type": "long", "doc": "When the ingester emitted this record"}
+  ]
+}

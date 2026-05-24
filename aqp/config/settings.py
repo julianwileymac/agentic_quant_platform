@@ -832,7 +832,7 @@ class Settings(BaseSettings):
     # services. Only flip to ``True`` for an emergency rollback to the
     # deprecated `rpi-k8s-management` legacy API; the matching k8s
     # Deployment is rollback-only under
-    # `rpi_kubernetes/kubernetes/legacy-management/`.
+    # `aqp_platform/deployments/kubernetes/rollback/legacy-management/`.
     control_plane_legacy_fallback: bool = Field(default=False)
 
     # --- Terraform IaC control plane ----------------------------------------

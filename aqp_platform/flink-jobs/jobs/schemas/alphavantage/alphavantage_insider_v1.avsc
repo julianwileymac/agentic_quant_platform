@@ -1,0 +1,19 @@
+{
+  "type": "record",
+  "name": "AlphaVantageInsiderV1",
+  "namespace": "aqp.streaming.alphavantage",
+  "doc": "Row-level insider transaction from INSIDER_TRANSACTIONS. Keyed by ticker+transaction_date+executive for compaction.",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "ticker", "type": "string"},
+    {"name": "transaction_date", "type": ["null", "string"], "default": null},
+    {"name": "executive", "type": ["null", "string"], "default": null},
+    {"name": "executive_title", "type": ["null", "string"], "default": null},
+    {"name": "security_type", "type": ["null", "string"], "default": null},
+    {"name": "acquisition_or_disposal", "type": ["null", "string"], "default": null},
+    {"name": "shares", "type": ["null", "double"], "default": null},
+    {"name": "share_price", "type": ["null", "double"], "default": null},
+    {"name": "av_function", "type": "string", "default": "INSIDER_TRANSACTIONS"},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

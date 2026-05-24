@@ -141,7 +141,7 @@ class ControlPlaneSettings(BaseSettings):
             "/manage/observability/*, /manage/lakehouse/*, "
             "/manage/timeseries/*, and /manage/data-plane/*. Only set True "
             "to re-enable the passthrough to the v1-final image pinned in "
-            "rpi_kubernetes/kubernetes/legacy-management/ during a rollback."
+            "aqp_platform/deployments/kubernetes/rollback/legacy-management/ during a rollback."
         ),
     )
 

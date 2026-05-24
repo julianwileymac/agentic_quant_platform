@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-python-consumer-template
+  labels:
+    app: kafka-python-consumer-template
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-python-consumer-template
+  template:
+    metadata:
+      labels:
+        app: kafka-python-consumer-template
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9301"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: consumer
+          image: ghcr.io/julianwiley/kafka-python-consumer-template:0.1.0
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: kafka-python-consumer-template
+          env:
+            - name: KAFKA_CONSUMER_SASL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: consumer-management
+                  key: password
+          ports:
+            - name: metrics
+              containerPort: 9301
+          volumeMounts:
+            - name: kafka-ca
+              mountPath: /etc/kafka/ca
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+      volumes:
+        - name: kafka-ca
+          secret:
+            secretName: trading-kafka-cluster-ca-cert
+            items:
+              - key: ca.crt
+                path: ca.crt

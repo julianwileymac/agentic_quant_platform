@@ -1,0 +1,26 @@
+{
+  "type": "record",
+  "name": "AlphaVantageFxV1",
+  "namespace": "aqp.streaming.alphavantage",
+  "doc": "Foreign exchange rate or FX OHLC bar. The rate_kind field disambiguates CURRENCY_EXCHANGE_RATE snapshots from FX_INTRADAY/DAILY/WEEKLY/MONTHLY bars.",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "from_currency", "type": "string"},
+    {"name": "to_currency", "type": "string"},
+    {"name": "rate_kind", "type": {
+      "type": "enum",
+      "name": "FxRateKind",
+      "symbols": ["REALTIME", "INTRADAY", "DAILY", "WEEKLY", "MONTHLY"]
+    }},
+    {"name": "interval", "type": ["null", "string"], "default": null},
+    {"name": "open", "type": ["null", "double"], "default": null},
+    {"name": "high", "type": ["null", "double"], "default": null},
+    {"name": "low", "type": ["null", "double"], "default": null},
+    {"name": "close", "type": ["null", "double"], "default": null},
+    {"name": "exchange_rate", "type": ["null", "double"], "default": null},
+    {"name": "bid_price", "type": ["null", "double"], "default": null},
+    {"name": "ask_price", "type": ["null", "double"], "default": null},
+    {"name": "av_function", "type": "string"},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

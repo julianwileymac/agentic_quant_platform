@@ -1,0 +1,65 @@
+// =============================================================================
+// Root build.gradle - shared config for all subprojects
+// =============================================================================
+
+plugins {
+    id 'java'
+    id 'com.gradleup.shadow' version '8.3.0' apply false
+}
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'java-library'
+
+    group = 'io.rpi.flink.indicators'
+    version = '0.1.0'
+
+    java {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    repositories {
+        mavenCentral()
+    }
+
+    configurations {
+        flinkShadowJar {
+            canBeConsumed = false
+        }
+        implementation.extendsFrom flinkShadowJar
+    }
+
+    dependencies {
+        // ---- Flink core (provided by the cluster, never bundle) ----
+        compileOnly "org.apache.flink:flink-streaming-java:${flinkVersion}"
+        compileOnly "org.apache.flink:flink-clients:${flinkVersion}"
+        compileOnly "org.apache.flink:flink-runtime-web:${flinkVersion}"
+
+        // ---- Shadowed: bundled into the shadow JAR ----
+        flinkShadowJar "org.apache.flink:flink-connector-kafka:${kafkaConnectorVersion}"
+        flinkShadowJar "org.apache.kafka:kafka-clients:${kafkaVersion}"
+        flinkShadowJar "org.apache.avro:avro:${avroVersion}"
+        flinkShadowJar "io.apicurio:apicurio-registry-serdes-avro-serde:${apicurioVersion}"
+        flinkShadowJar "com.tictactec:ta-lib:${talibVersion}"
+
+        // ---- Logging (provided) ----
+        compileOnly "org.slf4j:slf4j-api:${slf4jVersion}"
+        compileOnly "org.apache.logging.log4j:log4j-api:${log4jVersion}"
+
+        // ---- Test ----
+        testImplementation "org.apache.flink:flink-streaming-java:${flinkVersion}:tests"
+        testImplementation "org.apache.flink:flink-runtime:${flinkVersion}:tests"
+        testImplementation "org.apache.flink:flink-test-utils-junit:${flinkVersion}"
+        testImplementation "org.apache.flink:flink-test-utils:${flinkVersion}"
+        testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
+        testImplementation "org.assertj:assertj-core:${assertjVersion}"
+    }
+
+    test {
+        useJUnitPlatform()
+        testLogging {
+            events "passed", "skipped", "failed"
+        }
+    }
+}

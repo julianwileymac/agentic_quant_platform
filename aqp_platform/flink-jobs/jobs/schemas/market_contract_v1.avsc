@@ -1,0 +1,31 @@
+{
+  "type": "record",
+  "name": "MarketContractV1",
+  "namespace": "aqp.streaming.market",
+  "doc": "Contract metadata from IBKR reqContractDetails. Keyed by vt_symbol for log-compacted topic.",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "vt_symbol", "type": "string"},
+    {"name": "con_id", "type": "long"},
+    {"name": "sec_type", "type": "string", "doc": "STK, OPT, FUT, FOP, FOREX, CRYPTO, CONTFUT, IND, CFD, etc."},
+    {"name": "primary_exchange", "type": ["null", "string"], "default": null},
+    {"name": "exchange", "type": ["null", "string"], "default": null},
+    {"name": "currency", "type": "string"},
+    {"name": "local_symbol", "type": ["null", "string"], "default": null},
+    {"name": "trading_class", "type": ["null", "string"], "default": null},
+    {"name": "min_tick", "type": ["null", "double"], "default": null},
+    {"name": "price_magnifier", "type": ["null", "int"], "default": null},
+    {"name": "contract_month", "type": ["null", "string"], "default": null},
+    {"name": "industry", "type": ["null", "string"], "default": null},
+    {"name": "category", "type": ["null", "string"], "default": null},
+    {"name": "sub_category", "type": ["null", "string"], "default": null},
+    {"name": "timezone_id", "type": ["null", "string"], "default": null},
+    {"name": "trading_hours", "type": ["null", "string"], "default": null},
+    {"name": "liquid_hours", "type": ["null", "string"], "default": null},
+    {"name": "market_rule_ids", "type": ["null", "string"], "default": null},
+    {"name": "underlying_con_id", "type": ["null", "long"], "default": null},
+    {"name": "event_kind", "type": {"type": "enum", "name": "ContractEventKind", "symbols": ["upsert", "delete"]}, "default": "upsert"},
+    {"name": "venue_source", "type": {"type": "enum", "name": "VenueSource", "symbols": ["ibkr", "alpaca", "simulated"]}},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

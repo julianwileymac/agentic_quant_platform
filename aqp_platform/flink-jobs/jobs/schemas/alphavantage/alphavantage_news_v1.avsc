@@ -1,0 +1,46 @@
+{
+  "type": "record",
+  "name": "AlphaVantageNewsV1",
+  "namespace": "aqp.streaming.alphavantage",
+  "doc": "Normalized news + sentiment article from NEWS_SENTIMENT. Keyed by url hash for idempotent compaction.",
+  "fields": [
+    {"name": "ts_ns", "type": "long", "doc": "time_published parsed to epoch ns"},
+    {"name": "article_id", "type": "string", "doc": "SHA-256 of url"},
+    {"name": "url", "type": "string"},
+    {"name": "title", "type": ["null", "string"], "default": null},
+    {"name": "summary", "type": ["null", "string"], "default": null},
+    {"name": "banner_image", "type": ["null", "string"], "default": null},
+    {"name": "source", "type": ["null", "string"], "default": null},
+    {"name": "source_domain", "type": ["null", "string"], "default": null},
+    {"name": "category_within_source", "type": ["null", "string"], "default": null},
+    {"name": "authors", "type": {"type": "array", "items": "string"}, "default": []},
+    {"name": "topics", "type": {
+      "type": "array",
+      "items": {
+        "type": "record",
+        "name": "TopicRelevance",
+        "fields": [
+          {"name": "topic", "type": "string"},
+          {"name": "relevance_score", "type": ["null", "double"], "default": null}
+        ]
+      }
+    }, "default": []},
+    {"name": "ticker_sentiment", "type": {
+      "type": "array",
+      "items": {
+        "type": "record",
+        "name": "TickerSentiment",
+        "fields": [
+          {"name": "ticker", "type": "string"},
+          {"name": "relevance_score", "type": ["null", "double"], "default": null},
+          {"name": "ticker_sentiment_score", "type": ["null", "double"], "default": null},
+          {"name": "ticker_sentiment_label", "type": ["null", "string"], "default": null}
+        ]
+      }
+    }, "default": []},
+    {"name": "overall_sentiment_score", "type": ["null", "double"], "default": null},
+    {"name": "overall_sentiment_label", "type": ["null", "string"], "default": null},
+    {"name": "av_function", "type": "string", "default": "NEWS_SENTIMENT"},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

@@ -8,7 +8,7 @@
 #   - MinIO Parquet (s3://dagster-artifacts/normalized/...)
 #   - VictoriaMetrics remote-write
 #
-# Job source: rpi_kubernetes/flink-jobs/jobs/normalize_sink.py
+# Job source: aqp_platform/flink-jobs/jobs/normalize_sink.py
 # =============================================================================
 apiVersion: flink.apache.org/v1beta1
 kind: FlinkSessionJob

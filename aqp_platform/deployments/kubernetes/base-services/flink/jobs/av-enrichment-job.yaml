@@ -6,7 +6,7 @@
 # features.indicators.v1. Suspended by default so it only runs when the AV
 # producer is live.
 #
-# Job source: rpi_kubernetes/flink-jobs/jobs/av_enrichment.py -- uploaded by
+# Job source: aqp_platform/flink-jobs/jobs/av_enrichment.py -- uploaded by
 # bootstrap/scripts/build-flink-jobs.sh to s3://flink-jobs/av_enrichment.py.
 # =============================================================================
 apiVersion: flink.apache.org/v1beta1

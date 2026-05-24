@@ -4,7 +4,7 @@
 # Joins IBKR market.scanner.v1 rows with recent bars from market.bar.v1
 # and emits alignment-based trading signals into features.signals.v1.
 #
-# Job source: rpi_kubernetes/flink-jobs/jobs/scanner_alert.py
+# Job source: aqp_platform/flink-jobs/jobs/scanner_alert.py
 # =============================================================================
 apiVersion: flink.apache.org/v1beta1
 kind: FlinkSessionJob

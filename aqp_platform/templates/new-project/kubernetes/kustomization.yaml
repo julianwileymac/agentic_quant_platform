@@ -1,0 +1,23 @@
+# =============================================================================
+# Kustomization - __APP_NAME__
+# =============================================================================
+# Replace all __PLACEHOLDER__ values before deploying.
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: __APP_NAMESPACE__
+
+resources:
+  - configmap.yaml
+  - secret.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+commonLabels:
+  app.kubernetes.io/name: __APP_NAME__
+  app.kubernetes.io/component: __APP_COMPONENT__
+  app.kubernetes.io/part-of: rpi-k8s-platform

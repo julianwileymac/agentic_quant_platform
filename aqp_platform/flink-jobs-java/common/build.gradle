@@ -1,0 +1,3 @@
+// common shared helpers - consumed as a project dep by indicator modules
+
+// inherit settings from root build.gradle

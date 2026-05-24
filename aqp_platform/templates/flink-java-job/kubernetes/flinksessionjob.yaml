@@ -1,0 +1,33 @@
+# =============================================================================
+# FlinkSessionJob - sample Java job template
+# =============================================================================
+# Submit this CR under kubernetes/base-services/flink/jobs-java/ after
+# uploading the shadow jar to MinIO (s3://flink-jobs/java/sample-job.jar).
+# =============================================================================
+
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkSessionJob
+metadata:
+  name: flink-java-sample
+  namespace: flink
+  labels:
+    app: flink-trading-session
+    job: flink-java-sample
+    pipeline-stage: sample
+spec:
+  deploymentName: flink-trading-session
+  job:
+    jarURI: s3://flink-jobs/java/sample-job.jar
+    entryClass: io.rpi.flink.sample.SampleJob
+    args:
+      - "--kafka.bootstrap.servers"
+      - "trading-kafka-kafka-bootstrap.data-services.svc.cluster.local:9092"
+      - "--kafka.source.topic"
+      - "market.bar.v1"
+      - "--kafka.sink.topic"
+      - "features.indicators.v1"
+      - "--kafka.group.id"
+      - "flink-java-sample"
+    parallelism: 1
+    upgradeMode: savepoint
+    state: suspended

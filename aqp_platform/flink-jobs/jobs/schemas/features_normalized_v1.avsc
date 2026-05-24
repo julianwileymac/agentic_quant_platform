@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "FeaturesNormalizedV1",
+  "namespace": "aqp.streaming.features",
+  "doc": "Normalized feature vector (z-score or min-max) emitted by the normalize-sink job.",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "vt_symbol", "type": "string"},
+    {"name": "features", "type": {"type": "array", "items": "double"}, "doc": "Dense feature vector aligned with feature_names"},
+    {"name": "feature_names", "type": {"type": "array", "items": "string"}},
+    {"name": "method", "type": {"type": "enum", "name": "NormalizationMethod", "symbols": ["zscore", "minmax", "robust"]}, "default": "zscore"},
+    {"name": "raw_close", "type": ["null", "double"], "default": null},
+    {"name": "window_size_sec", "type": "int"},
+    {"name": "compute_ts_ns", "type": "long"}
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "type": "record",
+  "name": "AlphaVantageBarV1",
+  "namespace": "aqp.streaming.alphavantage",
+  "doc": "OHLCV bar emitted from TIME_SERIES_INTRADAY/DAILY/WEEKLY/MONTHLY. One record per bar.",
+  "fields": [
+    {"name": "ts_ns", "type": "long", "doc": "Bar close epoch ns"},
+    {"name": "symbol", "type": "string"},
+    {"name": "interval", "type": "string", "doc": "1min|5min|15min|30min|60min|daily|weekly|monthly"},
+    {"name": "open", "type": "double"},
+    {"name": "high", "type": "double"},
+    {"name": "low", "type": "double"},
+    {"name": "close", "type": "double"},
+    {"name": "adjusted_close", "type": ["null", "double"], "default": null},
+    {"name": "volume", "type": "double"},
+    {"name": "dividend_amount", "type": ["null", "double"], "default": null},
+    {"name": "split_coefficient", "type": ["null", "double"], "default": null},
+    {"name": "entitlement", "type": ["null", "string"], "default": null},
+    {"name": "av_function", "type": "string"},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

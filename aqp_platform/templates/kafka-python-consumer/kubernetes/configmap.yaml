@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-python-consumer-template
+data:
+  KAFKA_CONSUMER_BOOTSTRAP_SERVERS: "trading-kafka-kafka-bootstrap.data-services.svc.cluster.local:9094"
+  KAFKA_CONSUMER_SECURITY_PROTOCOL: "SASL_SSL"
+  KAFKA_CONSUMER_SASL_MECHANISM: "SCRAM-SHA-512"
+  KAFKA_CONSUMER_SASL_USERNAME: "consumer-management"
+  KAFKA_CONSUMER_SSL_CAFILE: "/etc/kafka/ca/ca.crt"
+  KAFKA_CONSUMER_GROUP_ID: "management-sample-consumer"
+  KAFKA_CONSUMER_TOPICS: '["market.bar.v1"]'
+  KAFKA_CONSUMER_AUTO_OFFSET_RESET: "latest"
+  KAFKA_CONSUMER_ENABLE_AUTO_COMMIT: "false"
+  KAFKA_CONSUMER_SCHEMA_REGISTRY_URL: "http://apicurio-registry.data-services.svc.cluster.local:8080/apis/registry/v2"
+  KAFKA_CONSUMER_OTEL_ENDPOINT: "http://otel-collector.observability.svc.cluster.local:4317"
+  KAFKA_CONSUMER_SERVICE_NAME: "kafka-python-consumer-template"
+  KAFKA_CONSUMER_METRICS_PORT: "9301"

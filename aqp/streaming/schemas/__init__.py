@@ -3,7 +3,7 @@
 The schemas here are the single source of truth shared by:
 
 - ``aqp.streaming.ingesters`` (producers): serialize IBKR/Alpaca events to Kafka
-- The Flink PyFlink jobs at ``rpi_kubernetes/flink-jobs/`` (produce + consume)
+- The Flink PyFlink jobs at ``aqp_platform/flink-jobs/`` (produce + consume)
 - ``aqp.trading.feeds.kafka_feed.KafkaDataFeed`` (consumer): materializes
   records back into :mod:`aqp.core.types` (``BarData``, ``TickData``, ``Signal``)
 
@@ -36,7 +36,7 @@ SCHEMAS_DIR = Path(__file__).resolve().parent
 # Canonical mapping of schema file stem -> Kafka topic. The schema stem is
 # also the shortname used by the rest of the platform (config, Flink jobs,
 # CLI arguments). Keep this table in lock-step with the topic list in
-# ``rpi_kubernetes/kubernetes/base-services/kafka/topics.yaml``.
+# ``aqp_platform/deployments/kubernetes/base-services/kafka-strimzi/topics.yaml``.
 TOPIC_BY_SCHEMA: dict[str, str] = {
     "market_trade_v1": "market.trade.v1",
     "market_quote_v1": "market.quote.v1",

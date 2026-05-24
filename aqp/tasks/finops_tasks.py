@@ -10,7 +10,7 @@ channel can react.
 
 The task is defensive: if the Kubernetes Python client is unavailable
 (e.g. local dev with no cluster credentials) it returns an explanatory
-no-op result rather than raising — the Kyverno ``ClusterPolicy`` in
+Optional sibling-repo Kyverno policy at
 ``rpi_kubernetes/kubernetes/policies/finops/`` is the authoritative
 enforcement layer; this task is the periodic safety net that catches
 mis-applied or pre-existing workloads that pre-date the policy.

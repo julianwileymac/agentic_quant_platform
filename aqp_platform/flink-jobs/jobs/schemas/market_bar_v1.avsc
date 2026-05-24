@@ -1,0 +1,21 @@
+{
+  "type": "record",
+  "name": "MarketBarV1",
+  "namespace": "aqp.streaming.market",
+  "doc": "OHLCV bar. Covers IBKR reqRealTimeBars (5s TRADES), Alpaca bars/updatedBars/dailyBars channels.",
+  "fields": [
+    {"name": "ts_ns", "type": "long", "doc": "Bar close epoch ns"},
+    {"name": "vt_symbol", "type": "string"},
+    {"name": "interval", "type": "string", "doc": "Lean/vnpy interval code (e.g. 5s, 1m, 1d)"},
+    {"name": "open", "type": "double"},
+    {"name": "high", "type": "double"},
+    {"name": "low", "type": "double"},
+    {"name": "close", "type": "double"},
+    {"name": "volume", "type": "double"},
+    {"name": "vwap", "type": ["null", "double"], "default": null},
+    {"name": "trade_count", "type": ["null", "long"], "default": null},
+    {"name": "bar_type", "type": {"type": "enum", "name": "BarType", "symbols": ["realtime", "updated", "daily"]}, "default": "realtime"},
+    {"name": "venue_source", "type": {"type": "enum", "name": "VenueSource", "symbols": ["ibkr", "alpaca", "simulated"]}},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

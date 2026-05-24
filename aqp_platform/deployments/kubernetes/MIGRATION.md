@@ -5,8 +5,9 @@
 > AQP is now self-contained: every shared cluster service runs in an
 > AQP-owned `aqp-*` namespace under
 > `agentic_quant_platform/deployments/kubernetes/`. `rpi_kubernetes`
-> only owns RPi cluster bootstrap, the `julianwiley-portal` stack,
-> and the rollback-only `legacy-management/` shell.
+> only owns RPi cluster bootstrap and the `julianwiley-portal` stack.
+> Rollback-only legacy management manifests live under
+> `aqp_platform/deployments/kubernetes/rollback/legacy-management/`.
 >
 > This document is retained only to explain why the layout looks the
 > way it does. Do not use it as a rollout runbook for new
@@ -39,8 +40,10 @@
   app + portal-scoped Prometheus + `web`-namespace NetworkPolicy.
 - `kubernetes/base-services/cloudflared/` - portal-only Cloudflare
   tunnel for `julianwiley.com`.
-- `kubernetes/legacy-management/` + `kubernetes/base-services/management/` -
-  rollback-only shell pinned to `:v1-final`.
+- Legacy management rollback (opt-in only):
+  `aqp_platform/deployments/kubernetes/rollback/legacy-management/` in
+  `agentic_quant_platform` (source trees under
+  `aqp_platform/rollback/legacy-management/`).
 
 ## Domain isolation
 

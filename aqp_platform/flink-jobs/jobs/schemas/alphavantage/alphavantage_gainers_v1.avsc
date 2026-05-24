@@ -1,0 +1,23 @@
+{
+  "type": "record",
+  "name": "AlphaVantageGainersV1",
+  "namespace": "aqp.streaming.alphavantage",
+  "doc": "A single row from TOP_GAINERS_LOSERS (US market). bucket distinguishes gainers/losers/most_actively_traded.",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "bucket", "type": {
+      "type": "enum",
+      "name": "TopMoverBucket",
+      "symbols": ["TOP_GAINER", "TOP_LOSER", "MOST_ACTIVELY_TRADED"]
+    }},
+    {"name": "rank", "type": "int"},
+    {"name": "ticker", "type": "string"},
+    {"name": "price", "type": ["null", "double"], "default": null},
+    {"name": "change_amount", "type": ["null", "double"], "default": null},
+    {"name": "change_percentage", "type": ["null", "double"], "default": null},
+    {"name": "volume", "type": ["null", "long"], "default": null},
+    {"name": "last_updated", "type": ["null", "string"], "default": null},
+    {"name": "av_function", "type": "string", "default": "TOP_GAINERS_LOSERS"},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

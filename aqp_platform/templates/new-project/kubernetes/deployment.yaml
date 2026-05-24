@@ -1,0 +1,77 @@
+# =============================================================================
+# __APP_NAME__ Deployment
+# =============================================================================
+# Replace all __PLACEHOLDER__ values before deploying.
+#
+# Strategy:
+#   - Recreate: safer for stateful single-replica workloads (default below)
+#   - RollingUpdate: use for stateless services that support concurrent versions
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: __APP_NAME__
+  namespace: __APP_NAMESPACE__
+  labels:
+    app: __APP_NAME__
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: __APP_NAME__
+  template:
+    metadata:
+      labels:
+        app: __APP_NAME__
+    spec:
+      containers:
+        - name: __APP_NAME__
+          image: __APP_IMAGE__
+          ports:
+            - name: http
+              containerPort: __APP_PORT__
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: __APP_NAME__-config
+            - secretRef:
+                name: __APP_NAME__-credentials
+          volumeMounts:
+            - name: data
+              mountPath: __APP_DATA_PATH__
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: __APP_PORT__
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: __APP_PORT__
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: __APP_NAME__-data
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.kubernetes.io/role
+                    operator: In
+                    values:
+                      - control-plane

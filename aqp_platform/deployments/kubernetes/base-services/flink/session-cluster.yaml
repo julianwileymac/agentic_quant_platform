@@ -9,7 +9,7 @@
 # Metrics: Prometheus reporter on port 9249 for scraping.
 # Image: ghcr.io/julianwiley/flink-trading:1.20 -- multi-arch build over
 #        flink:1.20-java11 that pre-installs PyFlink + S3/Kafka/JDBC
-#        plugins + PostgreSQL JDBC driver. See rpi_kubernetes/flink-jobs/
+#        plugins + PostgreSQL JDBC driver. See aqp_platform/flink-jobs/
 #        Dockerfile.
 #
 # Requires: Flink Kubernetes Operator CRDs installed via Helm, plus

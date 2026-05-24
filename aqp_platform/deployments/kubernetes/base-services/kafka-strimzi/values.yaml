@@ -11,7 +11,7 @@
 replicas: 1
 
 watchNamespaces:
-  - data-services
+  - aqp-streaming
 
 resources:
   requests:

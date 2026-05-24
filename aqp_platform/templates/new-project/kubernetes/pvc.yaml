@@ -1,0 +1,19 @@
+# =============================================================================
+# __APP_NAME__ PersistentVolumeClaim
+# =============================================================================
+# Uses the local-path provisioner (rancher/local-path-provisioner).
+# Remove this file and its references if the service is stateless.
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: __APP_NAME__-data
+  namespace: __APP_NAMESPACE__
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi

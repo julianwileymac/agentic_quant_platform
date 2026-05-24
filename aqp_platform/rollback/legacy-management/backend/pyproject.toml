@@ -1,0 +1,73 @@
+[project]
+name = "rpi-k8s-management"
+version = "0.1.0"
+description = "Management API for RPi Kubernetes Cluster"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "RPi K8s Team" }
+]
+keywords = ["kubernetes", "raspberry-pi", "management", "fastapi"]
+
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "kubernetes>=28.1.0",
+    "httpx>=0.26.0",
+    "paramiko>=3.4.0",
+    "mlflow>=2.10.0",
+    "opentelemetry-api>=1.22.0",
+    "opentelemetry-sdk>=1.22.0",
+    "opentelemetry-instrumentation-fastapi>=0.43b0",
+    "opentelemetry-instrumentation-redis>=0.43b0",
+    "opentelemetry-exporter-otlp>=1.22.0",
+    "prometheus-client>=0.19.0",
+    "python-multipart>=0.0.6",
+    "PyYAML>=6.0.1",
+    "asyncssh>=2.14.2",
+    "boto3>=1.35.0",
+    "aiofiles>=24.1.0",
+    "redis>=5.2.1",
+    "redisvl>=0.5.1",
+    "redis-om>=0.3.5",
+    # alphavantage-client is installed from integrations/alphavantage via the
+    # Dockerfile (pip install -e) and during local dev via scripts/bootstrap.
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "black>=24.1.0",
+    "ruff>=0.1.0",
+    "mypy>=1.8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "W", "I", "N", "UP", "B"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

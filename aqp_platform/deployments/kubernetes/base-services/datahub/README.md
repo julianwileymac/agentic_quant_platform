@@ -183,7 +183,7 @@ kubectl logs -n data-services job/datahub-ingest-postgres-manual
 | Source | DataHub path | Notes |
 | --- | --- | --- |
 | rpi Kubernetes MinIO | `recipe-minio-s3.yaml` | Scans pipeline, model, MLflow, AQP, and Iceberg buckets/prefixes. |
-| rpi Kubernetes Iceberg | `recipe-iceberg-rest.yaml` | DataHub GMS Iceberg REST catalog, platform instance `rpi-kubernetes`. |
+| AQP Kubernetes Iceberg | `recipe-iceberg-rest.yaml` | DataHub GMS Iceberg REST catalog, platform instance `agentic-quant-platform`. |
 | AQP Iceberg lake | `recipe-aqp-iceberg-rest.yaml` | Same REST catalog with AQP warehouse/platform instance naming. |
 | rpi/AQP MLflow | `recipe-mlflow*.yaml` | Logical platform instances over the shared in-cluster MLflow tracking service. |
 | rpi Kafka | `recipe-kafka.yaml` | Strimzi bootstrap plus Apicurio schema registry. |

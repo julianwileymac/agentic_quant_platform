@@ -4,7 +4,7 @@
 # Consumes market.bar.v1, computes SMA/EMA/RSI/MACD/BB/ATR/VWAP/OBV +
 # lagged returns per symbol, and produces features.indicators.v1.
 #
-# Job source: rpi_kubernetes/flink-jobs/jobs/indicator_compute.py
+# Job source: aqp_platform/flink-jobs/jobs/indicator_compute.py
 # =============================================================================
 apiVersion: flink.apache.org/v1beta1
 kind: FlinkSessionJob

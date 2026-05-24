@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: alphavantage-producer
+  namespace: data-services
+  labels:
+    app.kubernetes.io/name: alphavantage-producer
+spec:
+  selector:
+    app.kubernetes.io/name: alphavantage-producer
+  ports:
+    - name: metrics
+      port: 9312
+      targetPort: 9312
+      protocol: TCP

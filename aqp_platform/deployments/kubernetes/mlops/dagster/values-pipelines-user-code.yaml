@@ -11,7 +11,7 @@ dagster-user-deployments:
   deployments:
     - name: pipelines-user-code
       image:
-        repository: ghcr.io/julianwiley/rpi-k8s-pipelines
+        repository: ghcr.io/julianwiley/aqp-pipelines
         tag: latest
         pullPolicy: IfNotPresent
       dagsterApiGrpcArgs:

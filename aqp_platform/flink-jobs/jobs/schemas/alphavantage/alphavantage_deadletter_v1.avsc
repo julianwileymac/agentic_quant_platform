@@ -1,0 +1,33 @@
+{
+  "type": "record",
+  "name": "AlphaVantageDeadletterV1",
+  "namespace": "aqp.streaming.alphavantage",
+  "doc": "Dead-letter envelope for any AV producer/ingest failure. Captures original request params, raw response, error classification, and retry hint.",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "target_topic", "type": "string"},
+    {"name": "av_function", "type": "string"},
+    {"name": "request_params", "type": {"type": "map", "values": "string"}},
+    {"name": "error_kind", "type": {
+      "type": "enum",
+      "name": "AvDeadletterErrorKind",
+      "symbols": [
+        "TRANSIENT",
+        "RATE_LIMIT_RPM",
+        "RATE_LIMIT_DAILY",
+        "INVALID_KEY",
+        "INVALID_SYMBOL",
+        "PREMIUM_REQUIRED",
+        "PAYLOAD_ERROR",
+        "PRODUCER_FAILURE",
+        "UNKNOWN"
+      ]
+    }},
+    {"name": "error_message", "type": ["null", "string"], "default": null},
+    {"name": "raw_response", "type": ["null", "string"], "default": null},
+    {"name": "retry_after_seconds", "type": ["null", "double"], "default": null},
+    {"name": "attempt_count", "type": "int", "default": 1},
+    {"name": "producer", "type": ["null", "string"], "default": null},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

@@ -10,7 +10,7 @@ After the rpi <-> AQP decoupling this client is **rollback-only**:
 
 - The matching cluster Deployment (``rpi-k8s-management``) is pinned
   to a ``:v1-final`` image under
-  ``rpi_kubernetes/kubernetes/legacy-management/`` and is **not**
+  ``aqp_platform/deployments/kubernetes/rollback/legacy-management/`` and is **not**
   applied by the default cluster bootstrap.
 - ``settings.control_plane_legacy_fallback`` defaults to ``False``;
   constructing a :class:`ClusterMgmtClient` while the flag is False

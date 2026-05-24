@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "MarketStatusV1",
+  "namespace": "aqp.streaming.market",
+  "doc": "Trading status, halts, LULDs. Covers Alpaca statuses channel and IBKR market-data-type switches.",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "vt_symbol", "type": "string"},
+    {"name": "status_code", "type": "string", "doc": "e.g. T (Trading), H (Halted), C (Closed), marketDataType=1..4"},
+    {"name": "reason", "type": ["null", "string"], "default": null},
+    {"name": "tape", "type": ["null", "string"], "default": null},
+    {"name": "venue_source", "type": {"type": "enum", "name": "VenueSource", "symbols": ["ibkr", "alpaca", "simulated"]}},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

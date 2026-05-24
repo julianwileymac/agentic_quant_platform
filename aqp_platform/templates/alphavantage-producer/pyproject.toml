@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alphavantage-producer"
+version = "0.1.0"
+description = "Poll-and-emit Alpha Vantage streaming producer for the rpi_kubernetes trading-kafka cluster."
+requires-python = ">=3.11"
+dependencies = [
+    "alphavantage-client>=0.1",
+    "confluent-kafka>=2.4",
+    "fastavro>=1.9",
+    "httpx>=0.27",
+    "opentelemetry-api>=1.24",
+    "opentelemetry-sdk>=1.24",
+    "opentelemetry-exporter-otlp>=1.24",
+    "opentelemetry-instrumentation-confluent-kafka>=0.45b0",
+    "opentelemetry-instrumentation-httpx>=0.45b0",
+    "prometheus-client>=0.20",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+alphavantage-producer = "alphavantage_producer.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["alphavantage_producer*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

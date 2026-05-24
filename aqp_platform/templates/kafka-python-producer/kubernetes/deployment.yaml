@@ -1,0 +1,63 @@
+# =============================================================================
+# Kafka Python Producer Template - Deployment
+# =============================================================================
+# Mount the SCRAM password from the KafkaUser secret (created by the Strimzi
+# User Operator) and the cluster CA certificate into the pod. The producer
+# reads them via KAFKA_PRODUCER_SASL_PASSWORD_FILE and
+# KAFKA_PRODUCER_SSL_CA_LOCATION.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-python-producer-template
+  labels:
+    app: kafka-python-producer-template
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-python-producer-template
+  template:
+    metadata:
+      labels:
+        app: kafka-python-producer-template
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9300"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: producer
+          image: ghcr.io/julianwiley/kafka-python-producer-template:0.1.0
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: kafka-python-producer-template
+          env:
+            - name: KAFKA_PRODUCER_SASL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: producer-market
+                  key: password
+          ports:
+            - name: metrics
+              containerPort: 9300
+          volumeMounts:
+            - name: kafka-ca
+              mountPath: /etc/kafka/ca
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+      volumes:
+        - name: kafka-ca
+          secret:
+            secretName: trading-kafka-cluster-ca-cert
+            items:
+              - key: ca.crt
+                path: ca.crt

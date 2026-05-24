@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "AlphaVantageCommodityV1",
+  "namespace": "aqp.streaming.alphavantage",
+  "doc": "A single commodity price observation from WTI, BRENT, NATURAL_GAS, COPPER, ALUMINUM, WHEAT, CORN, COTTON, SUGAR, COFFEE, ALL_COMMODITIES, and the gold/silver history endpoints.",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "commodity", "type": "string", "doc": "AV function name (e.g. WTI, BRENT, NATURAL_GAS)"},
+    {"name": "date", "type": "string"},
+    {"name": "value", "type": ["null", "double"], "default": null},
+    {"name": "unit", "type": ["null", "string"], "default": null},
+    {"name": "interval", "type": ["null", "string"], "default": null},
+    {"name": "av_function", "type": "string"},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

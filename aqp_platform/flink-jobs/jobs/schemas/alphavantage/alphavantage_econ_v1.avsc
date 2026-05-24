@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "AlphaVantageEconV1",
+  "namespace": "aqp.streaming.alphavantage",
+  "doc": "A single observation from an AV economic indicator endpoint (REAL_GDP, CPI, TREASURY_YIELD, FFR, UNEMPLOYMENT, NONFARM_PAYROLL, etc.).",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "indicator", "type": "string", "doc": "AV function (REAL_GDP, CPI, TREASURY_YIELD, ...)"},
+    {"name": "date", "type": "string"},
+    {"name": "value", "type": ["null", "double"], "default": null},
+    {"name": "unit", "type": ["null", "string"], "default": null},
+    {"name": "interval", "type": ["null", "string"], "default": null},
+    {"name": "maturity", "type": ["null", "string"], "default": null, "doc": "Treasury yield maturity tag when applicable"},
+    {"name": "av_function", "type": "string"},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

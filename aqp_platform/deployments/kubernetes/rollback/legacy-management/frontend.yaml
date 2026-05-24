@@ -1,0 +1,625 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: management-ui-static
+  namespace: management
+data:
+  default.conf: |
+    server {
+      listen 80;
+      server_name _;
+
+      root /usr/share/nginx/html;
+      index index.html;
+
+      location / {
+        try_files $uri /index.html;
+      }
+
+      location /api/ {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass http://management-api.management.svc.cluster.local:8080/api/;
+      }
+
+      location = /api {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass http://management-api.management.svc.cluster.local:8080/api;
+      }
+    }
+  index.html: |
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>RPi Kubernetes Control Panel</title>
+        <style>
+          :root {
+            --bg: #0b1020;
+            --panel: #111a33;
+            --panel2: #172247;
+            --ink: #e6edf7;
+            --muted: #94a3b8;
+            --brand: #60a5fa;
+            --brand2: #22d3ee;
+            --good: #34d399;
+            --warn: #fbbf24;
+            --bad: #f87171;
+            --border: #1f2a4a;
+          }
+          * { box-sizing: border-box; }
+          body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; background: var(--bg); color: var(--ink); }
+          header {
+            padding: 14px 22px; background: linear-gradient(90deg,#0b1020 0%, #1e3a8a 100%);
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+          }
+          header h1 { font-size: 20px; margin: 0; letter-spacing: 0.3px; }
+          nav { display: flex; gap: 12px; flex-wrap: wrap; }
+          nav a {
+            color: var(--ink); text-decoration: none; padding: 6px 10px; border-radius: 8px;
+            background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+            font-size: 13px;
+          }
+          nav a:hover { background: rgba(96,165,250,0.15); border-color: var(--brand); }
+          main {
+            padding: 22px; display: grid; gap: 16px;
+            grid-template-columns: repeat(auto-fit,minmax(320px,1fr));
+            max-width: 1280px; margin: 0 auto;
+          }
+          section.card {
+            background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+            padding: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+          }
+          section.card.full { grid-column: 1 / -1; }
+          h2 { font-size: 15px; margin: 0 0 10px; color: var(--brand); display: flex; align-items: center; gap: 8px; }
+          h2 .badge {
+            background: rgba(34,211,238,0.15); color: var(--brand2);
+            font-size: 10px; padding: 3px 8px; border-radius: 999px; font-weight: 700;
+            letter-spacing: 0.5px;
+          }
+          pre {
+            margin: 0; white-space: pre-wrap; word-break: break-word; background: #0a0f20;
+            padding: 10px; border-radius: 8px; font-size: 12px; max-height: 280px; overflow: auto;
+            border: 1px solid var(--border); color: var(--muted);
+          }
+          .ok { color: var(--good); font-weight: 600; }
+          .warn { color: var(--warn); font-weight: 600; }
+          .bad { color: var(--bad); font-weight: 600; }
+          .muted { color: var(--muted); font-size: 12px; }
+          button {
+            border: 0; border-radius: 8px; padding: 7px 14px;
+            background: linear-gradient(90deg, #2563eb, #1d4ed8);
+            color: white; cursor: pointer; font-size: 13px; font-weight: 600;
+          }
+          button:hover { opacity: 0.9; }
+          .links a { margin-right: 10px; color: var(--brand); text-decoration: none; }
+          .tiles { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 10px; }
+          .tile {
+            background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+            padding: 10px; text-decoration: none; color: var(--ink); transition: all 0.2s;
+          }
+          .tile:hover { border-color: var(--brand); transform: translateY(-1px); }
+          .tile strong { display: block; font-size: 13px; color: var(--ink); }
+          .tile span { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+          th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; }
+          .ticker { font-weight: 700; color: var(--brand); }
+          .row-split { display: flex; justify-content: space-between; align-items: center; }
+          .search {
+            display: flex; gap: 8px; align-items: center; margin-bottom: 10px;
+          }
+          .search input {
+            flex: 1; background: #0a0f20; border: 1px solid var(--border); border-radius: 8px;
+            padding: 8px 10px; color: var(--ink); font-size: 13px;
+          }
+          .news-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
+          .news-item:last-child { border-bottom: 0; }
+          .news-item a { color: var(--ink); text-decoration: none; font-weight: 600; font-size: 13px; }
+          .news-item a:hover { color: var(--brand); }
+          .news-meta { color: var(--muted); font-size: 11px; margin-top: 3px; }
+          .sentiment-pos { color: var(--good); }
+          .sentiment-neg { color: var(--bad); }
+          .sentiment-neu { color: var(--muted); }
+          .flex-col { display: flex; flex-direction: column; gap: 10px; }
+        </style>
+      </head>
+      <body>
+        <header>
+          <h1>RPi Kubernetes Control Panel</h1>
+          <nav>
+            <a href="#overview">Cluster</a>
+            <a href="#alphavantage">Alpha Vantage</a>
+            <a href="/api/docs" target="_blank" rel="noreferrer">API Docs</a>
+          </nav>
+        </header>
+        <main id="overview">
+          <section class="card">
+            <h2>API Health</h2>
+            <p id="health" class="warn">Loading...</p>
+            <button onclick="refreshAll()">Refresh</button>
+          </section>
+          <section class="card">
+            <h2>Cluster Namespaces</h2>
+            <pre id="namespaces">Loading...</pre>
+          </section>
+          <section class="card">
+            <h2>Cluster Nodes</h2>
+            <pre id="nodes">Loading...</pre>
+          </section>
+          <section class="card links">
+            <h2>Quick Links</h2>
+            <a href="/api/docs" target="_blank" rel="noreferrer">Management API Docs</a>
+            <a href="/api/health" target="_blank" rel="noreferrer">Health JSON</a>
+            <a href="/api/cluster/services" target="_blank" rel="noreferrer">Services JSON</a>
+          </section>
+
+          <!-- ================================================================
+               Alpha Vantage section
+               ================================================================ -->
+          <section class="card full" id="alphavantage">
+            <h2>Alpha Vantage <span class="badge">PRIMARY DATA</span></h2>
+            <p class="muted" style="margin-top:-4px">
+              Primary market-data provider: quotes, fundamentals, news, options, FX,
+              crypto, commodities, economics, and 50+ technical indicators. Backed by
+              the custom async client, dedicated Kafka topics, Argo workflows, and an
+              optional Flink enrichment job.
+            </p>
+            <div class="row-split" style="margin-top:10px">
+              <div>
+                <strong id="av-health" class="warn">Checking integration...</strong>
+                <div class="muted" id="av-health-details"></div>
+              </div>
+              <div class="muted" id="av-usage"></div>
+            </div>
+            <div class="tiles" style="margin-top:14px">
+              <a class="tile" href="/api/alphavantage/health" target="_blank" rel="noreferrer">
+                <strong>Health</strong><span>Integration status and cache backend</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/usage" target="_blank" rel="noreferrer">
+                <strong>Usage</strong><span>RPM and daily budget meter</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/search?keywords=IBM" target="_blank" rel="noreferrer">
+                <strong>Symbol Search</strong><span>SYMBOL_SEARCH ticker lookup</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/timeseries/daily?symbol=IBM" target="_blank" rel="noreferrer">
+                <strong>Time Series</strong><span>Intraday/daily/weekly/monthly OHLCV</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/fundamentals/overview?symbol=IBM" target="_blank" rel="noreferrer">
+                <strong>Fundamentals</strong><span>Overview, IS/BS/CF, dividends, earnings</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/technicals/RSI?symbol=IBM&amp;interval=daily&amp;time_period=14&amp;series_type=close" target="_blank" rel="noreferrer">
+                <strong>Technicals</strong><span>52 indicators: RSI/MACD/SMA/EMA/...</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/intelligence/news?limit=25" target="_blank" rel="noreferrer">
+                <strong>Alpha Intelligence</strong><span>News sentiment, movers, insider</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/intelligence/top-movers" target="_blank" rel="noreferrer">
+                <strong>Top Movers</strong><span>Gainers, losers, most active</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/forex/rate?from_currency=USD&amp;to_currency=EUR" target="_blank" rel="noreferrer">
+                <strong>Forex</strong><span>FX rates + intraday/daily/weekly/monthly</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/crypto/daily?symbol=BTC&amp;market=USD" target="_blank" rel="noreferrer">
+                <strong>Crypto</strong><span>Digital currency rates + bars</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/options/realtime?symbol=AAPL" target="_blank" rel="noreferrer">
+                <strong>Options</strong><span>Realtime + historical chains, PCR, VOI</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/commodities/WTI?interval=monthly" target="_blank" rel="noreferrer">
+                <strong>Commodities</strong><span>WTI, Brent, metals, ags, global index</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/economics/CPI" target="_blank" rel="noreferrer">
+                <strong>Economics</strong><span>GDP, CPI, treasury yields, FFR</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/indices/catalog" target="_blank" rel="noreferrer">
+                <strong>Indices</strong><span>DJI, SPX, IXIC, NDX, VIX, RUT</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/workflows" target="_blank" rel="noreferrer">
+                <strong>Argo Workflows</strong><span>Bulk-load history snapshots</span>
+              </a>
+              <a class="tile" href="/api/alphavantage/stream" target="_blank" rel="noreferrer">
+                <strong>Streaming</strong><span>Kafka producer toggle</span>
+              </a>
+            </div>
+            <div style="margin-top:16px" class="search">
+              <input id="av-symbol" placeholder="Enter ticker (IBM, AAPL, MSFT)..." value="IBM" />
+              <button onclick="avLookup()">Lookup</button>
+            </div>
+            <div id="av-quote" class="muted">Enter a ticker and press Lookup for a real-time snapshot.</div>
+          </section>
+
+          <section class="card">
+            <h2>Top Gainers</h2>
+            <div id="av-gainers" class="muted">Loading top movers...</div>
+          </section>
+
+          <section class="card">
+            <h2>Top Losers</h2>
+            <div id="av-losers" class="muted">Loading top movers...</div>
+          </section>
+
+          <section class="card full">
+            <h2>Latest Market News</h2>
+            <p class="muted" style="margin-top:-4px">Sentiment-enriched feed from NEWS_SENTIMENT (latest 10).</p>
+            <div id="av-news" class="muted">Loading news...</div>
+          </section>
+        </main>
+        <script>
+          async function fetchJson(path) {
+            const res = await fetch(path, { headers: { "Accept": "application/json" } });
+            if (!res.ok) {
+              throw new Error(path + " returned " + res.status);
+            }
+            return await res.json();
+          }
+
+          async function refreshCluster() {
+            const healthEl = document.getElementById("health");
+            try {
+              const health = await fetchJson("/api/health");
+              healthEl.textContent = health.status || "ok";
+              healthEl.className = "ok";
+            } catch (err) {
+              healthEl.textContent = String(err);
+              healthEl.className = "bad";
+            }
+            try {
+              const namespaces = await fetchJson("/api/cluster/namespaces");
+              document.getElementById("namespaces").textContent = JSON.stringify(namespaces, null, 2);
+            } catch (err) {
+              document.getElementById("namespaces").textContent = String(err);
+            }
+            try {
+              const nodes = await fetchJson("/api/cluster/nodes");
+              document.getElementById("nodes").textContent = JSON.stringify(nodes, null, 2);
+            } catch (err) {
+              document.getElementById("nodes").textContent = String(err);
+            }
+          }
+
+          async function refreshAvHealth() {
+            const h = document.getElementById("av-health");
+            const d = document.getElementById("av-health-details");
+            try {
+              const health = await fetchJson("/api/alphavantage/health");
+              if (health.enabled && health.credentials_loaded) {
+                h.textContent = "Healthy";
+                h.className = "ok";
+                d.textContent = "Cache: " + (health.cache_backend || "memory") +
+                  " | Client v" + (health.client_version || "?") +
+                  " | RPM: " + (health.rpm_limit || "?");
+              } else if (health.enabled && !health.credentials_loaded) {
+                h.textContent = "API key missing";
+                h.className = "warn";
+                d.textContent = health.message || "Run bootstrap/scripts/install-alphavantage.ps1 to install the credentials Secret";
+              } else {
+                h.textContent = "Disabled";
+                h.className = "warn";
+                d.textContent = "Set ALPHAVANTAGE_ENABLED=true on the management-api deployment";
+              }
+            } catch (err) {
+              h.textContent = "Backend does not expose Alpha Vantage yet";
+              h.className = "warn";
+              d.textContent = "Rebuild management-api image: bootstrap/scripts/build-management.ps1 -BackendOnly";
+            }
+          }
+
+          async function refreshAvUsage() {
+            const el = document.getElementById("av-usage");
+            try {
+              const u = await fetchJson("/api/alphavantage/usage");
+              const dailyUsed = (u.requests_today !== undefined) ? u.requests_today : 0;
+              const dailyLimit = u.daily_limit || "&infin;";
+              const rpmAvail = (u.tokens_available !== undefined) ? Math.floor(u.tokens_available) : 0;
+              el.innerHTML = "<strong>Quota</strong>: " + dailyUsed + " / " + dailyLimit +
+                " daily &middot; " + rpmAvail + " / " + (u.rpm_limit || 0) + " rpm free";
+            } catch {
+              el.textContent = "";
+            }
+          }
+
+          async function refreshAvMovers() {
+            try {
+              const data = await fetchJson("/api/alphavantage/intelligence/top-movers");
+              renderMovers("av-gainers", data.top_gainers || []);
+              renderMovers("av-losers", data.top_losers || []);
+            } catch (err) {
+              document.getElementById("av-gainers").textContent = "Top movers unavailable (backend or quota).";
+              document.getElementById("av-losers").textContent = "Top movers unavailable (backend or quota).";
+            }
+          }
+
+          function renderMovers(targetId, rows) {
+            const el = document.getElementById(targetId);
+            if (!rows.length) {
+              el.textContent = "No data.";
+              return;
+            }
+            const tbl = ["<table><thead><tr><th>Ticker</th><th>Price</th><th>Change</th><th>%</th></tr></thead><tbody>"];
+            rows.slice(0, 8).forEach((r) => {
+              tbl.push(
+                "<tr><td class=ticker>" + (r.ticker || "") + "</td>" +
+                "<td>" + (r.price || "") + "</td>" +
+                "<td>" + (r.change_amount || "") + "</td>" +
+                "<td>" + (r.change_percentage || "") + "</td></tr>"
+              );
+            });
+            tbl.push("</tbody></table>");
+            el.innerHTML = tbl.join("");
+          }
+
+          function sentimentClass(score) {
+            const s = parseFloat(score);
+            if (isNaN(s)) return "sentiment-neu";
+            if (s > 0.15) return "sentiment-pos";
+            if (s < -0.15) return "sentiment-neg";
+            return "sentiment-neu";
+          }
+
+          async function refreshAvNews() {
+            const el = document.getElementById("av-news");
+            try {
+              const data = await fetchJson("/api/alphavantage/intelligence/news?limit=10");
+              const feed = data.feed || data.articles || [];
+              if (!feed.length) {
+                el.textContent = "No recent news.";
+                return;
+              }
+              const list = feed.slice(0, 10).map((n) => {
+                const cls = sentimentClass(n.overall_sentiment_score);
+                return "<div class=news-item>" +
+                  "<a href='" + (n.url || "#") + "' target=_blank rel=noreferrer>" + (n.title || "") + "</a>" +
+                  "<div class=news-meta>" +
+                  (n.source || "") + " &middot; " + (n.time_published || "") +
+                  " &middot; <span class='" + cls + "'>" + (n.overall_sentiment_label || "Neutral") + " " +
+                  (parseFloat(n.overall_sentiment_score || 0).toFixed(2)) + "</span>" +
+                  "</div></div>";
+              });
+              el.innerHTML = list.join("");
+            } catch (err) {
+              el.textContent = "News feed unavailable (backend not rebuilt or quota exhausted).";
+            }
+          }
+
+          async function avLookup() {
+            const symbol = (document.getElementById("av-symbol").value || "IBM").toUpperCase();
+            const el = document.getElementById("av-quote");
+            el.textContent = "Fetching " + symbol + "...";
+            try {
+              const q = await fetchJson("/api/alphavantage/timeseries/global_quote?symbol=" + encodeURIComponent(symbol));
+              const data = q["Global Quote"] || q.global_quote || q;
+              el.innerHTML = "<pre>" + JSON.stringify(data, null, 2) + "</pre>";
+            } catch (err) {
+              el.textContent = "Lookup failed: " + err;
+            }
+          }
+
+          async function refreshAll() {
+            await Promise.all([
+              refreshCluster(),
+              refreshAvHealth(),
+              refreshAvUsage(),
+              refreshAvMovers(),
+              refreshAvNews(),
+            ]);
+          }
+          refreshAll();
+          setInterval(refreshAvUsage, 60_000);
+          setInterval(refreshAvMovers, 120_000);
+          setInterval(refreshAvNews, 300_000);
+        </script>
+      </body>
+    </html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: management-ui
+  namespace: management
+  labels:
+    app.kubernetes.io/name: management
+    app.kubernetes.io/component: control-panel
+    app.kubernetes.io/part-of: rpi-k8s-platform
+    app.kubernetes.io/managed-by: rpi-k8s-cluster
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: management-ui
+      app.kubernetes.io/name: management
+      app.kubernetes.io/component: control-panel
+      app.kubernetes.io/part-of: rpi-k8s-platform
+      app.kubernetes.io/managed-by: rpi-k8s-cluster
+  template:
+    metadata:
+      labels:
+        app: management-ui
+        app.kubernetes.io/name: management
+        app.kubernetes.io/component: control-panel
+        app.kubernetes.io/part-of: rpi-k8s-platform
+        app.kubernetes.io/managed-by: rpi-k8s-cluster
+    spec:
+      containers:
+        # Next.js standalone runtime (replaces the previous nginx-static
+        # placeholder).  Built locally with
+        #   bootstrap/scripts/build-management.sh
+        # and imported into k3s containerd; the legacy
+        # `management-ui-static` ConfigMap stays in the manifest for
+        # rollback purposes but is no longer mounted.
+        - name: ui
+          # Phase 4 of the AQP infra-expansion plan: pinned to the
+          # frozen :v1-final tag (see ../management/backend.yaml). The
+          # legacy rpi-k8s-control-panel UI is rollback-only; new
+          # admin features ship to aqp_client/src/routes/admin/.
+          image: rpi-k8s-control-panel:v1-final
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: API_URL
+              value: "http://management-api.management.svc.cluster.local:8080"
+            - name: NEXT_TELEMETRY_DISABLED
+              value: "1"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      affinity:
+        nodeAffinity:
+          # The Next.js image is amd64-only (built on the developer laptop);
+          # also prefer the control plane for low-latency proxying to the
+          # management API in the same namespace.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["amd64"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: management-ui
+  namespace: management
+  labels:
+    app.kubernetes.io/name: management
+    app.kubernetes.io/component: control-panel
+    app.kubernetes.io/part-of: rpi-k8s-platform
+    app.kubernetes.io/managed-by: rpi-k8s-cluster
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    app: management-ui
+    app.kubernetes.io/name: management
+    app.kubernetes.io/component: control-panel
+    app.kubernetes.io/part-of: rpi-k8s-platform
+    app.kubernetes.io/managed-by: rpi-k8s-cluster
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: management-ui-external
+  namespace: management
+  labels:
+    app.kubernetes.io/name: management
+    app.kubernetes.io/component: control-panel
+    app.kubernetes.io/part-of: rpi-k8s-platform
+    app.kubernetes.io/managed-by: rpi-k8s-cluster
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      port: 9280
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    app: management-ui
+    app.kubernetes.io/name: management
+    app.kubernetes.io/component: control-panel
+    app.kubernetes.io/part-of: rpi-k8s-platform
+    app.kubernetes.io/managed-by: rpi-k8s-cluster
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: management-ui-nodeport
+  namespace: management
+  labels:
+    app.kubernetes.io/name: management
+    app.kubernetes.io/component: control-panel
+    app.kubernetes.io/part-of: rpi-k8s-platform
+    app.kubernetes.io/managed-by: rpi-k8s-cluster
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+      protocol: TCP
+      nodePort: 31280
+  selector:
+    app: management-ui
+    app.kubernetes.io/name: management
+    app.kubernetes.io/component: control-panel
+    app.kubernetes.io/part-of: rpi-k8s-platform
+    app.kubernetes.io/managed-by: rpi-k8s-cluster
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: management-ui
+  namespace: management
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: control.local
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: management-api
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: management-ui
+                port:
+                  number: 80
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: management-api
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: management-ui
+                port:
+                  number: 80

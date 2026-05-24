@@ -1,4 +1,9 @@
-# Kubernetes deployment
+# Kubernetes deployment (legacy — prefer `deployments/kubernetes/`)
+
+> **Deprecated.** New cluster rollouts use
+> [`aqp_platform/deployments/kubernetes/`](../deployments/kubernetes/).
+> This tree remains for minimal dev overlays (paper trader, ingesters)
+> that pre-date the full shared-infra bundle.
 
 Kustomize-based manifests for running the agentic quant platform in a
 Kubernetes cluster. The paper-trading deployment is the primary
@@ -41,10 +46,10 @@ every resource:
 | `owner` | `AQP_OWNER` / `Settings.owner` | `system-orchestrator` |
 | `data_classification` | `AQP_DATA_CLASSIFICATION` / `Settings.data_classification` | `proprietary-alpha` |
 
-The Kyverno [`require-finops-tags` ClusterPolicy](../../../rpi_kubernetes/kubernetes/policies/finops/require-finops-tags.yaml)
-in `rpi_kubernetes` enforces these as `validationFailureAction: Enforce` —
-any Pod / Job / CronJob / Deployment / StatefulSet missing one is denied at
-admission time.
+Optional cluster-wide FinOps enforcement may be applied from the sibling
+`rpi_kubernetes` repo (`kubernetes/policies/finops/require-finops-tags.yaml`).
+AQP workloads in `aqp-*` namespaces inherit those labels via
+`deployments/kubernetes/` commonLabels when deployed on the rpi cluster.
 
 The `aqp-beat` singleton in `beat-deployment.yaml` runs the
 [`aqp.tasks.finops_tasks.audit`](../../aqp/tasks/finops_tasks.py) task every
@@ -103,9 +108,10 @@ Once the secret exists, flip `dry_run: true` → `false` in the
 ## Streaming platform
 
 The `ingester-ibkr`, `ingester-alpaca`, and `ibgateway` Deployments
-connect to the Kafka cluster deployed by the companion
-`rpi_kubernetes` repo. The configmap default
-``AQP_KAFKA_BOOTSTRAP=trading-kafka-kafka-bootstrap.data-services.svc.cluster.local:9092``
+connect to the Kafka cluster deployed under
+`aqp_platform/deployments/kubernetes/base-services/kafka-strimzi/`.
+The configmap default
+``AQP_KAFKA_BOOTSTRAP=trading-kafka-kafka-bootstrap.aqp-streaming.svc.cluster.local:9092``
 assumes both workloads live in the same cluster. Override it in an
 overlay to point at an external Kafka.
 

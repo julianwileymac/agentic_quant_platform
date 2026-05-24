@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "MarketImbalanceV1",
+  "namespace": "aqp.streaming.market",
+  "doc": "Order imbalance from Alpaca 'imbalances' channel, typically during limit-up/limit-down halts.",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "vt_symbol", "type": "string"},
+    {"name": "aggregate_imbalance", "type": ["null", "double"], "default": null},
+    {"name": "auction_price", "type": ["null", "double"], "default": null},
+    {"name": "current_reference_price", "type": ["null", "double"], "default": null},
+    {"name": "indicative_match_price", "type": ["null", "double"], "default": null},
+    {"name": "imbalance_side", "type": ["null", "string"], "default": null},
+    {"name": "venue_source", "type": {"type": "enum", "name": "VenueSource", "symbols": ["ibkr", "alpaca", "simulated"]}, "default": "alpaca"},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

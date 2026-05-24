@@ -1,0 +1,24 @@
+plugins {
+    id 'com.gradleup.shadow'
+    id 'application'
+}
+
+ext.mainClass = 'io.rpi.flink.indicators.overlap.OverlapJob'
+
+application {
+    mainClass = ext.mainClass
+}
+
+dependencies {
+    implementation project(':common')
+}
+
+shadowJar {
+    archiveClassifier.set('')
+    configurations = [project.configurations.flinkShadowJar]
+    mergeServiceFiles()
+    zip64 true
+    manifest {
+        attributes 'Main-Class': ext.mainClass
+    }
+}

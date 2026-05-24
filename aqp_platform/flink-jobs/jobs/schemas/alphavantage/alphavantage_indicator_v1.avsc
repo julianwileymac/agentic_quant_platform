@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "AlphaVantageIndicatorV1",
+  "namespace": "aqp.streaming.alphavantage",
+  "doc": "One point of a technical indicator series. The values map carries indicator-specific fields (SMA -> {SMA: ..}, MACD -> {MACD: .., MACD_Signal: .., MACD_Hist: ..}).",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "symbol", "type": "string"},
+    {"name": "indicator", "type": "string", "doc": "Indicator name (SMA, EMA, RSI, MACD, BBANDS, ...)"},
+    {"name": "interval", "type": "string"},
+    {"name": "time_period", "type": ["null", "int"], "default": null},
+    {"name": "series_type", "type": ["null", "string"], "default": null},
+    {"name": "values", "type": {"type": "map", "values": ["null", "double"]}},
+    {"name": "av_function", "type": "string"},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

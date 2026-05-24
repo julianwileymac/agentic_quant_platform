@@ -2,7 +2,7 @@
 # =============================================================================
 # Build the Java TA-Lib Flink jobs + push image + upload JARs to MinIO
 # =============================================================================
-# Usage: bash bootstrap/scripts/build-flink-jobs-java.sh [flags]
+# Usage: bash aqp_platform/scripts/cluster_install/build-flink-jobs-java.sh [flags]
 #
 # Flags:
 #   --push                   Also push the multi-arch image to the registry

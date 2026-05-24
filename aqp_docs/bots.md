@@ -314,4 +314,4 @@ The detail page ships tabs:
 | REST routes | [aqp/api/routes/bots.py](../aqp/api/routes/bots.py) |
 | Example specs | [aqp_bots/templates/](../aqp_bots/templates/) |
 | UI builder | [webui/components/bots/](../webui/components/bots/) |
-| Argo template | `rpi_kubernetes/kubernetes/mlops/bots/workflowtemplate-bot-deploy.yaml` |
+| Argo template | `aqp_platform/deployments/kubernetes/mlops/bots/workflowtemplate-bot-deploy.yaml` |

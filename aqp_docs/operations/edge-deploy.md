@@ -34,20 +34,24 @@ k3s ships with Traefik (substitute for the NGINX Ingress) and a built-in service
 
 ### Shape C — rpi_kubernetes (4-node k3s lab)
 
-The reference home/edge cluster shape per `rpi_kubernetes/README.md`:
+The reference home/edge cluster uses **two sibling repos**:
 
-- 4 Raspberry Pi 5 boards + 1 Ubuntu desktop running k3s
-- Cloudflare Tunnel for the public edge
-- MinIO + Postgres + Kafka + Flink + DataHub + MLflow as platform services
+1. **`rpi_kubernetes`** — k3s bootstrap, portal, FinOps policies, storage class.
+2. **`agentic_quant_platform`** — every shared service + AQP workload under
+   `aqp_platform/deployments/kubernetes/`.
 
 ```bash
-# In the rpi_kubernetes repo
-kubectl apply -k kubernetes/                           # base platform
-# Then in the agentic_quant_platform repo
-kubectl apply -k aqp_platform/deployments/kubernetes/overlays/dev   # AQP workloads
+# In rpi_kubernetes (portal + cluster bootstrap only)
+kubectl apply -k kubernetes/
+
+# In agentic_quant_platform (AQP shared infra + app overlays)
+kubectl apply -k aqp_platform/deployments/kubernetes/overlays/dev
 ```
 
-The AQP namespace + ConfigMap scaffold lands via [`kubernetes/base-services/aqp/`](../../../rpi_kubernetes/kubernetes/base-services/aqp/) (Phase 7 absorption).
+Streaming install helpers live under
+`aqp_platform/scripts/cluster_install/` (`install-flink.sh`,
+`install-alphavantage.sh`, `build-flink-jobs.sh`). See
+[streaming.md](../streaming.md) for the full order.
 
 ## Edge-specific concerns
 

@@ -102,28 +102,28 @@ layout is:
 | `features_signals_v1.avsc`     | `features.signals.v1`    |
 
 Schemas are also copied into
-`rpi_kubernetes/flink-jobs/jobs/schemas/` by
-`bootstrap/scripts/build-flink-jobs.sh` so producers and Flink jobs
+`aqp_platform/flink-jobs/jobs/schemas/` by
+`aqp_platform/scripts/cluster_install/build-flink-jobs.sh` so producers and Flink jobs
 share byte-for-byte identical contracts.
 
-### Kafka cluster (rpi_kubernetes)
+### Kafka cluster (AQP)
 
 - Deployed by Strimzi in the ``aqp-streaming`` namespace
   (`aqp_platform/deployments/kubernetes/base-services/kafka-strimzi/`).
 - Topics managed by `KafkaTopic` CRs in
-  [rpi_kubernetes/kubernetes/base-services/kafka/topics.yaml](../../rpi_kubernetes/kubernetes/base-services/kafka/topics.yaml).
+  [aqp_platform/deployments/kubernetes/base-services/kafka-strimzi/topics.yaml](../aqp_platform/deployments/kubernetes/base-services/kafka-strimzi/topics.yaml).
 - Partitioning + retention tuned per topic (tick streams 1d, bars 7d,
   features 30d with compact+delete, `market.contract.v1` compacted
   forever, `market.deadletter.v1` 30d append-only).
 
-### Flink jobs (rpi_kubernetes)
+### Flink jobs (AQP)
 
-Source: [rpi_kubernetes/flink-jobs/jobs/](../../rpi_kubernetes/flink-jobs/jobs/).
+Source: [aqp_platform/flink-jobs/jobs/](../aqp_platform/flink-jobs/jobs/).
 
 Four PyFlink jobs run on the shared session cluster managed by the
 Flink Kubernetes Operator (image
 `ghcr.io/julianwiley/flink-trading:1.20` -- see
-`rpi_kubernetes/flink-jobs/Dockerfile`).
+`aqp_platform/flink-jobs/Dockerfile`).
 
 1. **`dedupe.py`** -- de-duplicates trades/quotes/bars produced by both
    ingesters for the same symbol window.
@@ -176,16 +176,16 @@ curl -X POST http://localhost:8000/live/subscribe \
 
 Bringing the pipeline up from a clean state:
 
-1. `rpi_kubernetes/bootstrap/scripts/install-flink.sh` -- Strimzi
+1. `bash aqp_platform/scripts/cluster_install/install-flink.sh` -- Strimzi
    operator + Kafka cluster + Flink Operator + session cluster.
-2. `kubectl apply -f rpi_kubernetes/kubernetes/base-services/kafka/topics.yaml`
-   -- creates the 12 canonical topics.
-3. `rpi_kubernetes/bootstrap/scripts/build-flink-jobs.sh --push`
+2. Topics are applied by `install-flink.sh` from
+   `aqp_platform/deployments/kubernetes/base-services/kafka-strimzi/topics.yaml`.
+3. `bash aqp_platform/scripts/cluster_install/build-flink-jobs.sh --push`
    -- builds `ghcr.io/julianwiley/flink-trading:1.20` (multi-arch) and
    uploads the PyFlink ``*.py`` files to
    ``s3://flink-jobs/`` in MinIO.
-4. `kubectl apply -k rpi_kubernetes/kubernetes/base-services/flink/`
-   -- picks up the new session-cluster image + job CRs (initially
+4. Flink session cluster + job CRs are applied by `install-flink.sh` from
+   `aqp_platform/deployments/kubernetes/base-services/flink/` (initially
    ``suspended``; flip ``state: running`` once the image and JAR URIs
    resolve).
 5. In this repo: populate the broker secret and apply the aqp base:

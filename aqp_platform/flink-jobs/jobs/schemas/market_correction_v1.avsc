@@ -1,0 +1,22 @@
+{
+  "type": "record",
+  "name": "MarketCorrectionV1",
+  "namespace": "aqp.streaming.market",
+  "doc": "Trade correction / cancel / error events from Alpaca.",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "vt_symbol", "type": "string"},
+    {"name": "correction_kind", "type": {"type": "enum", "name": "CorrectionKind", "symbols": ["correction", "cancel", "error"]}},
+    {"name": "original_trade_id", "type": ["null", "string"], "default": null},
+    {"name": "original_exchange", "type": ["null", "string"], "default": null},
+    {"name": "original_price", "type": ["null", "double"], "default": null},
+    {"name": "original_size", "type": ["null", "double"], "default": null},
+    {"name": "original_conditions", "type": {"type": "array", "items": "string"}, "default": []},
+    {"name": "corrected_trade_id", "type": ["null", "string"], "default": null},
+    {"name": "corrected_price", "type": ["null", "double"], "default": null},
+    {"name": "corrected_size", "type": ["null", "double"], "default": null},
+    {"name": "corrected_conditions", "type": {"type": "array", "items": "string"}, "default": []},
+    {"name": "venue_source", "type": {"type": "enum", "name": "VenueSource", "symbols": ["ibkr", "alpaca", "simulated"]}, "default": "alpaca"},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}

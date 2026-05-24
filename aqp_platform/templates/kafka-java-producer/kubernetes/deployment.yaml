@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-java-producer-template
+  labels:
+    app: kafka-java-producer-template
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-java-producer-template
+  template:
+    metadata:
+      labels:
+        app: kafka-java-producer-template
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9302"
+        prometheus.io/path: "/metrics"
+    spec:
+      initContainers:
+        - name: truststore
+          image: eclipse-temurin:17-jre-jammy
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              rm -f /work/truststore.jks
+              keytool -import -noprompt -alias strimzi-ca \
+                -file /etc/kafka/ca/ca.crt \
+                -keystore /work/truststore.jks \
+                -storepass changeit
+          volumeMounts:
+            - name: kafka-ca
+              mountPath: /etc/kafka/ca
+              readOnly: true
+            - name: truststore
+              mountPath: /work
+      containers:
+        - name: producer
+          image: ghcr.io/julianwiley/kafka-java-producer-template:0.1.0
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: kafka-java-producer-template
+          env:
+            - name: KAFKA_SASL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: producer-market
+                  key: password
+          ports:
+            - name: metrics
+              containerPort: 9302
+          volumeMounts:
+            - name: kafka-ca
+              mountPath: /etc/kafka/ca
+              readOnly: true
+            - name: truststore
+              mountPath: /work
+              readOnly: true
+          resources:
+            requests:
+              cpu: 200m
+              memory: 384Mi
+            limits:
+              cpu: 1
+              memory: 768Mi
+      volumes:
+        - name: kafka-ca
+          secret:
+            secretName: trading-kafka-cluster-ca-cert
+            items:
+              - key: ca.crt
+                path: ca.crt
+        - name: truststore
+          emptyDir: {}

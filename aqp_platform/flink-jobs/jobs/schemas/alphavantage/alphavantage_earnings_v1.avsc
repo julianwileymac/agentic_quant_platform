@@ -1,0 +1,26 @@
+{
+  "type": "record",
+  "name": "AlphaVantageEarningsV1",
+  "namespace": "aqp.streaming.alphavantage",
+  "doc": "Single earnings report row (annual or quarterly) from EARNINGS / EARNINGS_CALENDAR / EARNINGS_ESTIMATES.",
+  "fields": [
+    {"name": "ts_ns", "type": "long"},
+    {"name": "symbol", "type": "string"},
+    {"name": "report_kind", "type": {
+      "type": "enum",
+      "name": "EarningsReportKind",
+      "symbols": ["ANNUAL", "QUARTERLY", "CALENDAR", "ESTIMATE"]
+    }},
+    {"name": "fiscal_date_ending", "type": ["null", "string"], "default": null},
+    {"name": "reported_date", "type": ["null", "string"], "default": null},
+    {"name": "reported_eps", "type": ["null", "double"], "default": null},
+    {"name": "estimated_eps", "type": ["null", "double"], "default": null},
+    {"name": "surprise", "type": ["null", "double"], "default": null},
+    {"name": "surprise_percentage", "type": ["null", "double"], "default": null},
+    {"name": "horizon", "type": ["null", "string"], "default": null},
+    {"name": "name", "type": ["null", "string"], "default": null},
+    {"name": "currency", "type": ["null", "string"], "default": null},
+    {"name": "av_function", "type": "string"},
+    {"name": "ingest_ts_ns", "type": "long"}
+  ]
+}
