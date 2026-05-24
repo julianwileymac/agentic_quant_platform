@@ -46,6 +46,14 @@ export class AqpConfigEndpoint implements BackendApplicationContribution {
             const providersUrl = process.env.AQP_THEIA_PROVIDERS_URL
                 || `${apiBaseUrl.replace(/\/+$/u, '')}/auth/providers`;
 
+            const mcpDataUrl = process.env.AQP_THEIA_MCP_DATA_URL || '';
+            const mcpDataAudience = process.env.AQP_THEIA_MCP_DATA_AUDIENCE || '';
+            const mcpCodebaseUrl = process.env.AQP_THEIA_MCP_CODEBASE_URL || '';
+            const mcpCodebaseAudience = process.env.AQP_THEIA_MCP_CODEBASE_AUDIENCE || '';
+
+            const seraEnabled = (process.env.AQP_THEIA_SERA_ENABLED || '').toLowerCase() === 'true';
+            const routerCompletePath = process.env.AQP_THEIA_ROUTER_COMPLETE_PATH || '';
+
             const config: AqpRuntimeConfig = {
                 auth0: {
                     domain: process.env.AQP_THEIA_AUTH0_DOMAIN || '',
@@ -59,6 +67,18 @@ export class AqpConfigEndpoint implements BackendApplicationContribution {
                     apiBaseUrl,
                     frontendUrl,
                     providersUrl,
+                },
+                mcp: {
+                    data: mcpDataUrl && mcpDataAudience
+                        ? { url: mcpDataUrl, audience: mcpDataAudience }
+                        : undefined,
+                    codebase: mcpCodebaseUrl && mcpCodebaseAudience
+                        ? { url: mcpCodebaseUrl, audience: mcpCodebaseAudience }
+                        : undefined,
+                },
+                copilot: {
+                    seraEnabled,
+                    routerCompletePath: routerCompletePath || undefined,
                 },
             };
 

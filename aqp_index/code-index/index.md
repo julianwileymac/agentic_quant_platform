@@ -1,6 +1,8 @@
 # Code index
 
-> Last refreshed: 2026-05-23 (seed).
+> Last refreshed: 2026-05-24 by aqp-index-curator (trigger: AQP IDE
+> enhancement — first signature-populated entries for the six new
+> Theia extensions + `aqp/notebook/`).
 
 ## What this is
 
@@ -23,11 +25,16 @@ source.
 ## Methodology
 
 1. Walk top-level `aqp/`, `aqp_client/`, `aqp_control_plane/`,
-   `aqp_platform_core/`, `aqp_bots/`, `aqp_cli/`, `aqp_admin/`.
+   `aqp_platform_core/`, `aqp_bots/`, `aqp_rl/`, `aqp_models/`,
+   `aqp_cli/`, `aqp_admin/`, and the AQP-specific TypeScript surface
+   under `aqp_ide/theia-extensions/aqp*/`.
 2. For each Python file: extract top-level `class` + `def`, with the
    first non-empty line of the docstring (truncated to 120 chars).
-3. For each TypeScript file: extract top-level exports with the
-   immediately-preceding JSDoc summary (truncated).
+3. For each TypeScript file: extract top-level `export class` /
+   `export function` / `export interface` / `export const` /
+   `export namespace` with the immediately-preceding JSDoc summary
+   (truncated to 120 chars). `@injectable()` decorators are noted
+   alongside the class.
 4. Emit signatures only - never pasted bodies, never type-only re-exports.
 5. Cite source path + line number for each entry.
 
@@ -39,3 +46,7 @@ source.
   NOT edit `modules.md` / `symbols.md` by hand.
 - Not a complete API surface. It deliberately omits private helpers
   (leading `_`) and trivial pass-through re-exports.
+- Not a code-search index. The runtime equivalent is
+  [aqp/codebase/mcp/](../../aqp/codebase/mcp/) — agents needing search /
+  symbol-graph / find-references on the AQP source should call the
+  `codebase.*` MCP tools instead of scanning this file.

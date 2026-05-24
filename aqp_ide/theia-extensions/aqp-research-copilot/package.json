@@ -1,0 +1,37 @@
+{
+  "private": true,
+  "name": "theia-ide-aqp-research-copilot-ext",
+  "version": "1.71.100",
+  "description": "AQP Research Copilot - a Theia AI ChatAgent backed by AQP's router_complete LLM gateway (rule 2) with tool functions wrapping /agents, /workflows, /bots, /rl, /analysis, /backtest and the bridged DataMCP + CodebaseMCP servers.",
+  "dependencies": {
+    "@theia/ai-chat": "1.72.0-next.20",
+    "@theia/ai-core": "1.72.0-next.20",
+    "@theia/ai-mcp": "1.72.0-next.20",
+    "@theia/core": "1.72.0-next.20",
+    "inversify": "^6.2.2",
+    "theia-ide-aqp-ext": "1.71.100",
+    "theia-ide-aqp-mcp-bridge-ext": "1.71.100"
+  },
+  "devDependencies": {
+    "rimraf": "^2.7.1",
+    "typescript": "^4.9.5"
+  },
+  "theiaExtensions": [
+    {
+      "frontend": "lib/browser/aqp-research-copilot-frontend-module"
+    }
+  ],
+  "keywords": [
+    "theia-extension"
+  ],
+  "license": "MIT",
+  "files": [
+    "lib",
+    "src"
+  ],
+  "scripts": {
+    "clean": "rimraf lib *.tsbuildinfo",
+    "build": "tsc -b",
+    "watch": "tsc -w"
+  }
+}

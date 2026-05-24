@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aqp-ide
+  namespace: aqp-ide
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aqp-ide
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aqp-ide
+        app.kubernetes.io/component: developer-environment
+        app.kubernetes.io/part-of: aqp
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: default
+      containers:
+        - name: aqp-ide
+          image: aqp/aqp-ide:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: aqp-ide-config
+            # The Auth0 SPA client_id arrives via ExternalSecret named
+            # aqp-ide-auth0 (see secret-template.yaml). Uncomment once the
+            # ExternalSecret exists in this namespace.
+            # - secretRef:
+            #     name: aqp-ide-auth0
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          readinessProbe:
+            httpGet:
+              path: /aqp/config
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /aqp/config
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: workspace
+              mountPath: /home/project
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: aqp-ide-workspace
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aqp-ide-workspace
+  namespace: aqp-ide
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi

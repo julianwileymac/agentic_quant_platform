@@ -1,0 +1,20 @@
+diff --git a/node_modules/@theia/application-manager/lib/application-process.js b/node_modules/@theia/application-manager/lib/application-process.js
+index 929c6a8..80b7e96 100644
+--- a/node_modules/@theia/application-manager/lib/application-process.js
++++ b/node_modules/@theia/application-manager/lib/application-process.js
+@@ -50,7 +50,14 @@ class ApplicationProcess {
+         if (!binPath) {
+             throw new Error(`Could not resolve ${command} relative to ${this.binProjectPath}`);
+         }
+-        return this.spawn(binPath, args, {
++        // AQP patch: cp.spawn(..., { shell: true }) does not quote the
++        // command on Windows, so paths containing spaces (typical under
++        // C:\Users\<First Last>\...) are split at the first whitespace
++        // by cmd.exe. Wrap in double quotes when needed.
++        const quoted = process.platform === 'win32' && /\s/.test(binPath)
++            ? `"${binPath}"`
++            : binPath;
++        return this.spawn(quoted, args, {
+             ...options,
+             shell: true
+         });

@@ -1,0 +1,33 @@
+{
+  "private": true,
+  "name": "theia-ide-aqp-shell-ext",
+  "version": "1.71.100",
+  "description": "AQP IDE shell: white-label theme, FilterContribution lockdown, window-title + about-dialog rebinds. Sibling of theia-ide-aqp-ext.",
+  "dependencies": {
+    "@theia/core": "1.72.0-next.20",
+    "inversify": "^6.2.2",
+    "theia-ide-aqp-ext": "1.71.100"
+  },
+  "devDependencies": {
+    "rimraf": "^2.7.1",
+    "typescript": "^4.9.5"
+  },
+  "theiaExtensions": [
+    {
+      "frontend": "lib/browser/aqp-shell-frontend-module"
+    }
+  ],
+  "keywords": [
+    "theia-extension"
+  ],
+  "license": "MIT",
+  "files": [
+    "lib",
+    "src"
+  ],
+  "scripts": {
+    "clean": "rimraf lib *.tsbuildinfo",
+    "build": "tsc -b",
+    "watch": "tsc -w"
+  }
+}

@@ -98,6 +98,22 @@ ENV USE_LOCAL_GIT=true
 #                               Falls back to AQP_THEIA_API_URL when unset.
 #   AQP_THEIA_PROVIDERS_URL   - full URL of the BFF /auth/providers endpoint.
 #                               Defaults to '${AQP_THEIA_API_URL}/auth/providers'.
+#
+# AQP MCP bridge (theia-ide-aqp-mcp-bridge-ext, AQP rule 49):
+#   AQP_THEIA_MCP_DATA_URL          - streamable HTTP endpoint of aqp-data-mcp
+#                                     (e.g. https://api.aqp.fund/mcp/data)
+#   AQP_THEIA_MCP_DATA_AUDIENCE     - canonical URI advertised by the data
+#                                     MCP server's RFC 9728 PRM document
+#   AQP_THEIA_MCP_CODEBASE_URL      - streamable HTTP endpoint of
+#                                     aqp-codebase-mcp
+#   AQP_THEIA_MCP_CODEBASE_AUDIENCE - canonical URI for the codebase MCP
+#
+# AQP Research Copilot (theia-ide-aqp-research-copilot-ext, AQP rule 2):
+#   AQP_THEIA_SERA_ENABLED          - "true" to default code-focused agents
+#                                     to AQP's SERA-32B model (see
+#                                     aqp_docs/sera.md). Off by default.
+#   AQP_THEIA_ROUTER_COMPLETE_PATH  - override the default
+#                                     /llm/router/complete path (rare).
 ENV AQP_THEIA_AUTH0_DOMAIN="" \
     AQP_THEIA_AUTH0_CLIENT_ID="" \
     AQP_THEIA_AUTH0_AUDIENCE="" \
@@ -107,7 +123,13 @@ ENV AQP_THEIA_AUTH0_DOMAIN="" \
     AQP_THEIA_API_URL="http://host.docker.internal:8000" \
     AQP_THEIA_FRONTEND_URL="" \
     AQP_THEIA_PROVIDERS_URL="" \
-    AQP_THEIA_PUBLIC_ORIGIN="http://localhost:3000"
+    AQP_THEIA_PUBLIC_ORIGIN="http://localhost:3000" \
+    AQP_THEIA_MCP_DATA_URL="" \
+    AQP_THEIA_MCP_DATA_AUDIENCE="" \
+    AQP_THEIA_MCP_CODEBASE_URL="" \
+    AQP_THEIA_MCP_CODEBASE_AUDIENCE="" \
+    AQP_THEIA_SERA_ENABLED="false" \
+    AQP_THEIA_ROUTER_COMPLETE_PATH=""
 
 # Switch to Theia user
 USER theia

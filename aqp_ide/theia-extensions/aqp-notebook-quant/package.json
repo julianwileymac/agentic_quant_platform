@@ -1,0 +1,38 @@
+{
+  "private": true,
+  "name": "theia-ide-aqp-notebook-quant-ext",
+  "version": "1.71.100",
+  "description": "AQP quant notebook extras: FINOS Perspective MIME renderer for Arrow record batches + 'New AQP Notebook' command that scaffolds the aqp.notebook.helpers imports cell.",
+  "dependencies": {
+    "@theia/core": "1.72.0-next.20",
+    "@theia/notebook": "1.72.0-next.20",
+    "@theia/workspace": "1.72.0-next.20",
+    "@theia/filesystem": "1.72.0-next.20",
+    "inversify": "^6.2.2",
+    "theia-ide-aqp-ext": "1.71.100"
+  },
+  "devDependencies": {
+    "rimraf": "^2.7.1",
+    "typescript": "^4.9.5"
+  },
+  "theiaExtensions": [
+    {
+      "frontend": "lib/browser/aqp-notebook-quant-frontend-module",
+      "backend": "lib/node/aqp-notebook-quant-backend-module"
+    }
+  ],
+  "keywords": [
+    "theia-extension"
+  ],
+  "license": "MIT",
+  "files": [
+    "lib",
+    "src",
+    "resources"
+  ],
+  "scripts": {
+    "clean": "rimraf lib *.tsbuildinfo",
+    "build": "tsc -b",
+    "watch": "tsc -w"
+  }
+}

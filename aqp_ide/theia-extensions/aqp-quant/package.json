@@ -1,0 +1,39 @@
+{
+  "private": true,
+  "name": "theia-ide-aqp-quant-ext",
+  "version": "1.71.100",
+  "description": "AQP quant widgets: SpecAuthor (5 hash-locked specs), RunInspector (canonical progress frame, rule 4), and BacktestRunner wrapping /workflows + /bots + /rl + /backtest. Sibling of theia-ide-aqp-ext.",
+  "dependencies": {
+    "@theia/core": "1.72.0-next.20",
+    "@theia/messages": "1.72.0-next.20",
+    "@theia/monaco": "1.72.0-next.20",
+    "inversify": "^6.2.2",
+    "theia-ide-aqp-ext": "1.71.100"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "rimraf": "^2.7.1",
+    "typescript": "^4.9.5"
+  },
+  "theiaExtensions": [
+    {
+      "frontend": "lib/browser/aqp-quant-frontend-module"
+    }
+  ],
+  "keywords": [
+    "theia-extension"
+  ],
+  "license": "MIT",
+  "files": [
+    "lib",
+    "src"
+  ],
+  "scripts": {
+    "clean": "rimraf lib *.tsbuildinfo",
+    "build": "tsc -b",
+    "watch": "tsc -w"
+  },
+  "peerDependencies": {
+    "react": "^16.8.0"
+  }
+}

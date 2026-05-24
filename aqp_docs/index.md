@@ -19,6 +19,9 @@ Triple-axis table of contents for the AQP docs.
 | AQP blue/green cutover | [operations/aqp-fund-blue-green-cutover.md](operations/aqp-fund-blue-green-cutover.md) | active | `aqp.fund` green-lane validation + switch + rollback |
 | Deployment artifacts | [../aqp_platform/deployments/README.md](../aqp_platform/deployments/README.md) | active | Compose + Kubernetes manifests for current architecture |
 | Operator UI | [../aqp_client/README.md](../aqp_client/README.md) | active | Vite frontend is the primary UI |
+| AQP IDE | [aqp-ide.md](aqp-ide.md) | active | Theia 1.72 + 6 AQP extensions + research copilot + notebook |
+| AQP IDE roadmap | [aqp-ide-roadmap.md](aqp-ide-roadmap.md) | active | Phased plan (Phase A shipped; B + C trigger-driven) |
+| AQP IDE CLI entrypoint | [../aqp_cli/docs/index.md](../aqp_cli/docs/index.md) | active | `aqp-cli ide` is the canonical IDE entrypoint |
 | Repository split map | [repository-split.md](repository-split.md) | migration | Domain boundaries for future standalone repositories |
 | Monorepo path contract | [aqp-monorepo-paths.md](aqp-monorepo-paths.md) | active | Canonical paths for cross-repo references |
 | Code index governance | [code-index-governance.md](code-index-governance.md) | active | Agent search/index workflow across split boundaries |

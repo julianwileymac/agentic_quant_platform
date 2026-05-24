@@ -1,0 +1,75 @@
+---
+description: MCP integration rule for the AQP IDE. The `aqp-mcp-bridge-ext` is the only sanctioned consumer of `MCPServerManager`; every registration carries the per-MCP `aud` claim (AQP rule 49); Auth0 bearer + tenancy headers; no token passthrough across audiences.
+globs:
+  - "aqp_ide/theia-extensions/aqp-mcp-bridge/**"
+  - "aqp_ide/theia-extensions/aqp-research-copilot/**"
+  - "aqp_ide/theia-extensions/aqp/src/common/aqp-protocol.ts"
+  - "aqp_ide/theia-extensions/aqp/src/node/aqp-config-endpoint.ts"
+  - "aqp_platform/deployments/kubernetes/aqp-ide/configmap-aqp.yaml"
+alwaysApply: false
+---
+
+# AQP IDE MCP integration
+
+The AQP IDE bridges Theia AI's MCP client (`@theia/ai-mcp`) to AQP's
+two first-party MCP surfaces (`aqp-data-mcp` + `aqp-codebase-mcp`) per
+AQP hard rules **22** (DataMCP boundary) and **49** (RFC 9728 + RFC 8707
+audience validation).
+
+## Hard contract
+
+1. **The bridge is the only sanctioned consumer of
+   `MCPServerManager.addOrUpdateServer(...)` in `aqp_ide/`.** Other
+   extensions consume MCP tools through the bridged catalogue — they
+   never register a server directly.
+2. **Per-MCP `aud` claim (AQP rule 49).** Every registration carries
+   a token whose `aud` matches the MCP server's canonical URI. AQP
+   exposes the canonical URIs via:
+   - `AQP_THEIA_MCP_DATA_AUDIENCE`
+   - `AQP_THEIA_MCP_CODEBASE_AUDIENCE`
+   The bridge also sets a non-secret `X-AQP-MCP-Audience` header so
+   operators can verify the wiring from browser devtools without
+   inspecting the token.
+3. **No token passthrough across audiences.** The bridge MUST mint a
+   fresh token per MCP server via
+   `Auth0Service.getAccessToken({ authorizationParams: { audience: ... } })`.
+   Reusing the AQP API audience for an MCP server is forbidden.
+4. **Tenancy headers (AQP rule 51).** Every MCP request carries
+   `X-AQP-Workspace` / `X-AQP-Project` / `X-AQP-Lab` / `X-AQP-Org` /
+   `X-AQP-Team` from `AqpTenancyStore`.
+5. **No secret printing** (`.cursor/rules/aqp-management-engine.mdc`).
+   The redacted 4-character prefix rule applies to every log line in
+   the bridge.
+6. **Cross-extension dependency direction.** The bridge depends on
+   `theia-ide-aqp-ext`. The copilot extension depends on both. The
+   reverse direction is forbidden.
+
+## Where MCP changes go
+
+| Change | Path |
+| --- | --- |
+| Add a slot to runtime config | `aqp_ide/theia-extensions/aqp/src/common/aqp-protocol.ts` |
+| Read the env var on the backend | `aqp_ide/theia-extensions/aqp/src/node/aqp-config-endpoint.ts` |
+| Add the canonical MCP name | `aqp_ide/theia-extensions/aqp-mcp-bridge/src/common/aqp-mcp-protocol.ts` |
+| Add the new surface | `aqp_ide/theia-extensions/aqp-mcp-bridge/src/browser/mcp/aqp-mcp-server-spec.ts` (`AQP_MCP_SURFACES`) |
+| Document the env vars | `aqp_ide/browser.Dockerfile` + `aqp_platform/deployments/kubernetes/aqp-ide/configmap-aqp.yaml` |
+| Add the CLI knob | `aqp_cli/src/aqp_cli/commands/ide.py` (`_THEIA_ENV_KEYS`) |
+| Refresh the doc | `aqp_ide/docs/mcp-integration.md` |
+
+## Validation
+
+```bash
+yarn build:extensions
+yarn build:applications:dev
+aqp-cli ide doctor
+# In the running IDE: command palette → "AQP: MCP — Show Status"
+# should list both `aqp-data-mcp` and `aqp-codebase-mcp` with state OK.
+```
+
+## See also
+
+- AQP DataMCP boundary: `aqp_docs/data-mcp.md`
+- AQP Codebase MCP: `aqp_docs/codebase-mcp.md`
+- AQP IdentityProvider: `aqp_docs/identity.md`
+- AQP IDE MCP doc: `aqp_ide/docs/mcp-integration.md`
+- Skill: `aqp_ide/.cursor/skills/aqp-mcp-wiring/SKILL.md`

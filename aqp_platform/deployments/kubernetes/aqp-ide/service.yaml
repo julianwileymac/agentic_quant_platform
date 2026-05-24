@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: aqp-ide
+  namespace: aqp-ide
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: aqp-ide
+  ports:
+    - name: http
+      port: 3000
+      protocol: TCP
+      targetPort: http

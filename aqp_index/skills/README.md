@@ -1,6 +1,8 @@
 # Project skills
 
-> Last refreshed: 2026-05-23 (seed).
+> Last refreshed: 2026-05-24 by aqp-index-curator (trigger: AQP IDE
+> enhancement — registered two new skills under `aqp_ide/.cursor/skills/`
+> that operate via the Cursor-native auto-load path).
 
 ## What lives here
 
@@ -57,8 +59,13 @@ Read [extension.md](extension.md). The high-level steps:
 
 ## Registry
 
-The registry is rebuilt on each curator pass.
+The registry is rebuilt on each curator pass. Skills marked as
+*Cursor-native* live under `.cursor/skills/<slug>/SKILL.md` rather than
+inside `aqp_index/skills/`; the registry row links to the canonical
+source.
 
-| Skill | When | Owner | Last verified |
-| --- | --- | --- | --- |
-| [aqp-index-curator-skill](aqp-index-curator-skill.md) | Every aqp_index refresh | aqp-index-curator | 2026-05-23 |
+| Skill | When | Owner | Location | Last verified |
+| --- | --- | --- | --- | --- |
+| [aqp-index-curator-skill](aqp-index-curator-skill.md) | Every aqp_index refresh | aqp-index-curator | `aqp_index/skills/` (in-tree) | 2026-05-24 |
+| [aqp-quant-widget](../../aqp_ide/.cursor/skills/aqp-quant-widget/SKILL.md) | Adding a new AQP-side widget to `theia-extensions/aqp-quant/` (or a sibling AQP extension). Covers scaffolding, view contribution, Auth0 gating, canonical progress frame, and docs. | aqp-ide-quant-author | `aqp_ide/.cursor/skills/` (Cursor-native) | 2026-05-24 |
+| [aqp-mcp-wiring](../../aqp_ide/.cursor/skills/aqp-mcp-wiring/SKILL.md) | Wiring a new AQP-side MCP server into the IDE via `aqp-mcp-bridge`. Covers runtime config slot, env vars, RFC 8707 audience, tenancy headers, K8s ConfigMap, CLI knob, and docs. | aqp-ide-quant-author | `aqp_ide/.cursor/skills/` (Cursor-native) | 2026-05-24 |

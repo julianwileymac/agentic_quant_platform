@@ -47,6 +47,10 @@
     }
   },
   "dependencies": {
+    "@finos/perspective": "^3.6.0",
+    "@finos/perspective-viewer": "^3.6.0",
+    "@finos/perspective-viewer-d3fc": "^3.6.0",
+    "@finos/perspective-viewer-datagrid": "^3.6.0",
     "@theia/ai-anthropic": "1.72.0-next.20",
     "@theia/ai-chat": "1.72.0-next.20",
     "@theia/ai-chat-ui": "1.72.0-next.20",
@@ -117,13 +121,20 @@
     "@theia/variable-resolver": "1.72.0-next.20",
     "@theia/vsx-registry": "1.72.0-next.20",
     "@theia/workspace": "1.72.0-next.20",
+    "@vscode/windows-ca-certs": "^0.3.4",
+    "apache-arrow": "^17.0.0",
     "fs-extra": "^9.1.0",
     "theia-ide-aqp-ext": "1.71.100",
+    "theia-ide-aqp-mcp-bridge-ext": "1.71.100",
+    "theia-ide-aqp-notebook-quant-ext": "1.71.100",
+    "theia-ide-aqp-quant-ext": "1.71.100",
+    "theia-ide-aqp-research-copilot-ext": "1.71.100",
+    "theia-ide-aqp-shell-ext": "1.71.100",
     "theia-ide-product-ext": "1.71.100"
   },
   "devDependencies": {
-    "@theia/cli": "1.72.0-next.20",
-    "@theia/bundle-plugin": "1.72.0-next.20"
+    "@theia/bundle-plugin": "1.72.0-next.20",
+    "@theia/cli": "1.72.0-next.20"
   },
   "scripts": {
     "clean": "theia clean && rimraf node_modules",

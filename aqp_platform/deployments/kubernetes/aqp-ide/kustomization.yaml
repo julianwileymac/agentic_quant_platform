@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-ide
+
+resources:
+  - namespace.yaml
+  - configmap-aqp.yaml
+  - secret-template.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - networkpolicy.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: aqp-ide
+      app.kubernetes.io/component: developer-environment
+      app.kubernetes.io/part-of: aqp

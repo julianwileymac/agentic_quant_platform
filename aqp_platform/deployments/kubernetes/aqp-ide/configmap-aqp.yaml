@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aqp-ide-config
+  namespace: aqp-ide
+data:
+  # --- AQP API + frontend wiring -----------------------------------------
+  # Operator-modifiable. The Theia backend serves these to the browser
+  # bundle via GET /aqp/config; no value here is a secret.
+  AQP_THEIA_API_URL: "https://api.aqp.fund"
+  AQP_THEIA_FRONTEND_URL: "https://aqp.fund"
+  AQP_THEIA_PROVIDERS_URL: "https://api.aqp.fund/auth/providers"
+  AQP_THEIA_PUBLIC_ORIGIN: "https://ide.aqp.fund"
+
+  # --- Auth0 SPA (public per PKCE) ---------------------------------------
+  AQP_THEIA_AUTH0_DOMAIN: "aqp-fund.us.auth0.com"
+  AQP_THEIA_AUTH0_AUDIENCE: "https://api.aqp.fund"
+  AQP_THEIA_AUTH0_SCOPE: "openid profile email offline_access"
+  AQP_THEIA_AUTH0_REDIRECT_URI: "https://ide.aqp.fund/"
+  # AQP_THEIA_AUTH0_CLIENT_ID injected via the Secret template below — the
+  # SPA client_id is public per PKCE but we treat it as deployment-scoped
+  # config so it can be rotated without rebuilding the image.
+
+  # --- AQP MCP bridge (theia-ide-aqp-mcp-bridge-ext, rule 49) -----------
+  # Streamable HTTP endpoints for AQP's two first-party MCP servers + the
+  # canonical URIs they advertise via RFC 9728 Protected Resource Metadata.
+  # The Theia browser uses these to mint per-MCP audience-scoped tokens
+  # (no token passthrough across audiences, rule 49).
+  AQP_THEIA_MCP_DATA_URL: "https://api.aqp.fund/mcp/data"
+  AQP_THEIA_MCP_DATA_AUDIENCE: "https://api.aqp.fund/mcp/data"
+  AQP_THEIA_MCP_CODEBASE_URL: "https://api.aqp.fund/mcp/codebase"
+  AQP_THEIA_MCP_CODEBASE_AUDIENCE: "https://api.aqp.fund/mcp/codebase"
+
+  # --- Research Copilot (theia-ide-aqp-research-copilot-ext, rule 2) ----
+  AQP_THEIA_SERA_ENABLED: "false"
+  AQP_THEIA_ROUTER_COMPLETE_PATH: ""

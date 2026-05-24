@@ -1,0 +1,36 @@
+# Phase B (NOT deployed). See DEFERRED.md.
+#
+# AppDefinition CRD shape from theia-cloud v1.x (theia.cloud/v1beta10).
+# When the Phase B trigger fires, install the theia-cloud operator first
+# (`helm install theia-cloud ...`) which will register this CRD, then
+# `kubectl apply -f app-definition.yaml`.
+
+apiVersion: theia.cloud/v1beta10
+kind: AppDefinition
+metadata:
+  name: aqp-ide
+  namespace: theia-cloud-system
+spec:
+  name: aqp-ide
+  image: aqp/aqp-ide:latest
+  uid: 1001
+  port: 3000
+  ingressHostnamePrefixes:
+    - "*.webview."
+  ingressname: aqp-ide-tcs-ingress
+  minInstances: 1
+  maxInstances: 25
+  requestsMemory: "1Gi"
+  requestsCpu: "500m"
+  limitsMemory: "4Gi"
+  limitsCpu: "2"
+  imagePullPolicy: IfNotPresent
+  timeout: 240
+  downlinkLimit: 30000
+  uplinkLimit: 30000
+  mountPath: /home/project
+  monitor:
+    port: 8081
+    activityTracker:
+      timeoutAfter: 60
+      notifyAfter: 50

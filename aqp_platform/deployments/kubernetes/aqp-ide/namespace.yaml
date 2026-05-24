@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aqp-ide
+  labels:
+    app.kubernetes.io/name: aqp-ide
+    app.kubernetes.io/part-of: aqp
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+  annotations:
+    aqp.fund/owner: "platform-engineering"
+    aqp.fund/domain: "ide.aqp.fund"

@@ -1,6 +1,8 @@
 # Subagent registry
 
-> Last refreshed: 2026-05-23 (seed).
+> Last refreshed: 2026-05-24 by aqp-index-curator (trigger: AQP IDE
+> enhancement — registered the new `aqp-ide-quant-author` monorepo-level
+> subagent and the `aqp-ide-curator` IDE-scoped subagent).
 
 ## What lives here
 
@@ -24,7 +26,7 @@ The registry is rebuilt on each curator pass.
 | aqp-rules-reviewer | platform | reviewing rule changes | [../../.cursor/agents/aqp-rules-reviewer.md](../../.cursor/agents/aqp-rules-reviewer.md) |
 | aqp-run-monitor | platform | implementer fan-out monitor | [../../.cursor/agents/aqp-run-monitor.md](../../.cursor/agents/aqp-run-monitor.md) |
 | aqp-agentic-stack-expert | runtime | agent stack (`aqp/agents/`, `aqp/data/mcp/`, `aqp/rag/`) | [../../.cursor/agents/aqp-agentic-stack-expert.md](../../.cursor/agents/aqp-agentic-stack-expert.md) |
-| aqp-rl-runtime-expert | rl | RL stack (`aqp/rl/`) | [../../.cursor/agents/aqp-rl-runtime-expert.md](../../.cursor/agents/aqp-rl-runtime-expert.md) |
+| aqp-rl-runtime-expert | rl | RL stack (`aqp_rl/` + `aqp/rl/` shim) | [../../.cursor/agents/aqp-rl-runtime-expert.md](../../.cursor/agents/aqp-rl-runtime-expert.md) |
 | aqp-backtest-engine-expert | strategy | backtest engines (`aqp/backtest/`) | [../../.cursor/agents/aqp-backtest-engine-expert.md](../../.cursor/agents/aqp-backtest-engine-expert.md) |
 | aqp-frontend-vite-expert | client | `aqp_client/` | [../../.cursor/agents/aqp-frontend-vite-expert.md](../../.cursor/agents/aqp-frontend-vite-expert.md) |
 | aqp-kill-switch-expert | client | kill-switch fan-out | [../../.cursor/agents/aqp-kill-switch-expert.md](../../.cursor/agents/aqp-kill-switch-expert.md) |
@@ -34,6 +36,8 @@ The registry is rebuilt on each curator pass.
 | aqp-codebase-mcp-implementer | runtime | `aqp/codebase/mcp/` | [../../.cursor/agents/aqp-codebase-mcp-implementer.md](../../.cursor/agents/aqp-codebase-mcp-implementer.md) |
 | aqp-pgvector-implementer | runtime | pgvector control plane | [../../.cursor/agents/aqp-pgvector-implementer.md](../../.cursor/agents/aqp-pgvector-implementer.md) |
 | aqp-vite-analytics-implementer | client | analytics frontend routes | [../../.cursor/agents/aqp-vite-analytics-implementer.md](../../.cursor/agents/aqp-vite-analytics-implementer.md) |
+| aqp-ide-quant-author | ide | Authors new AQP-specific quant widgets, MCP server wirings, copilot tools, copilot prompts, and notebook MIME renderers inside `aqp_ide/theia-extensions/aqp*/`. Goes through HTTP (`AqpApiService`) and MCP only; never imports `agentic_quant_platform` source into Theia TypeScript. | [../../.cursor/agents/aqp-ide-quant-author.md](../../.cursor/agents/aqp-ide-quant-author.md) |
+| aqp-ide-curator | ide | Curator for the AQP IDE doc surface (`aqp_ide/docs/`, per-extension `README.md` + `AGENTS.md` for all six AQP extensions, plus the monorepo-side `aqp_docs/aqp-ide.md` + `aqp_docs/aqp-ide-roadmap.md`). Doc-only; delegates source changes to `aqp-ide-quant-author`. | [../../aqp_ide/.cursor/agents/aqp-ide-curator.md](../../aqp_ide/.cursor/agents/aqp-ide-curator.md) |
 
 ## Conventions
 
@@ -41,4 +45,9 @@ The registry is rebuilt on each curator pass.
 - The user-facing description here MUST be a strict superset of the
   Cursor frontmatter `description` field - so an operator can read this
   page without opening `.cursor/agents/`.
+- Most subagents live at monorepo-root `.cursor/agents/`. Package-scoped
+  subagents (e.g. `aqp-ide-curator`) live at
+  `<package>/.cursor/agents/` and that path is what the registry's
+  "Cursor file" column links to. The Cursor agent loader walks both
+  locations.
 - See [extension.md](extension.md) for how to add a new subagent.

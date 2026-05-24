@@ -1,0 +1,42 @@
+# Phase B (NOT deployed). See DEFERRED.md.
+#
+# Example Helm values for the `theia-cloud` chart from
+# https://eclipse-theia.github.io/theia-cloud-helm. When the Phase B
+# trigger fires, install:
+#
+#   helm install theia-cloud-base   theia-cloud/theia-cloud-base   \
+#     --namespace theia-cloud-system --create-namespace
+#   helm install theia-cloud-crds   theia-cloud/theia-cloud-crds   \
+#     --namespace theia-cloud-system
+#   helm install theia-cloud        theia-cloud/theia-cloud        \
+#     --namespace theia-cloud-system -f values.example.yaml
+
+operator:
+  # Use the Java-based operator that ships with theia-cloud upstream.
+  # Override with your own Maven build only if you need bespoke logic.
+  image: ghcr.io/eclipsesource/theia-cloud-operator:latest
+  args:
+    - --keycloak
+    - --cloudProvider=K8S
+    - --sessionsPerUser=2
+    - --eagerStart=1
+
+service:
+  image: ghcr.io/eclipsesource/theia-cloud-service:latest
+
+landingPage:
+  enabled: true
+  image: ghcr.io/eclipsesource/theia-cloud-landing-page:latest
+
+ingress:
+  controller: nginx
+  className: nginx
+
+# Use the Let's Encrypt prod ClusterIssuer from theia-cloud-base.
+issuer:
+  name: letsencrypt-prod
+  email: ops@aqp.fund
+
+# The Theia Cloud REST service handles per-tenant session creation. AQP
+# integrates via the future `aqp-cli ide tenant create` subcommand that
+# POSTs into this REST service.

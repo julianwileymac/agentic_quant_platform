@@ -96,7 +96,7 @@ export class AqpAuthService implements FrontendApplicationContribution {
      */
     async refreshBootstrap(): Promise<AqpAuthBootstrap> {
         const cfg = await this.cfg.load();
-        const base = (cfg.apiUrl || '').replace(/\/+$/u, '');
+        const base = (cfg.aqp?.apiBaseUrl || '').replace(/\/+$/u, '');
         if (!base) {
             this.bootstrap = INITIAL_BOOTSTRAP;
             this._onChange.fire(this.bootstrap);
@@ -155,7 +155,7 @@ export class AqpAuthService implements FrontendApplicationContribution {
         scope?: string;
     } | null> {
         const cfg = await this.cfg.load();
-        const base = (cfg.apiUrl || '').replace(/\/+$/u, '');
+        const base = (cfg.aqp?.apiBaseUrl || '').replace(/\/+$/u, '');
         if (!base || !refreshToken) return null;
         const url = `${base}/auth/refresh`;
         try {

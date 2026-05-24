@@ -1,37 +1,117 @@
 ---
-description: Boundary rule for the vendored Theia IDE workspace at aqp_ide/. AQP code lives only inside theia-extensions/aqp/. No Theia → agentic_quant_platform source imports.
+description: Boundary rule for aqp_ide/ — a Theia 1.72 distribution + six AQP compile-time extensions + an MCP-driven research copilot + a Perspective Arrow notebook renderer. Canonical operator entrypoint is `aqp-cli ide`.
 globs:
   - "aqp_ide/**"
+  - "aqp_platform/deployments/kubernetes/aqp-ide/**"
+  - "aqp_cli/src/aqp_cli/commands/ide.py"
 alwaysApply: false
 ---
 
-# AQP IDE (vendored Theia workspace)
+# AQP IDE (Theia 1.72 + six AQP extensions)
 
-- `aqp_ide/` is a copy of an upstream Theia IDE workspace plus an
-  additive AQP extension. Treat upstream behavior changes carefully.
-- AQP-specific behavior lives **only** inside
-  `aqp_ide/theia-extensions/aqp/`. Do not sprinkle AQP imports into
-  core Theia files.
-- Do not `import` from `agentic_quant_platform` source code (Python or
-  TypeScript) into Theia extension TypeScript. Cross the boundary only
-  through HTTP (`AqpApiService`) or the DataMCP / CodebaseMCP HTTP
-  surfaces.
-- Keep browser / electron target scope explicit in docs and commands.
-- Validate script names against `aqp_ide/package.json` before
-  documenting them.
-- Reference AQP paths through `aqp_ide/docs/aqp-monorepo-paths.md`
-  (in-folder Theia docs) for Theia-side guidance, or
-  `../aqp_docs/aqp-monorepo-paths.md` for monorepo-wide references.
+`aqp_ide/` is the AQP IDE — a white-labeled Eclipse Theia 1.72
+distribution plus **six** AQP compile-time extensions:
+
+- `theia-extensions/aqp/` — Auth0 PKCE login + 5 operator widgets +
+  9-endpoint kill-switch + tenancy QuickPick + `/aqp/config` endpoint
+- `theia-extensions/aqp-shell/` — white-label theme + `FilterContribution`
+  lockdown + window-title + About dialog
+- `theia-extensions/aqp-mcp-bridge/` — pre-configures Theia AI MCP for
+  `aqp-data-mcp` + `aqp-codebase-mcp` (AQP rule 49)
+- `theia-extensions/aqp-research-copilot/` — Theia AI `ChatAgent` routed
+  through `router_complete` (AQP rule 2)
+- `theia-extensions/aqp-notebook-quant/` — FINOS Perspective MIME
+  renderer for Arrow + `File → New AQP Notebook` scaffolder
+- `theia-extensions/aqp-quant/` — SpecAuthor + RunInspector (rule 4) +
+  BacktestRunner widgets
+
+## Hard boundaries
+
+1. AQP-specific behaviour lives ONLY inside `aqp_ide/theia-extensions/aqp*/`.
+   Do NOT sprinkle AQP imports into core Theia files.
+2. Do NOT `import` from `agentic_quant_platform` source code (Python or
+   TypeScript) into Theia extension TypeScript. Cross the boundary only
+   through HTTP (`AqpApiService` from `theia-ide-aqp-ext`) or the
+   DataMCP / CodebaseMCP HTTP surfaces.
+3. The **canonical operator entrypoint** is `aqp-cli ide` (subcommands:
+   `install`, `build`, `start`, `stop`, `status`, `logs`, `open`,
+   `url`, `env`, `detect`, `doctor`). Production / Docker / K8s
+   workflows MUST go through the CLI. Direct `yarn` invocations are
+   inner-loop development only.
+4. **LLM calls (AQP rule 2).** The `aqp-research-copilot-ext` is the
+   only sanctioned LLM consumer in the IDE. It MUST go through
+   `RouterCompleteClient` (`POST /llm/router/complete`). NEVER import
+   `@theia/ai-anthropic`, `@theia/ai-openai`, `@theia/ai-ollama`,
+   `@theia/ai-vercel-ai`, `@theia/ai-google` for the AQP agent — those
+   bundled adapters belong to upstream Theia AI's generic agents.
+5. **MCP audience (AQP rule 49).** Every MCP server registration in
+   `aqp-mcp-bridge-ext` MUST mint a token with the per-MCP `aud` claim.
+   The bridge sets a non-secret `X-AQP-MCP-Audience` header so
+   operators can verify the wiring from browser devtools without
+   inspecting the token. NO token passthrough across audiences.
+6. **Canonical progress frame (AQP rule 4).** The `RunInspectorWidget`
+   in `aqp-quant-ext` consumes `{task_id, stage, message, timestamp,
+   **extras}` verbatim. New WebSocket subscribers added to the IDE MUST
+   honour the same frame shape.
+7. **Tenancy headers (AQP rule 51).** `AqpApiService` attaches
+   `X-AQP-Workspace` / `X-AQP-Project` / `X-AQP-Lab` / `X-AQP-Org` /
+   `X-AQP-Team` on every HTTP request. WebSocket subscriptions pass the
+   same headers via query params (browsers can't set Authorization on
+   WS handshakes). The MCP bridge re-registers servers on every
+   tenancy change.
+8. **No secret printing** (`.cursor/rules/aqp-management-engine.mdc`).
+   The redacted 4-character prefix rule applies to every log line in
+   every IDE extension. NEVER print a full Auth0 bearer.
+9. Keep browser / electron target scope explicit in docs and commands.
+   The browser app is the AQP-wired target; electron remains
+   upstream-oriented unless explicitly added.
+10. Validate script names against `aqp_ide/package.json` and
+    `aqp_ide/applications/browser/package.json` before documenting
+    them.
+11. Reference AQP paths through `aqp_ide/docs/aqp-monorepo-paths.md`
+    (in-folder) or `aqp_docs/aqp-monorepo-paths.md` (monorepo-wide).
+    NEVER hardcode local absolute paths.
+
+## Where changes go
+
+| Change | Path |
+| --- | --- |
+| New AQP-specific widget | `aqp_ide/theia-extensions/aqp-quant/src/browser/widgets/` (or a NEW `theia-extensions/aqp-<name>/` if it doesn't fit the quant theme) |
+| New MCP server registration | `aqp_ide/theia-extensions/aqp-mcp-bridge/src/browser/mcp/` + add the slot to `AqpRuntimeConfig.mcp` in `theia-extensions/aqp/src/common/aqp-protocol.ts` |
+| New copilot prompt | `aqp_ide/theia-extensions/aqp-research-copilot/src/browser/copilot/prompts/<name>.md` + register in `AqpResearchAgent.prompts` |
+| New copilot tool | `aqp_ide/theia-extensions/aqp-research-copilot/src/browser/copilot/aqp-tool-functions.ts` |
+| New notebook MIME renderer | `aqp_ide/theia-extensions/aqp-notebook-quant/src/browser/notebook/<name>-renderer.ts` |
+| New CLI subcommand | `aqp_cli/src/aqp_cli/commands/ide.py` |
+| New env var | `aqp_ide/theia-extensions/aqp/src/common/aqp-protocol.ts` + `aqp-config-endpoint.ts` + `aqp_ide/browser.Dockerfile` + `aqp_platform/deployments/kubernetes/aqp-ide/configmap-aqp.yaml` + `_THEIA_ENV_KEYS` in `aqp_cli/src/aqp_cli/commands/ide.py` |
+| New K8s manifest | `aqp_platform/deployments/kubernetes/aqp-ide/` (single-pod overlay) |
+| New doc | `aqp_ide/docs/` + cross-link in `aqp_ide/docs/index.md` + `aqp_ide/AGENTS.md` |
+| New skill | `aqp_ide/.cursor/skills/<name>/SKILL.md` |
 
 ## Validation
 
 ```bash
+# Production entrypoint:
+aqp-cli ide doctor
+aqp-cli ide install
+aqp-cli ide build --dev
+aqp-cli ide start --open
+
+# Inner-loop dev:
 cd aqp_ide
 yarn install
 yarn build:extensions
 yarn build:applications:dev
 ```
 
-These commands are NOT chained from the monorepo's top-level Makefile
-(which builds the AQP Python/Vite stack). The Theia build is a
-standalone step.
+Build / lint / typecheck of every extension MUST pass before merge.
+
+## See also
+
+- [aqp_docs/aqp-ide.md](mdc:aqp_docs/aqp-ide.md) — monorepo SSoT pointer
+- [aqp_docs/aqp-ide-roadmap.md](mdc:aqp_docs/aqp-ide-roadmap.md) — Phase A/B/C
+- [aqp_ide/docs/architecture.md](mdc:aqp_ide/docs/architecture.md)
+- [aqp_ide/docs/extensions.md](mdc:aqp_ide/docs/extensions.md)
+- [aqp_ide/docs/cli-entrypoint.md](mdc:aqp_ide/docs/cli-entrypoint.md)
+- [aqp_ide/docs/mcp-integration.md](mdc:aqp_ide/docs/mcp-integration.md)
+- [aqp_ide/.cursor/agents/aqp-ide-curator.md](mdc:aqp_ide/.cursor/agents/aqp-ide-curator.md)
+- [.cursor/agents/aqp-ide-quant-author.md](mdc:.cursor/agents/aqp-ide-quant-author.md)

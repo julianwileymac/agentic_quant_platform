@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aqp-ide
+  namespace: aqp-ide
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # WebSocket support — Theia uses WS for JSON-RPC + notebook + the AQP
+    # /ws/tasks/{task_id} progress stream. The ingress controller MUST
+    # NOT terminate the connection prematurely.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: SAMEORIGIN";
+      more_set_headers "X-Content-Type-Options: nosniff";
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - ide.aqp.fund
+      secretName: aqp-ide-tls
+  rules:
+    - host: ide.aqp.fund
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aqp-ide
+                port:
+                  name: http

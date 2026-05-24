@@ -67,6 +67,23 @@ export namespace TenancyHeaders {
     export const TEAM = 'X-AQP-Team';
 }
 
+/**
+ * Per-MCP-surface configuration shape. The AQP backend serves these via
+ * `GET /aqp/config` so the `theia-ide-aqp-mcp-bridge-ext` extension can
+ * pre-register the MCP servers with the bundled `@theia/ai-mcp` client.
+ *
+ * - `url` is the streamable HTTP endpoint of the MCP server
+ *   (e.g. `https://api.aqp.fund/mcp/data`).
+ * - `audience` is the canonical URI advertised by the MCP server's
+ *   RFC 9728 Protected Resource Metadata document. The access token
+ *   we mint MUST carry this as its `aud` claim (AQP rule 49 — no
+ *   token passthrough across audiences).
+ */
+export interface AqpMcpConfigSlot {
+    url: string;
+    audience: string;
+}
+
 export interface AqpRuntimeConfig {
     auth0: {
         domain: string;
@@ -85,5 +102,24 @@ export interface AqpRuntimeConfig {
         // GET path for `/auth/providers` (BFF bootstrap). Defaults to
         // `${apiBaseUrl}/auth/providers`.
         providersUrl?: string;
+    };
+    /**
+     * MCP server configuration consumed by `theia-ide-aqp-mcp-bridge-ext`.
+     * Optional so older Theia backends that don't set the env vars degrade
+     * gracefully (the bridge skips registration and logs a structured
+     * warning rather than crashing).
+     */
+    mcp?: {
+        data?: AqpMcpConfigSlot;
+        codebase?: AqpMcpConfigSlot;
+    };
+    /**
+     * Research-copilot configuration. Optional. When `seraEnabled` is true,
+     * the copilot defaults to AQP's SERA-32B code model for codebase tools.
+     * `routerCompletePath` overrides the default `/llm/router/complete` path.
+     */
+    copilot?: {
+        seraEnabled?: boolean;
+        routerCompletePath?: string;
     };
 }

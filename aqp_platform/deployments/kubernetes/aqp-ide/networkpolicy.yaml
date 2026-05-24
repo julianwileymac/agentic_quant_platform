@@ -1,0 +1,70 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aqp-ide-default-deny
+  namespace: aqp-ide
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aqp-ide-ingress-from-nginx
+  namespace: aqp-ide
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aqp-ide
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aqp-ide-egress-aqp-api
+  namespace: aqp-ide
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aqp-ide
+  policyTypes:
+    - Egress
+  egress:
+    # Allow egress to the AQP API + MCP servers (api.aqp.fund). The
+    # NetworkPolicy targets the kube-dns + the cluster CIDR; egress to
+    # api.aqp.fund leaves the cluster via the standard egress path.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+    # NOTE: The IDE's MCP bridge talks to api.aqp.fund over public HTTPS.
+    # If you serve the MCP from a sibling namespace (e.g. aqp-api), add
+    # an explicit allow-rule with `to.namespaceSelector` here.

@@ -69,6 +69,33 @@ class AqpCliSettings(BaseSettings):
     )
     http_timeout_seconds: float = Field(default=15.0, ge=1.0)
 
+    # --- Theia IDE entrypoint configuration ------------------------------
+    theia_port: int = Field(
+        default=3000,
+        ge=1,
+        le=65535,
+        description="Local Theia IDE port (matches aqp_ide/applications/browser default).",
+    )
+    theia_url: str = Field(
+        default="http://localhost:3000",
+        description="Full URL where the local Theia IDE is served. `aqp-cli ide open` uses this.",
+    )
+    theia_workspace: str = Field(
+        default="",
+        description=(
+            "Optional Theia workspace path passed positionally to `yarn start`. "
+            "Empty means use whatever the Theia bundle defaults to (typically the cwd)."
+        ),
+    )
+    theia_yarn_offline: bool = Field(
+        default=False,
+        description="Pass `--frozen-lockfile` to `yarn install` for reproducible CI builds.",
+    )
+    theia_docker_image: str = Field(
+        default="aqp/aqp-ide:dev",
+        description="Container image tag used by future `aqp-cli ide image` subcommands.",
+    )
+
 
 def get_settings() -> AqpCliSettings:
     """Return a fresh settings object. Always recomputed; never cached."""

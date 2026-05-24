@@ -1,0 +1,37 @@
+/********************************************************************************
+ * Copyright (C) 2026 Julian Wiley and others.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the MIT License, which is available in the project root.
+ *
+ * SPDX-License-Identifier: MIT
+ ********************************************************************************/
+
+/* AQP IDE shell theme overrides.
+ *
+ * Every value targets a --theia-* CSS custom property so that the active
+ * Theia theme (dark / light) still drives the actual colour. We only tweak
+ * structural variables (font scale, icon size, spacing) plus a small
+ * accent colour for AQP-branded surfaces.
+ */
+
+:root {
+    /* Denser layout for quants who run a multi-pane research workspace. */
+    --theia-ui-font-scale-factor: 0.96;
+    --theia-icon-size: 14px;
+    --theia-private-sidebar-min-width: 220px;
+}
+
+/* AQP brand accent on the status bar so operators can tell at a glance they
+ * are inside the AQP IDE (as opposed to a vanilla Theia). The brand colour
+ * is intentionally NOT a hard hex — it falls back to the Theia accent
+ * variable in themes that define one. */
+.theia-statusBar {
+    border-top: 2px solid var(--theia-statusBarItem-prominentBackground, var(--theia-focusBorder));
+}
+
+/* Tighten the main sash border to make the in-IDE Vite iframe feel like
+ * a native pane rather than a webview. */
+.p-SplitPanel-handle {
+    background-color: var(--theia-sideBar-border, rgba(127, 127, 127, 0.12));
+}
