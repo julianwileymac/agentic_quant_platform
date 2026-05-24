@@ -834,10 +834,30 @@ def _emit_iceberg_lineage(
     """Fire a lineage event for an Iceberg write.
 
     Failures are swallowed because lineage is a side channel — never
-    block the data path.
+    block the data path. The ``details`` payload includes the current
+    snapshot id + manifest list location (workstream A) so the
+    :class:`BipartiteGraphObserver` can write a properly content-
+    addressed :class:`DatasetVertex` without re-loading the table.
     """
     try:
         from aqp.data.catalog.lineage import LineageEvent, get_lineage_bus
+
+        details: dict[str, Any] = {}
+        # Best-effort snapshot capture. Reuses the active catalog
+        # connection so we don't pay the discovery cost twice.
+        try:
+            table = load_table(target)
+            if table is not None:
+                snap = table.current_snapshot()
+                if snap is not None:
+                    details["iceberg_snapshot_id"] = int(snap.snapshot_id)
+                    if getattr(snap, "manifest_list", None):
+                        details["iceberg_manifest_list"] = str(snap.manifest_list)
+        except Exception:  # noqa: BLE001
+            # Snapshot capture is best-effort; missing details just
+            # mean the downstream observer falls back to its non-
+            # snapshot content-address path.
+            pass
 
         get_lineage_bus().emit(
             LineageEvent(
@@ -852,6 +872,7 @@ def _emit_iceberg_lineage(
                 mcp_tool_name=mcp_tool_name,
                 service_name=service_name or "iceberg",
                 summary=summary,
+                details=details,
             )
         )
     except Exception:  # noqa: BLE001

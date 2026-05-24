@@ -155,8 +155,18 @@ class IdentityProvider(metaclass=IdentityProviderMeta):
         code_challenge: str,
         scope: str = "openid profile email offline_access",
         audience: str | None = None,
+        resource: str | None = None,
     ) -> str:
-        """Return the provider's authorization-code (PKCE) URL."""
+        """Return the provider's authorization-code (PKCE) URL.
+
+        ``resource`` is the RFC 8707 Resource Indicator. The 2025-11-25
+        MCP authorization spec REQUIRES clients to include it on both
+        the authorize and token requests so the resulting access token
+        is audience-bound to a single MCP server. Providers that don't
+        natively understand the parameter forward it as a generic
+        authorize-endpoint query parameter (every standards-compliant
+        OIDC AS accepts unknown params verbatim).
+        """
 
     @abstractmethod
     def exchange_code(

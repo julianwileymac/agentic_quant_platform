@@ -616,6 +616,71 @@ These hold across the codebase. Any PR that violates one will be sent back.
  Let's Encrypt and Auth0 (`aqp-fund.us.auth0.com`). The portal's
  `julianwiley.com` tunnel + Microsoft Entra IdP live in
  `rpi_kubernetes` and are never co-mingled with AQP.
+48. **Bipartite lineage graph is the canonical data-flow audit
+ surface.** Workstream A of the Data Layer Selective Additive
+ Enhancement adds `lineage_dataset_vertex` + `lineage_transform_vertex`
+ + `lineage_edge` alongside the existing flat
+ [`data_lineage_events`](aqp/persistence/models_lineage.py) log. Every
+ :class:`LineageEvent` flowing through
+ [`LineageBus`](aqp/data/catalog/lineage.py) is dual-written by the
+ [`BipartiteGraphObserver`](aqp/lineage/graph/observer.py) when
+ ``AQP_LINEAGE_GRAPH_ENABLED=true``. Iceberg-resident datasets MUST
+ record their snapshot id + manifest-list location via
+ [`iceberg_snapshot_address`](aqp/lineage/graph/content_address.py) on
+ their :class:`DatasetVertex`. Reads go through
+ [`data.lineage.ancestry`](aqp/data/mcp/tools/lineage_graph.py) /
+ [`data.lineage.impact`](aqp/data/mcp/tools/lineage_graph.py) DataMCP
+ tools (rule 22). Migration: 0059.
+49. **MCP servers MUST be RFC 9728 + RFC 8707 conformant.** Workstream
+ E of the Data Layer enhancement. Both `aqp-data-mcp` and
+ `aqp-codebase-mcp` publish OAuth 2.0 Protected Resource Metadata at
+ [`/.well-known/oauth-protected-resource[/...]`](aqp/api/well_known.py)
+ and validate the `aud` claim of every incoming access token through
+ [`validate_mcp_audience`](aqp/api/mcp_audience.py) against the
+ deployment's `AQP_MCP_DATA_CANONICAL_URI` /
+ `AQP_MCP_CODEBASE_CANONICAL_URI`. The 2025-11-25 MCP spec's
+ no-token-passthrough invariant is enforced by the
+ [`tests/mcp/test_no_token_passthrough.py`](tests/mcp/test_no_token_passthrough.py)
+ source linter; MCP server outbound calls MUST mint their own M2M
+ token via :class:`M2MTokenIssuer` (rule 27). Enforcement modes:
+ `AQP_MCP_REQUIRE_RFC8707=off|permissive|strict`. PKCE remains S256
+ only.
+50. **All per-user external OAuth tokens resolve through
+ :class:`UserOAuthTokenStore` (priority 5).** Workstream D of the
+ Data Layer enhancement. The user-facing wizard lives at
+ [`/me/oauth-connections`](aqp/api/routes/oauth_connections.py);
+ token-blob storage is envelope-encrypted via
+ [`vault_transit.encrypt`](aqp/credentials/vault_transit.py)
+ (Vault Transit in prod, local AESGCM in dev). New external sources
+ register through
+ [`ExternalOAuthProviderMeta`](aqp/auth/external_oauth/protocol.py) —
+ NEVER decorate by hand and NEVER add a new direct `httpx` call to a
+ user's external API that hand-rolls a token. The
+ :class:`UserOAuthTokenStore` (priority 5, above M2M=10) is the single
+ sanctioned resolution path; tokens are refreshed by
+ [`refresh_external_oauth_tokens`](aqp/tasks/token_refresh_tasks.py)
+ Celery beat task within the configured refresh window. Reads go
+ through the [`data.oauth.list_connections`](aqp/data/mcp/tools/oauth_connections.py)
+ DataMCP tool (rule 22). Migration: 0062.
+51. **All tenancy isolation routes through
+ :class:`TenancyStrategy` + :class:`TenancyStrategyMeta`.** Workstream
+ F of the Data Layer enhancement. Concrete strategies
+ ([`SharedSchemaRLSStrategy`](aqp/tenancy/strategies/shared_schema_rls.py),
+ [`SchemaPerTenantStrategy`](aqp/tenancy/strategies/schema_per_tenant.py),
+ [`DatabasePerEnterpriseStrategy`](aqp/tenancy/strategies/database_per_enterprise.py),
+ [`HybridStrategy`](aqp/tenancy/strategies/hybrid.py)) self-register
+ via :class:`TenancyStrategyMeta`; the factory
+ [`get_tenancy_factory()`](aqp/tenancy/factory.py) returns the active
+ instance. The RLS DDL bundle in
+ [`aqp/tenancy/rls_policies.py`](aqp/tenancy/rls_policies.py) +
+ migration 0063 enable Row-Level Security on every tenant-scoped
+ table; the runtime contextvar in
+ [`aqp/tenancy/runtime_context.py`](aqp/tenancy/runtime_context.py)
+ propagates the active :class:`RequestContext` so session GUC writes
+ (`SET LOCAL app.current_workspace_id = …`) honour PEP 567. Direct
+ `engine.connect()` for an org-scoped query bypasses isolation and is
+ forbidden in route / task code. Migrations: 0063 (RLS + columns),
+ 0064 (tenant_template + public_data schemas).
 
 ## Common workflows
 

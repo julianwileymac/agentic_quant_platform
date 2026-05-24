@@ -55,7 +55,17 @@ class GenericOidcProvider(IdentityProvider):
         code_challenge: str,
         scope: str = "openid profile email offline_access",
         audience: str | None = None,
+        resource: str | None = None,
     ) -> str:
+        # The ``resource`` parameter (RFC 8707) is forwarded as a
+        # vanilla query string entry. Standards-compliant authorization
+        # servers either honour it (and audience-bind the issued
+        # token) or ignore it; either way the local code path stays
+        # unchanged. The 2025-11-25 MCP spec mandates this kwarg flow
+        # so MCP clients can target a specific MCP server.
+        extra: dict[str, str] = dict(self.config.extra_authorize_params or {})
+        if resource:
+            extra["resource"] = str(resource)
         return self._client.authorize_url(
             client_id=self.config.client_id,
             redirect_uri=redirect_uri,
@@ -63,7 +73,7 @@ class GenericOidcProvider(IdentityProvider):
             code_challenge=code_challenge,
             scope=scope,
             audience=audience or self.config.audience or None,
-            extra_params=self.config.extra_authorize_params or None,
+            extra_params=extra or None,
         )
 
     def exchange_code(

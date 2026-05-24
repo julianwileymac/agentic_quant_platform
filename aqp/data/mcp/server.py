@@ -32,6 +32,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from fastapi import Request
+
+from aqp.api.mcp_audience import (
+    get_data_mcp_canonical_uri,
+    get_mcp_audience_mode,
+    validate_mcp_audience,
+)
 from aqp.auth import (
     CurrentUser,
     RequestContext,
@@ -252,12 +259,26 @@ def build_mcp_router() -> APIRouter:
     def invoke_tool(
         name: str,
         body: MCPInvokeRequest,
+        request: Request,
         user: CurrentUser = Depends(require_authenticated),
         ctx: RequestContext = Depends(current_context),
     ) -> dict[str, Any]:
         cls = _tool_cls(name)
         if cls is None:
             raise HTTPException(status_code=404, detail=f"unknown tool {name!r}")
+        # RFC 8707 audience binding (workstream E). The 2025-11-25 MCP
+        # spec requires that access tokens carry the canonical MCP
+        # server URI in their ``aud`` (or ``resource``) claim. The
+        # validator below is a no-op when ``AQP_MCP_REQUIRE_RFC8707=off``
+        # (default during the rollout) and emits OTEL would-deny tags
+        # in permissive mode; strict mode raises 401 with the RFC 9728
+        # ``WWW-Authenticate`` header pointing at the matching
+        # ``/.well-known/oauth-protected-resource/mcp/data`` document.
+        validate_mcp_audience(
+            request,
+            get_data_mcp_canonical_uri(),
+            mode=get_mcp_audience_mode(),
+        )
         # Tenancy / identity always comes from the verified JWT +
         # X-AQP-* headers, never from the request body. Body fields
         # like ``actor`` are kept only for the ``actor_kind`` /

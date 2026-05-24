@@ -1,0 +1,97 @@
+---
+description: Bipartite lineage DAG + OpenLineage relay (Workstream A + B). Scopes AGENTS.md hard rule 48.
+globs:
+  - aqp/lineage/**/*.py
+  - aqp/data/iceberg_catalog.py
+  - aqp/data/catalog/lineage.py
+  - aqp/persistence/models_lineage_graph.py
+  - aqp/persistence/models_openlineage.py
+  - aqp/persistence/models_signing_keys.py
+  - aqp/data/mcp/tools/lineage_graph.py
+  - aqp/tasks/openlineage_relay_tasks.py
+  - aqp/auth/signing.py
+  - aqp/auth/signing_keys.py
+  - alembic/versions/0059_lineage_graph_v2.py
+  - alembic/versions/0060_openlineage_outbox.py
+  - alembic/versions/0061_lineage_signing_archive.py
+---
+
+# Bipartite lineage DAG + OpenLineage relay
+
+This rule scopes AGENTS hard rule 48 + the Workstream A / B / C
+additions from the Data Layer Selective Additive Enhancement.
+
+## Architecture
+
+- **Flat log (legacy, untouched)** — `data_lineage_events` keeps
+  receiving rows via [`LineageWriter`](mdc:aqp/data/catalog/lineage.py).
+  This is the OpenLineage outbox source; never replace it.
+- **Bipartite graph (workstream A)** —
+  [`lineage_dataset_vertex`](mdc:aqp/persistence/models_lineage_graph.py),
+  `lineage_transform_vertex`, `lineage_edge`. Written by the
+  [`BipartiteGraphObserver`](mdc:aqp/lineage/graph/observer.py)
+  on the existing :class:`LineageBus`.
+- **OpenLineage relay (workstream B)** —
+  [`OpenLineageOutboxObserver`](mdc:aqp/lineage/openlineage/observer.py)
+  writes `lineage_openlineage_outbox` rows; the Celery beat task
+  [`drain_openlineage_outbox`](mdc:aqp/tasks/openlineage_relay_tasks.py)
+  POSTs them to Marquez.
+- **Signed transforms (workstream C)** —
+  [`sign_transform_payload`](mdc:aqp/auth/signing.py) populates the
+  `signature` + `signing_key_id` columns on `lineage_transform_vertex`;
+  per-actor keys resolve via :class:`CredentialResolver`
+  ([`signing_keys`](mdc:aqp/auth/signing_keys.py)).
+
+## Hard rules
+
+1. **Every Iceberg write captures snapshot metadata.**
+   [`_emit_iceberg_lineage`](mdc:aqp/data/iceberg_catalog.py) MUST
+   populate `details["iceberg_snapshot_id"]` and
+   `details["iceberg_manifest_list"]` for the dataset vertex to be
+   content-addressed correctly. Skipping this drops Iceberg datasets
+   onto the fallback hash path.
+2. **Bipartite emission is additive, never replaces the flat log.**
+   The flat `data_lineage_events` log MUST keep writing so the
+   OpenLineage outbox observer + audit downstream consumers keep
+   working. The graph rows are a parallel projection.
+3. **Edges are bipartite.** A `consumes` edge goes from a dataset
+   vertex to a transform vertex; a `produces` edge goes from a
+   transform vertex to a dataset vertex. Never mix these — the
+   writer enforces direction.
+4. **Signing follows rule 26.** Per-actor keys live behind
+   :class:`CredentialResolver` under
+   `CredentialKey("lineage_signing", "<actor_kind|user:id|agent:id>")`.
+   Never hard-code key material in
+   [`aqp/auth/signing.py`](mdc:aqp/auth/signing.py) or its callers.
+5. **Public keys are archived.** Every issued signing key writes a
+   `lineage_signing_key_archive` row via
+   [`archive_public_key`](mdc:aqp/auth/signing_keys.py) so historical
+   signatures stay verifiable after rotation.
+6. **OpenLineage payloads are stable.** The
+   [`aqp_event_to_openlineage`](mdc:aqp/lineage/openlineage/mapper.py)
+   shape MUST conform to the OL `RunEvent` schema at
+   https://openlineage.io/spec/. AQP-specific fields go under
+   ``run.facets.aqp`` — never on the top-level keys OL reserves.
+7. **Reads route through DataMCP.** Agents query the graph via
+   [`data.lineage.ancestry`](mdc:aqp/data/mcp/tools/lineage_graph.py)
+   and `data.lineage.impact`. Direct ORM imports from
+   [`aqp/agents/`](mdc:aqp/agents) are forbidden (rule 22).
+
+## Settings
+
+- `AQP_LINEAGE_GRAPH_ENABLED` — toggle the bipartite observer.
+- `AQP_LINEAGE_OPENLINEAGE_RELAY_ENABLED` — toggle the OL outbox
+  observer + the Celery drain task.
+- `AQP_LINEAGE_OPENLINEAGE_MARQUEZ_URL` — explicit Marquez endpoint;
+  defaults to the topology-yaml entry when unset (rule 47).
+- `AQP_LINEAGE_SIGNING_ENABLED` + `AQP_LINEAGE_SIGNING_MODE` —
+  toggle signing + mode (off/permissive/strict).
+
+## Don't
+
+- Don't insert directly into the new tables. Go through
+  [`LineageGraphWriter`](mdc:aqp/lineage/graph/writer.py).
+- Don't shell out to Marquez with raw `httpx` calls outside
+  [`relay.post_openlineage_event`](mdc:aqp/lineage/openlineage/relay.py).
+- Don't add a new lineage `transform_kind` without also wiring the
+  matching upstream → transform → downstream edge pair.

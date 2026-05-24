@@ -62,6 +62,10 @@ CACHE_CATEGORIES: Final[tuple[str, ...]] = (
     "vector_indexes",
     # Aspect-driven Iceberg namespace prefix policies.
     "namespace_policies",
+    # Workstream D — per-user external OAuth2 connections. Read-only
+    # whitelist surfaced by ``data.oauth.list_connections`` + the
+    # ``/me/oauth-connections`` wizard.
+    "oauth_connections",
 )
 
 

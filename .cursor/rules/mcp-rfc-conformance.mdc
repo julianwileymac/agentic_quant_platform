@@ -1,0 +1,81 @@
+---
+description: MCP server RFC 9728 + RFC 8707 conformance (Workstream E). Scopes AGENTS.md hard rule 49.
+globs:
+  - aqp/api/well_known.py
+  - aqp/api/mcp_audience.py
+  - aqp/data/mcp/server.py
+  - aqp/codebase/mcp/server.py
+  - tests/mcp/test_no_token_passthrough.py
+---
+
+# MCP RFC 9728 + RFC 8707 conformance
+
+This rule scopes AGENTS hard rule 49 + the Workstream E additions
+from the Data Layer Selective Additive Enhancement.
+
+## What changed
+
+- [`aqp/api/well_known.py`](mdc:aqp/api/well_known.py) publishes
+  OAuth 2.0 Protected Resource Metadata (RFC 9728) at the root and
+  per-MCP-server paths.
+- [`aqp/api/mcp_audience.py`](mdc:aqp/api/mcp_audience.py) validates
+  the `aud` / `resource` claim of every access token reaching the
+  MCP servers (RFC 8707 Resource Indicators).
+- Both [`aqp-data-mcp`](mdc:aqp/data/mcp/server.py) and
+  [`aqp-codebase-mcp`](mdc:aqp/codebase/mcp/server.py) call
+  :func:`validate_mcp_audience` on every `tools/call`.
+- The [`tests/mcp/test_no_token_passthrough.py`](mdc:tests/mcp/test_no_token_passthrough.py)
+  linter scans the MCP packages for any code path that would
+  forward an incoming user Bearer token to an upstream API — the
+  2025-11-25 MCP spec explicitly forbids this.
+
+## Hard rules
+
+1. **Per-server canonical URI.** Each MCP server MUST advertise its
+   canonical URI via `settings.mcp_data_canonical_uri` /
+   `settings.mcp_codebase_canonical_uri`. Production deployments set
+   both explicitly so the audience-bound tokens minted by the AS
+   match what the server advertises.
+2. **PKCE S256 only.** No plaintext / no other challenge methods.
+   The :class:`IdentityProvider.login_url` ABC now accepts an
+   RFC 8707 ``resource`` kwarg; MCP clients MUST pass it on both
+   authorize and token requests.
+3. **No token passthrough.** When the MCP server calls upstream
+   APIs on the user's behalf, it MUST mint its own M2M token via
+   :class:`M2MTokenIssuer`. Direct
+   `request.headers["Authorization"]` forwarding into outbound
+   `httpx` calls is forbidden — the
+   [`test_no_token_passthrough`](mdc:tests/mcp/test_no_token_passthrough.py)
+   linter enforces this at CI time.
+4. **WWW-Authenticate header on 401.** Audience-mismatch 401s MUST
+   carry the RFC 9728 `WWW-Authenticate: Bearer
+   resource_metadata="…"` header so MCP clients can bootstrap
+   discovery. The
+   [`build_resource_metadata_header`](mdc:aqp/api/mcp_audience.py)
+   helper builds this for you; don't hand-roll the value.
+5. **Rollout modes.** `AQP_MCP_REQUIRE_RFC8707` accepts
+   `off` (rollout default), `permissive` (log + OTel tag without
+   rejecting), `strict` (raise 401 with WWW-Authenticate header).
+   Flip strict only after 24 h of zero would-be denies in
+   permissive mode.
+
+## Reference CVEs (why this matters)
+
+- **CVE-2025-49596** (Anthropic MCP Inspector, CVSS 9.4) —
+  unauthenticated RCE; demonstrated the impact of skipping
+  audience binding on MCP-adjacent surfaces.
+- **CVE-2025-6514** (`mcp-remote`, CVSS 9.6) — OS command injection
+  via a malicious MCP server; another consequence of weak token
+  scoping.
+
+## Don't
+
+- Don't add new MCP servers without publishing a matching
+  `/.well-known/oauth-protected-resource/...` document.
+- Don't relax PKCE to `plain` for compatibility with a buggy AS.
+  Replace the AS instead.
+- Don't accept a `resource` parameter from the request body — only
+  from the authorize URL / token endpoint per RFC 8707.
+- Don't read `audience` from the request body for MCP routes; the
+  validator reads it from the verified JWT
+  (`request.state.oidc_claims`) only.

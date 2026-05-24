@@ -1,0 +1,78 @@
+---
+description: Per-user external OAuth2 vault + ExternalOAuthProvider (Workstream D). Scopes AGENTS.md hard rule 50.
+globs:
+  - aqp/auth/external_oauth/**/*.py
+  - aqp/credentials/stores/user_oauth_token_store.py
+  - aqp/credentials/vault_transit.py
+  - aqp/persistence/models_oauth_tokens.py
+  - aqp/api/routes/oauth_connections.py
+  - aqp/data/mcp/tools/oauth_connections.py
+  - aqp/tasks/token_refresh_tasks.py
+  - alembic/versions/0062_user_oauth_tokens.py
+---
+
+# Per-user external OAuth2 + ExternalOAuthProvider
+
+This rule scopes AGENTS hard rule 50 + the Workstream D additions
+from the Data Layer Selective Additive Enhancement.
+
+## What this layer is for
+
+The platform now supports a user authorising AQP to call an external
+data source (Bloomberg, Refinitiv, GitHub, FRED, generic OAuth2) on
+their behalf. Tokens are envelope-encrypted via Vault Transit (with a
+local AESGCM fallback) and surfaced through the existing
+[`CredentialResolver`](mdc:aqp/credentials/resolver.py) chain at
+priority 5 — above the M2M token store so user-scoped credentials
+always win when a user is in context.
+
+## Hard rules
+
+1. **All per-user external OAuth tokens flow through
+   :class:`UserOAuthTokenStore`.** Direct `httpx` calls against a
+   user's external API that hand-roll a token are forbidden; the
+   only sanctioned access path is `resolver.resolve(
+   CredentialKey("<source>", "user_oauth"))`.
+2. **Token blobs are envelope-encrypted at rest.** Use
+   [`vault_transit.encrypt`](mdc:aqp/credentials/vault_transit.py).
+   In production with `VAULT_ADDR` set this round-trips through
+   Vault Transit; in dev it falls back to a process-local AESGCM
+   key. NEVER store plaintext tokens.
+3. **PKCE is mandatory.** The
+   [`flow._pkce_pair`](mdc:aqp/auth/external_oauth/flow.py) helper is
+   the only sanctioned PKCE generator; ``code_challenge_method`` is
+   `S256` only. The generic provider hard-codes
+   `code_challenge_method=S256` and refuses to emit `plain`.
+4. **New providers register through
+   :class:`ExternalOAuthProviderMeta`.** Set `provider_slug` on the
+   subclass and ship a `default_config()` classmethod that returns
+   an :class:`ExternalProviderConfig`. The metaclass auto-registers
+   via :func:`aqp.core.registry.register`; never decorate by hand.
+5. **Reads route through DataMCP.** Agents inspect a user's
+   connections via
+   [`data.oauth.list_connections`](mdc:aqp/data/mcp/tools/oauth_connections.py)
+   (rule 22). The MCP tool returns metadata only — never the
+   underlying token.
+6. **Refresh runs in Celery beat.** The
+   [`refresh_external_oauth_tokens`](mdc:aqp/tasks/token_refresh_tasks.py)
+   task handles the lifecycle. Synchronous refresh inside a request
+   is forbidden; surface a "re-authorise" UX to the user instead.
+7. **Frontend wizard is the only ingress.** The
+   [`/me/oauth-connections`](mdc:aqp/api/routes/oauth_connections.py)
+   routes are the only path that mints `user_oauth_tokens` rows.
+   Admin / SCIM provisioning does NOT bypass them.
+
+## Don't
+
+- Don't print, log, or surface the raw access_token / refresh_token
+  anywhere. The `aqp-management-engine` credential-safety rule
+  ([`aqp-management-engine.mdc`](mdc:.cursor/rules/aqp-management-engine.mdc))
+  applies verbatim.
+- Don't read `settings.<source>_client_secret` directly. Resolve
+  per-source client credentials through
+  [`CredentialResolver`](mdc:aqp/credentials/resolver.py) under
+  `CredentialKey("external_oauth:<source>", "client")`.
+- Don't add new entries to the legacy
+  :func:`aqp.auth.providers.IdentityProvider` registry for external
+  sources. That metaclass is for AQP-tenant login (Auth0 / Entra /
+  Cloudflare); use :class:`ExternalOAuthProviderMeta` here.

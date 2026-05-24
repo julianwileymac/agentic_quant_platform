@@ -17,9 +17,14 @@ import sys
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from aqp.api.mcp_audience import (
+    get_codebase_mcp_canonical_uri,
+    get_mcp_audience_mode,
+    validate_mcp_audience,
+)
 from aqp.codebase.mcp import (
     CODEBASE_MCP_TOOLS,
     MCPToolContext,
@@ -69,13 +74,22 @@ def build_codebase_mcp_router() -> APIRouter:
         }
 
     @router.post("/tools/{name}/invoke")
-    def invoke_tool(name: str, body: MCPInvokeRequest) -> dict[str, Any]:
+    def invoke_tool(name: str, body: MCPInvokeRequest, request: Request) -> dict[str, Any]:
         # Auth is enforced by the FastAPI dependency stack at the
         # main app level (mirroring /mcp/data). External callers must
         # carry the AQP_M2M_TOKEN; local dev with auth_provider=local
         # is allowed through unauthenticated.
         if name not in CODEBASE_MCP_TOOLS:
             raise HTTPException(status_code=404, detail=f"unknown tool {name!r}")
+        # RFC 8707 audience binding (workstream E). Mirrors the data
+        # MCP server. The validator no-ops when
+        # ``AQP_MCP_REQUIRE_RFC8707=off`` (default) and only enforces
+        # once the operator flips the knob after permissive soak.
+        validate_mcp_audience(
+            request,
+            get_codebase_mcp_canonical_uri(),
+            mode=get_mcp_audience_mode(),
+        )
         ctx = MCPToolContext(
             actor=body.actor or "codebase_mcp_http",
             actor_kind=body.actor_kind or "service",

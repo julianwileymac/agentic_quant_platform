@@ -1,0 +1,96 @@
+---
+description: TenancyStrategy ABC + RLS / schema-per-tenant / db-per-enterprise (Workstream F). Scopes AGENTS.md hard rule 51.
+globs:
+  - aqp/tenancy/**/*.py
+  - aqp/api/middleware/tenancy_middleware.py
+  - alembic/versions/0063_tenancy_strategy.py
+  - alembic/versions/0064_schema_per_tenant_bootstrap.py
+---
+
+# Multi-tenant TenancyStrategy
+
+This rule scopes AGENTS hard rule 51 + the Workstream F additions
+from the Data Layer Selective Additive Enhancement.
+
+## Architecture
+
+Four concrete strategies, all self-registering via
+:class:`TenancyStrategyMeta`
+([`protocol.py`](mdc:aqp/tenancy/protocol.py)):
+
+- [`SharedSchemaRLSStrategy`](mdc:aqp/tenancy/strategies/shared_schema_rls.py) —
+  PostgreSQL RLS on the shared schema (B2C default).
+- [`SchemaPerTenantStrategy`](mdc:aqp/tenancy/strategies/schema_per_tenant.py) —
+  one PostgreSQL schema per organization (mid-tier B2B).
+- [`DatabasePerEnterpriseStrategy`](mdc:aqp/tenancy/strategies/database_per_enterprise.py) —
+  dedicated PostgreSQL database (or cluster) per enterprise.
+- [`HybridStrategy`](mdc:aqp/tenancy/strategies/hybrid.py) — composes
+  the three above by reading `Organization.tenancy_strategy` per
+  session checkout. Production default.
+
+Existing application-layer enforcement (`RequestContext` +
+`Membership` + `filter_resources_for_user`) remains the outer ring;
+these strategies add defense-in-depth underneath. RLS DDL is
+installed by migration 0063 on every tenant-scoped table the
+platform owns (registry: [`rls_policies.py`](mdc:aqp/tenancy/rls_policies.py)).
+
+## Hard rules
+
+1. **Session checkout goes through
+   :class:`TenancyStrategyFactory`.** Direct
+   `engine.connect()` / `SessionLocal()` for an org-scoped query
+   bypasses isolation and is forbidden in route / task code.
+2. **GUC propagation goes through the runtime contextvar.** The
+   ASGI middleware
+   ([`tenancy_middleware`](mdc:aqp/api/middleware/tenancy_middleware.py))
+   binds the active :class:`RequestContext` into
+   [`runtime_context`](mdc:aqp/tenancy/runtime_context.py). The RLS
+   strategy reads it for `SET LOCAL app.current_workspace_id = …`
+   writes. PEP 567 guarantees propagation across `asyncio.create_task`;
+   `ThreadPoolExecutor` workers MUST use `contextvars.copy_context().run(fn)`.
+3. **New tenant-scoped tables MUST get RLS DDL.** Add the table to
+   :data:`RLS_TABLES` in
+   [`rls_policies.py`](mdc:aqp/tenancy/rls_policies.py) and ship a
+   one-line migration that runs `enable_rls_ddl(table)` +
+   `policy_ddl(table)` on PostgreSQL deployments.
+4. **`public_data` schema is the cross-tenant carve-out.** Use it
+   for genuinely cross-tenant datasets (GDELT, exchange OHLCV,
+   public macroeconomic series). Never put org-scoped data there.
+5. **Schema names are deterministic.** The
+   [`_schema_name_for(org_id)`](mdc:aqp/tenancy/strategies/schema_per_tenant.py)
+   function MUST stay under PostgreSQL's 63-byte identifier limit
+   and be reproducible from the org id alone.
+6. **DSNs for db-per-enterprise resolve through
+   :class:`CredentialResolver`** (rule 26). Use
+   `CredentialKey(f"tenant_db_{org_id}", "dsn")`; never store DSNs
+   on `Organization.tenancy_dsn_vault_path` directly — that column
+   carries the Vault PATH, not the credential.
+
+## Rollout modes
+
+`AQP_TENANCY_RLS_ENFORCE`:
+
+- `off` — RLS DDL is installed but the runtime connects as a
+  BYPASSRLS role. Default during rollout; existing routes keep
+  working unchanged.
+- `permissive` — runtime connects as the non-BYPASSRLS `app_runtime`
+  role and logs when `app.current_workspace_id` is unset on a
+  request.
+- `strict` — same as permissive but a missing GUC raises
+  `permission_denied`.
+
+Flip from `off` → `permissive` after the dashboard shows zero
+would-be denials for 24 h, then to `strict`.
+
+## Don't
+
+- Don't bypass the strategy by directly opening the legacy sync
+  `SessionLocal()` for a per-org query. The legacy session is
+  reserved for system-level reads (migrations, beat scheduling,
+  smoke scripts).
+- Don't add a new strategy without registering it through
+  :class:`TenancyStrategyMeta` — manual `@register` calls are
+  redundant + risk drift.
+- Don't add tenant-scoped tables that lack a `workspace_id`
+  column. Every RLS-protected table relies on that column for the
+  predicate.

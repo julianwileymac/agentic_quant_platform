@@ -106,6 +106,12 @@ celery_app = Celery(
         # Phase 5 (agent stall watchdog) — Celery beat task that
         # revokes stalled agent_runs_v2 rows + emits a halt frame.
         "aqp.tasks.agent_watchdog_tasks",
+        # Workstream B (OpenLineage relay) — Celery beat task that
+        # drains ``lineage_openlineage_outbox`` to Marquez.
+        "aqp.tasks.openlineage_relay_tasks",
+        # Workstream D (per-user OAuth) — Celery beat task that
+        # refreshes external OAuth tokens nearing expiry.
+        "aqp.tasks.token_refresh_tasks",
         # Phase 3 (orchestration refactor) — WorkflowRuntime dispatch
         # task + replay helper. Stays harmless when the orchestration
         # flags are off: the task body refuses to enqueue without a

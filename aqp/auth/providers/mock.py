@@ -71,6 +71,7 @@ class MockProvider(IdentityProvider):
         code_challenge: str,
         scope: str = "openid profile email offline_access",
         audience: str | None = None,
+        resource: str | None = None,
     ) -> str:
         from urllib.parse import urlencode
 
@@ -84,6 +85,8 @@ class MockProvider(IdentityProvider):
             "client_id": self.config.client_id or "aqp-mock-client",
             "response_type": "code",
         }
+        if resource:
+            params["resource"] = str(resource)
         endpoint = self.discovery()["authorization_endpoint"]
         return f"{endpoint}?{urlencode(params)}"
 

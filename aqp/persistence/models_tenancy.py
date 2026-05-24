@@ -64,6 +64,20 @@ class Organization(Base):
     A single AQP deployment can host multiple organizations; the local-first
     seed (`default-org`) is created by :ref:`migration 0017 <alembic-0017>`
     and is the home for every legacy resource backfilled by 0018.
+
+    Workstream F.1 adds three tenancy-strategy columns:
+
+    - ``tenancy_strategy`` — the active isolation kind
+      (``shared_schema_rls`` / ``schema_per_tenant`` /
+      ``database_per_enterprise``). Read by
+      :class:`HybridStrategy` per session checkout.
+    - ``tenancy_schema_name`` — populated by
+      :class:`SchemaPerTenantStrategy.onboard` so a re-onboard or a
+      diagnostic UI can show the canonical schema name without
+      re-deriving it.
+    - ``tenancy_dsn_vault_path`` — populated by
+      :class:`DatabasePerEnterpriseStrategy.onboard` so an operator can
+      audit which Vault path holds the dedicated DSN.
     """
 
     __tablename__ = "organizations"
@@ -73,6 +87,11 @@ class Organization(Base):
     billing_email = Column(String(320), nullable=True)
     status = Column(String(32), nullable=False, default="active", index=True)
     meta = Column(JSON, default=dict)
+    tenancy_strategy = Column(
+        String(32), nullable=True, index=True, default="shared_schema_rls"
+    )
+    tenancy_schema_name = Column(String(80), nullable=True)
+    tenancy_dsn_vault_path = Column(String(240), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

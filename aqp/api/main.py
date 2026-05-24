@@ -116,6 +116,17 @@ from aqp.api.routes import (  # noqa: E402
 from aqp.api.routes import (  # noqa: E402
     auth0_sync as auth0_sync_routes,
 )
+# Workstream D — per-user external OAuth wizard routes
+# (/me/oauth-connections). Feature-flagged behind ``user_oauth_enabled``;
+# the router enforces 404 on disabled deployments at request time.
+try:
+    from aqp.api.routes import (  # noqa: E402
+        oauth_connections as oauth_connections_routes,
+    )
+
+    _oauth_connections_router = oauth_connections_routes.router
+except Exception:  # noqa: BLE001
+    _oauth_connections_router = None
 # SCIM 2.0 provisioning endpoint for Auth0 / enterprise IdP sync.
 from aqp.api.routes import (  # noqa: E402
     scim as scim_routes,
@@ -508,6 +519,9 @@ app.include_router(resources_routes.router)
 
 # --- Phase 4 — Auth0 Action sync endpoint ----------------------------
 app.include_router(auth0_sync_routes.router)
+# --- Workstream D — per-user external OAuth wizard --------------------
+if _oauth_connections_router is not None:
+    app.include_router(_oauth_connections_router)
 # --- Phase 7 — MSAL / Entra ID sync endpoint + tenancy onboarding ----
 app.include_router(msal_sync_routes.router)
 app.include_router(tenancy_routes.router)
@@ -555,6 +569,56 @@ app.include_router(cluster_mgmt_routes.router)
 app.include_router(cluster_mgmt_routes.legacy_router)
 app.include_router(streaming_links_routes.router)
 app.include_router(dataset_loading_agent_routes.router)
+
+
+# --- Tenancy runtime context middleware (workstream F) ----------------
+# Binds the active RequestContext into the contextvar that tenancy
+# strategies read for SET LOCAL GUC writes. Inserted EARLY so every
+# downstream route + observer + MCP tool sees the propagated context.
+try:
+    from aqp.api.middleware.tenancy_middleware import TenancyContextMiddleware
+
+    app.add_middleware(TenancyContextMiddleware)
+except Exception:  # noqa: BLE001 - middleware is best-effort
+    logger.warning("TenancyContextMiddleware not mounted", exc_info=True)
+
+
+# --- MCP RFC 9728 Protected Resource Metadata (workstream E) -----------
+# Mounted BEFORE the MCP server routers so the well-known document is
+# always discoverable. The router is public per RFC 9728 §6.1 — MCP
+# clients bootstrap discovery from it before they have a Bearer token.
+try:
+    from aqp.api.well_known import build_well_known_router
+
+    app.include_router(build_well_known_router())
+except Exception:  # noqa: BLE001 - well-known router is best-effort
+    logger.warning("OAuth Protected Resource Metadata router not mounted", exc_info=True)
+
+
+# --- Bipartite lineage graph observer (workstream A) -------------------
+# Subscribes the BipartiteGraphObserver to the singleton LineageBus so
+# every existing LineageEvent emission (Iceberg / MCP / Discovery /
+# materialise / sinks / schema-drift / dbt / Airbyte / fabric) also
+# writes into the new bipartite tables. No-ops when
+# ``AQP_LINEAGE_GRAPH_ENABLED=false`` (the rollout default).
+try:
+    from aqp.lineage.graph import register_bipartite_observer
+
+    register_bipartite_observer()
+except Exception:  # noqa: BLE001 - observer is opt-in and best-effort
+    logger.warning("BipartiteGraphObserver not registered", exc_info=True)
+
+
+# --- OpenLineage outbox observer (workstream B) ------------------------
+# Writes one ``lineage_openlineage_outbox`` row per LineageEvent so the
+# Celery beat task ``drain_openlineage_outbox`` can POST it to Marquez.
+# No-ops when ``AQP_LINEAGE_OPENLINEAGE_RELAY_ENABLED=false``.
+try:
+    from aqp.lineage.openlineage import register_openlineage_observer
+
+    register_openlineage_observer()
+except Exception:  # noqa: BLE001 - observer is opt-in and best-effort
+    logger.warning("OpenLineageOutboxObserver not registered", exc_info=True)
 
 
 # --- Data layer unification: external MCP server router ----------------

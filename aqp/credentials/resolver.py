@@ -158,6 +158,22 @@ def _build_default_resolver() -> CredentialResolver:
     except Exception:  # noqa: BLE001
         logger.debug("HashicorpVaultSecretStore auto-registration failed", exc_info=True)
 
+    # Workstream D — per-user external OAuth token store (priority 5,
+    # above M2M=10). Only installed when the feature flag is on so the
+    # default chain stays unchanged for deployments that haven't yet
+    # adopted the wizard.
+    try:
+        from aqp.config import settings
+
+        if bool(getattr(settings, "user_oauth_enabled", False)):
+            from aqp.credentials.stores.user_oauth_token_store import (
+                UserOAuthTokenStore,
+            )
+
+            resolver.add_store(UserOAuthTokenStore())
+    except Exception:  # noqa: BLE001
+        logger.debug("UserOAuthTokenStore auto-registration failed", exc_info=True)
+
     # Optional cloud layer (selected by AQP_DEFAULT_CLOUD_PROVIDER).
     try:
         from aqp.config import settings

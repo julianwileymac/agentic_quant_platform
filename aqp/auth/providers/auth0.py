@@ -31,16 +31,21 @@ class Auth0Provider(GenericOidcProvider):
         code_challenge: str,
         scope: str = "openid profile email offline_access",
         audience: str | None = None,
+        resource: str | None = None,
     ) -> str:
         # Auth0 *requires* the audience query param to mint an access
         # token for a non-OIDC API; pass through whatever the caller
-        # provided or fall back to the configured audience.
+        # provided or fall back to the configured audience. The
+        # ``resource`` argument (RFC 8707) propagates through the
+        # generic-OIDC base so MCP clients can audience-bind tokens to
+        # a specific MCP server URI per the 2025-11-25 spec.
         return super().login_url(
             redirect_uri=redirect_uri,
             state=state,
             code_challenge=code_challenge,
             scope=scope,
             audience=audience or self.config.audience or None,
+            resource=resource,
         )
 
     def logout_url(

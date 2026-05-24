@@ -101,6 +101,11 @@ URL_FALLBACK_FIELDS: tuple[_Mapping, ...] = (
     _Mapping("tempo_otlp_url", "tempo", "otlp_grpc"),
     _Mapping("hudi_warehouse_url", "hudi", "warehouse"),
     _Mapping("hudi_metastore_url", "hudi", "metastore"),
+    # --- OpenLineage / Marquez relay (Workstream B). ---
+    # When unset, defaults to the cluster-local Marquez endpoint
+    # declared in topology.yaml. Setting AQP_LINEAGE_OPENLINEAGE_MARQUEZ_URL
+    # explicitly overrides.
+    _Mapping("lineage_openlineage_marquez_url", "marquez", "http"),
 )
 
 

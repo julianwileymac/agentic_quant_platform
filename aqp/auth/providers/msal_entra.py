@@ -258,6 +258,7 @@ class MsalEntraProvider(IdentityProvider):
         code_challenge: str,
         scope: str = "openid profile email offline_access",
         audience: str | None = None,
+        resource: str | None = None,
     ) -> str:
         """Return the Entra authorize URL via :meth:`initiate_auth_code_flow`.
 
@@ -271,6 +272,12 @@ class MsalEntraProvider(IdentityProvider):
         the optional ``audience`` argument — when set, it is passed as
         an additional scope (Entra ignores the OAuth ``audience``
         query param the Auth0 path uses).
+
+        ``resource`` (RFC 8707) is appended to ``data`` for Microsoft
+        Entra: it accepts the parameter on v2.0 ``/oauth2/v2.0/authorize``
+        but ignores it for the access-token audience binding (Entra
+        uses scopes for that). We forward it for spec parity and so any
+        downstream proxy honours the binding.
         """
         app = self._get_app()
         scopes = [s for s in (scope or "").split() if s]
@@ -279,11 +286,14 @@ class MsalEntraProvider(IdentityProvider):
             # additional scope. MSAL deduplicates internally.
             scopes.append(str(audience).strip())
         try:
-            flow = app.initiate_auth_code_flow(
-                scopes=scopes,
-                redirect_uri=redirect_uri,
-                state=state,
-            )
+            kwargs: dict[str, Any] = {
+                "scopes": scopes,
+                "redirect_uri": redirect_uri,
+                "state": state,
+            }
+            if resource:
+                kwargs["data"] = {"resource": str(resource)}
+            flow = app.initiate_auth_code_flow(**kwargs)
         except Exception as exc:  # noqa: BLE001
             raise IdentityProviderError(
                 f"MSAL initiate_auth_code_flow failed: {exc}"

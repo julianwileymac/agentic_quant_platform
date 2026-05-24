@@ -206,6 +206,86 @@ class Settings(BaseSettings):
     # OTEL span without blocking the request so the rollout can flip
     # to ``strict`` only when the dashboard shows zero would-be denies.
     auth_enforce: str = Field(default="strict")  # strict | permissive
+    # --- MCP RFC 9728 + RFC 8707 conformance (Workstream E) ---
+    # The 2025-11-25 MCP authorization spec mandates that each MCP
+    # server publish a Protected Resource Metadata document (RFC 9728)
+    # and validate that incoming access tokens carry the server's
+    # canonical URI in their ``aud`` (or ``resource``) claim (RFC 8707).
+    # ``mcp_data_canonical_uri`` and ``mcp_codebase_canonical_uri`` are
+    # the canonical URIs the well-known endpoint advertises and the
+    # audience validator enforces. Empty defaults to the backend's
+    # external URL plus the matching ``/mcp/*`` path; production
+    # deployments SHOULD set them explicitly.
+    mcp_data_canonical_uri: str = Field(default="")
+    mcp_codebase_canonical_uri: str = Field(default="")
+    # ``off`` skips audience enforcement (rollout default). ``permissive``
+    # logs would-be denies + tags the OTEL span without rejecting.
+    # ``strict`` returns 401 with the RFC 9728 ``WWW-Authenticate``
+    # header when the token audience does not include the MCP
+    # canonical URI. Flip to ``strict`` after the dashboard shows
+    # zero would-be denies for 24 h.
+    mcp_require_rfc8707: str = Field(default="off")  # off | permissive | strict
+    # Backend external URL used by ``aqp/api/well_known.py`` as a
+    # fallback when neither MCP canonical URI is explicitly set. Empty
+    # in pre-production deployments. Mirrors the existing
+    # ``auth_login_callback`` shape.
+    backend_external_url: str = Field(default="")
+    # --- Lineage Ed25519 signing (Workstream C) ---
+    # When enabled, every ``transform_vertex`` row in the bipartite
+    # lineage ledger carries an Ed25519 signature over the canonical
+    # encoding of (job_name || run_id || code_version || sorted_params
+    # || sorted_input_hashes || sorted_output_hashes). Per-actor keys
+    # resolve through :class:`CredentialResolver` (rule 26); the
+    # archived public-key index lives in ``lineage_signing_key_archive``.
+    # ``off`` short-circuits (default). ``permissive`` attempts to sign
+    # and falls back to an empty signature on failure. ``strict``
+    # raises on any signing failure.
+    lineage_signing_enabled: bool = Field(default=False)
+    lineage_signing_mode: str = Field(default="permissive")  # off | permissive | strict
+    # --- Bipartite lineage graph (Workstream A) ---
+    # Enables the BipartiteGraphObserver that dual-writes every
+    # LineageEvent into the new dataset_vertex / transform_vertex /
+    # edge tables. The legacy ``data_lineage_events`` flat log keeps
+    # writing unchanged; the new graph is purely additive.
+    lineage_graph_enabled: bool = Field(default=False)
+    # --- OpenLineage / Marquez relay (Workstream B) ---
+    lineage_openlineage_relay_enabled: bool = Field(default=False)
+    lineage_openlineage_marquez_url: str = Field(default="")
+    lineage_openlineage_namespace: str = Field(default="aqp")
+    lineage_openlineage_relay_batch: int = Field(default=200)
+    # --- Multi-tenant TenancyStrategy (Workstream F) ---
+    # The default isolation strategy when no per-org override is set on
+    # the :class:`Organization.tenancy_strategy` column. The rollout
+    # default is ``shared_schema_rls`` (B2C pool). Production typically
+    # flips to ``hybrid`` once enterprise customers land.
+    tenancy_default_strategy: str = Field(default="shared_schema_rls")
+    # ``off`` skips RLS enforcement at the app role level (the policies
+    # are still installed but the runtime connects as a BYPASSRLS role
+    # so existing routes keep working). ``permissive`` connects as the
+    # non-BYPASSRLS ``app_runtime`` role with logging on
+    # ``current_setting('app.current_organization_id', true) IS NULL``
+    # accesses. ``strict`` enforces strictly and any code path that
+    # forgot to set the GUC raises ``permission_denied``.
+    tenancy_rls_enforce: str = Field(default="off")  # off | permissive | strict
+    # LRU TTL for the database-per-enterprise engine cache. The cache
+    # avoids re-resolving the DSN + re-creating the engine for every
+    # session checkout on the same tenant; 30 min (1800 s) is the
+    # default — flip lower in dev so DSN rotation propagates faster.
+    tenancy_db_per_enterprise_pool_ttl_seconds: int = Field(default=1800)
+    # --- Per-user external OAuth (Workstream D) ---
+    # Toggles the entire user-level OAuth wizard. When false, the
+    # ``/me/oauth-connections`` routes 404, the ``UserOAuthTokenStore``
+    # is not installed in the resolver chain, and the refresh worker
+    # short-circuits. Production deployments flip this on once
+    # Vault Transit is up and the per-provider client ids land in
+    # ``CredentialResolver``.
+    user_oauth_enabled: bool = Field(default=False)
+    user_oauth_refresh_window_seconds: int = Field(default=300)
+    # Hex-encoded 32-byte key for the LOCAL fallback envelope
+    # encryption (used when ``VAULT_ADDR`` isn't set). Generate with
+    # ``openssl rand -hex 32``. Empty in production deployments; a
+    # warning is logged on every encrypt when this fallback is hit.
+    user_oauth_local_key: str = Field(default="")
     # Phase 3a of the AQP control-plane maturation gates the
     # WebSocket first-frame token protocol on this flag. When False
     # (default during the cutover), an unauthenticated WS connection

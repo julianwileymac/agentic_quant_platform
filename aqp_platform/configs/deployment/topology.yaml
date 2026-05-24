@@ -365,6 +365,22 @@ services:
       ui: http://phoenix.aqp-observability.svc.cluster.local:6006
       otlp_http: http://phoenix.aqp-observability.svc.cluster.local:6006
       otlp_grpc: phoenix.aqp-observability.svc.cluster.local:4317
+  - id: marquez
+    label: Marquez (OpenLineage)
+    role: observability
+    workload: deployment
+    app_label: marquez
+    cluster: observability.lineage
+    namespace: aqp-observability
+    port: 5000
+    storage: 4Gi
+    restartable: true
+    logs_enabled: true
+    protocols:
+      http: 5000
+    endpoints:
+      http: http://marquez.aqp-observability.svc.cluster.local:5000
+      lineage: http://marquez.aqp-observability.svc.cluster.local:5000/api/v1/lineage
   - id: phoenix-postgres
     label: Phoenix Postgres backend
     role: database
