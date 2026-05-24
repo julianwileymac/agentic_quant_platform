@@ -1,0 +1,117 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: bots.quantbot.io
+spec:
+  group: quantbot.io
+  scope: Namespaced
+  names:
+    kind: Bot
+    listKind: BotList
+    plural: bots
+    singular: bot
+    shortNames:
+      - bot
+      - qbot
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Strategy
+          type: string
+          jsonPath: .spec.strategyRef.name
+        - name: Fleet
+          type: string
+          jsonPath: .spec.fleet
+        - name: PnL
+          type: string
+          jsonPath: .status.pnlUsd
+        - name: KillSwitch
+          type: boolean
+          jsonPath: .status.killSwitchEngaged
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                strategyRef:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    version: { type: string }
+                fleet: { type: string }
+                capabilities:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  properties:
+                    frequency:
+                      type: string
+                      enum: [hft, mid, low, eod, event]
+                    assetClasses:
+                      type: array
+                      items: { type: string }
+                    venues:
+                      type: array
+                      items: { type: string }
+                    needsGpu: { type: boolean }
+                    needsNumaPinning: { type: boolean }
+                    needsHugepagesMiB: { type: integer }
+                    needsSrIov: { type: boolean }
+                    expectedP99TickToTradeUs: { type: integer }
+                    maxCapitalUsd: { type: string }
+                riskPolicyRefs:
+                  type: array
+                  items: { type: string }
+                marketDataRefs:
+                  type: array
+                  items: { type: string }
+                executionVenueRefs:
+                  type: array
+                  items: { type: string }
+                resources:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                schedulingHints:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                botSpec:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                config:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                phase: { type: string }
+                observedGeneration: { type: integer }
+                pnlUsd: { type: string }
+                killSwitchEngaged: { type: boolean }
+                killSwitchReason: { type: string }
+                workloadType: { type: string }
+                workloadName: { type: string }
+                specVersion: { type: string }
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type: { type: string }
+                      status: { type: string }
+                      lastTransitionTime: { type: string, format: date-time }
+                      reason: { type: string }
+                      message: { type: string }

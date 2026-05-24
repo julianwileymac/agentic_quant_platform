@@ -1,0 +1,9 @@
+# EIIE-style multi-asset portfolio env (Phase 3).
+
+class: tradesim_portfolio
+module_path: aqp_rl.envs.tradesim_portfolio.PortfolioManagementEnv
+kwargs:
+  initial_amount: 100000.0
+  transaction_cost_pct: 0.001
+  tech_indicator_list: [close, macd, rsi, boll_ub, boll_lb]
+  time_steps: 10

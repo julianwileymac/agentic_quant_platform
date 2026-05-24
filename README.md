@@ -12,7 +12,9 @@ operations while keeping infrastructure and data under operator control.
 ## Overview
 
 - **Primary operator UI**: [aqp_client/](aqp_client/) (Vite 7 + React 19)
-- **Primary runtime package**: [aqp/](aqp/) (agents, data, backtests, RL, tasks, APIs)
+- **Primary runtime package**: [aqp/](aqp/) (agents, data, backtests, tasks, APIs, LLM gateway)
+- **Reinforcement-learning subsystem**: [aqp_rl/](aqp_rl/) (`RLRuntime`, hash-locked specs, advantage estimators, policy backbones, weight-centric portfolio pipeline, Iceberg trajectory store)
+- **Custom model boundary**: [aqp_models/](aqp_models/) (qlib-style ML framework, Predictor Hub, AlphaBacktestExperiment, walk-forward, finetune trainers, custom model serving via vLLM + Ollama)
 - **Primary deployment assets**: [aqp_platform/deployments/](aqp_platform/deployments/) and [aqp_platform/terraform/](aqp_platform/terraform/)
 - **Primary local setup runbook**: [aqp_docs/operations/local-setup.md](aqp_docs/operations/local-setup.md)
 - **Primary Kubernetes runbook**: [aqp_docs/operations/kubernetes-deploy.md](aqp_docs/operations/kubernetes-deploy.md)
@@ -22,6 +24,8 @@ operations while keeping infrastructure and data under operator control.
 | Responsibility | Path | Status |
 | --- | --- | --- |
 | Monolith runtime domains | [aqp/](aqp/) | active |
+| Reinforcement-learning subsystem | [aqp_rl/](aqp_rl/) | active |
+| Custom model pulling / building / training / fine-tuning / evaluating / testing | [aqp_models/](aqp_models/) | active |
 | Standalone management API | [aqp_control_plane/](aqp_control_plane/) | active |
 | Shared platform contracts | [aqp_platform_core/](aqp_platform_core/) | active |
 | Operator UI (Vite) | [aqp_client/](aqp_client/) | active |
@@ -35,6 +39,9 @@ operations while keeping infrastructure and data under operator control.
 | Hosted-platform deployment + build + IaC + cluster setup | [aqp_platform/](aqp_platform/) | active |
 | Compose + Kubernetes artifacts | [aqp_platform/deployments/](aqp_platform/deployments/) | active |
 | Infrastructure as code | [aqp_platform/terraform/](aqp_platform/terraform/) | active |
+| RL subsystem (deprecated shim) | [aqp/rl/](aqp/rl/) | shim |
+| Custom model framework (deprecated shim) | [aqp/ml/](aqp/ml/) | shim |
+| Custom model serving (deprecated shims) | [aqp/llm/vllm_runner.py](aqp/llm/vllm_runner.py), [aqp/llm/ollama_client.py](aqp/llm/ollama_client.py) | shim |
 | Legacy Next.js UI | [webui/](webui/) | rollback-only |
 | Legacy Kubernetes tree | [aqp_platform/deploy/k8s/](aqp_platform/deploy/k8s/) | legacy |
 
@@ -198,6 +205,31 @@ flowchart LR
 - Terraform environments: [aqp_platform/terraform/environments/](aqp_platform/terraform/environments/)
 
 ## Changelog (concise)
+
+### 2026-05-24
+
+- Extracted the reinforcement-learning subsystem out of `aqp/rl/` into a
+  new top-level boundary package [aqp_rl/](aqp_rl/) (src-layout) following
+  the existing `aqp_bots/` / `aqp_platform_core/` / `aqp_control_plane/`
+  pattern. The matching Celery task wrapper, FastAPI router, YAML spec
+  library, and tests moved with the source. Legacy `aqp.rl.*` imports
+  are preserved through a deprecation-warning shim under [aqp/rl/](aqp/rl/)
+  per the strangler-migration policy in
+  [aqp_docs/repository-split.md](aqp_docs/repository-split.md).
+- Extracted custom model pulling, building, training, fine-tuning,
+  evaluating, and testing out of `aqp/ml/` (and the model-pulling /
+  serving slice of `aqp/llm/`) into a new top-level boundary package
+  [aqp_models/](aqp_models/). Includes `src/aqp_models/serving/{vllm,ollama}.py`
+  for the moved custom serving layer. The central LLM gateway
+  (`router_complete`, memory, cache, prompts, tokens) **stays** at
+  [aqp/llm/](aqp/llm/) per Hard Rule 2 in [AGENTS.md](AGENTS.md). Legacy
+  imports preserved through deprecation shims.
+- Pruned root-level build artifacts and scratch reports. Archived
+  point-in-time planning material to [aqp_docs/archive/](aqp_docs/archive/).
+- Updated [AGENTS.md](AGENTS.md), the `.cursor/rules/` set,
+  [aqp_docs/repository-split.md](aqp_docs/repository-split.md), and
+  [aqp_docs/aqp-monorepo-paths.md](aqp_docs/aqp-monorepo-paths.md) for
+  the new boundaries.
 
 ### 2026-05-23
 

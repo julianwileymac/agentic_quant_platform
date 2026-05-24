@@ -8,7 +8,7 @@ import pytest
 pytest.importorskip("gymnasium", reason="gymnasium is an optional RL dep")
 pytest.importorskip("stable_baselines3", reason="sb3 is imported transitively")
 
-from aqp.rl.envs.stock_trading_discrete import StockTradingDiscreteEnv  # noqa: E402
+from aqp_rl.envs.stock_trading_discrete import StockTradingDiscreteEnv  # noqa: E402
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ def _patch_load_bars(monkeypatch, synthetic_bars: pd.DataFrame) -> None:
         return df.reset_index(drop=True)
 
     monkeypatch.setattr(
-        "aqp.rl.envs.stock_trading_discrete.load_bars",
+        "aqp_rl.envs.stock_trading_discrete.load_bars",
         fake_load_bars,
     )
 

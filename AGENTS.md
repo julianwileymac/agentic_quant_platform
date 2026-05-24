@@ -50,6 +50,8 @@ standalone repo extraction:
 | [aqp_client/](aqp_client/) + [aqp_client/](aqp_client/) | Future client repo boundary + active Vite implementation | Read [aqp_client/AGENTS.md](aqp_client/AGENTS.md) and [aqp_client/AGENTS.md](aqp_client/AGENTS.md) |
 | [aqp_snippets/](aqp_snippets/) + [aqp_snippets/extractions/](aqp_snippets/extractions/) + [aqp_snippets/inspiration/](aqp_snippets/inspiration/) | Curated code knowledge and prompt/rule/skill material | Read [aqp_snippets/AGENTS.md](aqp_snippets/AGENTS.md); runtime code must not import it |
 | [aqp_bots/](aqp_bots/) + [aqp_bots/](aqp_bots/) + [aqp_bots/templates/](aqp_bots/templates/) | Bot templates now, runtime extraction later | Read [aqp_bots/AGENTS.md](aqp_bots/AGENTS.md); preserve `BotRuntime` |
+| [aqp_rl/](aqp_rl/) | Reinforcement-learning subsystem — hash-locked `RLExperimentSpec` + `RLRuntime` + `RLComponent` metaclass + advantage estimators + policy backbones + weight-centric pipeline + Iceberg trajectory store. Self-contained: source (`src/aqp_rl/`), Celery task (`tasks/rl_tasks.py`), FastAPI route (`api/routes/rl.py`), YAML spec library (`configs/`), tests (`tests/`). | Read [aqp_rl/AGENTS.md](aqp_rl/AGENTS.md); preserve `RLRuntime` and immutable `rl_experiment_versions`; legacy `aqp.rl.*` imports route through deprecation-warning shims under [aqp/rl/](aqp/rl/) |
+| [aqp_models/](aqp_models/) | Custom model pulling, building, training, fine-tuning, evaluating, testing — qlib-style ML framework + Predictor Hub + AlphaBacktestExperiment + walk-forward + finetune trainers + every model implementation (tree / linear / sklearn / forecast / anomaly / keras / tensorflow / huggingface / SAE / SPM / torch zoo) + the custom model-serving slice of `aqp/llm/` (vLLM + Ollama). Self-contained: source (`src/aqp_models/`), Celery tasks (`tasks/`), FastAPI routes (`api/routes/`), YAML spec library (`configs/`), tests (`tests/`). | Read [aqp_models/AGENTS.md](aqp_models/AGENTS.md); legacy `aqp.ml.*` and `aqp.llm.{vllm_runner,ollama_client}` imports route through deprecation-warning shims under [aqp/ml/](aqp/ml/), [aqp/llm/vllm_runner.py](aqp/llm/vllm_runner.py), [aqp/llm/ollama_client.py](aqp/llm/ollama_client.py); the central LLM gateway (`router_complete`) stays at [aqp/llm/providers/router.py](aqp/llm/providers/router.py) per Hard Rule 2 |
 | [aqp_ide/](aqp_ide/) | Vendored Theia IDE workspace + AQP extension | Read [aqp_ide/AGENTS.md](aqp_ide/AGENTS.md); keep AQP code inside `theia-extensions/aqp/`; never import `agentic_quant_platform` source into Theia extension code |
 | [aqp_cli/](aqp_cli/) | Standalone operator CLI (`aqp-cli`) — bootstrap setup, detect services, fetch updates, authenticate | Read [aqp_cli/AGENTS.md](aqp_cli/AGENTS.md); never import `aqp.*` or `aqp_control_plane.*`; HTTP-only |
 | [aqp_admin/](aqp_admin/) | Internal admin (managed services + company accounts), FastAPI backend + Vite frontend | Read [aqp_admin/AGENTS.md](aqp_admin/AGENTS.md); never import `aqp.*`; audit-first; mirrors `aqp_control_plane` boundary |
@@ -83,8 +85,9 @@ Use this as your first lookup when answering "where does X live?".
 | [aqp/data/fetchers/userland/](aqp/data/fetchers/userland/) | Auto-generated `Fetcher` stubs from the visual builder | [aqp_docs/airbyte-builder.md](aqp_docs/airbyte-builder.md) |
 | [aqp/dagster/sandbox/](aqp/dagster/sandbox/) | Ephemeral interactive Dagster + Airbyte sandbox (per-session folder, isolated Redis namespace, ContextVar env override, data fabric phase 3) | [aqp_docs/dagster-sandbox.md](aqp_docs/dagster-sandbox.md) |
 | [aqp/data/sources/{cfpb,fda,uspto}/](aqp/data/sources/) | Third-order regulatory adapters | [aqp_docs/regulatory-data.md](aqp_docs/regulatory-data.md) |
-| [aqp/llm/](aqp/llm/) | Provider registry, LiteLLM router, Ollama client, BM25 + Redis hybrid memory | [aqp_docs/providers.md](aqp_docs/providers.md) |
-| [aqp/ml/](aqp/ml/) | ML model factory, feature engineering, deployments, AlphaBacktestExperiment, lightweight workbench flows, adhoc helpers | [aqp_docs/ml-framework.md](aqp_docs/ml-framework.md), [aqp_docs/ml-libraries.md](aqp_docs/ml-libraries.md), [aqp_docs/ml-alpha-backtest.md](aqp_docs/ml-alpha-backtest.md), [aqp_docs/ml-flows.md](aqp_docs/ml-flows.md) |
+| [aqp/llm/](aqp/llm/) | LLM gateway — provider registry, LiteLLM router (`router_complete`), prompts, semantic cache, token catalog, BM25 + Redis hybrid memory. The custom model serving slice (Ollama client, vLLM runner) was extracted to [aqp_models/src/aqp_models/serving/](aqp_models/src/aqp_models/serving/); the legacy `aqp/llm/{vllm_runner,ollama_client}.py` files are now compatibility shims that re-export from `aqp_models.serving.*`. | [aqp_docs/providers.md](aqp_docs/providers.md) |
+| [aqp/ml/](aqp/ml/) | **Deprecated shim** — re-exports [aqp_models](aqp_models/) with `DeprecationWarning`. New code imports from `aqp_models.*` directly. | [aqp_models/AGENTS.md](aqp_models/AGENTS.md), [aqp_docs/ml-framework.md](aqp_docs/ml-framework.md), [aqp_docs/ml-libraries.md](aqp_docs/ml-libraries.md), [aqp_docs/ml-alpha-backtest.md](aqp_docs/ml-alpha-backtest.md), [aqp_docs/ml-flows.md](aqp_docs/ml-flows.md) |
+| [aqp_models/](aqp_models/) | ML model factory, feature engineering, deployments, AlphaBacktestExperiment, walk-forward, finetune trainers, lightweight workbench flows, adhoc helpers, custom model serving (vLLM + Ollama). Self-contained boundary package: `src/aqp_models/{models,features,finetune,applications,adhoc,predictors,labeling,serving}/`, plus `tasks/`, `api/routes/`, `configs/`, `tests/`. | [aqp_models/AGENTS.md](aqp_models/AGENTS.md), [aqp_docs/ml-framework.md](aqp_docs/ml-framework.md), [aqp_docs/ml-libraries.md](aqp_docs/ml-libraries.md), [aqp_docs/ml-alpha-backtest.md](aqp_docs/ml-alpha-backtest.md), [aqp_docs/ml-flows.md](aqp_docs/ml-flows.md) |
 | [aqp/mlops/](aqp/mlops/) | MLflow autolog hooks, lineage helpers | [aqp_docs/observability.md](aqp_docs/observability.md) |
 | [aqp/observability/](aqp/observability/) | OTEL setup, tracers | [aqp_docs/observability.md](aqp_docs/observability.md) |
 | [aqp/optimal_control/](aqp/optimal_control/) | JAX-compiled HJB solvers — Avellaneda-Stoikov, Cartea-Jaimungal-Penalva | [aqp_docs/optimal-control.md](aqp_docs/optimal-control.md) |
@@ -95,10 +98,11 @@ Use this as your first lookup when answering "where does X live?".
 | [aqp/rag/](aqp/rag/) | Hierarchical Redis RAG (Alpha-GPT levels × first/second/third-order corpora) plus pgvector backend (Phase 3 refactor) | [aqp_docs/rag.md](aqp_docs/rag.md), [aqp_docs/pgvector-control-plane.md](aqp_docs/pgvector-control-plane.md) |
 | [aqp/codebase/](aqp/codebase/) | Codebase MCP — agent-readable view of the AQP source tree (`codebase.*` tools, `/mcp/codebase/*` router, `aqp-codebase-mcp` stdio binary) | [aqp_docs/codebase-mcp.md](aqp_docs/codebase-mcp.md) |
 | [aqp/risk/](aqp/risk/) | Position-, daily-, drawdown-loss limits | [aqp_docs/paper-trading.md](aqp_docs/paper-trading.md) |
-| [aqp/rl/](aqp/rl/) | Metaclass-driven RL stack: core abstractions + envs (FinRL ports) + composable rewards / observations / actions / terminations + multi-framework agents (SB3 / ElegantRL / RLlib / CleanRL / LLM-hybrid) + data pipelines + ensemblers + experiments + Iceberg-backed trajectory store | [aqp_docs/rl-framework.md](aqp_docs/rl-framework.md), [aqp_docs/rl-lab.md](aqp_docs/rl-lab.md), [aqp_docs/rl-components.md](aqp_docs/rl-components.md), [aqp_docs/rl-iceberg.md](aqp_docs/rl-iceberg.md) |
-| [aqp/rl/core/](aqp/rl/core/) | `RLComponent` metaclass + abstract bases (env, observation, action, reward, termination, policy, agent, data, ensembler, experiment, trajectory store) + JSON schema introspection | [aqp_docs/rl-framework.md](aqp_docs/rl-framework.md) |
-| [aqp/rl/spec.py](aqp/rl/spec.py) + [aqp/rl/runtime.py](aqp/rl/runtime.py) | Hash-locked `RLExperimentSpec` + `RLRuntime` single sanctioned executor (mirrors `BotRuntime` / `AgentRuntime`) | [aqp_docs/rl-framework.md](aqp_docs/rl-framework.md) |
-| [aqp/rl/trajectories/](aqp/rl/trajectories/) | Iceberg-backed trajectory persistence (`rl.trajectories`, `rl.equity_curves`, `rl.action_logs`, `rl.reward_decomposition`) + DuckDB views | [aqp_docs/rl-iceberg.md](aqp_docs/rl-iceberg.md) |
+| [aqp/rl/](aqp/rl/) | **Deprecated shim** — re-exports [aqp_rl](aqp_rl/) with `DeprecationWarning`. New code imports from `aqp_rl.*` directly. | [aqp_rl/AGENTS.md](aqp_rl/AGENTS.md), [aqp_docs/rl-framework.md](aqp_docs/rl-framework.md), [aqp_docs/rl-lab.md](aqp_docs/rl-lab.md), [aqp_docs/rl-components.md](aqp_docs/rl-components.md), [aqp_docs/rl-iceberg.md](aqp_docs/rl-iceberg.md) |
+| [aqp_rl/](aqp_rl/) | Metaclass-driven RL stack: core abstractions + envs (FinRL ports) + composable rewards / observations / actions / terminations + multi-framework agents (SB3 / ElegantRL / RLlib / CleanRL / LLM-hybrid) + data pipelines + ensemblers + experiments + Iceberg-backed trajectory store + advantage estimators + policy backbones + weight-centric portfolio pipeline. Self-contained boundary package: `src/aqp_rl/{core,envs,rewards,observations,actions,terminations,policies,advantage,data_pipelines,agents,ensemblers,experiments,applications,portfolio,bridges,trajectories,execution}/`, plus `tasks/`, `api/routes/`, `configs/`, `tests/`. | [aqp_rl/AGENTS.md](aqp_rl/AGENTS.md), [aqp_docs/rl-framework.md](aqp_docs/rl-framework.md), [aqp_docs/rl-lab.md](aqp_docs/rl-lab.md), [aqp_docs/rl-components.md](aqp_docs/rl-components.md), [aqp_docs/rl-iceberg.md](aqp_docs/rl-iceberg.md) |
+| [aqp_rl/src/aqp_rl/core/](aqp_rl/src/aqp_rl/core/) | `RLComponent` metaclass + abstract bases (env, observation, action, reward, termination, policy, agent, data, ensembler, experiment, trajectory store) + JSON schema introspection | [aqp_docs/rl-framework.md](aqp_docs/rl-framework.md) |
+| [aqp_rl/src/aqp_rl/spec.py](aqp_rl/src/aqp_rl/spec.py) + [aqp_rl/src/aqp_rl/runtime.py](aqp_rl/src/aqp_rl/runtime.py) | Hash-locked `RLExperimentSpec` + `RLRuntime` single sanctioned executor (mirrors `BotRuntime` / `AgentRuntime`) | [aqp_docs/rl-framework.md](aqp_docs/rl-framework.md) |
+| [aqp_rl/src/aqp_rl/trajectories/](aqp_rl/src/aqp_rl/trajectories/) | Iceberg-backed trajectory persistence (`rl.trajectories`, `rl.equity_curves`, `rl.action_logs`, `rl.reward_decomposition`) + DuckDB views | [aqp_docs/rl-iceberg.md](aqp_docs/rl-iceberg.md) |
 | [aqp/runtime/](aqp/runtime/) | Control-plane state (provider overrides, kill switches) | [aqp_docs/providers.md](aqp_docs/providers.md) |
 | [aqp/services/](aqp/services/) | Higher-level domain services (Alpha Vantage, Tradier, …) | [aqp_docs/alpha-vantage.md](aqp_docs/alpha-vantage.md) |
 | [aqp/strategies/](aqp/strategies/) | `BaseStrategy` + concrete alphas + framework | [aqp_docs/factor-research.md](aqp_docs/factor-research.md) |
@@ -200,20 +204,20 @@ These hold across the codebase. Any PR that violates one will be sent back.
  new version row automatically when the spec hash changes.
 16. **All RL training / evaluation / paper-trading / replay /
  walk-forward goes through
- [aqp/rl/runtime.py::RLRuntime](aqp/rl/runtime.py).** Celery tasks
- (`aqp.tasks.rl_tasks`) and API routes (`aqp.api.routes.rl`) wrap it —
+ [aqp_rl/src/aqp_rl/runtime.py::RLRuntime](aqp_rl/src/aqp_rl/runtime.py).** Celery tasks
+ (`aqp_rl.tasks.rl_tasks`) and API routes (`aqp_rl.api.routes.rl`) wrap it —
  they never call `agent.train` directly.
 17. **`rl_experiment_versions` rows are immutable, hash-locked.**
  Re-snapshotting via
- [aqp/rl/registry.py::persist_spec](aqp/rl/registry.py) inserts a new
+ [aqp_rl/src/aqp_rl/registry.py::persist_spec](aqp_rl/src/aqp_rl/registry.py) inserts a new
  version row automatically when the spec hash changes.
 18. **All RL trajectory / equity-curve / action-log / reward-term
  writes go through
- [aqp/rl/trajectories/iceberg_writer.py::IcebergTrajectoryStore](aqp/rl/trajectories/iceberg_writer.py)**
+ [aqp_rl/src/aqp_rl/trajectories/iceberg_writer.py::IcebergTrajectoryStore](aqp_rl/src/aqp_rl/trajectories/iceberg_writer.py)**
  → [`iceberg_catalog.append_arrow`](aqp/data/iceberg_catalog.py). Don't
  call PyIceberg directly from RL code.
 19. **All concrete RL components register through the
- [`RLComponent`](aqp/rl/core/base.py) metaclass.** Set ``rl_kind`` to
+ [`RLComponent`](aqp_rl/src/aqp_rl/core/base.py) metaclass.** Set ``rl_kind`` to
  one of the canonical kinds (`rl_env`, `rl_reward`, `rl_observation`,
  `rl_action`, `rl_termination`, `rl_policy`, `rl_agent`, `rl_data`,
  `rl_ensembler`, `rl_experiment`, `rl_trajectory_store`); the
@@ -404,41 +408,41 @@ These hold across the codebase. Any PR that violates one will be sent back.
  source template so the ownership graph can audit provenance. See
  [aqp_docs/strategy-templates.md](aqp_docs/strategy-templates.md).
 36. **All RL advantage estimation goes through
- [`BaseAdvantageEstimator`](aqp/rl/advantage/base.py)
+ [`BaseAdvantageEstimator`](aqp_rl/src/aqp_rl/advantage/base.py)
  (`rl_kind='rl_advantage_estimator'`).** The native
  :class:`ReinforcePlusPlusAdvantage`, :class:`GRPOAdvantage`, and
  :class:`GAEAdvantage` register through the
- [`RLComponent`](aqp/rl/core/base.py) metaclass alongside envs /
+ [`RLComponent`](aqp_rl/src/aqp_rl/core/base.py) metaclass alongside envs /
  rewards / policies. The
- [`RLExperimentSpec.training.advantage`](aqp/rl/spec.py) field
+ [`RLExperimentSpec.training.advantage`](aqp_rl/src/aqp_rl/spec.py) field
  references one by `rl_alias`. NeMo-RL's optional adapter
- ([aqp/rl/agents/nemo_rl_adapter.py](aqp/rl/agents/nemo_rl_adapter.py))
+ ([aqp_rl/src/aqp_rl/agents/nemo_rl_adapter.py](aqp_rl/src/aqp_rl/agents/nemo_rl_adapter.py))
  is the heavy-dep escape hatch, but new flows MUST prefer the
  native estimators (no Megatron required, deterministic results
  across replays).
 37. **All RL policy backbones go through
- [`TimeSeriesEncoder`](aqp/rl/policies/backbones/base.py)
+ [`TimeSeriesEncoder`](aqp_rl/src/aqp_rl/policies/backbones/base.py)
  (`rl_kind='rl_policy_backbone'`).** The four shipped backbones —
  :class:`TransformerBackbone`, :class:`RecurrentBackbone`
  (LSTM/GRU/RNN), :class:`AutoencoderBackbone`,
- :class:`PatchTSTBackbone` — wrap existing :mod:`aqp.ml.models`
+ :class:`PatchTSTBackbone` — wrap existing :mod:`aqp_models.models`
  modules so the policy network and the offline ML stack share one
  source of truth. The SB3 bridge
- ([`BackboneFeaturesExtractor`](aqp/rl/policies/feature_extractors.py))
+ ([`BackboneFeaturesExtractor`](aqp_rl/src/aqp_rl/policies/feature_extractors.py))
  takes `backbone_alias` from the spec and injects the backbone via
  `policy_kwargs={'features_extractor_class': ...}`. Don't hand-roll
  a custom feature extractor inside an adapter — register a new
  backbone instead.
 38. **All weight-centric portfolio actions go through the FinRL-X
  four-stage pipeline
- [`WeightCentricPipeline`](aqp/rl/portfolio/pipeline.py)
+ [`WeightCentricPipeline`](aqp_rl/src/aqp_rl/portfolio/pipeline.py)
  (`f_S -> f_A -> f_T -> f_R`).** The risk overlay (`f_R`)
  re-uses [`RiskLimits`](aqp/risk/limits.py) + the existing
  [`TargetWeightsRebalancer`](aqp/strategies/portfolio_construction.py)
  so the offline backtest and live paper-trading paths produce
  identical target-weight vectors. The pipeline is plumbed onto
  every backtest engine through
- [`context['rl_agent']`](aqp/rl/bridges/agent_bridge.py); engines
+ [`context['rl_agent']`](aqp_rl/src/aqp_rl/bridges/agent_bridge.py); engines
  opt in by flipping
  [`EngineCapabilities.supports_rl_injection=True`](aqp/backtest/capabilities.py).
  Don't bypass the pipeline by writing weights directly into broker
@@ -655,11 +659,11 @@ docker exec aqp-api alembic upgrade head
 | Add an API route | [aqp/api/routes/](aqp/api/routes/) — copy an existing module, register in [aqp/api/main.py](aqp/api/main.py) |
 | Add a Celery task | [aqp/tasks/](aqp/tasks/) — pick the right file, decorate with `@celery_app.task(bind=True, name=...)`, register in [aqp/tasks/celery_app.py](aqp/tasks/celery_app.py)'s `include` list, route via `task_routes` |
 | Add an LLM provider | One dict entry in [aqp/llm/providers/catalog.py::PROVIDERS](aqp/llm/providers/catalog.py); the router does the rest |
-| Add an ML model | Implement in [aqp/ml/models/](aqp/ml/models/) following the `class`/`module_path`/`kwargs` pattern; decorate with `@register("Name", kind="model")`; add a YAML example in [configs/ml/](configs/ml/) and update [aqp_docs/ml-libraries.md](aqp_docs/ml-libraries.md) |
-| Add a workbench flow | Implement `run_<flow>_flow(...)` in [aqp/ml/flows.py](aqp/ml/flows.py); register it in `run_flow(...)` and `list_flows()` so the webui drawer picks it up automatically; document in [aqp_docs/ml-flows.md](aqp_docs/ml-flows.md) |
-| Add an ML preprocessor pipeline node | Subclass [aqp/ml/processors.py::Processor](aqp/ml/processors.py); reference the new class from [aqp/data/fetchers/transforms/ml_preprocessing.py](aqp/data/fetchers/transforms/ml_preprocessing.py) (umbrella node) or add a thin specialised tile via `_make_single_processor_node` |
-| Run an alpha-backtest experiment | Use [aqp/ml/alpha_backtest_experiment.py::AlphaBacktestExperiment](aqp/ml/alpha_backtest_experiment.py) (or `POST /ml/alpha-backtest-runs`). Trains + registers + deploys + backtests + persists to `ml_alpha_backtest_runs` in one call. See [aqp_docs/ml-alpha-backtest.md](aqp_docs/ml-alpha-backtest.md) |
-| Add a test workbench mode | Extend [aqp/tasks/ml_test_tasks.py](aqp/tasks/ml_test_tasks.py) with the new task and route it via [aqp/api/routes/ml.py](aqp/api/routes/ml.py); add a tab to [webui/components/ml/MlTestPage.tsx](webui/components/ml/MlTestPage.tsx) |
+| Add an ML model | Implement in [aqp_models/src/aqp_models/models/](aqp_models/src/aqp_models/models/) following the `class`/`module_path`/`kwargs` pattern; decorate with `@register("Name", kind="model")`; add a YAML example in [aqp_models/configs/](aqp_models/configs/) and update [aqp_docs/ml-libraries.md](aqp_docs/ml-libraries.md) |
+| Add a workbench flow | Implement `run_<flow>_flow(...)` in [aqp_models/src/aqp_models/flows.py](aqp_models/src/aqp_models/flows.py); register it in `run_flow(...)` and `list_flows()` so the webui drawer picks it up automatically; document in [aqp_docs/ml-flows.md](aqp_docs/ml-flows.md) |
+| Add an ML preprocessor pipeline node | Subclass [aqp_models/src/aqp_models/processors.py::Processor](aqp_models/src/aqp_models/processors.py); reference the new class from [aqp/data/fetchers/transforms/ml_preprocessing.py](aqp/data/fetchers/transforms/ml_preprocessing.py) (umbrella node) or add a thin specialised tile via `_make_single_processor_node` |
+| Run an alpha-backtest experiment | Use [aqp_models/src/aqp_models/alpha_backtest_experiment.py::AlphaBacktestExperiment](aqp_models/src/aqp_models/alpha_backtest_experiment.py) (or `POST /ml/alpha-backtest-runs`). Trains + registers + deploys + backtests + persists to `ml_alpha_backtest_runs` in one call. See [aqp_docs/ml-alpha-backtest.md](aqp_docs/ml-alpha-backtest.md) |
+| Add a test workbench mode | Extend [aqp_models/tasks/ml_test_tasks.py](aqp_models/tasks/ml_test_tasks.py) with the new task and route it via [aqp_models/api/routes/ml.py](aqp_models/api/routes/ml.py); add a tab to [webui/components/ml/MlTestPage.tsx](webui/components/ml/MlTestPage.tsx) |
 | Add a data source | Implement adapter in [aqp/providers/](aqp/providers/) or [aqp/services/](aqp/services/); register in [aqp/persistence/models.py::DataSource](aqp/persistence/models.py); document in [aqp_docs/data-plane.md](aqp_docs/data-plane.md) |
 | Add a regulatory data adapter | Mirror [aqp/data/sources/cfpb/](aqp/data/sources/cfpb/) — client + adapter + catalog upserts + Celery task in [aqp/tasks/regulatory_tasks.py](aqp/tasks/regulatory_tasks.py) + REST route + RAG indexer in [aqp/rag/indexers/](aqp/rag/indexers/) |
 | Add a persistence model | Add the class to the right `aqp/persistence/models_*.py` file; create an Alembic migration; update [aqp_docs/data-dictionary.md](aqp_docs/data-dictionary.md) and the relevant ERD section in [aqp_docs/erd.md](aqp_docs/erd.md) |
@@ -669,11 +673,11 @@ docker exec aqp-api alembic upgrade head
 | Add a backtest engine | Subclass [aqp/backtest/base.py::BaseBacktestEngine](aqp/backtest/base.py); declare an `EngineCapabilities` class attribute; decorate with `@register("Name")`; add a shortcut to [aqp/backtest/runner.py::_ENGINE_SHORTCUTS](aqp/backtest/runner.py) and document in [aqp_docs/backtest-engines.md](aqp_docs/backtest-engines.md) |
 | Add a bot | Drop a YAML under [aqp_bots/templates/trading/](aqp_bots/templates/trading/) or [aqp_bots/templates/research/](aqp_bots/templates/research/); the registry auto-loads on first lookup. Programmatic: `BotSpec(...)` + `add_spec(spec)`. CRUD via `POST /bots`; lifecycle via `/bots/{id}/{backtest|paper|chat|deploy}`. |
 | Add a bot deployment target | Subclass [aqp_bots/deploy.py::DeploymentTarget](aqp_bots/deploy.py); register on `DeploymentDispatcher.register(target)`; add the kind to the `BOT_PALETTE` Deploy section in [webui/components/bots/botPalette.ts](webui/components/bots/botPalette.ts). |
-| Add an RL component (env / reward / observation / action / termination / policy / agent / data / ensembler / experiment / trajectory_store) | Subclass the matching base in [aqp/rl/core/](aqp/rl/core/) and set `rl_kind` + `rl_alias`. The [`RLComponent`](aqp/rl/core/base.py) metaclass auto-registers via `@register`. Add a palette tile in [webui/components/rl/palette.ts](webui/components/rl/palette.ts) and a serialiser entry in [webui/components/rl/serialize.ts](webui/components/rl/serialize.ts). |
-| Add an RL reward term | Subclass [`RewardTerm`](aqp/rl/core/reward.py) in [aqp/rl/rewards/](aqp/rl/rewards/); add to [aqp/rl/rewards/__init__.py](aqp/rl/rewards/__init__.py); ship a sample composite YAML under [configs/rl/rewards/](configs/rl/rewards/) |
-| Add an RL framework adapter | Subclass [`BaseRLAgent`](aqp/rl/core/policy.py) in [aqp/rl/agents/](aqp/rl/agents/); set `rl_alias`/`rl_source`; expose via the agents `__init__.py` (suppress import errors so the dep stays optional). |
-| Add an RL data source | Subclass [`BaseDataPipeline`](aqp/rl/core/data.py) in [aqp/rl/data_pipelines/](aqp/rl/data_pipelines/); implement `download_data` / optionally override `add_risk_features` and `df_to_array`; add a YAML under [configs/rl/data_pipelines/](configs/rl/data_pipelines/). |
-| Add an RL experiment / ensemble | Subclass [`BaseExperiment`](aqp/rl/core/experiment.py) / [`BaseEnsembler`](aqp/rl/core/ensembler.py) and ship under [aqp/rl/experiments/](aqp/rl/experiments/) / [aqp/rl/ensemblers/](aqp/rl/ensemblers/). |
+| Add an RL component (env / reward / observation / action / termination / policy / agent / data / ensembler / experiment / trajectory_store) | Subclass the matching base in [aqp_rl/src/aqp_rl/core/](aqp_rl/src/aqp_rl/core/) and set `rl_kind` + `rl_alias`. The [`RLComponent`](aqp_rl/src/aqp_rl/core/base.py) metaclass auto-registers via `@register`. Add a palette tile in [webui/components/rl/palette.ts](webui/components/rl/palette.ts) and a serialiser entry in [webui/components/rl/serialize.ts](webui/components/rl/serialize.ts). |
+| Add an RL reward term | Subclass [`RewardTerm`](aqp_rl/src/aqp_rl/core/reward.py) in [aqp_rl/src/aqp_rl/rewards/](aqp_rl/src/aqp_rl/rewards/); add to [aqp_rl/src/aqp_rl/rewards/__init__.py](aqp_rl/src/aqp_rl/rewards/__init__.py); ship a sample composite YAML under [aqp_rl/configs/rewards/](aqp_rl/configs/rewards/) |
+| Add an RL framework adapter | Subclass [`BaseRLAgent`](aqp_rl/src/aqp_rl/core/policy.py) in [aqp_rl/src/aqp_rl/agents/](aqp_rl/src/aqp_rl/agents/); set `rl_alias`/`rl_source`; expose via the agents `__init__.py` (suppress import errors so the dep stays optional). |
+| Add an RL data source | Subclass [`BaseDataPipeline`](aqp_rl/src/aqp_rl/core/data.py) in [aqp_rl/src/aqp_rl/data_pipelines/](aqp_rl/src/aqp_rl/data_pipelines/); implement `download_data` / optionally override `add_risk_features` and `df_to_array`; add a YAML under [aqp_rl/configs/data_pipelines/](aqp_rl/configs/data_pipelines/). |
+| Add an RL experiment / ensemble | Subclass [`BaseExperiment`](aqp_rl/src/aqp_rl/core/experiment.py) / [`BaseEnsembler`](aqp_rl/src/aqp_rl/core/ensembler.py) and ship under [aqp_rl/src/aqp_rl/experiments/](aqp_rl/src/aqp_rl/experiments/) / [aqp_rl/src/aqp_rl/ensemblers/](aqp_rl/src/aqp_rl/ensemblers/). |
 | Run an RL experiment | Author / load an `RLExperimentSpec`, call `RLRuntime(spec).train(...)`. The runtime persists Iceberg trajectories + a `rl_runs` ledger row + MLflow artifacts. From the UI: [`/rl/lab`](webui/app/(shell)/rl/lab/page.tsx) → "Save & train". |
 | Add a vbt-pro mode / kwarg | Extend [aqp/backtest/vbtpro/engine.py::VectorbtProEngine](aqp/backtest/vbtpro/engine.py); update [aqp_docs/vbtpro-integration.md](aqp_docs/vbtpro-integration.md) |
 | Add an agent-aware alpha (vbt-pro) | Subclass `IAlphaModel` in [aqp/strategies/vbtpro/](aqp/strategies/vbtpro/); implement `generate_panel_signals` for the fast path; decorate with `@register("Name", kind="alpha")` |
@@ -811,22 +815,22 @@ Things that look like they should work but actively break the system.
   subclass.** Bots compose references and dispatch to existing
   primitives (`run_backtest_from_config`, `build_session_from_config`,
   `AgentRuntime`, `HierarchicalRAG`).
-- **Don't bypass [aqp/rl/runtime.py::RLRuntime](aqp/rl/runtime.py)
+- **Don't bypass [aqp_rl/src/aqp_rl/runtime.py::RLRuntime](aqp_rl/src/aqp_rl/runtime.py)
   for RL train / evaluate / paper / replay / walk-forward.**
   Telemetry, `rl_runs` ledger, Iceberg trajectories, and
   hash-locked spec versions depend on it.
 - **Don't mutate `rl_experiment_versions` rows.** They are
   immutable, hash-locked snapshots — re-snapshotting via
-  [aqp/rl/registry.py::persist_spec](aqp/rl/registry.py) creates a
+  [aqp_rl/src/aqp_rl/registry.py::persist_spec](aqp_rl/src/aqp_rl/registry.py) creates a
   new version row when the hash changes.
 - **Don't write RL trajectories / equity / action / reward-decomp
   directly to Iceberg.** Buffer them through
-  [`IcebergTrajectoryStore`](aqp/rl/trajectories/iceberg_writer.py)
+  [`IcebergTrajectoryStore`](aqp_rl/src/aqp_rl/trajectories/iceberg_writer.py)
   so `append_arrow` calls share batching, tenancy stamping, and
   flush semantics.
 - **Don't decorate RL component subclasses manually with
   `@register`.** The
-  [`RLComponent`](aqp/rl/core/base.py) metaclass does it for you when
+  [`RLComponent`](aqp_rl/src/aqp_rl/core/base.py) metaclass does it for you when
   you set `rl_kind` + `rl_alias` (and optional `rl_tags` /
   `rl_source` / `rl_category`).
 - **Don't call `litellm.completion` / `OllamaClient` from RL code.**
@@ -959,9 +963,9 @@ Things that look like they should work but actively break the system.
 | Halt every running workflow | `POST /workflows/halt` (mirrors `/agents/halt`, `/paper/stop-all`, `/bots/halt-all`, `/rl/halt-all`, `/quant-agents/halt`). The topbar [`KillSwitch`](aqp_client/src/components/common/KillSwitch.tsx) component fans out to all six in parallel. |
 | Inspect workflow stall candidates | `data.orchestration.health` MCP tool, or `GET /workflows/runs?status=running`. The [`scan_for_stalled_workflow_runs`](aqp/tasks/agent_watchdog_tasks.py) Celery beat task halts rows past `AQP_AGENT_STALL_THRESHOLD_SECONDS`. |
 | `BotSpec` + `BotRuntime` | Bot blueprint + executor (backtest / paper / chat / deploy) | [aqp_bots/spec.py](aqp_bots/spec.py), [aqp_bots/runtime.py](aqp_bots/runtime.py) |
-| `AlphaBacktestExperiment` | Train + register + deploy + backtest in one experiment, combined ML + trading metrics | [aqp/ml/alpha_backtest_experiment.py](aqp/ml/alpha_backtest_experiment.py), [aqp/ml/alpha_metrics.py](aqp/ml/alpha_metrics.py) |
-| `aqp.ml.flows.run_flow` | Sync workbench flow dispatch (linear / decomposition / forecast / GARCH / ACF / ...) | [aqp/ml/flows.py](aqp/ml/flows.py) |
-| `aqp.ml.adhoc.quick_*` | Notebook-friendly one-liners (ridge, ARIMA, iforest, FinBERT, ...) | [aqp/ml/adhoc/](aqp/ml/adhoc/) |
+| `AlphaBacktestExperiment` | Train + register + deploy + backtest in one experiment, combined ML + trading metrics | [aqp_models/src/aqp_models/alpha_backtest_experiment.py](aqp_models/src/aqp_models/alpha_backtest_experiment.py), [aqp_models/src/aqp_models/alpha_metrics.py](aqp_models/src/aqp_models/alpha_metrics.py) |
+| `aqp_models.flows.run_flow` | Sync workbench flow dispatch (linear / decomposition / forecast / GARCH / ACF / ...) | [aqp_models/src/aqp_models/flows.py](aqp_models/src/aqp_models/flows.py) |
+| `aqp_models.adhoc.quick_*` | Notebook-friendly one-liners (ridge, ARIMA, iforest, FinBERT, ...) | [aqp_models/src/aqp_models/adhoc/](aqp_models/src/aqp_models/adhoc/) |
 | `transform.ml_preprocessing` + `sink.ml_feature_snapshot` | ML preprocessing as data-engine nodes; feature-snapshot Iceberg sink | [aqp/data/fetchers/transforms/ml_preprocessing.py](aqp/data/fetchers/transforms/ml_preprocessing.py), [aqp/data/fetchers/sinks/ml_feature_snapshot_sink.py](aqp/data/fetchers/sinks/ml_feature_snapshot_sink.py) |
 | `TradingBot` / `ResearchBot` | Bot subclasses (`build_bot(spec)` picks the right one) | [aqp_bots/trading_bot.py](aqp_bots/trading_bot.py), [aqp_bots/research_bot.py](aqp_bots/research_bot.py) |
 | `DeploymentDispatcher` | Bot deploy target dispatch (paper / k8s / backtest_only) | [aqp_bots/deploy.py](aqp_bots/deploy.py) |
@@ -972,18 +976,18 @@ Things that look like they should work but actively break the system.
 | `submit_factor_job` | Render + apply a Flink session-job for an AQP factor / ML pipeline | [aqp/streaming/runtime.py](aqp/streaming/runtime.py) |
 | `ClusterMgmtClient` | Httpx wrapper around `rpi_kubernetes` `/api/{kafka,flink,alphavantage}` | [aqp/services/cluster_mgmt_client.py](aqp/services/cluster_mgmt_client.py) |
 | `dataset_loading_assistant` | Read-only data-onboarding agent (Ollama via AgentRuntime) | [configs/agents/dataset_loading_assistant.yaml](configs/agents/dataset_loading_assistant.yaml) |
-| `RLComponent` metaclass + `rl_kind` | Auto-registers concrete RL components by kind | [aqp/rl/core/base.py](aqp/rl/core/base.py) |
-| `BaseRLEnv` | Composable env (observation / action / reward / termination hooks) | [aqp/rl/core/env.py](aqp/rl/core/env.py) |
-| `CompositeReward` + `RewardTerm` | Sum of weighted reward terms with per-step decomposition | [aqp/rl/core/reward.py](aqp/rl/core/reward.py) |
-| `BaseObservationBuilder` + `StackedObservationBuilder` | Compose feature blocks (FinRL stockstats / covariance / turbulence / VIX / lookback / fundamentals / microstructure) | [aqp/rl/core/observation.py](aqp/rl/core/observation.py) |
-| `BaseActionSpace` (continuous / softmax / integer-shares / discrete / multi-discrete / target-position) | Declares gym space + transform | [aqp/rl/core/action.py](aqp/rl/core/action.py) |
-| `BaseDataPipeline` (FinRL `DataProcessor` parity) | Iceberg / Yahoo / Alpaca / streaming / replay | [aqp/rl/core/data.py](aqp/rl/core/data.py), [aqp/rl/data_pipelines/](aqp/rl/data_pipelines/) |
-| `RLExperimentSpec` + `RLRuntime` | Hash-locked spec + single sanctioned executor (mirrors `BotRuntime` / `AgentRuntime`) | [aqp/rl/spec.py](aqp/rl/spec.py), [aqp/rl/runtime.py](aqp/rl/runtime.py) |
-| `IcebergTrajectoryStore` | Buffered Arrow writer for `rl.trajectories` / `rl.equity_curves` / `rl.action_logs` / `rl.reward_decomposition` | [aqp/rl/trajectories/iceberg_writer.py](aqp/rl/trajectories/iceberg_writer.py) |
-| `WalkForwardEnsembler` | FinRL `DRLEnsembleAgent` port (rolling Sharpe-based pick) | [aqp/rl/ensemblers/walk_forward.py](aqp/rl/ensemblers/walk_forward.py) |
-| `LLMHybridAgent` | FinRobot-style LLM advisor blended with RL backbone (LLM via `router_complete`) | [aqp/rl/agents/llm_hybrid.py](aqp/rl/agents/llm_hybrid.py) |
-| `SB3Adapter` (PPO / SAC / TD3 / DDPG / DQN / sb3-contrib) | Stable-Baselines3 + sb3-contrib wrapper | [aqp/rl/agents/sb3_adapter.py](aqp/rl/agents/sb3_adapter.py) |
-| `ElegantRLAdapter` / `RayRLlibAdapter` / `CleanRLAdapter` | FinRL parity backends (optional deps) | [aqp/rl/agents/elegantrl_adapter.py](aqp/rl/agents/elegantrl_adapter.py), [aqp/rl/agents/rllib_adapter.py](aqp/rl/agents/rllib_adapter.py), [aqp/rl/agents/cleanrl_adapter.py](aqp/rl/agents/cleanrl_adapter.py) |
+| `RLComponent` metaclass + `rl_kind` | Auto-registers concrete RL components by kind | [aqp_rl/src/aqp_rl/core/base.py](aqp_rl/src/aqp_rl/core/base.py) |
+| `BaseRLEnv` | Composable env (observation / action / reward / termination hooks) | [aqp_rl/src/aqp_rl/core/env.py](aqp_rl/src/aqp_rl/core/env.py) |
+| `CompositeReward` + `RewardTerm` | Sum of weighted reward terms with per-step decomposition | [aqp_rl/src/aqp_rl/core/reward.py](aqp_rl/src/aqp_rl/core/reward.py) |
+| `BaseObservationBuilder` + `StackedObservationBuilder` | Compose feature blocks (FinRL stockstats / covariance / turbulence / VIX / lookback / fundamentals / microstructure) | [aqp_rl/src/aqp_rl/core/observation.py](aqp_rl/src/aqp_rl/core/observation.py) |
+| `BaseActionSpace` (continuous / softmax / integer-shares / discrete / multi-discrete / target-position) | Declares gym space + transform | [aqp_rl/src/aqp_rl/core/action.py](aqp_rl/src/aqp_rl/core/action.py) |
+| `BaseDataPipeline` (FinRL `DataProcessor` parity) | Iceberg / Yahoo / Alpaca / streaming / replay | [aqp_rl/src/aqp_rl/core/data.py](aqp_rl/src/aqp_rl/core/data.py), [aqp_rl/src/aqp_rl/data_pipelines/](aqp_rl/src/aqp_rl/data_pipelines/) |
+| `RLExperimentSpec` + `RLRuntime` | Hash-locked spec + single sanctioned executor (mirrors `BotRuntime` / `AgentRuntime`) | [aqp_rl/src/aqp_rl/spec.py](aqp_rl/src/aqp_rl/spec.py), [aqp_rl/src/aqp_rl/runtime.py](aqp_rl/src/aqp_rl/runtime.py) |
+| `IcebergTrajectoryStore` | Buffered Arrow writer for `rl.trajectories` / `rl.equity_curves` / `rl.action_logs` / `rl.reward_decomposition` | [aqp_rl/src/aqp_rl/trajectories/iceberg_writer.py](aqp_rl/src/aqp_rl/trajectories/iceberg_writer.py) |
+| `WalkForwardEnsembler` | FinRL `DRLEnsembleAgent` port (rolling Sharpe-based pick) | [aqp_rl/src/aqp_rl/ensemblers/walk_forward.py](aqp_rl/src/aqp_rl/ensemblers/walk_forward.py) |
+| `LLMHybridAgent` | FinRobot-style LLM advisor blended with RL backbone (LLM via `router_complete`) | [aqp_rl/src/aqp_rl/agents/llm_hybrid.py](aqp_rl/src/aqp_rl/agents/llm_hybrid.py) |
+| `SB3Adapter` (PPO / SAC / TD3 / DDPG / DQN / sb3-contrib) | Stable-Baselines3 + sb3-contrib wrapper | [aqp_rl/src/aqp_rl/agents/sb3_adapter.py](aqp_rl/src/aqp_rl/agents/sb3_adapter.py) |
+| `ElegantRLAdapter` / `RayRLlibAdapter` / `CleanRLAdapter` | FinRL parity backends (optional deps) | [aqp_rl/src/aqp_rl/agents/elegantrl_adapter.py](aqp_rl/src/aqp_rl/agents/elegantrl_adapter.py), [aqp_rl/src/aqp_rl/agents/rllib_adapter.py](aqp_rl/src/aqp_rl/agents/rllib_adapter.py), [aqp_rl/src/aqp_rl/agents/cleanrl_adapter.py](aqp_rl/src/aqp_rl/agents/cleanrl_adapter.py) |
 
 ## When in doubt
 

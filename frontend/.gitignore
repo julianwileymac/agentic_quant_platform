@@ -1,5 +1,0 @@
-# Legacy stub — active client lives in ../aqp_client
-node_modules/
-dist/
-.env.local
-*.tsbuildinfo

@@ -61,6 +61,38 @@ def _build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="Pod entrypoint — run whatever the deployment target says")
     run.add_argument("slug")
 
+    replay = sub.add_parser("replay", help="Time-travel replay of bot_events for a bot")
+    replay.add_argument("slug")
+    replay.add_argument("--since-seq", type=int, default=0)
+    replay.add_argument("--until-seq", type=int, default=None)
+    replay.add_argument("--limit", type=int, default=None)
+
+    conformance = sub.add_parser(
+        "conformance",
+        help="Run the RTS 6 Article 6 conformance test harness",
+    )
+    conformance.add_argument("slug")
+
+    stress = sub.add_parser(
+        "stress",
+        help="Run the RTS 6 Article 10 stress test (2x prior 6-month peak)",
+    )
+    stress.add_argument("slug")
+    stress.add_argument("--duration-s", type=float, default=5.0)
+    stress.add_argument("--rate-multiplier", type=float, default=2.0)
+
+    render = sub.add_parser(
+        "render-manifest",
+        help="Preview the operator-rendered k8s manifests for a bot (no apply)",
+    )
+    render.add_argument("slug")
+
+    validate = sub.add_parser(
+        "validate",
+        help="Run the validating-webhook checks locally on a bot spec",
+    )
+    validate.add_argument("slug")
+
     return parser
 
 
@@ -135,6 +167,191 @@ def _run(slug: str) -> int:
     return 2
 
 
+def _replay(slug: str, since_seq: int, until_seq: int | None, limit: int | None) -> int:
+    """Replay bot_events for the bot identified by ``slug``."""
+    from aqp_bots.state.replay import replay_events
+
+    captured: list[dict[str, Any]] = []
+
+    def _capture_any(_event_data: dict[str, Any]) -> None:
+        captured.append(_event_data)
+
+    spec = get_bot_spec(slug)
+    bot_id = spec.slug or spec.name
+    cursor = replay_events(
+        bot_id=bot_id,
+        handlers={"order": _capture_any, "fill": _capture_any, "snapshot": _capture_any},
+        since_seq=since_seq,
+        until_seq=until_seq,
+        limit=limit,
+    )
+    print(
+        json.dumps(
+            {
+                "bot_id": cursor.bot_id,
+                "events_seen": cursor.events_seen,
+                "final_seq_no": cursor.final_seq_no,
+                "skipped_event_types": sorted(set(cursor.skipped)),
+                "errors": cursor.errors,
+            },
+            indent=2,
+            default=str,
+        )
+    )
+    return 0 if not cursor.errors else 1
+
+
+def _conformance(slug: str) -> int:
+    """Run the RTS 6 Article 6 conformance harness against the bot's risk engine."""
+    from aqp_bots.risk.engine import PreTradeRiskEngine
+    from aqp_bots.risk.policies import (
+        MaxOrderValuePolicy,
+        MaxOrderVolumePolicy,
+        PriceCollarPolicy,
+    )
+    from aqp_bots.risk.reg.conformance import run_conformance_tests
+    from decimal import Decimal as _Decimal
+
+    spec = get_bot_spec(slug)
+    rl = spec.risk_layer
+    engine = PreTradeRiskEngine(
+        policies=[
+            PriceCollarPolicy(max_bps=int((rl.price_collar_bps if rl else None) or 100)),
+            MaxOrderValuePolicy(
+                max_value_usd=_Decimal(str((rl.max_order_value_usd if rl else None) or "100000"))
+            ),
+            MaxOrderVolumePolicy(
+                max_qty=_Decimal(str((rl.max_order_qty if rl else None) or "10000"))
+            ),
+        ],
+        check_kill_switch=False,
+        check_legacy_risk_manager=False,
+    )
+    result = run_conformance_tests(engine=engine)
+    print(
+        json.dumps(
+            {
+                "bot": slug,
+                "cases_run": result.cases_run,
+                "cases_passed": result.cases_passed,
+                "cases_failed": result.cases_failed,
+                "passing": result.is_passing(),
+            },
+            indent=2,
+            default=str,
+        )
+    )
+    return 0 if result.is_passing() else 1
+
+
+def _stress(slug: str, duration_s: float, rate_multiplier: float) -> int:
+    """Run the RTS 6 Article 10 stress test against the bot's risk engine."""
+    from aqp_bots.risk.engine import PreTradeRiskEngine
+    from aqp_bots.risk.policies import MaxOrderValuePolicy, MaxOrderVolumePolicy
+    from aqp_bots.risk.reg.stress import run_stress_test
+    from decimal import Decimal as _Decimal
+
+    spec = get_bot_spec(slug)
+    rl = spec.risk_layer
+    engine = PreTradeRiskEngine(
+        policies=[
+            MaxOrderValuePolicy(
+                max_value_usd=_Decimal(str((rl.max_order_value_usd if rl else None) or "100000"))
+            ),
+            MaxOrderVolumePolicy(
+                max_qty=_Decimal(str((rl.max_order_qty if rl else None) or "10000"))
+            ),
+        ],
+        check_kill_switch=False,
+        check_legacy_risk_manager=False,
+    )
+    result = run_stress_test(
+        engine=engine,
+        bot_id=slug,
+        duration_s=duration_s,
+        rate_multiplier=rate_multiplier,
+    )
+    print(
+        json.dumps(
+            {
+                "bot": slug,
+                "target_rate_per_s": result.target_rate_per_s,
+                "throughput_per_s": result.throughput_per_s,
+                "messages_sent": result.messages_sent,
+                "blocks": result.blocks,
+                "warnings": result.warnings,
+                "allows": result.allows,
+                "passed": result.passed,
+            },
+            indent=2,
+            default=str,
+        )
+    )
+    return 0 if result.passed else 1
+
+
+def _render_manifest(slug: str) -> int:
+    """Preview the operator-rendered manifests for ``slug``."""
+    import yaml
+
+    spec = get_bot_spec(slug)
+    if spec.capabilities is None:
+        # Legacy bot — fall back to the existing KubernetesTarget renderer.
+        from aqp_bots.base import build_bot
+        from aqp_bots.deploy import KubernetesTarget
+
+        bot = build_bot(spec)
+        manifest = KubernetesTarget().render_manifest(bot, overrides={})
+        print(manifest)
+        return 0
+    from aqp_bots.operator.crds.bot_cr import BotCR, BotSpecField, CapabilitiesField
+    from aqp_bots.operator.render import render_bot_workload
+
+    caps = CapabilitiesField(
+        frequency=spec.capabilities.frequency.value,
+        assetClasses=[a.value for a in spec.capabilities.asset_classes],
+        venues=list(spec.capabilities.venues),
+        needsGpu=spec.capabilities.needs_gpu,
+        needsNumaPinning=spec.capabilities.needs_numa_pinning,
+        needsHugepagesMiB=spec.capabilities.needs_hugepages_mib,
+        needsSrIov=spec.capabilities.needs_sr_iov,
+        expectedP99TickToTradeUs=spec.capabilities.expected_p99_tick_to_trade_us,
+        maxCapitalUsd=str(spec.capabilities.max_capital_usd),
+    )
+    bot_cr = BotCR(
+        metadata={"name": spec.slug or spec.name, "namespace": spec.deployment.namespace},
+        spec=BotSpecField(capabilities=caps, botSpec=spec.model_dump(mode="json")),
+    )
+    documents = render_bot_workload(bot_cr)
+    print(yaml.safe_dump_all(documents, sort_keys=False))
+    return 0
+
+
+def _validate(slug: str) -> int:
+    """Run the same validations the admission webhook does."""
+    spec = get_bot_spec(slug)
+    failures: list[str] = []
+    if spec.capabilities is not None and spec.capabilities.frequency.value == "hft":
+        if not spec.capabilities.needs_numa_pinning:
+            failures.append("HFT bot must set capabilities.needs_numa_pinning=True")
+        if spec.capabilities.expected_p99_tick_to_trade_us is None:
+            failures.append("HFT bot must set capabilities.expected_p99_tick_to_trade_us")
+    if spec.risk_layer and spec.risk_layer.max_order_value_usd is not None:
+        try:
+            if float(spec.risk_layer.max_order_value_usd) <= 0:
+                failures.append("risk_layer.max_order_value_usd must be > 0")
+        except (TypeError, ValueError):
+            failures.append("risk_layer.max_order_value_usd must be numeric")
+    print(
+        json.dumps(
+            {"bot": slug, "valid": not failures, "failures": failures},
+            indent=2,
+            default=str,
+        )
+    )
+    return 0 if not failures else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     parser = _build_parser()
@@ -153,6 +370,16 @@ def main(argv: list[str] | None = None) -> int:
         return _deploy(args.slug, args.target)
     if args.cmd == "run":
         return _run(args.slug)
+    if args.cmd == "replay":
+        return _replay(args.slug, args.since_seq, args.until_seq, args.limit)
+    if args.cmd == "conformance":
+        return _conformance(args.slug)
+    if args.cmd == "stress":
+        return _stress(args.slug, args.duration_s, args.rate_multiplier)
+    if args.cmd == "render-manifest":
+        return _render_manifest(args.slug)
+    if args.cmd == "validate":
+        return _validate(args.slug)
     parser.print_help()
     return 1
 

@@ -1,0 +1,41 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: quantbot-crd-installer
+  namespace: aqp-bots
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: quantbot-crd-installer
+    spec:
+      serviceAccountName: quantbot-operator
+      restartPolicy: OnFailure
+      containers:
+        - name: installer
+          image: bitnami/kubectl:1.30
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -euo pipefail
+              echo "Installing QuantBot CRDs..."
+              for crd in /crds/*.yaml; do
+                echo "Applying $crd"
+                kubectl apply -f "$crd"
+              done
+              echo "Done"
+          volumeMounts:
+            - name: crds
+              mountPath: /crds
+              readOnly: true
+      volumes:
+        - name: crds
+          configMap:
+            name: quantbot-crds

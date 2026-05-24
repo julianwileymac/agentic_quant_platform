@@ -1,0 +1,64 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: quantbot-fleet
+  namespace: argocd
+spec:
+  generators:
+    - matrix:
+        generators:
+          - list:
+              elements:
+                - env: prod
+                  cluster: in-cluster
+                  destinationServer: https://kubernetes.default.svc
+                - env: staging
+                  cluster: in-cluster
+                  destinationServer: https://kubernetes.default.svc
+          - git:
+              repoURL: https://github.com/aqp/quantbot-fleets.git
+              revision: main
+              directories:
+                - path: fleets/*/bots/*
+  template:
+    metadata:
+      name: '{{path.basename}}-{{env}}'
+      namespace: argocd
+      labels:
+        app.kubernetes.io/managed-by: argocd
+        quantbot.io/env: '{{env}}'
+    spec:
+      project: quantbot
+      sources:
+        # The bot subchart (rendered values come from the values files
+        # under the multi-source $values reference below).
+        - repoURL: https://charts.aqp.io
+          chart: quantbot-bot
+          targetRevision: 0.2.0
+          helm:
+            releaseName: 'bot-{{path.basename}}'
+            valueFiles:
+              - $values/global/values-platform.yaml
+              - $values/global/values-env-{{env}}.yaml
+              - $values/{{path}}/../values-fleet.yaml
+              - $values/{{path}}/values-bot.yaml
+        # The values reference repo.
+        - repoURL: https://github.com/aqp/quantbot-fleets.git
+          targetRevision: main
+          ref: values
+      destination:
+        server: '{{destinationServer}}'
+        namespace: aqp-bots
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=false
+          - PrunePropagationPolicy=foreground
+        retry:
+          limit: 5
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 5m

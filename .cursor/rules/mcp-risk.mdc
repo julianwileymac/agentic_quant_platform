@@ -1,6 +1,6 @@
 ---
 description: Phase 5 MCP risk/pricing/arbitrage tools + ML predictor hub + strategy templates
-globs: aqp/data/mcp/tools/pricing.py,aqp/data/mcp/tools/arbitrage.py,aqp/data/mcp/tools/identity.py,aqp/data/mcp/tools/futures.py,aqp/data/mcp/tools/instruments.py,aqp/ml/predictors/**/*.py,aqp/persistence/models_predictors.py,configs/strategy_templates/**/*.yaml,alembic/versions/0044_*.py
+globs: aqp/data/mcp/tools/pricing.py,aqp/data/mcp/tools/arbitrage.py,aqp/data/mcp/tools/identity.py,aqp/data/mcp/tools/futures.py,aqp/data/mcp/tools/instruments.py,aqp_models/src/aqp_models/predictors/**/*.py,aqp/persistence/models_predictors.py,configs/strategy_templates/**/*.yaml,alembic/versions/0044_*.py
 alwaysApply: false
 ---
 

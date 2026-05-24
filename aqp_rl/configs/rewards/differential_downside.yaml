@@ -1,0 +1,11 @@
+# Differential Downside Deviation Ratio (D3R).
+# Sortino's per-step sibling — penalises only downside variance.
+
+class: differential_downside
+module_path: aqp_rl.rewards.differential_downside.DifferentialDownside
+kwargs:
+  eta: 0.01
+  weight: 1.0
+  warmup: 1
+  target_return: 0.0    # MAR; default Sortino convention
+  return_key: portfolio_return

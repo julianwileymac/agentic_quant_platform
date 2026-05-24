@@ -1,0 +1,10 @@
+fleet:
+  name: example-fleet
+  namespace: aqp-bots
+  description: ""
+  sharedRiskPolicyRefs: []
+  maxCapitalUsd: null
+  maxBotCount: null
+  halt: false
+  selector:
+    quantbot.io/fleet: example-fleet

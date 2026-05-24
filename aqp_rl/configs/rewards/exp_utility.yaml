@@ -1,0 +1,9 @@
+# Exponential (CARA) utility reward — −exp(−γ · ΔPnL).
+
+class: exp_utility
+module_path: aqp_rl.rewards.exponential_utility.ExponentialUtility
+kwargs:
+  weight: 1.0
+  gamma: 0.1
+  pnl_scale: 0.01
+  clip_pnl: 100.0        # guard against overflow on flash crashes

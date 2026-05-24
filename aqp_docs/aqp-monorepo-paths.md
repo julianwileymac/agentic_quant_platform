@@ -12,6 +12,8 @@ Canonical path contract for this repository. Sibling repos (`rpi_kubernetes`,
 | Shared platform contracts | `aqp_platform_core/` |
 | Active client (Vite) | `aqp_client/` |
 | Bot runtime/templates | `aqp_bots/` |
+| RL subsystem | `aqp_rl/` (`src/aqp_rl/` source; `tasks/`, `api/routes/`, `configs/`, `tests/` siblings) |
+| Custom model boundary | `aqp_models/` (`src/aqp_models/` source incl. `serving/`; `tasks/`, `api/routes/`, `configs/`, `tests/` siblings) |
 | Snippet corpus | `aqp_snippets/` |
 | Monolith runtime | `aqp/` |
 | Standalone operator CLI | `aqp_cli/` |
@@ -38,6 +40,22 @@ Compatibility stubs and historical paths (do not add active source here):
 | `extractions/` | `aqp_snippets/extractions/` |
 | `inspiration/` | `aqp_snippets/inspiration/` (ignored raw repos) |
 | `aqp/bots/` | `aqp_bots/` (import shim) |
+| `aqp/rl/` | `aqp_rl/src/aqp_rl/` (deprecation-warning import shim; `pkgutil.walk_packages` aliases every submodule under `aqp.rl.*`) |
+| `aqp/ml/` | `aqp_models/src/aqp_models/` (deprecation-warning import shim; `pkgutil.walk_packages` aliases every submodule under `aqp.ml.*`) |
+| `aqp/llm/vllm_runner.py` | `aqp_models/src/aqp_models/serving/vllm.py` (one-line re-export shim) |
+| `aqp/llm/ollama_client.py` | `aqp_models/src/aqp_models/serving/ollama.py` (one-line re-export shim) |
+| `aqp/tasks/rl_tasks.py` | `aqp_rl/tasks/rl_tasks.py` (Celery `name=` strings preserved for in-flight queue messages) |
+| `aqp/tasks/ml_tasks.py` | `aqp_models/tasks/ml_tasks.py` |
+| `aqp/tasks/ml_test_tasks.py` | `aqp_models/tasks/ml_test_tasks.py` |
+| `aqp/tasks/finetune_tasks.py` | `aqp_models/tasks/finetune_tasks.py` |
+| `aqp/tasks/training_tasks.py` | `aqp_models/tasks/training_tasks.py` |
+| `aqp/api/routes/rl.py` | `aqp_rl/api/routes/rl.py` (FastAPI mount path `/rl` unchanged) |
+| `aqp/api/routes/ml.py` | `aqp_models/api/routes/ml.py` (FastAPI mount path `/ml` unchanged) |
+| `aqp/api/routes/analytics_ml.py` | `aqp_models/api/routes/analytics_ml.py` (FastAPI mount path `/analytics/ml` unchanged) |
+| `configs/rl/` | `aqp_rl/configs/` |
+| `configs/ml/` | `aqp_models/configs/` |
+| `tests/rl/` | `aqp_rl/tests/` |
+| `tests/ml/` | `aqp_models/tests/` |
 | `docs/` | `aqp_docs/` (renamed; all references updated) |
 | root `deployments/` | `aqp_platform/deployments/` |
 | root `build/` | `aqp_platform/build/` |

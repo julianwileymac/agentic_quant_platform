@@ -1,0 +1,24 @@
+apiVersion: v2
+name: quantbot-platform
+description: |
+  Umbrella Helm chart for the QuantBot Platform — installs the operator,
+  the 9 QuantBot CRDs, the out-of-band pre-trade risk service, and the
+  HFT node tier configuration.
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+home: https://github.com/aqp/agentic_quant_platform
+keywords:
+  - quantbot
+  - quant-trading
+  - kubernetes
+  - operator
+  - hft
+  - risk
+maintainers:
+  - name: AQP Platform Team
+dependencies:
+  - name: cert-manager
+    version: "1.14.x"
+    repository: https://charts.jetstack.io
+    condition: cert-manager.enabled

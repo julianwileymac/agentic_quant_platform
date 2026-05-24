@@ -1,0 +1,95 @@
+# ptp4l + phc2sys DaemonSet for HFT nodes.
+#
+# Disciplines the host wall clock to a PTP master via IEEE 1588.
+# Required for RTS 25 1-microsecond timestamp granularity.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: quantbot-ptp
+  namespace: aqp-bots
+  labels:
+    app.kubernetes.io/name: quantbot-ptp
+    app.kubernetes.io/component: hft-time-sync
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: quantbot-ptp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: quantbot-ptp
+    spec:
+      hostNetwork: true
+      hostPID: true
+      nodeSelector:
+        quantbot.io/hft: "true"
+      tolerations:
+        - key: quantbot.io/hft
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      containers:
+        - name: ptp4l
+          image: quay.io/openshift/origin-ptp:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - >
+              ptp4l -i eth0 -s -m -2
+              -f /etc/ptp4l/ptp4l.conf
+          securityContext:
+            privileged: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          volumeMounts:
+            - name: ptp-conf
+              mountPath: /etc/ptp4l
+              readOnly: true
+        - name: phc2sys
+          image: quay.io/openshift/origin-ptp:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - phc2sys -s eth0 -c CLOCK_REALTIME -O 0 -m
+          securityContext:
+            privileged: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      volumes:
+        - name: ptp-conf
+          configMap:
+            name: quantbot-ptp-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quantbot-ptp-config
+  namespace: aqp-bots
+data:
+  ptp4l.conf: |
+    [global]
+    domainNumber 0
+    priority1 128
+    priority2 128
+    logging_level 6
+    time_stamping hardware
+    tx_timestamp_timeout 1
+    # 1-microsecond granularity per RTS 25 — clock_servo pi targets
+    # sub-microsecond offsets on hardware-timestamping NICs.
+    clock_servo pi
+    pi_proportional_const 0.0
+    pi_integral_const 0.0
+    [eth0]
+    masterOnly 0

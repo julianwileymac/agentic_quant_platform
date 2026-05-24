@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: bot-canary-pnl
+  namespace: aqp-bots
+spec:
+  args:
+    - name: bot-id
+  metrics:
+    - name: realized-pnl-vs-stable
+      # 6 samples * 5min = 30min window
+      interval: 5m
+      count: 6
+      successCondition: "result[0] >= -50"   # USD: canary may bleed up to $50 vs stable
+      failureLimit: 2
+      provider:
+        prometheus:
+          address: http://prometheus.observability.svc:9090
+          query: |
+            sum(quantbot_realized_pnl_usd{bot_id="{{args.bot-id}}",variant="canary"})
+              - on() group_left
+            sum(quantbot_realized_pnl_usd{bot_id="{{args.bot-id}}",variant="stable"})

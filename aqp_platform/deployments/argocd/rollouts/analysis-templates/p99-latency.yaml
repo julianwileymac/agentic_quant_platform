@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: bot-p99-latency
+  namespace: aqp-bots
+spec:
+  args:
+    - name: bot-id
+    - name: max-latency-seconds
+      value: "0.001"   # 1ms default; HFT canaries override to "0.0001" (100µs)
+  metrics:
+    - name: tick-to-trade-p99
+      interval: 1m
+      count: 30
+      successCondition: "result[0] <= {{args.max-latency-seconds}}"
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://prometheus.observability.svc:9090
+          query: |
+            histogram_quantile(0.99,
+              sum(rate(quantbot_tick_to_trade_seconds_bucket{bot_id="{{args.bot-id}}",variant="canary"}[5m]))
+                by (le)
+            )

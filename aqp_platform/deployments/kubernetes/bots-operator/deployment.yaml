@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quantbot-operator
+  namespace: aqp-bots
+  labels:
+    app.kubernetes.io/component: operator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: quantbot-operator
+      app.kubernetes.io/component: operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: quantbot-operator
+        app.kubernetes.io/component: operator
+    spec:
+      serviceAccountName: quantbot-operator
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: operator
+          image: ghcr.io/aqp/quantbot-operator:latest
+          imagePullPolicy: IfNotPresent
+          args: ["aqp-bots-operator", "run"]
+          env:
+            - name: AQP_BOTS_LOG_LEVEL
+              value: INFO
+            - name: AQP_OTEL_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: aqp-otel-config
+                  key: endpoint
+                  optional: true
+          ports:
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+            - name: webhook
+              containerPort: 8443
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /etc/quantbot/webhook/certs
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: webhook-certs
+          secret:
+            secretName: quantbot-operator-webhook-cert
+            optional: true
+        - name: tmp
+          emptyDir: {}

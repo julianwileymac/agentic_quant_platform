@@ -1,0 +1,7 @@
+# RegimeStratifiedEvaluation experiment (Phase 6).
+
+class: regime_stratified
+module_path: aqp_rl.experiments.regime_stratified.RegimeStratifiedEvaluation
+kwargs:
+  n_regimes: 4
+  n_episodes: 1

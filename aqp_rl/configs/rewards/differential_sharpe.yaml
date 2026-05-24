@@ -1,0 +1,11 @@
+# Differential Sharpe Ratio (Moody & Saffell 1998).
+# Drop-in reward term for any spec that wants a per-step Sharpe
+# signal without warm-up aliasing.
+
+class: differential_sharpe
+module_path: aqp_rl.rewards.differential_sharpe.DifferentialSharpe
+kwargs:
+  eta: 0.01          # EMA adaptation rate (smaller = slower)
+  weight: 1.0        # composite multiplier
+  warmup: 1          # bars before non-zero reward
+  return_key: portfolio_return

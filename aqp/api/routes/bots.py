@@ -596,6 +596,260 @@ async def halt_bot(
     }
 
 
+# ----------------------------------------------------------------- QuantBot Platform extensions
+
+
+class BotReplayRequest(BaseModel):
+    since_seq: int = 0
+    until_seq: int | None = None
+    limit: int | None = None
+
+
+class BotReplayResponse(BaseModel):
+    bot_id: str
+    events_seen: int
+    final_seq_no: int
+    skipped: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class BotConformanceResponse(BaseModel):
+    bot: str
+    cases_run: int
+    cases_passed: int
+    cases_failed: list[dict[str, Any]] = Field(default_factory=list)
+    passing: bool
+
+
+class BotStressRequest(BaseModel):
+    duration_s: float = 5.0
+    rate_multiplier: float = 2.0
+    explicit_target_rate: float | None = None
+
+
+class BotStressResponse(BaseModel):
+    bot: str
+    target_rate_per_s: float
+    throughput_per_s: float
+    messages_sent: int
+    blocks: int
+    warnings: int
+    allows: int
+    passed: bool
+
+
+class BotStateSnapshotResponse(BaseModel):
+    bot_id: str
+    seq_no: int | None = None
+    snapshot_at: datetime | None = None
+    positions: dict[str, Any] = Field(default_factory=dict)
+    exposures: dict[str, Any] = Field(default_factory=dict)
+    metrics: dict[str, Any] = Field(default_factory=dict)
+
+
+class BotStateEventOut(BaseModel):
+    seq_no: int
+    event_type: str
+    event_data: dict[str, Any]
+    occurred_at: datetime | None = None
+
+
+@router.post("/{bot_ref}/replay", response_model=BotReplayResponse)
+async def replay_bot(
+    bot_ref: str,
+    body: BotReplayRequest | None = None,
+    session: AsyncSession = Depends(async_session_dep),
+) -> BotReplayResponse:
+    """Time-travel replay of bot_events for a single bot."""
+    from aqp_bots.state.replay import replay_events
+
+    row = await _get_row(session, bot_ref)
+    body = body or BotReplayRequest()
+
+    def _capture(_event_data: dict[str, Any]) -> None:
+        return None
+
+    cursor = replay_events(
+        bot_id=row.id,
+        handlers={"order": _capture, "fill": _capture, "snapshot": _capture},
+        since_seq=body.since_seq,
+        until_seq=body.until_seq,
+        limit=body.limit,
+    )
+    return BotReplayResponse(
+        bot_id=cursor.bot_id,
+        events_seen=cursor.events_seen,
+        final_seq_no=cursor.final_seq_no,
+        skipped=sorted(set(cursor.skipped)),
+        errors=cursor.errors,
+    )
+
+
+@router.post("/{bot_ref}/conformance", response_model=BotConformanceResponse)
+async def conformance_bot(
+    bot_ref: str,
+    session: AsyncSession = Depends(async_session_dep),
+) -> BotConformanceResponse:
+    """Run the RTS 6 Article 6 conformance harness against the bot's risk policies."""
+    from decimal import Decimal as _Decimal
+
+    from aqp_bots.risk.engine import PreTradeRiskEngine
+    from aqp_bots.risk.policies import (
+        MaxOrderValuePolicy,
+        MaxOrderVolumePolicy,
+        PriceCollarPolicy,
+    )
+    from aqp_bots.risk.reg.conformance import run_conformance_tests
+
+    row = await _get_row(session, bot_ref)
+    spec = BotSpec.from_yaml_str(row.spec_yaml) if row.spec_yaml else None
+    rl = spec.risk_layer if spec is not None else None
+    engine = PreTradeRiskEngine(
+        policies=[
+            PriceCollarPolicy(max_bps=int((rl.price_collar_bps if rl else None) or 100)),
+            MaxOrderValuePolicy(
+                max_value_usd=_Decimal(str((rl.max_order_value_usd if rl else None) or "100000"))
+            ),
+            MaxOrderVolumePolicy(
+                max_qty=_Decimal(str((rl.max_order_qty if rl else None) or "10000"))
+            ),
+        ],
+        check_kill_switch=False,
+        check_legacy_risk_manager=False,
+    )
+    result = run_conformance_tests(engine=engine)
+    return BotConformanceResponse(
+        bot=row.slug,
+        cases_run=result.cases_run,
+        cases_passed=result.cases_passed,
+        cases_failed=result.cases_failed,
+        passing=result.is_passing(),
+    )
+
+
+@router.post("/{bot_ref}/stress", response_model=BotStressResponse)
+async def stress_bot(
+    bot_ref: str,
+    body: BotStressRequest | None = None,
+    session: AsyncSession = Depends(async_session_dep),
+) -> BotStressResponse:
+    """Run the RTS 6 Article 10 stress test (2x prior 6-month peak by default)."""
+    from decimal import Decimal as _Decimal
+
+    from aqp_bots.risk.engine import PreTradeRiskEngine
+    from aqp_bots.risk.policies import MaxOrderValuePolicy, MaxOrderVolumePolicy
+    from aqp_bots.risk.reg.stress import run_stress_test
+
+    row = await _get_row(session, bot_ref)
+    body = body or BotStressRequest()
+    spec = BotSpec.from_yaml_str(row.spec_yaml) if row.spec_yaml else None
+    rl = spec.risk_layer if spec is not None else None
+    engine = PreTradeRiskEngine(
+        policies=[
+            MaxOrderValuePolicy(
+                max_value_usd=_Decimal(str((rl.max_order_value_usd if rl else None) or "100000"))
+            ),
+            MaxOrderVolumePolicy(
+                max_qty=_Decimal(str((rl.max_order_qty if rl else None) or "10000"))
+            ),
+        ],
+        check_kill_switch=False,
+        check_legacy_risk_manager=False,
+    )
+    result = run_stress_test(
+        engine=engine,
+        bot_id=row.id,
+        duration_s=body.duration_s,
+        rate_multiplier=body.rate_multiplier,
+        explicit_target_rate=body.explicit_target_rate,
+    )
+    return BotStressResponse(
+        bot=row.slug,
+        target_rate_per_s=result.target_rate_per_s,
+        throughput_per_s=result.throughput_per_s,
+        messages_sent=result.messages_sent,
+        blocks=result.blocks,
+        warnings=result.warnings,
+        allows=result.allows,
+        passed=result.passed,
+    )
+
+
+@router.get("/{bot_ref}/risk/validation-report")
+async def risk_validation_report(
+    bot_ref: str,
+    session: AsyncSession = Depends(async_session_dep),
+) -> dict[str, Any]:
+    """Generate the RTS 6 Art. 9 / 15c3-5(e) annual validation report payload."""
+    from aqp_bots.risk.reg.validation_report import generate_validation_report
+
+    row = await _get_row(session, bot_ref)
+    return generate_validation_report(
+        bot_inventory=[
+            {
+                "slug": row.slug,
+                "fleet": (row.annotations or [])[:1] or [""],
+                "kind": row.kind,
+            }
+        ],
+    )
+
+
+@router.get("/{bot_ref}/state/snapshot", response_model=BotStateSnapshotResponse)
+async def get_bot_state_snapshot(
+    bot_ref: str,
+    session: AsyncSession = Depends(async_session_dep),
+) -> BotStateSnapshotResponse:
+    """Return the latest event-sourced state snapshot for the bot."""
+    from aqp_bots.state.snapshots import SnapshotWriter
+
+    row = await _get_row(session, bot_ref)
+    writer = SnapshotWriter(bot_id=row.id)
+    latest = writer.latest()
+    if latest is None:
+        return BotStateSnapshotResponse(bot_id=row.id)
+    return BotStateSnapshotResponse(
+        bot_id=latest.bot_id,
+        seq_no=latest.seq_no,
+        snapshot_at=latest.snapshot_at,
+        positions=latest.positions,
+        exposures=latest.exposures,
+        metrics=latest.metrics,
+    )
+
+
+@router.get("/{bot_ref}/state/events", response_model=list[BotStateEventOut])
+async def get_bot_state_events(
+    bot_ref: str,
+    since_seq: int = 0,
+    limit: int = 200,
+    session: AsyncSession = Depends(async_session_dep),
+) -> list[BotStateEventOut]:
+    """Paginated event stream from ``bot_events``."""
+    from aqp.persistence.models_bots import BotEvent
+
+    row = await _get_row(session, bot_ref)
+    stmt = (
+        select(BotEvent)
+        .where(BotEvent.bot_id == row.id, BotEvent.seq_no > since_seq)
+        .order_by(BotEvent.seq_no)
+        .limit(min(max(limit, 1), 1000))
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    return [
+        BotStateEventOut(
+            seq_no=int(r.seq_no),
+            event_type=r.event_type,
+            event_data=dict(r.event_data or {}),
+            occurred_at=r.occurred_at,
+        )
+        for r in rows
+    ]
+
+
+# ----------------------------------------------------------------- chat (existing)
+
+
 @router.post("/{bot_ref}/chat", response_model=TaskAccepted)
 async def chat_bot(
     bot_ref: str,

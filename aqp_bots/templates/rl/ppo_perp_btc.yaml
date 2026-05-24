@@ -1,0 +1,79 @@
+name: PPO BTC-PERP Agent
+slug: rl-perp-btc-001
+kind: rl_trading
+description: >-
+  Reinforcement-learning agent (PPO) on the BTC-USDT perp via Binance.
+  Mid-frequency (5-minute step). Inference runs on GPU; the bot uses
+  the existing RLRuntime (rule 16) — kernel runtime is NOT used here,
+  this template is reference for how the new capability/layer specs
+  interoperate with the existing rl_trading kind.
+
+universe:
+  symbols:
+    - BTCUSDT.BINANCE_PERP
+
+rl_experiment_ref:
+  slug: ppo_perp_btc
+  deterministic: true
+
+capabilities:
+  frequency: mid
+  asset_classes: [perp]
+  venues: [binance-perp]
+  needs_gpu: true
+  max_capital_usd: "250000"
+
+data_layer:
+  adapters: [binance_perp_ws]
+  subscriptions:
+    - { symbol: BTCUSDT.BINANCE_PERP, channels: [trades, quotes, l2_book], interval: PT1M }
+
+risk_layer:
+  layer1_policies:
+    - PriceCollarPolicy
+    - MaxOrderValuePolicy
+    - MaxOrderVolumePolicy
+    - VolatilityCircuitBreakerPolicy
+  price_collar_bps: 200
+  max_order_value_usd: "25000"
+  max_order_qty: "5"
+
+execution_layer:
+  adapters: [binance_perp_rest]
+  smart_order_router: latency_aware
+
+state_layer:
+  mode: sync
+
+telemetry:
+  hft_mode: false
+
+lifecycle:
+  drain_timeout_seconds: 300
+  flatten_on_drain: true
+  environment: paper
+
+metrics:
+  - { name: sharpe, threshold: 1.2, direction: max }
+  - { name: max_drawdown, threshold: 0.20, direction: min }
+  - { name: avg_reward, threshold: 0.0, direction: max }
+
+risk:
+  max_position_pct: 0.30
+  max_daily_loss_pct: 0.03
+  max_drawdown_pct: 0.20
+
+deployment:
+  target: kubernetes
+  namespace: aqp-bots
+  initial_cash: 250000.0
+  heartbeat_seconds: 30
+  dry_run: true
+  resources:
+    requests: { cpu: "4", memory: "16Gi", nvidia.com/gpu: "1" }
+    limits:   { cpu: "4", memory: "16Gi", nvidia.com/gpu: "1" }
+
+annotations:
+  - rl_trading
+  - ppo
+  - crypto_perps

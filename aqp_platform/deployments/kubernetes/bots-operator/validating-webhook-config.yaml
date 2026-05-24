@@ -1,0 +1,79 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: quantbot-operator-validating
+  annotations:
+    cert-manager.io/inject-ca-from: aqp-bots/quantbot-operator-webhook-cert
+webhooks:
+  - name: bot.quantbot.io
+    failurePolicy: Fail
+    sideEffects: None
+    admissionReviewVersions: ["v1"]
+    timeoutSeconds: 10
+    rules:
+      - apiGroups: ["quantbot.io"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["bots"]
+    clientConfig:
+      service:
+        name: quantbot-operator-webhook
+        namespace: aqp-bots
+        path: /validate-bot
+        port: 443
+  - name: riskpolicy.quantbot.io
+    failurePolicy: Fail
+    sideEffects: None
+    admissionReviewVersions: ["v1"]
+    timeoutSeconds: 10
+    rules:
+      - apiGroups: ["quantbot.io"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["riskpolicies"]
+    clientConfig:
+      service:
+        name: quantbot-operator-webhook
+        namespace: aqp-bots
+        path: /validate-riskpolicy
+        port: 443
+  - name: killswitch.quantbot.io
+    failurePolicy: Fail
+    sideEffects: None
+    admissionReviewVersions: ["v1"]
+    timeoutSeconds: 10
+    rules:
+      - apiGroups: ["quantbot.io"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["killswitches"]
+    clientConfig:
+      service:
+        name: quantbot-operator-webhook
+        namespace: aqp-bots
+        path: /validate-killswitch
+        port: 443
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: quantbot-operator-mutating
+  annotations:
+    cert-manager.io/inject-ca-from: aqp-bots/quantbot-operator-webhook-cert
+webhooks:
+  - name: mutate-bot.quantbot.io
+    failurePolicy: Ignore
+    sideEffects: None
+    admissionReviewVersions: ["v1"]
+    timeoutSeconds: 5
+    rules:
+      - apiGroups: ["quantbot.io"]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["bots"]
+    clientConfig:
+      service:
+        name: quantbot-operator-webhook
+        namespace: aqp-bots
+        path: /mutate-bot
+        port: 443

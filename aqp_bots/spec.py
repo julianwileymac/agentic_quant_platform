@@ -77,6 +77,8 @@ import hashlib
 import json
 import re
 from collections.abc import Iterable
+from decimal import Decimal
+from enum import StrEnum
 from typing import Any, Literal
 
 import yaml
@@ -88,6 +90,224 @@ from aqp.agents.spec import RAGRef
 
 BotKind = Literal["trading", "research", "rl_trading"]
 """Subclass discriminator for :class:`aqp.bots.base.BaseBot`."""
+
+
+# ---------------------------------------------------------------------------
+# Capabilities (QuantBot Platform Phase 1 — enterprise extension)
+# ---------------------------------------------------------------------------
+
+
+class Frequency(StrEnum):
+    """Latency / cadence class of a bot.
+
+    Five canonical tiers, each maps to a specific K8s scheduling primitive
+    in the operator (DaemonSet for HFT, StatefulSet for stateful mid-freq,
+    Deployment for stateless, CronJob for EOD, Job/event-driven adapter
+    for on-chain). HFT bots additionally require NUMA pinning + 1µs clock
+    granularity (Commission Delegated Regulation (EU) 2017/574 RTS 25).
+    """
+
+    HFT = "hft"  # < 1ms tick-to-trade target
+    MID = "mid"  # 1ms - 1s
+    LOW = "low"  # 1s - 1min
+    EOD = "eod"  # batch / daily rebalance
+    EVENT = "event"  # event-driven (on-chain, news feed, scheduled trigger)
+
+
+class AssetClass(StrEnum):
+    """Asset class a bot trades. Used by the operator + risk policies."""
+
+    EQUITY = "equity"
+    FUTURE = "future"
+    OPTION = "option"
+    SPOT_CRYPTO = "spot_crypto"
+    PERP = "perp"
+    FX = "fx"
+    ONCHAIN = "onchain"
+
+
+class CapabilitySpec(BaseModel):
+    """Hardware + scheduling capabilities the bot needs.
+
+    Operator uses these to:
+
+    1. Select the right K8s primitive (Deployment / StatefulSet /
+       DaemonSet / CronJob / Job).
+    2. Validate node assignment (NUMA pinning, HugePages, SR-IOV).
+    3. Set Pod QoS class (Guaranteed for HFT, Burstable for others).
+    4. Apply scheduling tolerations / affinity rules.
+
+    A legacy bot (``kind=trading`` with no ``capabilities`` block) skips
+    every check below and continues through the existing ``BotRuntime``
+    path; capabilities is fully optional and additive.
+    """
+
+    frequency: Frequency = Frequency.MID
+    asset_classes: list[AssetClass] = Field(default_factory=list)
+    venues: list[str] = Field(default_factory=list)
+    needs_gpu: bool = False
+    needs_numa_pinning: bool = False
+    needs_hugepages_mib: int = 0
+    needs_sr_iov: bool = False
+    expected_p99_tick_to_trade_us: int | None = None
+    max_capital_usd: Decimal = Field(default=Decimal("0"))
+
+    @model_validator(mode="after")
+    def _hft_invariants(self) -> CapabilitySpec:
+        """HFT bots MUST declare NUMA + p99 latency target.
+
+        Mirrors blueprint §C.1: HFT pods land on dedicated nodes with
+        ``cpuManagerPolicy: static`` and ``topologyManagerPolicy:
+        single-numa-node``; without ``needs_numa_pinning=True`` the
+        operator would schedule them on a shared node and silently
+        violate the 1µs RTS 25 granularity requirement.
+        """
+        if self.frequency == Frequency.HFT:
+            if not self.needs_numa_pinning:
+                raise ValueError(
+                    "Frequency.HFT requires needs_numa_pinning=True "
+                    "(operator schedules HFT bots on dedicated NUMA nodes)"
+                )
+            if self.expected_p99_tick_to_trade_us is None:
+                raise ValueError(
+                    "Frequency.HFT requires expected_p99_tick_to_trade_us "
+                    "(operator uses it to size the Prometheus alert SLO)"
+                )
+        return self
+
+
+# ---------------------------------------------------------------------------
+# Seven layer specs (composition model — blueprint §A.1)
+# ---------------------------------------------------------------------------
+
+
+class DataLayerSpec(BaseModel):
+    """Market data ingestion configuration.
+
+    A bot may declare zero or more adapters; each name resolves through
+    the metaclass-registered :class:`MarketDataAdapter` registry. The
+    legacy ``BotSpec.data_pipeline`` block remains the canonical
+    historical-data source for backtest mode; this spec describes the
+    live-data adapters consumed by the new ``BotKernel`` runtime.
+    """
+
+    adapters: list[str] = Field(default_factory=list)
+    subscriptions: list[dict[str, Any]] = Field(default_factory=list)
+    feature_store: dict[str, Any] | None = None
+    normalization: str | None = None
+    extras: dict[str, Any] = Field(default_factory=dict)
+
+
+class StrategyLayerSpec(BaseModel):
+    """Strategy composition: alpha → portfolio → execution algo.
+
+    Distinct from the existing top-level ``BotSpec.strategy`` (which
+    drives the legacy ``run_backtest_from_config`` / paper path).
+    This block additionally lets a bot declare which execution algo
+    (TWAP / VWAP / POV / IS / Iceberg) wraps the raw strategy signals
+    when the kernel runtime is active.
+    """
+
+    alpha: dict[str, Any] | None = None
+    portfolio_constructor: dict[str, Any] | None = None
+    execution_algo: dict[str, Any] | None = None
+    risk_overlay: dict[str, Any] | None = None
+    warmup_bars: int = 0
+    extras: dict[str, Any] = Field(default_factory=dict)
+
+
+class RiskLayerSpec(BaseModel):
+    """Pre-trade risk policy bindings.
+
+    Layer-1 (in-bot, fast path) policies are listed by alias from the
+    registered :class:`aqp_bots.risk.policies` module. Layer-2 (the
+    out-of-band pre-trade risk service per 17 CFR § 240.15c3-5(d))
+    is referenced via :attr:`risk_service_endpoint`.
+
+    Reuses :class:`aqp_bots.spec.RiskSpec` for the position / drawdown /
+    daily-loss caps; this layer carries the RTS 6 Article 15(1) and
+    SEC 15c3-5 (c)(1) policy aliases.
+    """
+
+    layer1_policies: list[str] = Field(default_factory=list)
+    risk_service_endpoint: str | None = None
+    fail_open: bool = False
+    price_collar_bps: int | None = None
+    max_order_value_usd: Decimal | None = None
+    max_order_qty: Decimal | None = None
+    max_messages_per_second: int | None = None
+    repeated_execution_throttle_ms: int | None = None
+    instrument_allowlist: list[str] = Field(default_factory=list)
+    extras: dict[str, Any] = Field(default_factory=dict)
+
+
+class ExecutionLayerSpec(BaseModel):
+    """Execution venue + order-routing configuration.
+
+    Names registered :class:`ExecutionAdapter` aliases. The default
+    SOR is ``latency_aware``; alternative routers register through
+    the standard ``@register(name=..., kind="smart_order_router")``
+    decorator.
+    """
+
+    adapters: list[str] = Field(default_factory=list)
+    smart_order_router: str = "latency_aware"
+    default_order_type: str = "limit"
+    idempotency_lru_size: int = 4096
+    reconcile_interval_ms: int = 500
+    drop_copy_enabled: bool = False
+    extras: dict[str, Any] = Field(default_factory=dict)
+
+
+class StateLayerSpec(BaseModel):
+    """Event-sourced state configuration.
+
+    Production bots write through the partitioned ``bot_events`` table
+    (Phase 4 — see migration 0061). The :attr:`mode` knob controls
+    whether snapshots are written synchronously (durability-first) or
+    asynchronously (HFT latency-first).
+    """
+
+    mode: Literal["sync", "async"] = "sync"
+    snapshot_interval_seconds: int = 60
+    event_store_enabled: bool = True
+    replay_on_restart: bool = True
+    extras: dict[str, Any] = Field(default_factory=dict)
+
+
+class TelemetrySpec(BaseModel):
+    """Observability configuration.
+
+    Standard mode emits OTel traces / Prometheus metrics through
+    :mod:`aqp.observability.tracing` (which delegates to
+    ``rpi_k8s_sdk.tracing``). HFT mode swaps in the lock-free
+    :class:`HFTSpanProcessor` and the microsecond Prometheus bucket
+    boundaries.
+    """
+
+    otel_enabled: bool = True
+    hft_mode: bool = False
+    p99_alert_threshold_us: int | None = None
+    metrics_namespace: str = "quantbot"
+    log_correlation_id_field: str = "correlation_id"
+    extras: dict[str, Any] = Field(default_factory=dict)
+
+
+class LifecycleSpec(BaseModel):
+    """Lifecycle hooks + graceful drain configuration.
+
+    Operator finalizer respects :attr:`drain_timeout_seconds` (30s for
+    HFT, 300s for everything else); :attr:`flatten_on_drain` flips the
+    bot from cancel-only-on-shutdown to cancel + flatten.
+    """
+
+    drain_timeout_seconds: int = 300
+    flatten_on_drain: bool = False
+    warmup_timeout_seconds: int = 60
+    health_check_path: str = "/healthz"
+    readiness_check_path: str = "/readyz"
+    environment: Literal["live", "paper", "backtest", "sim"] = "paper"
+    extras: dict[str, Any] = Field(default_factory=dict)
 
 
 class UniverseRef(BaseModel):
@@ -289,6 +509,19 @@ class BotSpec(BaseModel):
     risk: RiskSpec = Field(default_factory=RiskSpec)
     deployment: DeploymentTargetSpec = Field(default_factory=DeploymentTargetSpec)
 
+    # QuantBot Platform Phase 1 — opt-in capability + layer specs.
+    # When ``capabilities`` is None the legacy BotRuntime path runs
+    # unchanged; when set, BotRuntime._run_with_kernel() (Phase 2)
+    # composes the layered runtime instead.
+    capabilities: CapabilitySpec | None = None
+    data_layer: DataLayerSpec | None = None
+    strategy_layer: StrategyLayerSpec | None = None
+    risk_layer: RiskLayerSpec | None = None
+    execution_layer: ExecutionLayerSpec | None = None
+    state_layer: StateLayerSpec | None = None
+    telemetry: TelemetrySpec | None = None
+    lifecycle: LifecycleSpec | None = None
+
     annotations: list[str] = Field(default_factory=list)
     extras: dict[str, Any] = Field(default_factory=dict)
 
@@ -431,16 +664,27 @@ def load_specs_from_dir(dir_path: str, *, suffix: str = ".yaml") -> Iterable[Bot
 
 
 __all__ = [
+    "AssetClass",
     "BotAgentRef",
     "BotKind",
     "BotSpec",
+    "CapabilitySpec",
+    "DataLayerSpec",
     "DataPipelineRef",
     "DeploymentTargetKind",
     "DeploymentTargetSpec",
+    "ExecutionLayerSpec",
+    "Frequency",
+    "LifecycleSpec",
     "MLDeploymentRef",
     "MetricRef",
     "RAGRef",
+    "RLExperimentRef",
+    "RiskLayerSpec",
     "RiskSpec",
+    "StateLayerSpec",
+    "StrategyLayerSpec",
+    "TelemetrySpec",
     "UniverseRef",
     "load_specs_from_dir",
 ]

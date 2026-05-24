@@ -15,6 +15,37 @@ This page is the canonical entry point. For shorter cuts:
   reference (browse via `/rl/components` in the UI).
 - [`aqp_docs/rl-iceberg.md`](rl-iceberg.md) — Iceberg trajectory / equity /
   reward-decomposition tables and DuckDB views.
+- [`aqp_docs/rl-market-dynamics.md`](rl-market-dynamics.md) — Phase 6
+  slice-and-merge regime labeller + `RegimeAwareObservation` +
+  `RegimeStratifiedEvaluation`.
+- [`aqp_docs/rl-prudex-evaluation.md`](rl-prudex-evaluation.md) — Phase 9
+  PRUDEX-Compass framework (17 measures, 5 visualisations).
+- [`aqp_docs/rl-finagent.md`](rl-finagent.md) — Phase 10 FinAgent
+  multimodal 5-stage LLM-hybrid adapter.
+- [`aqp_docs/architecture/decisions/010-rl-production-enhancement.md`](architecture/decisions/010-rl-production-enhancement.md)
+  — full Phase 1-12 production-enhancement ADR.
+
+## Phase 1-12 production enhancements (May 2026)
+
+The Phase 1-12 deliverables documented in
+[ADR-010](architecture/decisions/010-rl-production-enhancement.md)
+add the following components under their canonical `rl_alias` /
+`kind`:
+
+| Phase | Components |
+| --- | --- |
+| 1 (Rewards) | `differential_sharpe`, `differential_downside`, `implementation_shortfall`, `running_inventory`, `exp_utility`, `hindsight`, `dp_distillation` |
+| 2 (Analytical) | `almgren_chriss_residual`, `avellaneda_stoikov_residual` (+ `aqp_rl.analytical.{almgren_chriss,avellaneda_stoikov,cartea_jaimungal}` helpers) |
+| 3 (Envs) | `tradesim_algotrading`, `tradesim_portfolio`, `tradesim_execution`, `tradesim_hft`, `finagent_trading` |
+| 4 (Agents) | `eiie`, `deeptrader`, `investor_imitator`, `eteo`, `opd`, `deepscalper`, `hft_ddqn`, `ppo_inhouse` |
+| 5 (Backbones) | `eiie_conv`, `sagcn`, `market_scorer`, `hft_qnet`, `eteo_dual_head`, `pd_dual_rnn`, `sarl_lstm` |
+| 6 (MDM) | `slice_and_merge_regime_flow` (analysis flow), `regime_aware` observation, `regime_stratified` experiment |
+| 7 (CSDI) | `csdi_imputed` dataset kind |
+| 8 (Validation) | `CombinatorialPurgedKFold`, `probability_of_backtest_overfitting`, `rademacher_anti_serum`, `deflated_sharpe_ratio`, `walk_forward_anchored`, `walk_forward_rolling`, `benjamini_hochberg`, `holm_bonferroni`, `validation_suite` experiment |
+| 9 (PRUDEX) | `PrudexMetrics`, `PrudexReport`, `compute_prudex_metrics`, 5 chart helpers, `prudex_compass` experiment |
+| 10 (FinAgent) | `finagent_layered` adapter + 5 AgentSpec YAMLs under [`configs/agents/finagent/`](../configs/agents/finagent/) + 3 tools under [`aqp/agents/tools/finagent/`](../aqp/agents/tools/finagent/) |
+| 11 (Replay) | `GeneralReplayBuffer`, `PrioritizedReplayBuffer`, `NStepInfoReplayBuffer` |
+| 12 (Parity) | Determinism + kill-switch tests around `WeightCentricPipeline` + `WeightToOrders` |
 
 ## Contracts
 

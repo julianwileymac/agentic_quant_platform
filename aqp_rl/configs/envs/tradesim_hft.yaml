@@ -1,0 +1,11 @@
+# 5-level LOB HFT env with DP demonstration oracle.
+
+class: tradesim_hft
+module_path: aqp_rl.envs.tradesim_hft.HighFrequencyTradingEnv
+kwargs:
+  stack_length: 1
+  transaction_cost_pct: 0.00005
+  max_holding_number: 0.01
+  num_action: 11
+  max_punish: 1.0e12
+  enable_dp_oracle: true

@@ -1,0 +1,7 @@
+# Implementation Shortfall reward (Almgren & Chriss 2001 normalisation).
+
+class: implementation_shortfall
+module_path: aqp_rl.rewards.implementation_shortfall.ImplementationShortfall
+kwargs:
+  weight: 1.0
+  lambda_risk: 0.0       # set > 0 to penalise per-step fill-price variance

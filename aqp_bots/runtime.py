@@ -153,6 +153,75 @@ class BotRuntime:
             action=lambda: self.bot.deploy(target=target, **(overrides or {})),
         )
 
+    # ----------------------------------------------------------- kernel runtime
+
+    def has_kernel_runtime(self) -> bool:
+        """Return True iff this bot opts into the QuantBot Platform kernel.
+
+        Capability-opt-in: a bot declares ``capabilities`` on its spec to
+        request the new kernel runtime. Legacy bots (capabilities=None)
+        skip this branch entirely and continue through the existing
+        ``run_backtest_from_config`` / ``build_session_from_config`` path.
+        """
+        return self.spec.capabilities is not None
+
+    def run_kernel(
+        self,
+        *,
+        wire: Any = None,
+    ) -> BotRunResult:
+        """Drive the bot through :class:`BotKernel`.
+
+        This is the entry point for the new layered runtime. Strategies do
+        NOT import :class:`BotKernel` directly — they declare layers on
+        the :class:`BotSpec` and the runtime composes them here. Hard
+        rule 14 (``BotRuntime`` is the only sanctioned executor) stays
+        intact.
+
+        ``wire`` is an optional callable
+        ``Callable[[BotKernel], None]`` that the runtime invokes after
+        constructing the kernel and before calling :meth:`BotKernel.run`.
+        Phase 8 (operator) and the per-bot CLI wire layers from
+        :class:`MarketDataAdapter` / :class:`ExecutionAdapter` / risk
+        policy registrations.
+        """
+
+        def _action() -> dict[str, Any]:
+            import asyncio as _asyncio
+
+            from aqp_bots.core.kernel import BotKernel, install_uvloop
+
+            install_uvloop()
+            kernel = BotKernel(self.spec)
+            if wire is not None:
+                wire(kernel)
+
+            async def _run() -> dict[str, Any]:
+                async with kernel:
+                    await kernel.run()
+                return {
+                    "bot_id": kernel.bot_id,
+                    "run_id": kernel.run_id,
+                    "final_state": kernel.fsm.state.value,
+                    "history": [
+                        {
+                            "from": evt.from_state.value,
+                            "to": evt.to_state.value,
+                            "reason": evt.reason,
+                            "at_utc": evt.at_utc.isoformat(),
+                        }
+                        for evt in kernel.fsm.history
+                    ],
+                }
+
+            return _asyncio.run(_run())
+
+        return self._with_deployment(
+            target="kernel",
+            stage_message=f"Running bot {self.spec.name!r} via QuantBot kernel",
+            action=_action,
+        )
+
     # ----------------------------------------------------------- DB plumbing
 
     def _snapshot_spec(self) -> str | None:

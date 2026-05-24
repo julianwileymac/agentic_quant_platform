@@ -1,0 +1,15 @@
+# FinAgent 5-stage layered reflection adapter (Phase 10).
+# References the 5 stage YAMLs under configs/agents/finagent/.
+
+class: finagent_layered
+module_path: aqp_rl.agents.llm_hybrid_layered.LayeredReflectionAdapter
+kwargs:
+  llm_model: ""               # empty -> settings.llm_quick_model
+  llm_provider: ollama
+  rl_weight: 0.0              # 0 = pure LLM; 1 = pure RL backbone
+  rl_agent:
+    class: ppo_inhouse
+    kwargs:
+      policy: MlpPolicy
+  max_tokens: 300
+  temperature: 0.1

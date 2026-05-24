@@ -1,0 +1,47 @@
+# Kubelet configuration for HFT nodes.
+#
+# This file is applied to nodes labelled ``quantbot.io/hft=true`` via
+# the cluster's node config operator (or by direct ssh + systemctl
+# restart kubelet on bare-metal nodes). Per blueprint §K.6:
+#
+# - cpuManagerPolicy: static  → dedicated cores for Guaranteed-QoS pods
+# - topologyManagerPolicy: single-numa-node  → CPU + memory + device
+#   allocation pinned to one NUMA domain
+# - memoryManagerPolicy: Static  → reserved memory per NUMA node
+# - reservedSystemCPUs: cores 0,1  → kept for kernel + kubelet itself
+#
+# Applies the Kubernetes CPU manager static policy documented at
+# https://kubernetes.io/docs/concepts/workloads/resource-managers/
+
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+
+# CPU Manager (full-pcpus-only stops the kubelet from splitting a
+# physical core's hyperthreads across two pods).
+cpuManagerPolicy: static
+cpuManagerPolicyOptions:
+  full-pcpus-only: "true"
+cpuManagerReconcilePeriod: 5s
+
+# Topology Manager keeps CPU + memory + device allocation NUMA-local.
+topologyManagerPolicy: single-numa-node
+topologyManagerScope: pod
+
+# Memory Manager pins memory allocations to a NUMA node.
+memoryManagerPolicy: Static
+reservedMemory:
+  - numaNode: 0
+    limits:
+      memory: 4Gi
+
+# Reserve cores 0,1 for kernel + kubelet so they never compete with
+# pinned bot pods.
+reservedSystemCPUs: "0,1"
+
+featureGates:
+  CPUManager: true
+  TopologyManager: true
+  MemoryManager: true
+
+# Disable swap completely on HFT nodes — swapping a hot order book is fatal.
+failSwapOn: true

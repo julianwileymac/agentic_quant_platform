@@ -1,0 +1,6 @@
+# PRUDEX-Compass evaluation experiment (Phase 9).
+
+class: prudex_compass
+module_path: aqp_rl.experiments.prudex_evaluation.PrudexEvaluation
+kwargs:
+  periods_per_year: 252    # 31536000 for per-second HFT

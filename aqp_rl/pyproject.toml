@@ -1,0 +1,96 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aqp-rl"
+version = "0.1.0"
+description = "Reinforcement-learning subsystem for the Agentic Quant Platform — RLRuntime, hash-locked RLExperimentSpec, RLComponent metaclass, advantage estimators, policy backbones, weight-centric portfolio pipeline, and Iceberg trajectory store."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "AQP Platform Team" }]
+keywords = ["aqp", "reinforcement-learning", "rl", "trading", "finrl"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# Core RL deps. Heavier framework adapters (ElegantRL, RLlib, CleanRL,
+# NeMo-RL) live behind extras so the base install stays light.
+dependencies = [
+    "pydantic>=2.5",
+    "PyYAML>=6.0",
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "gymnasium>=0.29",
+    "stable-baselines3>=2.2",
+    "torch>=2.1",
+]
+
+[project.optional-dependencies]
+elegantrl = ["elegantrl>=0.3"]
+rllib = ["ray[rllib]>=2.10"]
+cleanrl = ["cleanrl>=1.1"]
+nemo-rl = ["nemo-rl>=0.1"]
+mbtgym = ["mbt-gym @ git+https://github.com/JJJerome/mbt_gym@main"]
+finrl = [
+    "finrl>=0.3",
+    "alpaca-py>=0.25",
+    "yfinance>=0.2.37",
+]
+all-frameworks = [
+    "aqp-rl[elegantrl,rllib,cleanrl,mbtgym,finrl]",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=4.1",
+    "ruff>=0.4",
+    "mypy>=1.8",
+]
+
+[project.urls]
+Homepage = "https://github.com/julianwiley/agentic_quant_platform"
+Issues = "https://github.com/julianwiley/agentic_quant_platform/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aqp_rl"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/aqp_rl",
+    "tasks",
+    "api",
+    "configs",
+    "tests",
+    "README.md",
+    "AGENTS.md",
+    "INDEX.md",
+    "pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "ARG", "N"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+disallow_untyped_defs = false

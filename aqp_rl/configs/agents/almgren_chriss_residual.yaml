@@ -1,0 +1,27 @@
+# Almgren-Chriss residual policy spec — anneals an SB3 PPO residual
+# on top of the deterministic AC schedule.
+
+class: almgren_chriss_residual
+module_path: aqp_rl.agents.almgren_chriss_residual.AlmgrenChrissResidualPolicy
+kwargs:
+  base_policy:
+    class: SB3Adapter
+    kwargs:
+      algorithm: PPO
+      policy: MlpPolicy
+      learning_rate: 0.0003
+      n_steps: 256
+      gamma: 0.95
+  ac_params:
+    total_shares: 1000000.0
+    liquidation_time: 5.0
+    num_trades: 5
+    gamma: 2.5e-7
+    eta: 2.5e-6
+    epsilon: 0.0625
+    sigma: 0.95
+    risk_aversion: 1.0e-6
+  alpha_start: 0.0
+  alpha_end: 1.0
+  alpha_warmup: 50000          # linear anneal over training
+  clip_to_inventory: true

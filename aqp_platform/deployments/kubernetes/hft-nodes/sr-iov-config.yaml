@@ -1,0 +1,41 @@
+# SR-IOV Network Operator policy for HFT NICs.
+#
+# Reserves VFs on the supported NIC family (Intel I210/X710,
+# Mellanox ConnectX-5/6/7) and exposes them as a NetworkAttachmentDefinition
+# that HFT bot pods can attach to via the ``k8s.v1.cni.cncf.io/networks``
+# annotation.
+apiVersion: sriovnetwork.openshift.io/v1
+kind: SriovNetworkNodePolicy
+metadata:
+  name: quantbot-hft-vf-policy
+  namespace: openshift-sriov-network-operator
+spec:
+  resourceName: quantbot_hft_vf
+  nodeSelector:
+    quantbot.io/hft: "true"
+  numVfs: 8
+  nicSelector:
+    vendor: "8086"           # Intel; use "15b3" for Mellanox
+    deviceID: "1572"          # X710-DA2 (placeholder; override per hardware)
+  deviceType: vfio-pci
+  isRdma: false
+  priority: 99
+---
+apiVersion: sriovnetwork.openshift.io/v1
+kind: SriovNetwork
+metadata:
+  name: quantbot-hft-net
+  namespace: openshift-sriov-network-operator
+spec:
+  resourceName: quantbot_hft_vf
+  networkNamespace: aqp-bots
+  ipam: |
+    {
+      "type": "host-local",
+      "subnet": "10.244.100.0/24",
+      "rangeStart": "10.244.100.10",
+      "rangeEnd": "10.244.100.250"
+    }
+  vlan: 0
+  spoofChk: "on"
+  trust: "off"

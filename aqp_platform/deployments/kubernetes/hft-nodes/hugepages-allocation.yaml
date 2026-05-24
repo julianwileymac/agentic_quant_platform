@@ -1,0 +1,77 @@
+# HugePages allocation for HFT nodes.
+#
+# Pre-allocate 2 MiB hugepages so HFT bot pods can request
+# hugepages-2Mi via Pod ``resources.requests``. The amount here
+# (1024 * 2MiB = 2 GiB per node) is the conservative default; raise
+# per fleet via the platform values file.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quantbot-hugepages-init
+  namespace: aqp-bots
+data:
+  pre-stop.sh: |
+    #!/usr/bin/env bash
+    # Release allocations on node drain so non-HFT pods can use the
+    # memory back. Optional — depends on operator policy.
+    echo 0 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+  set-hugepages.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo 1024 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+    grep -i hugepages /proc/meminfo
+---
+# DaemonSet that runs once per HFT node and configures the hugepages
+# allocation. Idempotent — safe to re-run.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: quantbot-hugepages-init
+  namespace: aqp-bots
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: quantbot-hugepages-init
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: quantbot-hugepages-init
+    spec:
+      hostPID: true
+      nodeSelector:
+        quantbot.io/hft: "true"
+      tolerations:
+        - key: quantbot.io/hft
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      containers:
+        - name: init
+          image: busybox:1.36
+          command: ["/bin/sh", "/scripts/set-hugepages.sh"]
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: sys
+              mountPath: /sys
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "/scripts/pre-stop.sh"]
+        - name: pause
+          image: registry.k8s.io/pause:3.10
+          resources:
+            requests: { cpu: "10m", memory: "16Mi" }
+            limits: { cpu: "50m", memory: "32Mi" }
+      volumes:
+        - name: scripts
+          configMap:
+            name: quantbot-hugepages-init
+            defaultMode: 0755
+        - name: sys
+          hostPath:
+            path: /sys

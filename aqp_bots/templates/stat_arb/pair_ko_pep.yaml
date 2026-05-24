@@ -1,0 +1,113 @@
+name: KO/PEP Cointegrated Pair
+slug: pair-ko-pep
+kind: trading
+description: >-
+  Mid-frequency stat-arb on the KO/PEP pair. Ornstein-Uhlenbeck spread
+  reversion with entry at +/- 2 sigma and exit at +/- 0.5 sigma. Uses
+  the paper bridge execution adapter so the same bot runs in backtest,
+  paper, and live without code changes.
+
+universe:
+  symbols:
+    - KO.NYSE
+    - PEP.NASDAQ
+
+data_pipeline:
+  preset: ohlcv-1m
+  source: alpaca
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs: { symbols: [KO.NYSE, PEP.NASDAQ] }
+    alpha_model:
+      class: CointegratedPairOU
+      module_path: aqp.strategies.stat_arb
+      kwargs:
+        lookback_minutes: 240
+        entry_z: 2.0
+        exit_z: 0.5
+    portfolio_model:
+      class: DollarNeutralPortfolio
+      module_path: aqp.strategies.portfolio_construction
+    risk_model:
+      class: NoOpRiskModel
+      module_path: aqp.strategies.risk_models
+    execution_model:
+      class: ImmediateExecutionModel
+      module_path: aqp.strategies.execution_models
+
+backtest:
+  engine: vbt-pro:signals
+  kwargs:
+    initial_cash: 1000000.0
+
+capabilities:
+  frequency: mid
+  asset_classes: [equity]
+  venues: [alpaca]
+  max_capital_usd: "1000000"
+
+data_layer:
+  adapters: [alpaca_bridge]
+  subscriptions:
+    - { symbol: KO.NYSE, channels: [quotes] }
+    - { symbol: PEP.NASDAQ, channels: [quotes] }
+
+risk_layer:
+  layer1_policies:
+    - PriceCollarPolicy
+    - MaxOrderValuePolicy
+    - InstrumentAllowlistPolicy
+  price_collar_bps: 200
+  max_order_value_usd: "50000"
+  instrument_allowlist: [KO.NYSE, PEP.NASDAQ]
+
+execution_layer:
+  adapters: [alpaca_bridge]
+  smart_order_router: latency_aware
+
+state_layer:
+  mode: sync
+  snapshot_interval_seconds: 60
+
+telemetry:
+  hft_mode: false
+
+lifecycle:
+  drain_timeout_seconds: 180
+  flatten_on_drain: true
+  environment: paper
+
+agents:
+  - spec_name: research.quant_vbtpro
+    role: supervisor
+    inputs_template:
+      hypothesis: "Does the KO/PEP spread remain mean-reverting under the current regime?"
+
+metrics:
+  - { name: sharpe, threshold: 1.0, direction: max }
+  - { name: max_drawdown, threshold: 0.15, direction: min }
+  - { name: pair_correlation, threshold: 0.70, direction: max }
+
+risk:
+  max_position_pct: 0.25
+  max_daily_loss_pct: 0.02
+  max_drawdown_pct: 0.15
+
+deployment:
+  target: paper_session
+  brokerage: alpaca
+  feed: alpaca
+  initial_cash: 1000000.0
+  heartbeat_seconds: 30
+  dry_run: true
+
+annotations:
+  - stat_arb
+  - pair_trade
+  - mid_frequency

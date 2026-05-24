@@ -1,0 +1,11 @@
+# EIIE (Jiang & Liang 2017) — DDPG-style portfolio agent.
+
+class: eiie
+module_path: aqp_rl.agents.paper_grade.EIIEAgent
+kwargs:
+  learning_rate: 0.0001
+  buffer_size: 100000
+  batch_size: 64
+  tau: 0.005
+  gamma: 0.99
+  policy: MlpPolicy

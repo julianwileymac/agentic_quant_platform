@@ -409,8 +409,15 @@ aqp-codebase-mcp = "aqp.codebase.mcp.server:run_stdio"
 aqp-export-schemas = "aqp.metadata.schema_export:cli"
 
 [tool.setuptools.packages.find]
+# The root ``agentic-quant-platform`` distribution installs the
+# monolith (``aqp*``). Sibling boundary packages with their own
+# ``pyproject.toml`` -- ``aqp_rl/``, ``aqp_models/``,
+# ``aqp_platform_core/``, ``aqp_control_plane/``, ``aqp_admin/``,
+# ``aqp_cli/``, ``aqp_index/``, ``aqp_platform/`` -- are installed
+# separately via ``pip install -e ./aqp_<name>`` so their per-package
+# extras stay decoupled from the monolith install.
 include = ["aqp*"]
-exclude = ["tests*", "notebooks*", "data*"]
+exclude = ["tests*", "notebooks*", "data*", "aqp_rl*", "aqp_models*", "aqp_platform_core*", "aqp_control_plane*", "aqp_admin*", "aqp_cli*", "aqp_index*", "aqp_platform*"]
 
 [tool.setuptools.package-data]
 aqp_bots = ["templates/**/*.yaml"]
@@ -432,7 +439,11 @@ ignore_missing_imports = true
 disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# Monolith tests stay in ``tests/``. Boundary packages own their own
+# ``tests/`` dir (``aqp_rl/tests/``, ``aqp_models/tests/``,
+# ``aqp_platform_core/tests/``, ``aqp_control_plane/tests/``) and
+# expose them through their per-package ``pyproject.toml``.
+testpaths = ["tests", "aqp_rl/tests", "aqp_models/tests"]
 asyncio_mode = "auto"
 markers = [
     "requires_hft: tests that need the optional [hft] extra (hftbacktest + Rust toolchain)",

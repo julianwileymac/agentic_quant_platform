@@ -751,13 +751,18 @@ def _load_rl_policy_specs() -> list[tuple[dict[str, Any], str]]:
         import yaml
         from pathlib import Path
 
+        # New canonical: aqp_rl/configs/policies/. Legacy fallback for
+        # the pre-extraction layout (configs/rl/policies/) and the
+        # production container path (/app/configs/rl/policies).
         roots = [
+            Path("aqp_rl/configs/policies"),
+            Path("/app/aqp_rl/configs/policies"),
             Path("/app/configs/rl/policies"),
             Path("configs/rl/policies"),
         ]
         root = next((r for r in roots if r.exists()), None)
         if root is None:
-            logger.warning("configs/rl/policies not found; returning empty RL spec set")
+            logger.warning("RL policy specs not found; returning empty RL spec set")
             _RL_SPEC_CACHE = []
             return []
         out: list[tuple[dict[str, Any], str]] = []

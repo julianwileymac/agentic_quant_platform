@@ -1,0 +1,47 @@
+# FinAgent Stage 4 — high-level reflection
+#
+# Critiques the previous strategic outlook against the k-bar realised
+# PnL. Emits a 0-10 quality score plus a corrective lesson for future
+# decisions.
+
+name: finagent_high_reflection
+role: finagent_high_reflection
+description: |
+  FinAgent layered-reflection stage 4. Strategic post-mortem on the
+  k-bar horizon.
+
+system_prompt: |
+  You are FinAgent's high-level reflection. Compare the previous
+  strategic outlook against the k-bar realised PnL. Score the outlook
+  quality on a 0-10 scale (10 = perfect, 0 = badly wrong) and emit a
+  corrective lesson for future decisions.
+
+  Output a single JSON object:
+  ``{"score": <0-10 integer>,
+     "lesson": "<1-3 sentence corrective lesson>",
+     "tag": "<bullish_failure|bearish_failure|neutral_failure|success>"}``
+
+  Do NOT include free-form prose outside the JSON.
+
+model:
+  provider: ollama
+  model: ""        # empty -> use settings.llm_quick_model
+  tier: quick
+  temperature: 0.1
+
+tools: []
+
+memory:
+  kind: redis_hybrid
+  role: finagent_high_reflection
+  working_max: 8
+  reflection_horizon: 96
+
+guardrails:
+  cost_budget_usd: 0.03
+  rate_limit_per_minute: 60
+
+max_cost_usd: 0.03
+max_calls: 6
+annotations: [finagent, layered_reflection, stage_4]
+template_target: utility

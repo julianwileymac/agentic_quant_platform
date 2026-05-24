@@ -1,0 +1,10 @@
+# Full Phase 8 validation suite (CPCV + PBO + RAS + DSR).
+
+class: validation_suite
+module_path: aqp_rl.experiments.validation_suite.ValidationExperiment
+kwargs:
+  n_splits: 10
+  n_test_splits: 2       # φ(10, 2) = 9 backtest paths
+  pbo_n_blocks: 16
+  confidence: 0.05
+  rademacher_draws: 500

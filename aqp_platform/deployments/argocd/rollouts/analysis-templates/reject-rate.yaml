@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: bot-reject-rate
+  namespace: aqp-bots
+spec:
+  args:
+    - name: bot-id
+  metrics:
+    - name: reject-rate
+      interval: 1m
+      count: 30
+      successCondition: "result[0] <= 0.01"   # <= 1%
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://prometheus.observability.svc:9090
+          query: |
+            sum(rate(quantbot_orders_rejected_total{bot_id="{{args.bot-id}}",variant="canary"}[5m]))
+              /
+            (sum(rate(quantbot_orders_total{bot_id="{{args.bot-id}}",variant="canary"}[5m])) > 0)

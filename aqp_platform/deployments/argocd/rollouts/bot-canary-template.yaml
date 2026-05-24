@@ -1,0 +1,56 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: bot-canary-template
+  namespace: aqp-bots
+  annotations:
+    quantbot.io/template: "true"
+    description: |
+      Reference Argo Rollouts canary spec for one QuantBot bot.
+      Per-bot Rollouts are rendered from this template via the
+      operator's CanaryRollout CR reconciler.
+spec:
+  replicas: 2
+  strategy:
+    canary:
+      canaryService: bot-canary
+      stableService: bot-stable
+      maxSurge: "25%"
+      maxUnavailable: 0
+      analysis:
+        templates:
+          - templateName: bot-canary-pnl
+          - templateName: bot-reject-rate
+          - templateName: bot-p99-latency
+      steps:
+        - setWeight: 10
+        - pause: { duration: 30m }
+        - analysis:
+            templates:
+              - templateName: bot-canary-pnl
+              - templateName: bot-reject-rate
+              - templateName: bot-p99-latency
+        - setWeight: 50
+        - pause: { duration: 1h }
+        - analysis:
+            templates:
+              - templateName: bot-canary-pnl
+              - templateName: bot-reject-rate
+              - templateName: bot-p99-latency
+        - setWeight: 100
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: quantbot-bot
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: quantbot-bot
+    spec:
+      serviceAccountName: quantbot-bot
+      containers:
+        - name: bot
+          image: ghcr.io/aqp/quantbot-runtime:latest
+          ports:
+            - name: health
+              containerPort: 9090
+              protocol: TCP

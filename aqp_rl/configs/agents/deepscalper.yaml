@@ -1,0 +1,12 @@
+# DeepScalper (Sun CIKM 22) — DQN with hindsight reward.
+
+class: deepscalper
+module_path: aqp_rl.agents.paper_grade.DeepScalperAgent
+kwargs:
+  learning_rate: 0.0001
+  buffer_size: 100000
+  batch_size: 64
+  gamma: 0.9
+  exploration_fraction: 0.1
+  exploration_final_eps: 0.05
+  policy: MlpPolicy

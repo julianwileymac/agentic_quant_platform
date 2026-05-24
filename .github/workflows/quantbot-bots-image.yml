@@ -1,0 +1,124 @@
+name: quantbot-bots-image
+
+# Builds, scans, signs the QuantBot bot runtime image.
+# Triggered on changes under aqp_bots/ or the operator deploy manifests.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "aqp_bots/**"
+      - "aqp/persistence/models_bots.py"
+      - "aqp/api/routes/bots.py"
+      - "aqp/tasks/bot_tasks.py"
+      - ".github/workflows/quantbot-bots-image.yml"
+  pull_request:
+    paths:
+      - "aqp_bots/**"
+      - ".github/workflows/quantbot-bots-image.yml"
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: aqp/quantbot-runtime
+  HFT_IMAGE_NAME: aqp/quantbot-runtime-hft
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        variant:
+          - { name: standard, dockerfile: aqp_bots/Dockerfile, suffix: "" }
+          - { name: hft,      dockerfile: aqp_bots/Dockerfile.hft, suffix: "-hft" }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image tag
+        id: meta
+        run: |
+          REF="${GITHUB_SHA::12}"
+          echo "tag=$REF" >> "$GITHUB_OUTPUT"
+          if [[ "${{ matrix.variant.name }}" == "standard" ]]; then
+            echo "name=${{ env.IMAGE_NAME }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ env.HFT_IMAGE_NAME }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build + push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.variant.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.name }}:${{ steps.meta.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+
+      - name: Generate SBOM with syft
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ steps.meta.outputs.name }}:${{ steps.meta.outputs.tag }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.variant.name }}-${{ steps.meta.outputs.tag }}
+          path: sbom.spdx.json
+
+      - name: Scan with Trivy
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ steps.meta.outputs.name }}:${{ steps.meta.outputs.tag }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'   # fail the pipeline on CRITICAL/HIGH CVEs
+          ignore-unfixed: true
+          format: sarif
+          output: trivy.sarif
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.2.4'
+
+      - name: Sign image (keyless via OIDC)
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ steps.meta.outputs.name }}:${{ steps.meta.outputs.tag }}
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign sign --yes "${IMAGE}"
+
+      - name: Attest SBOM
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ steps.meta.outputs.name }}:${{ steps.meta.outputs.tag }}
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign attest --yes --predicate sbom.spdx.json --type spdxjson "${IMAGE}"

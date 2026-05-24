@@ -1,0 +1,120 @@
+name: Cross-Sectional Momentum (EOD)
+slug: factor-momentum-eod
+kind: trading
+description: >-
+  Daily cross-sectional momentum rebalance on the S&P 500 universe.
+  Runs as a Kubernetes CronJob at 21:00 UTC on weekdays. Executes
+  trades via VWAP over a 30-minute horizon to minimize market impact.
+
+universe:
+  symbols: []   # static universe loaded by the strategy from configs/universes/sp500.yaml
+
+data_pipeline:
+  preset: ohlcv-daily
+  source: alpaca
+
+strategy:
+  class: FrameworkAlgorithm
+  module_path: aqp.strategies.framework
+  kwargs:
+    universe_model:
+      class: SP500Universe
+      module_path: aqp.strategies.universes
+      kwargs: { rebalance_frequency: monthly }
+    alpha_model:
+      class: CrossSectionalMomentum
+      module_path: aqp.strategies.momentum
+      kwargs:
+        lookback_days: 252
+        skip_days: 21
+        top_quantile: 0.2
+        bottom_quantile: 0.2
+    portfolio_model:
+      class: EqualWeightPortfolio
+      module_path: aqp.strategies.portfolio_construction
+    risk_model:
+      class: SectorCapsRiskModel
+      module_path: aqp.strategies.risk_models
+      kwargs: { max_sector_pct: 0.25 }
+    execution_model:
+      class: VWAPExecutionModel
+      module_path: aqp.strategies.execution_models
+      kwargs: { horizon_minutes: 30 }
+
+backtest:
+  engine: vbt-pro:signals
+  kwargs:
+    initial_cash: 50000000.0
+    frequency: daily
+
+capabilities:
+  frequency: eod
+  asset_classes: [equity]
+  venues: [alpaca]
+  max_capital_usd: "50000000"
+
+strategy_layer:
+  execution_algo:
+    class: VWAPAlgo
+    module_path: aqp_bots.execution.ems
+    kwargs: { duration_minutes: 30, volume_profile: null }
+
+risk_layer:
+  layer1_policies:
+    - PriceCollarPolicy
+    - MaxOrderValuePolicy
+    - MaxMessagesPerSecondPolicy
+    - BuyingPowerPolicy
+  price_collar_bps: 100
+  max_order_value_usd: "500000"
+  max_messages_per_second: 50
+
+execution_layer:
+  adapters: [alpaca_bridge]
+  smart_order_router: latency_aware
+
+state_layer:
+  mode: sync
+  snapshot_interval_seconds: 3600   # once per hour for EOD
+
+telemetry:
+  hft_mode: false
+
+lifecycle:
+  drain_timeout_seconds: 600
+  flatten_on_drain: false   # EOD intentionally holds positions overnight
+  environment: paper
+
+agents:
+  - spec_name: research.equity
+    role: supervisor
+    inputs_template:
+      hypothesis: "Has the momentum factor decayed in the current macro regime?"
+
+metrics:
+  - { name: sharpe, threshold: 0.8, direction: max }
+  - { name: max_drawdown, threshold: 0.25, direction: min }
+  - { name: turnover, threshold: 2.0, direction: min }
+  - { name: information_ratio, threshold: 0.5, direction: max }
+
+risk:
+  max_position_pct: 0.05
+  max_daily_loss_pct: 0.03
+  max_drawdown_pct: 0.20
+
+deployment:
+  target: kubernetes      # rendered as a CronJob by the operator
+  namespace: aqp-bots
+  initial_cash: 50000000.0
+  heartbeat_seconds: 60
+  dry_run: true
+  resources:
+    requests: { cpu: "2", memory: "4Gi" }
+    limits:   { cpu: "4", memory: "8Gi" }
+  extras:
+    schedule: "0 21 * * 1-5"   # 21:00 UTC, weekdays
+
+annotations:
+  - eod
+  - factor_momentum
+  - cross_sectional

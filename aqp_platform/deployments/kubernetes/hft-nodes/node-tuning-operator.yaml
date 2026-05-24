@@ -1,0 +1,49 @@
+# tuned profile for HFT nodes.
+#
+# Applied via the Node Tuning Operator. Tightens kernel scheduling
+# parameters, disables CPU power management, and sets the I/O scheduler
+# to ``none`` so block I/O latency is consistent.
+apiVersion: tuned.openshift.io/v1
+kind: Tuned
+metadata:
+  name: quantbot-hft
+  namespace: openshift-cluster-node-tuning-operator
+spec:
+  profile:
+    - data: |
+        [main]
+        summary=QuantBot HFT low-latency profile
+
+        [cpu]
+        force_latency=1
+        governor=performance
+        energy_perf_bias=performance
+        min_perf_pct=100
+
+        [vm]
+        transparent_hugepages=never
+
+        [scheduler]
+        # Avoid kernel migrations across NUMA nodes for HFT pods.
+        sched_min_granularity_ns=10000000
+        sched_wakeup_granularity_ns=15000000
+
+        [sysctl]
+        # Reduce TCP timestamp churn for FIX sessions.
+        kernel.timer_migration=0
+        kernel.nmi_watchdog=0
+        # Allow large network buffers for incoming market data bursts.
+        net.core.rmem_max=268435456
+        net.core.wmem_max=268435456
+        net.core.netdev_max_backlog=65535
+        net.ipv4.tcp_rmem=4096 87380 268435456
+        net.ipv4.tcp_wmem=4096 65536 268435456
+        # Disable receive packet steering reshuffles.
+        net.core.rps_default_mask=0
+      name: quantbot-hft
+  recommend:
+    - match:
+        - label: quantbot.io/hft
+          value: "true"
+      priority: 10
+      profile: quantbot-hft

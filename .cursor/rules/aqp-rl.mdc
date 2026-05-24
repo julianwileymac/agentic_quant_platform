@@ -1,0 +1,58 @@
+---
+description: RL subsystem boundary. Owns RLRuntime, hash-locked RLExperimentSpec, RLComponent metaclass, advantage estimators, policy backbones, weight-centric portfolio pipeline, Iceberg trajectory store.
+globs:
+  - "aqp_rl/**"
+  - "aqp/rl/**"
+  - "tests/rl/**"
+alwaysApply: false
+---
+
+# AQP RL
+
+- `aqp_rl/` owns the RL subsystem (spec, runtime, registry, core
+  abstractions, component libraries, advantage estimators, policy
+  backbones, weight-centric portfolio pipeline, Iceberg trajectory
+  store, Celery task wrapper, FastAPI route, YAML spec library, tests).
+- `aqp/rl/` is **compatibility shims only** — `aqp/rl/__init__.py`
+  re-exports `aqp_rl.*` with `DeprecationWarning`. Do not add new
+  source files under `aqp/rl/`.
+- All RL train / evaluate / paper / replay / walk-forward go through
+  [`RLRuntime`](mdc:aqp_rl/src/aqp_rl/runtime.py). Celery tasks
+  ([`aqp_rl/tasks/rl_tasks.py`](mdc:aqp_rl/tasks/rl_tasks.py)) and the
+  REST router
+  ([`aqp_rl/api/routes/rl.py`](mdc:aqp_rl/api/routes/rl.py)) wrap it —
+  never call `agent.train` directly.
+- `rl_experiment_versions` rows are immutable, hash-locked snapshots.
+  Re-snapshotting via
+  [`registry.persist_spec`](mdc:aqp_rl/src/aqp_rl/registry.py) inserts
+  a new version row when the SHA-256 hash changes.
+- Every concrete RL component registers via the
+  [`RLComponent`](mdc:aqp_rl/src/aqp_rl/core/base.py) metaclass. Set
+  `rl_kind` (one of `rl_env`, `rl_reward`, `rl_observation`,
+  `rl_action`, `rl_termination`, `rl_policy`, `rl_agent`, `rl_data`,
+  `rl_ensembler`, `rl_experiment`, `rl_advantage_estimator`,
+  `rl_policy_backbone`, `rl_trajectory_store`) and `rl_alias`.
+  Don't decorate with `@register` manually.
+- All trajectory / equity-curve / action-log / reward-decomposition
+  writes go through
+  [`IcebergTrajectoryStore`](mdc:aqp_rl/src/aqp_rl/trajectories/iceberg_writer.py)
+  → `iceberg_catalog.append_arrow`. Never call PyIceberg directly.
+- LLM calls inside `LLMHybridAgent` route through `router_complete`
+  (in the monolith at
+  [`aqp/llm/providers/router.py`](mdc:aqp/llm/providers/router.py)).
+  No direct `litellm.completion` / `OllamaClient` from RL code.
+- All weight-centric portfolio actions go through the four-stage
+  pipeline `f_S -> f_A -> f_T -> f_R` in
+  [`aqp_rl/src/aqp_rl/portfolio/pipeline.py`](mdc:aqp_rl/src/aqp_rl/portfolio/pipeline.py).
+  The risk overlay (`f_R`) re-uses `RiskLimits` +
+  `TargetWeightsRebalancer` from the monolith so offline backtest and
+  live paper-trading produce identical target-weight vectors.
+
+Validation:
+
+```bash
+cd aqp_rl
+pip install -e .
+pytest -ra
+ruff check src tests
+```

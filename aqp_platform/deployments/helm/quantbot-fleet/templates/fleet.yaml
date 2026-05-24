@@ -1,0 +1,24 @@
+apiVersion: quantbot.io/v1
+kind: BotFleet
+metadata:
+  name: {{ .Values.fleet.name }}
+  namespace: {{ .Values.fleet.namespace }}
+  labels:
+    app.kubernetes.io/name: quantbot
+    app.kubernetes.io/managed-by: helm
+    quantbot.io/fleet: {{ .Values.fleet.name | quote }}
+spec:
+  {{- with .Values.fleet.description }}
+  description: {{ . | quote }}
+  {{- end }}
+  botSelector:
+    {{- toYaml .Values.fleet.selector | nindent 4 }}
+  sharedRiskPolicyRefs:
+    {{- toYaml .Values.fleet.sharedRiskPolicyRefs | nindent 4 }}
+  {{- with .Values.fleet.maxCapitalUsd }}
+  maxCapitalUsd: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.fleet.maxBotCount }}
+  maxBotCount: {{ . }}
+  {{- end }}
+  halt: {{ .Values.fleet.halt }}

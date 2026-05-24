@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: quantbot-operator-webhook
+  namespace: aqp-bots
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: quantbot-operator
+    app.kubernetes.io/component: operator
+  ports:
+    - name: webhook
+      port: 443
+      targetPort: webhook
+      protocol: TCP
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: quantbot-operator-webhook-cert
+  namespace: aqp-bots
+spec:
+  secretName: quantbot-operator-webhook-cert
+  duration: 8760h
+  renewBefore: 720h
+  dnsNames:
+    - quantbot-operator-webhook.aqp-bots.svc
+    - quantbot-operator-webhook.aqp-bots.svc.cluster.local
+  issuerRef:
+    name: aqp-internal-ca-issuer
+    kind: ClusterIssuer

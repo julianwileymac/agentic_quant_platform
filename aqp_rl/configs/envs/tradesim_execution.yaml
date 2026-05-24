@@ -1,0 +1,10 @@
+# OPD-style order-execution env with teacher-student dual state.
+
+class: tradesim_execution
+module_path: aqp_rl.envs.tradesim_execution.OrderExecutionEnv
+kwargs:
+  initial_amount: 100000.0
+  state_length: 10
+  tech_indicator_list: [close, vwap, spread]
+  target_order: 1.0
+  teacher_lookahead: 10

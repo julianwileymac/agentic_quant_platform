@@ -1,0 +1,7 @@
+# RegimeAwareObservation — appends one-hot regime label to obs.
+
+class: regime_aware
+module_path: aqp_rl.observations.regime.RegimeAwareObservation
+kwargs:
+  n_regimes: 4
+  label_key: regime_label    # env stamps this in info

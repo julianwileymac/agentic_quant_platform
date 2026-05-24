@@ -1,79 +1,51 @@
-"""Reinforcement-learning layer — FinRL + FinRobot inspired refactor.
+"""Compatibility shim for the extracted ``aqp_rl`` package.
 
-Public surface:
+The reinforcement-learning subsystem was extracted into a top-level
+:mod:`aqp_rl` boundary package per ``aqp_docs/repository-split.md``.
+This shim aliases every submodule of :mod:`aqp_rl` under the legacy
+``aqp.rl`` name so existing imports (``from aqp.rl.runtime import
+RLRuntime`` etc.) keep working through one release cycle.
 
-- :mod:`aqp.rl.core` — abstract bases (env, observation, action, reward,
-  termination, policy, agent, data pipeline, ensembler, experiment,
-  trajectory store) plus the :class:`RLComponent` metaclass that
-  auto-registers every concrete subclass.
-- :mod:`aqp.rl.spec` — :class:`RLExperimentSpec` declarative blueprint.
-- :mod:`aqp.rl.runtime` — :class:`RLRuntime` single sanctioned executor.
-- :mod:`aqp.rl.envs` — concrete envs (existing AQP envs + FinRL ports +
-  options / execution / market-making placeholders).
-- :mod:`aqp.rl.rewards`, :mod:`aqp.rl.observations`, :mod:`aqp.rl.actions`,
-  :mod:`aqp.rl.terminations` — composable component libraries.
-- :mod:`aqp.rl.data_pipelines` — Iceberg / Yahoo / Alpaca / streaming /
-  replay data pipelines (FinRL ``DataProcessor`` parity).
-- :mod:`aqp.rl.agents` — SB3 / ElegantRL / RLlib / CleanRL / LLM-hybrid
-  adapters + classical / Q-family / actor-critic / evolutionary / SPM.
-- :mod:`aqp.rl.ensemblers` / :mod:`aqp.rl.experiments` /
-  :mod:`aqp.rl.applications` — high-level orchestration.
-- :mod:`aqp.rl.trajectories` — Iceberg-backed trajectory store + DuckDB views.
-
-Importing this module triggers eager registration of the concrete
-component libraries so the introspection routes
-(``GET /rl/components``) light up without scanning the filesystem.
+New code should import from :mod:`aqp_rl` directly.
 """
 from __future__ import annotations
 
-import contextlib as _contextlib
+import importlib as _importlib
+import pkgutil as _pkgutil
+import sys as _sys
+import warnings as _warnings
 
-from aqp.rl.agents.sb3_adapter import SB3Adapter
-from aqp.rl.envs.portfolio_env import PortfolioAllocationEnv
-from aqp.rl.envs.stock_trading_env import StockTradingEnv
-from aqp.rl.evaluator import evaluate_policy
-from aqp.rl.runtime import RLRuntime, RLRunResult, runtime_for
-from aqp.rl.spec import RLExperimentSpec
-from aqp.rl.trainer import train_from_config
+import aqp_rl as _aqp_rl
 
-# Eager imports so the metaclass registers every component on first
-# ``aqp.rl`` import. Each is wrapped to keep optional deps optional.
-with _contextlib.suppress(Exception):  # pragma: no cover
-    from aqp.rl import actions, observations, rewards, terminations  # noqa: F401
-with _contextlib.suppress(Exception):  # pragma: no cover
-    from aqp.rl import data_pipelines  # noqa: F401
-with _contextlib.suppress(Exception):  # pragma: no cover
-    from aqp.rl import ensemblers, experiments  # noqa: F401
-with _contextlib.suppress(Exception):  # pragma: no cover
-    from aqp.rl import envs  # noqa: F401
-# Hybrid agentic-RL Phase 2 + Phase 3: eager-import the new
-# advantage estimators + policy backbones so the RLComponent
-# metaclass auto-registration fires and `/rl/components/{kind}`
-# enumerates them.
-with _contextlib.suppress(Exception):  # pragma: no cover
-    from aqp.rl import advantage  # noqa: F401
-with _contextlib.suppress(Exception):  # pragma: no cover
-    from aqp.rl import policies  # noqa: F401
-# Hybrid agentic-RL Phase 1: eager-import the weight-centric
-# portfolio pipeline + RL ↔ Backtest bridge so RLBacktestEnv and
-# the WeightCentricPipeline are reachable via build_from_config.
-with _contextlib.suppress(Exception):  # pragma: no cover
-    from aqp.rl import portfolio  # noqa: F401
-with _contextlib.suppress(Exception):  # pragma: no cover
-    from aqp.rl import bridges  # noqa: F401
-with _contextlib.suppress(Exception):
-    from aqp.rl.tagging import apply_tags as _apply_rl_tags
+# Emit a one-time deprecation warning so legacy callers know to migrate.
+_warnings.warn(
+    "aqp.rl is deprecated; import from aqp_rl instead. "
+    "The compatibility shim will be removed in a future release.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-    _apply_rl_tags()
+# Eager-import every submodule of ``aqp_rl`` and alias it under
+# ``aqp.rl.<name>``. This is what makes
+# ``from aqp.rl.core.base import RLComponent`` resolve via the
+# already-imported ``aqp_rl.core.base`` rather than searching the
+# (empty) ``aqp/rl/`` package directory.
+for _modinfo in _pkgutil.walk_packages(_aqp_rl.__path__, prefix="aqp_rl."):
+    _src_name = _modinfo.name
+    _dst_name = "aqp.rl" + _src_name[len("aqp_rl"):]
+    try:
+        _mod = _importlib.import_module(_src_name)
+    except Exception:  # noqa: BLE001 - heavy optional deps may not be installed
+        continue
+    _sys.modules[_dst_name] = _mod
 
-__all__ = [
-    "PortfolioAllocationEnv",
-    "RLExperimentSpec",
-    "RLRunResult",
-    "RLRuntime",
-    "SB3Adapter",
-    "StockTradingEnv",
-    "evaluate_policy",
-    "runtime_for",
-    "train_from_config",
-]
+# Re-export the public top-level surface so ``from aqp.rl import RLRuntime``
+# still works for callers that don't reach into a submodule.
+from aqp_rl import *  # noqa: F401,F403,E402
+
+# Mirror ``__all__`` so ``from aqp.rl import *`` matches the new package.
+try:
+    from aqp_rl import __all__ as _aqp_rl__all__  # noqa: E402
+    __all__ = list(_aqp_rl__all__)
+except ImportError:  # pragma: no cover
+    __all__ = []

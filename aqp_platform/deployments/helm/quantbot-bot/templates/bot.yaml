@@ -1,0 +1,41 @@
+{{- /*
+Render one Bot CR per chart release.
+The operator handles workload rendering; this chart only writes the CR.
+*/ -}}
+apiVersion: quantbot.io/v1
+kind: Bot
+metadata:
+  name: {{ .Values.bot.name }}
+  namespace: {{ .Values.bot.namespace }}
+  labels:
+    app.kubernetes.io/name: quantbot
+    app.kubernetes.io/instance: {{ .Values.bot.name }}
+    app.kubernetes.io/managed-by: helm
+    {{- if .Values.bot.fleet }}
+    quantbot.io/fleet: {{ .Values.bot.fleet | quote }}
+    {{- end }}
+    quantbot.io/variant: {{ .Values.bot.variant | default "stable" | quote }}
+spec:
+  {{- with .Values.bot.strategyRef }}
+  strategyRef:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if .Values.bot.fleet }}
+  fleet: {{ .Values.bot.fleet | quote }}
+  {{- end }}
+  capabilities:
+    {{- toYaml .Values.bot.capabilities | nindent 4 }}
+  riskPolicyRefs:
+    {{- toYaml .Values.bot.riskPolicyRefs | nindent 4 }}
+  marketDataRefs:
+    {{- toYaml .Values.bot.marketDataRefs | nindent 4 }}
+  executionVenueRefs:
+    {{- toYaml .Values.bot.executionVenueRefs | nindent 4 }}
+  resources:
+    {{- toYaml .Values.bot.resources | nindent 4 }}
+  schedulingHints:
+    {{- toYaml .Values.bot.schedulingHints | nindent 4 }}
+  botSpec:
+    {{- toYaml .Values.bot.botSpec | nindent 4 }}
+  config:
+    {{- toYaml .Values.bot.config | nindent 4 }}

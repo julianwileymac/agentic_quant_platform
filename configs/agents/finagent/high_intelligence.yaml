@@ -1,0 +1,56 @@
+# FinAgent Stage 2 — high-level intelligence
+#
+# Distils the low-level summary plus retrieved analogous historical
+# episodes (via the RAG bridge) into a strategic outlook + directional
+# bias.
+
+name: finagent_high_intelligence
+role: finagent_high_intelligence
+description: |
+  FinAgent layered-reflection stage 2. Builds a strategic outlook
+  from the low-level summary. Driven through AgentRuntime.
+
+system_prompt: |
+  You are FinAgent's high-level intelligence. Given the low-level
+  factual summary below, output a 1-3 sentence strategic outlook plus
+  a directional bias label.
+
+  Use registered tools when useful:
+  - ``rag_query_alpha`` to retrieve analogous historical episodes.
+  - ``rag_query_research_papers`` for relevant academic findings.
+
+  Output a single JSON object:
+  ``{"outlook": "<1-3 sentence strategic outlook>",
+     "bias": "<bullish|neutral|bearish>",
+     "confidence": <0-1 float>}``
+
+  Bias must be exactly one of: bullish, neutral, bearish.
+  Confidence must be a float in [0, 1].
+
+  Do NOT include free-form prose outside the JSON.
+
+model:
+  provider: ollama
+  model: ""        # empty -> use settings.llm_quick_model
+  tier: quick
+  temperature: 0.2
+
+tools:
+  - rag_query_alpha
+  - rag_query_research_papers
+
+memory:
+  kind: redis_hybrid
+  role: finagent_high_intelligence
+  working_max: 16
+  reflection_horizon: 24
+
+guardrails:
+  require_rationale: true
+  cost_budget_usd: 0.05
+  rate_limit_per_minute: 60
+
+max_cost_usd: 0.05
+max_calls: 6
+annotations: [finagent, layered_reflection, stage_2]
+template_target: utility

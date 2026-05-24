@@ -1,0 +1,12 @@
+# FinAgent multimodal trading env (Phase 3 + 10).
+
+class: finagent_trading
+module_path: aqp_rl.envs.tradesim_multimodal.MultimodalTradingEnv
+kwargs:
+  selected_asset: AAPL
+  asset_type: company
+  look_back_days: 14
+  look_forward_days: 14
+  initial_amount: 10000.0
+  transaction_cost_pct: 0.001
+  discount: 1.0

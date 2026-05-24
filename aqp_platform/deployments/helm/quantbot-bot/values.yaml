@@ -1,0 +1,47 @@
+# Per-bot values. Layered via Argo CD multi-source Application.
+
+bot:
+  name: example-bot
+  namespace: aqp-bots
+  fleet: ""
+
+  strategyRef:
+    name: example-strategy
+    version: "1.0.0"
+
+  capabilities:
+    frequency: mid          # hft | mid | low | eod | event
+    assetClasses: []
+    venues: []
+    needsGpu: false
+    needsNumaPinning: false
+    needsHugepagesMiB: 0
+    needsSrIov: false
+    expectedP99TickToTradeUs: null
+    maxCapitalUsd: "100000"
+
+  riskPolicyRefs: []
+  marketDataRefs: []
+  executionVenueRefs: []
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+
+  schedulingHints:
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+  # Embedded BotSpec — what the bot pod actually runs.
+  botSpec:
+    name: ""
+    slug: ""
+    kind: trading
+    description: ""
+
+  config: {}

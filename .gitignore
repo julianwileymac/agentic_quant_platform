@@ -131,6 +131,15 @@ __pypackages__/
 # Celery stuff
 celerybeat-schedule
 celerybeat.pid
+.local-aqp-api.db
+
+# Build / dev / runtime scratch logs (regenerated on every boot)
+build-*.log
+tf-init.log
+response.json
+tmp_dup_check.txt
+# CI verification artifacts (recreated by `make verify` etc.)
+verification_logs/
 
 # SageMath parsed files
 *.sage.py

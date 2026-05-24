@@ -1,0 +1,53 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: quantbot-operator
+rules:
+  # Read every quantbot.io/v1 CRD.
+  - apiGroups: ["quantbot.io"]
+    resources:
+      - bots
+      - bots/status
+      - bots/finalizers
+      - strategies
+      - strategies/status
+      - riskpolicies
+      - riskpolicies/status
+      - marketdatafeeds
+      - marketdatafeeds/status
+      - executionvenues
+      - executionvenues/status
+      - backtestjobs
+      - backtestjobs/status
+      - botfleets
+      - botfleets/status
+      - canaryrollouts
+      - canaryrollouts/status
+      - killswitches
+      - killswitches/status
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Manage rendered workloads.
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Pod inspection (drain coordination).
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  # Coordination + leader election (kopf uses leases).
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Events for status reflection.
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]

@@ -19,7 +19,6 @@ from aqp.api.routes import (
     alpha_vantage,
     analysis as analysis_routes,
     analysis_agents,
-    analytics_ml as analytics_ml_routes,
     analytics_portfolio as analytics_portfolio_routes,
     airbyte,
     airbyte_builder as airbyte_builder_routes,
@@ -55,7 +54,6 @@ from aqp.api.routes import (
     memory,
     metadata_catalog,
     metadata_aspects as metadata_aspects_routes,
-    ml,
     monitoring,
     orders as orders_routes,
     paper,
@@ -63,7 +61,6 @@ from aqp.api.routes import (
     rag,
     registry,
     research_agents,
-    rl,
     sec,
     security,
     selection_agents,
@@ -167,6 +164,15 @@ from aqp.api.routes import (  # noqa: E402
 # Simulation). REST + WebSocket surface, gated by settings.aqp_lab_enabled.
 from aqp.api.routes import (  # noqa: E402
     lab as lab_routes,
+)
+# RL + ML routers were extracted into the ``aqp_rl`` and ``aqp_models``
+# boundary packages. Import them from their new homes; the mount paths
+# ( ``/rl``, ``/ml``, ``/analytics/ml`` ) stay identical so the
+# operator UI + generated TS client are unaffected.
+from aqp_rl.api.routes import rl  # noqa: E402
+from aqp_models.api.routes import (  # noqa: E402
+    ml,
+    analytics_ml as analytics_ml_routes,
 )
 from aqp.config import settings
 from aqp.observability import (

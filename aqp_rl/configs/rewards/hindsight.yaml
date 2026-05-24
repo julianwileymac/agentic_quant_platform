@@ -1,0 +1,9 @@
+# Hindsight reward (DeepScalper / Sun et al. CIKM 2022).
+# Auxiliary training-only forward-aware reward — degrades to
+# immediate-PnL term at inference when ``future_price`` is absent.
+
+class: hindsight
+module_path: aqp_rl.rewards.hindsight.HindsightReward
+kwargs:
+  weight: 1.0
+  future_weight: 0.2     # λ on the k-bar forward PnL

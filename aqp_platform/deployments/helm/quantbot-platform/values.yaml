@@ -1,0 +1,89 @@
+# Default values for quantbot-platform.
+# Override these via values-{platform,env,fleet,bot,strategy}.yaml in the
+# Argo CD multi-source Application (see blueprint §L.2 — we avoid the
+# extra-helm-layer trap by NOT using subchart inheritance).
+
+global:
+  imageRegistry: ghcr.io/aqp
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  otel:
+    enabled: true
+    endpoint: http://otel-collector.observability.svc:4317
+    sampleRatio: "1.0"
+  namespace: aqp-bots
+
+operator:
+  enabled: true
+  image:
+    repository: quantbot-operator
+    tag: "latest"
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+  logLevel: INFO
+  webhook:
+    enabled: true
+    certManager:
+      enabled: true
+      issuerRef:
+        name: aqp-internal-ca-issuer
+        kind: ClusterIssuer
+
+crds:
+  install: true   # CRD installer Job
+  preserveOnUninstall: true
+
+riskService:
+  enabled: true
+  image:
+    repository: quantbot-risk-service
+    tag: "latest"
+  replicaCount: 2  # HA — broker-dealer control requires no single point of failure
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2
+      memory: 2Gi
+
+hftNodes:
+  enabled: false
+  taint:
+    key: quantbot.io/hft
+    value: "true"
+    effect: NoSchedule
+  ptp:
+    enabled: true
+  srIov:
+    enabled: true
+  hugepages:
+    enabled: true
+    pagesPerNode: 1024  # 1024 * 2MiB = 2 GiB
+
+argoRollouts:
+  enabled: true
+  defaultCanarySteps:
+    - setWeight: 10
+    - pause: { duration: 30m }
+    - analysis: { templates: [bot-canary-pnl] }
+    - setWeight: 50
+    - pause: { duration: 1h }
+    - analysis: { templates: [bot-canary-pnl] }
+    - setWeight: 100
+
+prometheus:
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+  rules:
+    enabled: true
+
+cert-manager:
+  enabled: false   # set true if cert-manager isn't already in cluster

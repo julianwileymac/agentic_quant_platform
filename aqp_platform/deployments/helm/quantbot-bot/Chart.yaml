@@ -1,0 +1,12 @@
+apiVersion: v2
+name: quantbot-bot
+description: |
+  Library chart for one QuantBot Bot CR. The Argo CD ApplicationSet
+  template (see ../../argocd/applicationsets/bot-fleet.yaml)
+  instantiates one Application per Bot via a matrix generator.
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+keywords:
+  - quantbot
+  - bot

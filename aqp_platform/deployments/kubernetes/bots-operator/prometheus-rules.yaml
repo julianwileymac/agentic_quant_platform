@@ -1,0 +1,92 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: quantbot-bots-rules
+  namespace: aqp-bots
+  labels:
+    app.kubernetes.io/part-of: quantbot-platform
+spec:
+  groups:
+    # RTS 6 Art. 16(5) — alerts within 5 seconds. We use a 15s
+    # evaluation interval with for=0s on critical signals to stay
+    # comfortably within budget.
+    - name: quantbot.bots.critical
+      interval: 15s
+      rules:
+        - alert: BotErrorRateHigh
+          expr: |
+            sum by (bot_id, variant) (
+              rate(quantbot_orders_rejected_total[1m])
+            )
+            /
+            sum by (bot_id, variant) (
+              rate(quantbot_orders_total[1m])
+            )
+            > 0.05
+          for: 30s
+          labels:
+            severity: page
+            quantbot_io_alert_class: error_rate
+          annotations:
+            summary: "Bot {{ $labels.bot_id }} rejection rate above 5%"
+            runbook_url: "https://docs.aqp.io/runbooks/bot-error-rate"
+
+        - alert: BotPnLDrawdownCritical
+          expr: |
+            (
+              quantbot_realized_pnl_usd{variant="canary"}
+              -
+              quantbot_realized_pnl_usd{variant="stable"}
+            ) < -500
+          for: 0s   # immediate page
+          labels:
+            severity: page
+            quantbot_io_alert_class: pnl_drawdown
+            quantbot_io_action: kill_switch
+          annotations:
+            summary: "Bot {{ $labels.bot_id }} canary bleed > $500 vs stable"
+            runbook_url: "https://docs.aqp.io/runbooks/canary-pnl-bleed"
+
+        - alert: BotLatencyP99High
+          expr: |
+            histogram_quantile(0.99,
+              sum by (bot_id, variant, le) (
+                rate(quantbot_tick_to_trade_seconds_bucket{capability_frequency="hft"}[5m])
+              )
+            ) > 0.001
+          for: 1m
+          labels:
+            severity: page
+            quantbot_io_alert_class: latency
+          annotations:
+            summary: "HFT bot {{ $labels.bot_id }} P99 tick-to-trade > 1ms"
+
+        - alert: BotKillSwitchEngaged
+          expr: increase(quantbot_kill_switch_engagements_total[5m]) > 0
+          for: 0s
+          labels:
+            severity: page
+            quantbot_io_alert_class: kill_switch
+          annotations:
+            summary: "Kill switch engaged at scope {{ $labels.scope }}"
+
+    - name: quantbot.bots.warnings
+      interval: 30s
+      rules:
+        - alert: BotQueueDepthHigh
+          expr: max by (bot_id, topic) (quantbot_queue_depth) > 2000
+          for: 5m
+          labels:
+            severity: warning
+            quantbot_io_alert_class: backpressure
+          annotations:
+            summary: "Bot {{ $labels.bot_id }} bus queue {{ $labels.topic }} depth high"
+
+        - alert: BotReconcileMismatches
+          expr: increase(quantbot_reconcile_mismatch_count[10m]) > 5
+          for: 0s
+          labels:
+            severity: warning
+            quantbot_io_alert_class: reconciliation
+          annotations:
+            summary: "Bot reconciliation mismatches on venue {{ $labels.venue }}"

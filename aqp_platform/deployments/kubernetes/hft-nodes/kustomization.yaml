@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aqp-bots
+
+resources:
+  - ptp-config.yaml
+  - hugepages-allocation.yaml
+
+# The cluster-level configs below are applied via the Node Tuning
+# Operator + SR-IOV Network Operator + kubelet drop-in; kustomize
+# can't apply them directly because they require operator CRDs that
+# may not be installed in every environment.
+# Listed here as references — the operator (Phase 8) validates that
+# at least one of:
+#   - quantbot.io/hft node label
+#   - PTP DaemonSet running
+#   - SR-IOV VF available
+# is present before scheduling an HFT bot.
+#
+# Apply manually or via the platform's GitOps overlay:
+#   kubectl apply -f kubelet-config.yaml
+#   kubectl apply -f node-tuning-operator.yaml
+#   kubectl apply -f sr-iov-config.yaml

@@ -3,14 +3,17 @@ description: Hash-locked spec runtimes (AgentRuntime / BotRuntime / RLRuntime / 
 globs:
   - aqp/agents/**/*.py
   - aqp/bots/**/*.py
+  - aqp_bots/**/*.py
   - aqp/rl/**/*.py
+  - aqp_rl/src/aqp_rl/**/*.py
+  - aqp_rl/tests/**/*.py
   - aqp/analysis/**/*.py
   - configs/agents/**/*.yaml
   - configs/bots/**/*.yaml
-  - configs/rl/**/*.yaml
+  - aqp_rl/configs/**/*.yaml
   - tests/agents/**/*.py
   - tests/bots/**/*.py
-  - tests/rl/**/*.py
+  - aqp_rl/tests/**/*.py
   - tests/analysis/**/*.py
 alwaysApply: false
 ---
@@ -30,7 +33,7 @@ these directories.
 | --- | --- | --- | --- |
 | [`AgentSpec`](mdc:aqp/agents/spec.py) | [`AgentRuntime`](mdc:aqp/agents/runtime.py) | `agent_spec_versions` | [aqp_docs/agents.md](mdc:aqp_docs/agents.md) |
 | [`BotSpec`](mdc:aqp/bots/spec.py) | [`BotRuntime`](mdc:aqp/bots/runtime.py) | `bot_versions` | [aqp_docs/bots.md](mdc:aqp_docs/bots.md) |
-| [`RLExperimentSpec`](mdc:aqp/rl/spec.py) | [`RLRuntime`](mdc:aqp/rl/runtime.py) | `rl_experiment_versions` | [aqp_docs/rl-framework.md](mdc:aqp_docs/rl-framework.md) |
+| [`RLExperimentSpec`](mdc:aqp_rl/src/aqp_rl/spec.py) | [`RLRuntime`](mdc:aqp_rl/src/aqp_rl/runtime.py) | `rl_experiment_versions` | [aqp_docs/rl-framework.md](mdc:aqp_docs/rl-framework.md) |
 | [`AnalysisSpec`](mdc:aqp/analysis/spec.py) | [`AnalysisRuntime`](mdc:aqp/analysis/runtime.py) | `analysis_spec_versions` | [aqp_docs/analysis-framework.md](mdc:aqp_docs/analysis-framework.md) |
 
 ## Hard rules
@@ -46,8 +49,8 @@ these directories.
      `AgentRuntime` directly from a bot subclass. Derive the cfg in
      `BaseBot._derive_*_cfg`.
    - RL: `RLRuntime.{train,evaluate,paper,replay,walk_forward}(...)` —
-     Celery tasks (`aqp.tasks.rl_tasks`) and API routes
-     (`aqp.api.routes.rl`) wrap it. Never call `agent.train` directly.
+     Celery tasks (`aqp_rl.tasks.rl_tasks`) and API routes
+     (`aqp_rl.api.routes.rl`) wrap it. Never call `agent.train` directly.
    - Analysis: `AnalysisRuntime.{run,preview}(...)` — Celery tasks
      ([aqp/tasks/analysis_flow_tasks.py](mdc:aqp/tasks/analysis_flow_tasks.py))
      and the REST router
@@ -64,7 +67,7 @@ these directories.
    author a new spec, snapshot it, switch traffic.
 4. **LLM calls in agent / RL bodies still route through
    `router_complete`.** `LLMHybridAgent`
-   ([aqp/rl/agents/llm_hybrid.py](mdc:aqp/rl/agents/llm_hybrid.py))
+   ([aqp_rl/src/aqp_rl/agents/llm_hybrid.py](mdc:aqp_rl/src/aqp_rl/agents/llm_hybrid.py))
    and `AgentRuntime` both go through
    [aqp/llm/providers/router.py](mdc:aqp/llm/providers/router.py). No
    direct `litellm.completion` / `OllamaClient`.
@@ -73,11 +76,12 @@ these directories.
    registered `DataMCPTool`. See
    [data-mcp.mdc](mdc:.cursor/rules/data-mcp.mdc) for the boundary
    contract and adoption checklist.
-6. **RL components register via the [`RLComponent`](mdc:aqp/rl/core/base.py)
+6. **RL components register via the [`RLComponent`](mdc:aqp_rl/src/aqp_rl/core/base.py)
    metaclass.** Set `rl_kind` (one of `rl_env` / `rl_reward` /
    `rl_observation` / `rl_action` / `rl_termination` / `rl_policy` /
    `rl_agent` / `rl_data` / `rl_ensembler` / `rl_experiment` /
-   `rl_trajectory_store`) and `rl_alias` — the metaclass calls
+   `rl_trajectory_store` / `rl_advantage_estimator` /
+   `rl_policy_backbone`) and `rl_alias` — the metaclass calls
    `@register` automatically. Don't decorate manually.
 7. **Analysis flows register via `@register_analysis_flow`.**
    Subclass [`FlowParams`](mdc:aqp/analysis/base.py) for params; the
@@ -114,7 +118,7 @@ these directories.
   [`RedisHybridMemory`](mdc:aqp/llm/memory.py).
 - Don't write RL trajectories / equity / actions / reward-decomp
   directly to Iceberg — buffer through
-  [`IcebergTrajectoryStore`](mdc:aqp/rl/trajectories/iceberg_writer.py).
+  [`IcebergTrajectoryStore`](mdc:aqp_rl/src/aqp_rl/trajectories/iceberg_writer.py).
 - Don't write analysis output to a non-`aqp_gold_analysis_*`
   namespace. The default tail is
   `aqp_gold_analysis_<flow.namespace>`; override via

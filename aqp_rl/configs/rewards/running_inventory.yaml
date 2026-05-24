@@ -1,0 +1,10 @@
+# Cartea-Jaimungal-Penalva running + terminal inventory penalty.
+
+class: running_inventory
+module_path: aqp_rl.rewards.inventory.RunningInventoryPenalty
+kwargs:
+  weight: 1.0
+  phi: 1.0e-4            # running inventory-variance penalty
+  alpha: 1.0e-3          # terminal inventory penalty (push to flat)
+  dt: 1.0                # step duration
+  include_pnl: true      # compose with the agent's PnL contribution

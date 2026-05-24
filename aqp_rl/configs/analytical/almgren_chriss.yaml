@@ -1,0 +1,12 @@
+# Almgren-Chriss 2001 worked-example defaults (paper §2).
+# Used by AlmgrenChrissResidualPolicy.
+
+total_shares: 1000000.0
+liquidation_time: 5.0          # days
+num_trades: 5
+gamma: 2.5e-7                  # permanent impact slope
+eta: 2.5e-6                    # temporary impact slope
+epsilon: 0.0625                # half-spread per share
+sigma: 0.95                    # mid-price vol (dollars / sqrt(day))
+risk_aversion: 1.0e-6          # λ
+# ⇒ κ ≈ 0.6164 / day per the paper.

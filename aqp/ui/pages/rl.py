@@ -8,7 +8,11 @@ import yaml
 
 from aqp.ui.api_client import post
 
-_RL_DIR = Path("configs/rl")
+# RL configs were extracted to ``aqp_rl/configs/`` per the boundary split.
+# Legacy ``configs/rl`` is checked as a fallback for repos still on the
+# pre-extraction layout.
+_CANDIDATES = [Path("aqp_rl/configs"), Path("configs/rl")]
+_RL_DIR = next((p for p in _CANDIDATES if p.exists()), _CANDIDATES[0])
 
 
 @solara.component

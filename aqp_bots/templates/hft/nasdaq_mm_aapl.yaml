@@ -1,0 +1,134 @@
+name: NASDAQ MM AAPL
+slug: nasdaq-mm-aapl
+kind: trading
+description: >-
+  HFT market maker on AAPL via NASDAQ ITCH (market data) + OUCH
+  (execution). Avellaneda-Stoikov-style two-sided quoting with the
+  Lucic-Tse portfolio overlay. Pinned to a dedicated NUMA-0 node
+  with HugePages + SR-IOV. Full RTS 6 Article 15 policy bundle.
+
+universe:
+  symbols:
+    - AAPL.NASDAQ
+
+data_pipeline:
+  preset: market-data-realtime
+  source: nasdaq
+
+strategy:
+  class: AgenticVbtAlpha
+  module_path: aqp.strategies.vbtpro.alphas
+  kwargs:
+    universe_model:
+      class: StaticUniverse
+      module_path: aqp.strategies.universes
+      kwargs:
+        symbols: [AAPL.NASDAQ]
+    alpha_model:
+      class: AvellanedaStoikovAlpha
+      module_path: aqp.strategies.market_making
+      kwargs:
+        gamma: 0.1
+        sigma: 0.02
+        kappa: 1.5
+    portfolio_model:
+      class: TargetWeightsRebalancer
+      module_path: aqp.strategies.portfolio_construction
+    risk_model:
+      class: NoOpRiskModel
+      module_path: aqp.strategies.risk_models
+    execution_model:
+      class: ImmediateExecutionModel
+      module_path: aqp.strategies.execution_models
+
+backtest:
+  engine: hftbacktest:lob
+  kwargs:
+    initial_cash: 5000000.0
+    latency_profile: us-equities-direct
+
+# QuantBot Platform Phase 1+ capability declaration.
+capabilities:
+  frequency: hft
+  asset_classes: [equity]
+  venues: [nasdaq]
+  needs_numa_pinning: true
+  needs_hugepages_mib: 1024
+  needs_sr_iov: true
+  expected_p99_tick_to_trade_us: 50
+  max_capital_usd: "5000000"
+
+data_layer:
+  adapters: [nasdaq_itch]
+  subscriptions:
+    - { symbol: AAPL.NASDAQ, channels: [trades, quotes, l2_book], depth: 10 }
+  normalization: nasdaq_native_ns
+
+strategy_layer:
+  execution_algo:
+    class: AvellanedaStoikovMM
+    module_path: aqp.strategies.market_making
+    kwargs: { tick_size: 0.01, max_inventory: 1000 }
+  warmup_bars: 60
+
+risk_layer:
+  layer1_policies:
+    - PriceCollarPolicy
+    - MaxOrderValuePolicy
+    - MaxOrderVolumePolicy
+    - MaxMessagesPerSecondPolicy
+    - RepeatedExecutionThrottlePolicy
+    - InstrumentAllowlistPolicy
+    - VolatilityCircuitBreakerPolicy
+    - FatFingerPolicy
+  price_collar_bps: 50
+  max_order_value_usd: "100000"
+  max_order_qty: "5000"
+  max_messages_per_second: 100
+  repeated_execution_throttle_ms: 1
+  instrument_allowlist: [AAPL.NASDAQ]
+
+execution_layer:
+  adapters: [nasdaq_ouch]
+  smart_order_router: latency_aware
+  default_order_type: limit
+  reconcile_interval_ms: 100
+  drop_copy_enabled: true
+
+state_layer:
+  mode: async      # async event journal for HFT — durability favors latency
+  snapshot_interval_seconds: 30
+
+telemetry:
+  hft_mode: true
+  p99_alert_threshold_us: 100
+
+lifecycle:
+  drain_timeout_seconds: 30
+  flatten_on_drain: true
+  environment: paper
+
+metrics:
+  - { name: sharpe, threshold: 2.0, direction: max }
+  - { name: tick_to_trade_us, threshold: 100, direction: min }
+  - { name: max_drawdown, threshold: 0.05, direction: min }
+
+risk:
+  max_position_pct: 0.10
+  max_daily_loss_pct: 0.005
+  max_drawdown_pct: 0.05
+
+deployment:
+  target: kubernetes
+  namespace: aqp-bots
+  initial_cash: 5000000.0
+  heartbeat_seconds: 5
+  dry_run: false
+  resources:
+    requests: { cpu: "8", memory: "16Gi", hugepages-2Mi: "1Gi" }
+    limits:   { cpu: "8", memory: "16Gi", hugepages-2Mi: "1Gi" }
+
+annotations:
+  - hft
+  - market_maker
+  - nasdaq

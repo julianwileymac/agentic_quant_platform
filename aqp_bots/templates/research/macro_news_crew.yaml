@@ -1,0 +1,80 @@
+name: Macro News Research Crew
+slug: macro-news-crew
+kind: research
+description: >-
+  Multi-agent research bot — LangGraph orchestrates a four-agent crew
+  (data_collector / sentiment / technical / consensus) on a 15-minute
+  cadence to produce macro outlook reports. LLM calls go through
+  ``router_complete`` per hard rule 2; the bot stays on the slow
+  alpha-source path (blueprint §E.3) so its tokens-per-decision is
+  budgeted independently from the execution path.
+
+universe:
+  symbols: [SPY.NYSE, QQQ.NASDAQ, IWM.NYSE, GLD.NYSE, TLT.NASDAQ]
+
+capabilities:
+  frequency: low
+  asset_classes: [equity]
+  venues: []
+  max_capital_usd: "0"  # research-only — no capital deployed
+
+agents:
+  - spec_name: research.macro_collector
+    role: data_collector
+    inputs_template:
+      sources: [reuters, bloomberg, fed_calendar]
+  - spec_name: research.macro_sentiment
+    role: sentiment
+    inputs_template:
+      window_hours: 24
+  - spec_name: research.macro_technical
+    role: technical
+    inputs_template:
+      lookback_days: 60
+  - spec_name: research.macro_consensus
+    role: consensus
+    inputs_template:
+      voting: weighted
+
+rag:
+  - levels: [l1, l2]
+    orders: [first, second]
+    corpora: [bars_daily, macro_news, fed_speeches]
+    per_level_k: 5
+    final_k: 12
+  - levels: [l3]
+    orders: [third]
+    corpora: [bls_releases, sec_filings, fomc_minutes]
+    per_level_k: 3
+    final_k: 8
+
+risk_layer:
+  layer1_policies: []   # research bot — no orders to gate
+
+execution_layer:
+  adapters: []
+
+telemetry:
+  hft_mode: false
+
+lifecycle:
+  drain_timeout_seconds: 60
+  environment: paper
+
+metrics:
+  - { name: cost_usd_per_turn, threshold: 2.50, direction: min }
+  - { name: avg_latency_seconds, threshold: 30, direction: min }
+  - { name: avg_confidence, threshold: 0.6, direction: max }
+
+deployment:
+  target: backtest_only
+  namespace: aqp-bots
+  initial_cash: 0.0
+  heartbeat_seconds: 900   # 15 minutes
+  dry_run: true
+
+annotations:
+  - research
+  - llm_crew
+  - macro
+  - langgraph

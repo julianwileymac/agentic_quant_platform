@@ -1,0 +1,62 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: executionvenues.quantbot.io
+spec:
+  group: quantbot.io
+  scope: Namespaced
+  names:
+    kind: ExecutionVenue
+    listKind: ExecutionVenueList
+    plural: executionvenues
+    singular: executionvenue
+    shortNames: [exvenue]
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Venue
+          type: string
+          jsonPath: .spec.venue
+        - name: Transport
+          type: string
+          jsonPath: .spec.transport
+        - name: DropCopy
+          type: boolean
+          jsonPath: .spec.dropCopy.enabled
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                venue: { type: string }
+                transport:
+                  type: string
+                  enum: [fix, rest, grpc, onchain, bridge]
+                adapter: { type: string }
+                endpoint: { type: string }
+                credentialsRef:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    key: { type: string }
+                supportedOrderTypes:
+                  type: array
+                  items: { type: string }
+                maxOrdersPerSecond: { type: integer }
+                dropCopy:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                extras:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true

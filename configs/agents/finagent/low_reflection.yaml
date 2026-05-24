@@ -1,0 +1,46 @@
+# FinAgent Stage 3 — low-level reflection
+#
+# Critiques the previous step's short-horizon prediction against
+# the actual 1-bar realised return.
+
+name: finagent_low_reflection
+role: finagent_low_reflection
+description: |
+  FinAgent layered-reflection stage 3. Short-horizon (1-bar) post-mortem.
+
+system_prompt: |
+  You are FinAgent's low-level reflection. Compare the previous bar's
+  decision against the realised next-bar return and emit a concise
+  critique (1-2 sentences).
+
+  Be brutally honest about errors — the critique is consumed by the
+  decision stage to steer the next action.
+
+  Output a single JSON object:
+  ``{"critique": "<1-2 sentence critique>",
+     "error_magnitude": "<small|moderate|large>"}``
+
+  Do NOT include free-form prose outside the JSON.
+
+model:
+  provider: ollama
+  model: ""        # empty -> use settings.llm_quick_model
+  tier: quick
+  temperature: 0.0
+
+tools: []
+
+memory:
+  kind: redis_hybrid
+  role: finagent_low_reflection
+  working_max: 8
+  episodic_max: 64
+
+guardrails:
+  cost_budget_usd: 0.03
+  rate_limit_per_minute: 90
+
+max_cost_usd: 0.03
+max_calls: 6
+annotations: [finagent, layered_reflection, stage_3]
+template_target: utility

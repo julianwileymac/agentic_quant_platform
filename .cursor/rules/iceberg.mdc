@@ -48,7 +48,7 @@ This rule scopes the Iceberg-write contract that AGENTS.md hard rules
    - `aqp_gold_analysis_<flow.namespace>` — owned by
      [`AnalysisRuntime`](mdc:aqp/analysis/runtime.py)
    - RL trajectory tables — owned by
-     [`IcebergTrajectoryStore`](mdc:aqp/rl/trajectories/iceberg_writer.py)
+     [`IcebergTrajectoryStore`](mdc:aqp_rl/src/aqp_rl/trajectories/iceberg_writer.py)
 4. **Never write trajectory / RL / analysis output through
    `append_arrow` directly from those subsystems.** Use the
    subsystem-specific buffer:

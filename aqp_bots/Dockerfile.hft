@@ -1,0 +1,81 @@
+# syntax=docker/dockerfile:1.7
+# QuantBot Platform — HFT bot runtime (Debian-slim + kernel-bypass libs).
+#
+# Distroless is incompatible with kernel-bypass user-space libs (DPDK,
+# Solarflare Onload, Mellanox OFED) so HFT bots run on a hardened
+# slim Debian image instead. Still: read-only root FS, non-root UID,
+# ALL caps dropped except those required by the bypass driver.
+
+# ============== STAGE 1: builder ==============
+FROM python:3.12-slim-bookworm AS builder
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_INSTALL_DIR=/python \
+    UV_PYTHON_PREFERENCE=only-managed \
+    PYTHONDONTWRITEBYTECODE=1
+
+COPY --from=ghcr.io/astral-sh/uv:0.6.0 /uv /uvx /bin/
+
+# Build tools + Cython compiler for the SPSC ring extension + kernel
+# headers (DPDK + Onload SDK link against them).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        gcc \
+        python3-dev \
+        linux-headers-amd64 \
+        libnuma-dev \
+        libcap2-bin \
+        linuxptp \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN uv python install 3.12
+
+WORKDIR /app
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=aqp_bots/uv.lock,target=uv.lock \
+    --mount=type=bind,source=aqp_bots/pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project --no-dev --extra hft
+
+COPY aqp_bots /app/aqp_bots
+COPY aqp /app/aqp
+COPY aqp_platform_core /app/aqp_platform_core
+RUN --mount=type=cache,target=/root/.cache/uv \
+    cd /app/aqp_bots && uv sync --frozen --no-dev --extra hft
+
+# Build the Cython SPSC ring extension.
+RUN /app/aqp_bots/.venv/bin/python -c \
+    "from Cython.Build import cythonize; cythonize('/app/aqp_bots/aqp_bots/hft/_ring_buffer_cy.pyx', language_level=3)"
+
+# ============== STAGE 2: runtime (hardened Debian-slim) ==============
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libnuma1 \
+        linuxptp \
+        ethtool \
+        kmod \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 65532 quantbot \
+    && useradd  --system --uid 65532 --gid 65532 --no-create-home --shell /sbin/nologin quantbot
+
+COPY --from=builder /python /python
+COPY --from=builder /app/aqp_bots/.venv /app/.venv
+COPY --from=builder /app/aqp_bots /app/aqp_bots
+COPY --from=builder /app/aqp /app/aqp
+COPY --from=builder /app/aqp_platform_core /app/aqp_platform_core
+
+ENV PATH=/app/.venv/bin:/python/bin:$PATH \
+    PYTHONPATH=/app:/app/aqp_bots:/app/aqp_platform_core/src \
+    PYTHONHASHSEED=random \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    AQP_BOTS_LOG_LEVEL=INFO
+
+WORKDIR /app
+USER 65532:65532
+
+EXPOSE 9090
+
+ENTRYPOINT ["python", "-m", "aqp_bots.cli"]

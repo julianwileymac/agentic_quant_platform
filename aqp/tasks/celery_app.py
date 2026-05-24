@@ -25,19 +25,29 @@ celery_app = Celery(
     backend=settings.redis_url,
     include=[
         "aqp.tasks.backtest_tasks",
-        "aqp.tasks.training_tasks",
+        # ML training (legacy ``training_tasks`` train_rl/evaluate_rl) — moved
+        # to ``aqp_models`` per the boundary split. Task ``name=`` strings
+        # keep the legacy ``aqp.tasks.training_tasks.*`` prefix for in-flight
+        # message compatibility.
+        "aqp_models.tasks.training_tasks",
         "aqp.tasks.agent_tasks",
         "aqp.tasks.chat_tasks",
         "aqp.tasks.agentic_backtest_tasks",
-        "aqp.tasks.finetune_tasks",
+        # LLM finetune trainer — moved to ``aqp_models``. Task ``name=`` strings
+        # keep the legacy ``aqp.tasks.finetune_tasks.*`` prefix.
+        "aqp_models.tasks.finetune_tasks",
         "aqp.tasks.ingestion_tasks",
         # Phase 3 (data fabric refactor) — feed/catalog sync tasks.
         "aqp.tasks.instrument_catalog_tasks",
         "aqp.tasks.data_sync_tasks",
         "aqp.tasks.paper_tasks",
         "aqp.tasks.factor_tasks",
-        "aqp.tasks.ml_tasks",
-        "aqp.tasks.ml_test_tasks",
+        # ML training + test workbench — moved to ``aqp_models``. Task
+        # ``name=`` strings keep the legacy ``aqp.tasks.ml_tasks.*`` /
+        # ``aqp.tasks.ml_test_tasks.*`` prefixes for in-flight message
+        # compatibility.
+        "aqp_models.tasks.ml_tasks",
+        "aqp_models.tasks.ml_test_tasks",
         "aqp.tasks.optimize_tasks",
         "aqp.tasks.feature_set_tasks",
         "aqp.tasks.equity_report_tasks",
@@ -71,7 +81,10 @@ celery_app = Celery(
         # Data layer expansion: scheduling + streaming link refresh.
         "aqp.tasks.streaming_link_tasks",
         # RL layer (FinRL + FinRobot inspired refactor) — runtime-driven tasks.
-        "aqp.tasks.rl_tasks",
+        # Moved to ``aqp_rl`` per the boundary split. Task ``name=`` strings
+        # keep the legacy ``aqp.tasks.rl_tasks.*`` prefix for in-flight
+        # message compatibility.
+        "aqp_rl.tasks.rl_tasks",
         # Analysis umbrella (hash-locked AnalysisSpec + flow catalog).
         "aqp.tasks.analysis_flow_tasks",
         # Self-service data fabric — interactive Dagster sandbox (phase 3).

@@ -1,0 +1,53 @@
+# FinAgent Stage 5 — decision
+#
+# Synthesises stages 1-4 into a final SELL / HOLD / BUY action
+# and a confidence score.
+
+name: finagent_decision
+role: finagent_decision
+description: |
+  FinAgent layered-reflection stage 5. Emits the final action.
+
+system_prompt: |
+  You are FinAgent's decision-maker. Synthesise the upstream stages
+  into a single trading action.
+
+  Use the registered ``strategy_agents_query`` tool to consult other
+  registered RL agents (e.g. the EIIE / DeepTrader / PPO ensemble) and
+  weight their consensus against your own analysis.
+
+  Output a single JSON object:
+  ``{"action": "<SELL|HOLD|BUY>",
+     "confidence": <0-1 float>,
+     "rationale": "<1-2 sentence justification>"}``
+
+  Action must be exactly one of: SELL, HOLD, BUY.
+  Confidence must be a float in [0, 1].
+
+  Do NOT include free-form prose outside the JSON.
+
+model:
+  provider: ollama
+  model: ""        # empty -> use settings.llm_quick_model
+  tier: quick
+  temperature: 0.0
+
+tools:
+  - strategy_agents_query
+
+memory:
+  kind: redis_hybrid
+  role: finagent_decision
+  working_max: 12
+  episodic_max: 96
+
+guardrails:
+  require_rationale: true
+  cost_budget_usd: 0.05
+  rate_limit_per_minute: 30
+  forbidden_terms: ["guaranteed", "risk free"]
+
+max_cost_usd: 0.05
+max_calls: 8
+annotations: [finagent, layered_reflection, stage_5, decision]
+template_target: utility

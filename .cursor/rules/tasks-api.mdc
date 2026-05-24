@@ -92,7 +92,7 @@ it instead of creating a new one:
 | --- | --- |
 | `AgentRuntime` | `aqp/tasks/agent_tasks.py` (and friends) |
 | `BotRuntime` | [aqp/tasks/bot_tasks.py](mdc:aqp/tasks/bot_tasks.py) |
-| `RLRuntime` | [aqp/tasks/rl_tasks.py](mdc:aqp/tasks/rl_tasks.py) |
+| `RLRuntime` | [aqp_rl/tasks/rl_tasks.py](mdc:aqp_rl/tasks/rl_tasks.py) |
 | `AnalysisRuntime` | [aqp/tasks/analysis_flow_tasks.py](mdc:aqp/tasks/analysis_flow_tasks.py) |
 
 These wrappers are thin — they instantiate the runtime, call the

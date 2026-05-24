@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from aqp.ml.dataset import materialize_segments
-from aqp.ml.planning import build_split_plan
+from aqp_models.dataset import materialize_segments
+from aqp_models.planning import build_split_plan
 
 
 def _one_symbol(frame: pd.DataFrame) -> pd.DataFrame:

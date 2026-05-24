@@ -9,7 +9,7 @@ import pytest
 pytest.importorskip("sklearn")
 
 from aqp.core.types import Direction, Symbol  # noqa: E402
-from aqp.ml.models.naive_bayes import NaiveBayesSentimentModel  # noqa: E402
+from aqp_models.models.naive_bayes import NaiveBayesSentimentModel  # noqa: E402
 from aqp.strategies.ml.nb_sentiment import NaiveBayesSentimentAlpha  # noqa: E402
 
 

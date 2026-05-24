@@ -8,6 +8,7 @@ runs hermetic when an extra (e.g. pyarrow, redis) isn't installed.
 from __future__ import annotations
 
 from aqp.data.datasets.kinds.api import APIDataset
+from aqp.data.datasets.kinds.csdi_imputed import CSDIImputedDataset
 from aqp.data.datasets.kinds.csv import CSVDataset
 from aqp.data.datasets.kinds.external import ExternalDataset
 from aqp.data.datasets.kinds.hudi import HudiDataset
@@ -21,6 +22,7 @@ from aqp.data.datasets.kinds.sql import SQLDataset
 
 __all__ = [
     "APIDataset",
+    "CSDIImputedDataset",
     "CSVDataset",
     "ExternalDataset",
     "HudiDataset",

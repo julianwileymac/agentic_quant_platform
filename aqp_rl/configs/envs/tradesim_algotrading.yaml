@@ -1,0 +1,12 @@
+# Synthetic single-asset algorithmic trading env (DeepScalper).
+
+class: tradesim_algotrading
+module_path: aqp_rl.envs.tradesim_algotrading.AlgorithmicTradingEnv
+kwargs:
+  initial_amount: 100000.0
+  transaction_cost_pct: 0.001
+  tech_indicator_list: [close, rsi, macd]
+  backward_num_day: 10
+  forward_num_day: 5
+  max_volume: 1
+  future_weights: 0.2

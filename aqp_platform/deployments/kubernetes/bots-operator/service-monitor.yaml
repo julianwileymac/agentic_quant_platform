@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: quantbot-bots
+  namespace: aqp-bots
+  labels:
+    app.kubernetes.io/part-of: quantbot-platform
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: quantbot
+  namespaceSelector:
+    matchNames:
+      - aqp-bots
+  endpoints:
+    - port: health
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s

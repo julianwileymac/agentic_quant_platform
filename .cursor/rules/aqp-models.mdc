@@ -1,0 +1,55 @@
+---
+description: Custom model boundary. Owns ML framework, Predictor Hub, AlphaBacktestExperiment, walk-forward, finetune trainers, model implementations (tree / linear / sklearn / forecast / anomaly / keras / tensorflow / huggingface / SAE / SPM / torch zoo), and the custom model-serving slice of aqp/llm/ (vLLM + Ollama).
+globs:
+  - "aqp_models/**"
+  - "aqp/ml/**"
+  - "tests/ml/**"
+alwaysApply: false
+---
+
+# AQP Models
+
+- `aqp_models/` owns custom model pulling, building, training,
+  fine-tuning, evaluating, and testing — the qlib-style ML framework,
+  Predictor Hub, AlphaBacktestExperiment, walk-forward, finetune
+  trainers, every model implementation (tree / linear / sklearn /
+  forecast / anomaly / keras / tensorflow / huggingface / SAE / SPM /
+  torch zoo), and the custom model-serving slice of `aqp/llm/`
+  (vLLM + Ollama).
+- `aqp/ml/` is **compatibility shims only** — `aqp/ml/__init__.py`
+  re-exports `aqp_models.*` with `DeprecationWarning`. Do not add new
+  source files under `aqp/ml/`.
+- `aqp/llm/vllm_runner.py` and `aqp/llm/ollama_client.py` are
+  **compatibility shims only** — they re-export
+  `aqp_models.serving.{vllm,ollama}.*`. Do not add new source there.
+- The central LLM gateway (`router_complete`) **stays in the monolith**
+  at [`aqp/llm/providers/router.py`](mdc:aqp/llm/providers/router.py)
+  per Hard Rule 2 in the root [`AGENTS.md`](mdc:AGENTS.md). Do not move
+  the gateway, its memory layer, prompts, cache, or token helpers.
+- All ML model lifecycle (train / fit / predict / save / load) goes
+  through the model class methods inherited from
+  [`BaseModel`](mdc:aqp_models/src/aqp_models/base.py). Tasks
+  ([`aqp_models/tasks/`](mdc:aqp_models/tasks/)) and routes
+  ([`aqp_models/api/routes/`](mdc:aqp_models/api/routes/)) wrap these
+  methods; they never reach into a model's internals.
+- All AlphaBacktestExperiment runs go through
+  [`AlphaBacktestExperiment.run`](mdc:aqp_models/src/aqp_models/alpha_backtest_experiment.py).
+- Workbench flows register via
+  [`run_flow(...)`](mdc:aqp_models/src/aqp_models/flows.py); add new
+  flows to `_FLOWS_BY_NAME` and `list_flows()` so the webui drawer
+  picks them up.
+- All models register via `@register("Name", kind="model")` from
+  [`aqp.core.registry`](mdc:aqp/core/registry.py) (the central
+  registry stays in the monolith).
+- All Iceberg writes go through `iceberg_catalog.append_arrow`
+  (Hard Rule 3 in the root `AGENTS.md`) with `medallion_layer` +
+  `business_metadata` set. Don't call PyIceberg directly.
+
+Validation:
+
+```bash
+cd aqp_models
+pip install -e .
+pytest -ra
+ruff check src tests
+```

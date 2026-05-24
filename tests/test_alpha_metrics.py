@@ -1,10 +1,10 @@
-"""Tests for aqp.ml.alpha_metrics."""
+"""Tests for aqp_models.alpha_metrics."""
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-from aqp.ml.alpha_metrics import (
+from aqp_models.alpha_metrics import (
     combined_score,
     compute_alpha_metrics,
     compute_attribution,

@@ -1,0 +1,85 @@
+name: ETH DEX Backrun Searcher
+slug: mev-backrun-eth
+kind: trading
+description: >-
+  On-chain MEV searcher. Listens to the Ethereum mempool, identifies
+  large swaps on Uniswap V3 / Curve / Balancer, simulates a backrun
+  via eth_callBundle, and submits the bundle to Flashbots + MEV-share
+  + Beaverbuild + Titanbuild. Event-driven; no continuous schedule.
+
+universe:
+  symbols: []   # symbol-less; pairs are discovered on-chain
+
+capabilities:
+  frequency: event
+  asset_classes: [onchain]
+  venues: [flashbots-relay, ethereum-mainnet]
+  max_capital_usd: "100000"
+
+data_layer:
+  adapters: [eth_mempool_ws]
+  subscriptions:
+    - { symbol: "*", channels: [pending_tx] }
+  extras:
+    mempool_source: blocknative
+    dexes: [uniswap-v3, curve, balancer]
+
+strategy_layer:
+  alpha:
+    class: DexBackrunAlpha
+    module_path: aqp.strategies.mev
+    kwargs:
+      min_profit_eth: 0.01
+      max_gas_gwei: 50
+      relay_list: [flashbots, mev_share, beaverbuild, titanbuild]
+
+risk_layer:
+  layer1_policies:
+    - MaxOrderValuePolicy
+    - VolatilityCircuitBreakerPolicy
+    - InstrumentAllowlistPolicy
+  max_order_value_usd: "25000"
+
+execution_layer:
+  adapters: [flashbots_relay]
+  smart_order_router: latency_aware
+  default_order_type: market   # MEV bundles are atomic
+  reconcile_interval_ms: 12000  # block time
+
+state_layer:
+  mode: async   # event-driven; snapshot less often
+
+telemetry:
+  hft_mode: false   # MEV is block-level, not microsecond
+
+lifecycle:
+  drain_timeout_seconds: 60
+  flatten_on_drain: false   # MEV positions are atomic by construction
+  environment: paper
+
+metrics:
+  - { name: bundles_submitted_per_block, direction: max }
+  - { name: bundles_landed_pct, threshold: 0.10, direction: max }
+  - { name: realized_profit_eth, direction: max }
+
+risk:
+  max_position_pct: 1.0
+  max_daily_loss_pct: 0.05
+  extras:
+    max_gas_eth_per_day: "1.0"
+
+deployment:
+  target: kubernetes
+  namespace: aqp-bots
+  initial_cash: 100000.0
+  heartbeat_seconds: 5
+  dry_run: true
+  resources:
+    requests: { cpu: "2", memory: "4Gi" }
+    limits:   { cpu: "4", memory: "8Gi" }
+
+annotations:
+  - mev
+  - flashbots
+  - dex_backrun
+  - event_driven

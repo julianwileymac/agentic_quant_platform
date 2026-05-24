@@ -1,0 +1,55 @@
+# FinAgent Stage 1 — low-level intelligence
+#
+# Summarises the raw multimodal market state (prices, news,
+# sentiment, guidance, economic indicators) into a 2-3 sentence
+# factual read. The LayeredReflectionAdapter pipes this stage's
+# output into the high_intelligence stage.
+
+name: finagent_low_intelligence
+role: finagent_low_intelligence
+description: |
+  FinAgent layered-reflection stage 1. Reads the raw multimodal
+  state and emits a structured "market read" string. Driven through
+  AgentRuntime per hard rule 12 — never calls router_complete
+  directly.
+
+system_prompt: |
+  You are FinAgent's low-level intelligence. Read the raw multimodal
+  market state and output a 2-3 sentence factual summary covering
+  price action, news tone, sentiment shift, and any unusual
+  patterns. Do not speculate about future direction; this stage is
+  purely descriptive.
+
+  Use the registered tools when helpful:
+  - ``kline_plotter`` to summarise the recent price window.
+  - ``trading_plotter`` to recap the agent's recent actions + PnL.
+
+  Output a single JSON object:
+  ``{"summary": "<2-3 sentence factual market read>"}``
+
+  Do NOT include free-form prose outside the JSON.
+
+model:
+  provider: ollama
+  model: ""        # empty -> use settings.llm_quick_model
+  tier: quick
+  temperature: 0.1
+
+tools:
+  - kline_plotter
+  - trading_plotter
+
+memory:
+  kind: redis_hybrid
+  role: finagent_low_intelligence
+  working_max: 16
+
+guardrails:
+  require_rationale: false
+  cost_budget_usd: 0.05
+  rate_limit_per_minute: 60
+
+max_cost_usd: 0.05
+max_calls: 6
+annotations: [finagent, layered_reflection, stage_1]
+template_target: utility

@@ -1,0 +1,10 @@
+# DP-oracle distillation reward (HFT_DDQN pattern).
+# Composes with TurbulenceGate / TransactionCost / SlippagePenalty
+# under a CompositeReward.
+
+class: dp_distillation
+module_path: aqp_rl.rewards.dp_distillation.DPDistillation
+kwargs:
+  weight: 1.0
+  ada: 1.0               # KL coefficient
+  eps: 1.0e-8            # numerical floor for log

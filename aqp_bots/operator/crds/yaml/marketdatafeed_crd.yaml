@@ -1,0 +1,64 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: marketdatafeeds.quantbot.io
+spec:
+  group: quantbot.io
+  scope: Namespaced
+  names:
+    kind: MarketDataFeed
+    listKind: MarketDataFeedList
+    plural: marketdatafeeds
+    singular: marketdatafeed
+    shortNames: [mdfeed]
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Venue
+          type: string
+          jsonPath: .spec.venue
+        - name: Transport
+          type: string
+          jsonPath: .spec.transport
+        - name: Connected
+          type: boolean
+          jsonPath: .status.connected
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                venue: { type: string }
+                transport:
+                  type: string
+                  enum: [fix, websocket, rest, grpc, onchain]
+                adapter: { type: string }
+                endpoint: { type: string }
+                credentialsRef:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    key: { type: string }
+                subscriptions:
+                  type: array
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                rateLimitPerSecond: { type: integer }
+                backoff:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                extras:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true

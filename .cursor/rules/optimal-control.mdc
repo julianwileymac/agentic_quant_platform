@@ -1,5 +1,5 @@
 ---
-description: Optimal-control / HJB math layer (Avellaneda-Stoikov, Cartea-Jaimungal, Lucic-Tse) and the hftbacktest LOB engine. Apply when working under aqp/optimal_control/, aqp/options/portfolio_mm.py, aqp/options/greeks_jax.py, aqp/backtest/hft.py, aqp/strategies/hft/, aqp/analysis/flows/optimal_control.py, aqp/data/mcp/tools/optimal_control.py, aqp/data/mcp/tools/strategy_config.py, aqp/rl/envs/{market_making_env,lucic_tse_options_env,optimal_execution_env,mbtgym_adapter}.py, configs/rl/avellaneda_stoikov_mm.yaml, configs/rl/lucic_tse_options.yaml, configs/rl/cartea_jaimungal_execution.yaml, configs/agents/research_toxicity_regime_adapter.yaml.
+description: Optimal-control / HJB math layer (Avellaneda-Stoikov, Cartea-Jaimungal, Lucic-Tse) and the hftbacktest LOB engine. Apply when working under aqp/optimal_control/, aqp/options/portfolio_mm.py, aqp/options/greeks_jax.py, aqp/backtest/hft.py, aqp/strategies/hft/, aqp/analysis/flows/optimal_control.py, aqp/data/mcp/tools/optimal_control.py, aqp/data/mcp/tools/strategy_config.py, aqp_rl/src/aqp_rl/envs/{market_making_env,lucic_tse_options_env,optimal_execution_env,mbtgym_adapter}.py, aqp_rl/configs/avellaneda_stoikov_mm.yaml, aqp_rl/configs/lucic_tse_options.yaml, aqp_rl/configs/cartea_jaimungal_execution.yaml, configs/agents/research_toxicity_regime_adapter.yaml.
 globs:
   - aqp/optimal_control/**/*.py
   - aqp/options/portfolio_mm.py
@@ -10,15 +10,15 @@ globs:
   - aqp/analysis/flows/optimal_control.py
   - aqp/data/mcp/tools/optimal_control.py
   - aqp/data/mcp/tools/strategy_config.py
-  - aqp/rl/envs/market_making_env.py
-  - aqp/rl/envs/lucic_tse_options_env.py
-  - aqp/rl/envs/optimal_execution_env.py
-  - aqp/rl/envs/mbtgym_adapter.py
+  - aqp_rl/src/aqp_rl/envs/market_making_env.py
+  - aqp_rl/src/aqp_rl/envs/lucic_tse_options_env.py
+  - aqp_rl/src/aqp_rl/envs/optimal_execution_env.py
+  - aqp_rl/src/aqp_rl/envs/mbtgym_adapter.py
   - aqp/tasks/hft_tasks.py
   - aqp/api/routes/lob_backtest.py
-  - configs/rl/avellaneda_stoikov_mm.yaml
-  - configs/rl/lucic_tse_options.yaml
-  - configs/rl/cartea_jaimungal_execution.yaml
+  - aqp_rl/configs/avellaneda_stoikov_mm.yaml
+  - aqp_rl/configs/lucic_tse_options.yaml
+  - aqp_rl/configs/cartea_jaimungal_execution.yaml
   - configs/agents/research_toxicity_regime_adapter.yaml
   - tests/optimal_control/**/*.py
   - tests/options/test_portfolio_mm.py
@@ -26,7 +26,7 @@ globs:
   - tests/analysis/test_optimal_control_flows.py
   - tests/data/mcp/test_optimal_control_tools.py
   - tests/data/mcp/test_strategy_config_tool.py
-  - tests/rl/envs/test_market_making_env_avst.py
+  - aqp_rl/tests/envs/test_market_making_env_avst.py
   - tests/backtest/test_lob_engine.py
 alwaysApply: false
 ---
@@ -89,7 +89,7 @@ engine. Narrative: [aqp_docs/optimal-control.md](mdc:aqp_docs/optimal-control.md
 8. **RL envs auto-register through the metaclass.** Set ``rl_kind``
    and ``rl_alias`` (and optional ``rl_tags`` / ``rl_source`` /
    ``rl_category``); the
-   [`RLComponent`](mdc:aqp/rl/core/base.py) metaclass calls
+   [`RLComponent`](mdc:aqp_rl/src/aqp_rl/core/base.py) metaclass calls
    ``register`` for you. Don't decorate manually.
 
 ## Optional dependency hygiene

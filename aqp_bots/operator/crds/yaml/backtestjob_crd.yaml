@@ -1,0 +1,59 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: backtestjobs.quantbot.io
+spec:
+  group: quantbot.io
+  scope: Namespaced
+  names:
+    kind: BacktestJob
+    listKind: BacktestJobList
+    plural: backtestjobs
+    singular: backtestjob
+    shortNames: [btjob]
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Kind
+          type: string
+          jsonPath: .spec.kind
+        - name: Bot
+          type: string
+          jsonPath: .spec.botRef
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                botRef: { type: string }
+                botSpec:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                kind:
+                  type: string
+                  enum: [backtest, walk_forward, parameter_sweep, stress, conformance]
+                startDate: { type: string }
+                endDate: { type: string }
+                initialCash: { type: string }
+                parallelism: { type: integer }
+                parameterGrid:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                splits: { type: integer }
+                stressMultiplier: { type: number }
+                experimentId: { type: string }
+                testId: { type: string }
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true

@@ -37,6 +37,7 @@ for _name in (
     "microstructure",
     "futures_curves",  # Phase 1: continuous futures-curve stitching
     "arbitrage",       # Phase 4: Johansen / pair signal / A-H share / ADR basis
+    "market_dynamics_modeling",  # Phase 6 (aqp_rl plan): regime labelling
 ):
     _safe_import(_name)
 
