@@ -116,6 +116,15 @@ from aqp.api.routes import (  # noqa: E402
 from aqp.api.routes import (  # noqa: E402
     auth0_sync as auth0_sync_routes,
 )
+# AGENTS hard rule 53 — Auth0 Custom Webhook log-stream sink. Mirrors
+# session-revoke / user-delete / suspicious-API events into the audit
+# ledger and enqueues per-user runtime cleanup via
+# ``aqp.tasks.session_revocation_tasks.cleanup_for_user``. Authenticated
+# by shared-secret header (``AQP_AUTH0_LOG_STREAM_SECRET``), NOT by a
+# Bearer JWT — Auth0's webhook delivery cannot carry a user token.
+from aqp.api.routes import (  # noqa: E402
+    auth0_log_stream as auth0_log_stream_routes,
+)
 # Workstream D — per-user external OAuth wizard routes
 # (/me/oauth-connections). Feature-flagged behind ``user_oauth_enabled``;
 # the router enforces 404 on disabled deployments at request time.
@@ -313,6 +322,17 @@ async def lifespan(app: FastAPI):
     _maybe_install_m2m_store()
     _maybe_prefetch_metadata_cache()
     _install_ownership_graph_hooks()
+    # Phase 7 — subscribe to tenancy-strategy-change announcements so
+    # multi-worker deployments invalidate the local cache the moment
+    # an admin flips an org via /tenancy/orgs/{org_id}/migrate-strategy.
+    # Best-effort: no-op when Redis is unreachable at boot, the 30s
+    # cache TTL caps the drift in that case.
+    try:
+        from aqp.tenancy.strategies.hybrid import start_strategy_invalidation_subscriber
+
+        start_strategy_invalidation_subscriber()
+    except Exception:  # noqa: BLE001
+        logger.debug("strategy invalidation subscriber not started", exc_info=True)
     try:
         yield
     finally:
@@ -519,6 +539,26 @@ app.include_router(resources_routes.router)
 
 # --- Phase 4 — Auth0 Action sync endpoint ----------------------------
 app.include_router(auth0_sync_routes.router)
+# --- AGENTS rule 53 — Auth0 log-stream sink + session-revocation cleanup
+app.include_router(auth0_log_stream_routes.router)
+# --- AGENTS rule 55 — BYOK broker credentials (B2C local + B2B vault)
+try:
+    from aqp.api.routes import (  # noqa: E402
+        broker_credentials as broker_credential_routes,
+    )
+
+    app.include_router(broker_credential_routes.router)
+    app.include_router(broker_credential_routes.admin_router)
+except Exception:  # noqa: BLE001 — keep boot resilient if extra deps missing
+    pass
+# --- Phase 6 — per-org IdP connections (Google Workspace / AWS IDC / Okta / etc.)
+try:
+    from aqp.api.routes import idp_connections as idp_connection_routes  # noqa: E402
+
+    app.include_router(idp_connection_routes.router)
+    app.include_router(idp_connection_routes.internal_router)
+except Exception:  # noqa: BLE001
+    pass
 # --- Workstream D — per-user external OAuth wizard --------------------
 if _oauth_connections_router is not None:
     app.include_router(_oauth_connections_router)

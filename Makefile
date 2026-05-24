@@ -10,16 +10,18 @@
 	test-auth test-providers test-platform-core \
 	deploy-k8s deploy-helm docs docs-serve
 
+AQP_CLI ?= aqp-cli
+
 help:
 	@echo "Agentic Quant Platform — Makefile targets"
 	@echo ""
 	@echo "  install       Install python package in editable mode with dev extras"
 	@echo "  install-full  Install package with every optional extra (alpaca, ibkr, tradier, otel, cli, paper)"
-	@echo "  up            Bring up the local AQP stack via Terraform (k3d + workloads). Delegates to 'aqp deploy up'."
-	@echo "  down          Tear down the local stack. Delegates to 'aqp deploy down'."
-	@echo "  logs          Tail aqp-api pod logs. Delegates to 'aqp deploy logs api'."
-	@echo "  deploy-build  Rebuild + push backend + frontend images. Delegates to 'aqp deploy build'."
-	@echo "  deploy-status Pod / service rollup via 'aqp deploy status'."
+	@echo "  up            Bring up the local AQP stack via Terraform (k3d + workloads). Delegates to 'aqp-cli deploy up'."
+	@echo "  down          Tear down the local stack. Delegates to 'aqp-cli deploy down'."
+	@echo "  logs          Tail aqp-api pod logs. Delegates to 'aqp-cli deploy logs api'."
+	@echo "  deploy-build  Rebuild + push backend + frontend images. Delegates to 'aqp-cli deploy build'."
+	@echo "  deploy-status Pod / service rollup via 'aqp-cli deploy status'."
 	@echo "  deploy-plan   Show terraform plan for the local stack."
 	@echo "  bootstrap     Build images, bring up stack, then apply DB migrations."
 	@echo ""
@@ -54,7 +56,7 @@ install-full:
 	pip install -e ".[dev,alpaca,ibkr,tradier,otel,cli,paper]"
 
 # ---------------------------------------------------------------------------
-# Canonical local lifecycle — Terraform + k3d via the aqp deploy CLI.
+# Canonical local lifecycle — Terraform + k3d via the aqp-cli deploy CLI.
 # Each call lands a row in terraform_runs (rule 42) and respects the
 # global kill switch.
 # ---------------------------------------------------------------------------
@@ -66,26 +68,26 @@ down: deploy-down
 logs: deploy-logs
 
 deploy-up:
-	aqp deploy up
+	$(AQP_CLI) deploy up
 
 deploy-down:
-	aqp deploy down --yes
+	$(AQP_CLI) deploy down --yes
 
 deploy-plan:
-	aqp deploy plan
+	$(AQP_CLI) deploy plan
 
 deploy-build:
-	aqp deploy build
+	$(AQP_CLI) deploy build
 
 deploy-status:
-	aqp deploy status
+	$(AQP_CLI) deploy status
 
 deploy-logs:
-	aqp deploy logs api
+	$(AQP_CLI) deploy logs api
 
 bootstrap:
-	aqp deploy build
-	aqp deploy up
+	$(AQP_CLI) deploy build
+	$(AQP_CLI) deploy up
 	python -m scripts.bootstrap
 
 # ---------------------------------------------------------------------------
@@ -214,7 +216,7 @@ frontend-typecheck:
 # ---------------------------------------------------------------------------
 # Refactor — /build/ + /deployments/ + aqp_platform_core + aqp_control_plane
 # Drives the docker-compose-based local + admin stacks alongside the existing
-# `aqp deploy` (TerraformRuntime) workflow. See aqp_docs/architecture/decisions/.
+# `aqp-cli deploy` (TerraformRuntime) workflow. See aqp_docs/architecture/decisions/.
 # ---------------------------------------------------------------------------
 
 COMPOSE_DIR := aqp_platform/deployments/compose

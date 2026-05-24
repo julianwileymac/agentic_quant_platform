@@ -51,6 +51,8 @@ const DEFAULT_SECONDARY: Partial<Record<CacheCategory, string>> = {
   bots: "kind",
   resources: "resource_type",
   strategy_templates: "framework",
+  broker_credentials: "provider",
+  broker_providers: "credential_kind",
 };
 
 const PLACEHOLDER_LABEL: Record<CacheCategory, string> = {
@@ -92,6 +94,9 @@ const PLACEHOLDER_LABEL: Record<CacheCategory, string> = {
   grafana_dashboards: "Select Grafana dashboard...",
   lakehouse_tables: "Select lakehouse table (Iceberg / Hudi)...",
   topology_services: "Select topology service...",
+  // AGENTS rule 55 — BYOK broker credentials
+  broker_credentials: "Select broker credential...",
+  broker_providers: "Select broker provider...",
 };
 
 /**

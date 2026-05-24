@@ -129,6 +129,14 @@ class MetadataPrefetcher:
         )
         results["resources"] = self._populate_resources(session)
         results["strategy_templates"] = self._populate_strategy_templates(session)
+        # AGENTS rule 55 — BYOK broker providers (global registry). Cheap
+        # in-process lookup that doesn't need a DB hit. broker_credentials
+        # itself is intentionally NOT prefetched: it's per-user, so the
+        # route layer writes through on create/revoke; eagerly walking
+        # every user's credentials at boot would be wasteful and would
+        # leak into the prefetcher's bulk read pattern that assumes
+        # global / org-scoped data.
+        results["broker_providers"] = self._populate_broker_providers()
 
     def _stamp(self, pipe: Any, category: str) -> None:
         """Record a cache freshness stamp for the category."""
@@ -691,6 +699,48 @@ class MetadataPrefetcher:
             category_stamp("strategy_templates"), datetime.utcnow().isoformat()
         )
         return len(rows)
+
+    def _populate_broker_providers(self) -> int:
+        """Cache the global BYOK broker provider catalog (AGENTS rule 55).
+
+        Reads the in-process ``_PROVIDER_METADATA`` map from
+        :mod:`aqp.api.routes.broker_credentials`. Cheap; runs at boot
+        + every prefetch refresh. The frontend EntityPicker reads
+        ``GET /me/broker-credentials/providers`` directly; this cache
+        is the warmup for that route's response.
+        """
+        try:
+            from aqp.api.routes.broker_credentials import _PROVIDER_METADATA
+        except Exception:  # noqa: BLE001
+            return 0
+        if not _PROVIDER_METADATA:
+            return 0
+        zkey = names_zset("broker_providers")
+        self.cache.delete(zkey)
+        mapping: dict[str, float] = {}
+        for slug, meta in sorted(_PROVIDER_METADATA.items()):
+            mapping[slug] = 0.0
+            id_key = by_id_hash("broker_providers", slug)
+            self.cache.hset(
+                id_key,
+                {
+                    "slug": slug,
+                    "display_name": str(meta.get("display_name") or slug),
+                    "credential_kind": str(meta.get("credential_kind") or "api_key"),
+                    "supports_environments": list(
+                        meta.get("supports_environments") or []
+                    ),
+                    "payload_fields": list(meta.get("payload_fields") or []),
+                    "meta_fields": list(meta.get("meta_fields") or []),
+                },
+            )
+            self.cache.expire(id_key, settings.cache_master_ttl_s)
+        self.cache.zadd(zkey, mapping)
+        self.cache.expire(zkey, settings.cache_master_ttl_s)
+        self.cache.set_string(
+            category_stamp("broker_providers"), datetime.utcnow().isoformat()
+        )
+        return len(mapping)
 
 
 def _dataset_payload(row: Any) -> dict[str, Any]:

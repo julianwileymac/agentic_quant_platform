@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from pydantic import BaseModel, EmailStr, Field
 
 from aqp.api.security import secure_router
+from aqp.api.security_stepup import require_step_up
 from aqp.auth.audit import emit_audit_event
 from aqp.auth.deps import current_user, require_role
 from aqp.auth.user import CurrentUser, user_can
@@ -249,6 +250,7 @@ def create_invite(
     request: Request,
     user: CurrentUser = Depends(current_user),
     _: object = Depends(require_role("admin", "org")),
+    _stepup: CurrentUser = Depends(require_step_up(max_age_seconds=180)),
 ) -> InviteCreateResponse:
     organization_id = payload.organization_id
     _require_org_admin(user, organization_id)
@@ -397,6 +399,7 @@ def revoke_invite(
     request: Request,
     user: CurrentUser = Depends(current_user),
     _: object = Depends(require_role("admin", "org")),
+    _stepup: CurrentUser = Depends(require_step_up(max_age_seconds=180)),
 ) -> Response:
     now = _utcnow()
     with get_session() as session:

@@ -1,0 +1,122 @@
+---
+description: AGENTS hard rules 52-55 — step-up MFA, RFC 8628 CLI device flow, RFC 8693 delegated agent tokens, BYOK broker credentials
+globs:
+  - "aqp/api/security_stepup.py"
+  - "aqp/api/routes/auth0_log_stream.py"
+  - "aqp/api/routes/broker_credentials.py"
+  - "aqp/api/routes/idp_connections.py"
+  - "aqp/auth/token_exchange.py"
+  - "aqp/credentials/stores/broker_credential_store.py"
+  - "aqp/persistence/models_broker.py"
+  - "aqp/persistence/models_billing.py"
+  - "aqp/tasks/session_revocation_tasks.py"
+  - "aqp_cli/src/aqp_cli/auth/**"
+  - "aqp_client/src/lib/auth/useStepUp.ts"
+  - "aqp_client/src/components/account/BrokerCredentialsTab.tsx"
+  - "aqp_client/src/components/onboarding/IdpGroupMappingEditor.tsx"
+---
+
+# Auth refactor — step-up MFA, CLI device flow, delegated agent tokens, BYOK brokers
+
+Scopes AGENTS hard rules **52, 53, 54, 55**. Read this when touching
+any of the globbed files. The narrative walkthrough is in
+[aqp_docs/auth0-setup.md](mdc:aqp_docs/auth0-setup.md); the matching
+Auth0 Action bodies (post-login MFA gate, Custom Token Exchange
+Profile, IdP group sync) are in
+[aqp_docs/auth0-actions.md](mdc:aqp_docs/auth0-actions.md).
+
+## Hard rules
+
+1. **Step-up MFA goes through
+   [`require_step_up`](mdc:aqp/api/security_stepup.py)** (rule 52).
+   Attach `Depends(require_step_up(max_age_seconds=180))` to every
+   destructive route — kill-switch, all `/halt` endpoints, `/me/byok/*`
+   and `/me/oauth-connections/*` deletes, `/tenancy/invites` create,
+   `/terraform/workspaces/*/{apply,destroy}`,
+   `/tenancy/orgs/*/migrate-strategy`,
+   `/admin/orgs/*/broker-backend`. The dep raises 401 with an RFC 9470
+   `WWW-Authenticate` header so the SPA's `apiFetch` retry middleware
+   prompts the IdP for fresh MFA + retries transparently.
+
+2. **CLI authentication uses real RFC 8628 Device Authorization
+   Grant + OS keyring** (rule 53). The flow lives at
+   [`device_flow.DeviceFlowClient`](mdc:aqp_cli/src/aqp_cli/auth/device_flow.py)
+   and tokens persist via
+   [`keyring_store.KeyringStore`](mdc:aqp_cli/src/aqp_cli/auth/keyring_store.py)
+   (OS-native first, `keyrings.alt` encrypted-file fallback, plain
+   JSON only under `AQP_CLI_AUTH_ALLOW_PLAINTEXT_FALLBACK=1`). Use
+   `aqp-cli auth login --device`; the legacy `--direct` flag is
+   deprecated and emits a warning. NEVER print, log, or echo a token
+   value beyond the 4-char `redact_token()` prefix.
+
+3. **Delegated agent tokens go through RFC 8693 Custom Token
+   Exchange** (rule 54). `AgentRuntime` instantiated with the
+   originating user's access token calls
+   :meth:`AgentRuntime.delegated_token_for_mcp` which delegates to
+   [`TokenExchangeBroker`](mdc:aqp/auth/token_exchange.py). Both MCP
+   `/tools/{name}/invoke` routes extract the `act` claim and stamp
+   `MCPToolContext.actor_kind="agent"` + `on_behalf_of_sub`. Every
+   audit row for an agent-driven action MUST carry the delegation
+   chain via the new
+   [`emit_audit_event`](mdc:aqp/auth/audit.py) kwargs
+   (`agent_subject`, `on_behalf_of_user_id`, `delegation_profile`).
+
+4. **BYOK broker credentials route through
+   [`BrokerCredentialStore`](mdc:aqp/credentials/stores/broker_credential_store.py)**
+   (rule 55) at priority 4. Adding a new broker provider means:
+   - Add a slug to
+     :data:`KNOWN_BROKER_PROVIDERS` in
+     [`models_broker.py`](mdc:aqp/persistence/models_broker.py).
+   - Add a metadata block to `_PROVIDER_METADATA` in
+     [`broker_credentials.py`](mdc:aqp/api/routes/broker_credentials.py)
+     declaring the `credential_kind`, `payload_fields`,
+     `meta_fields`, and supported `environments`.
+   - The frontend `BrokerCredentialsTab` reads
+     `GET /me/broker-credentials/providers` and renders the form
+     dynamically — no frontend code change required.
+   - Per-org enterprise tenants flip
+     `Organization.broker_credential_backend` to
+     `hashicorp_vault` / `aws_sm` / `azure_kv` / `gcp_sm` and the
+     store delegates to the matching cloud-KMS store via the
+     deterministic key convention.
+
+5. **Auth0 log-stream events trigger session-revocation cleanup**
+   (rule 53). The webhook at
+   [`/_internal/auth0/log-stream`](mdc:aqp/api/routes/auth0_log_stream.py)
+   validates the shared-secret `Authorization` header
+   (`AQP_AUTH0_LOG_STREAM_SECRET`) and enqueues
+   [`cleanup_for_user`](mdc:aqp/tasks/session_revocation_tasks.py)
+   for every session-revoke / user-delete / suspicious-API event.
+   The task halts agent_runs_v2 / paper_trading_runs /
+   bot_deployments / rl_runs / workflow_runs / non-destructive
+   terraform_runs for that user AND revokes their UserOAuthToken
+   rows AND drops cached delegated agent tokens. **Destructive
+   terraform_runs (`apply` / `destroy`) are NEVER halted mid-flight
+   — the state-corruption risk outweighs the session-revoke
+   benefit.** They get audited as a warning.
+
+## Don't
+
+- Don't soft-fail step-up gates in permissive mode. The dep always
+  raises 401 — that's the contract.
+- Don't bypass `KeyringStore` and write tokens to a plain JSON file
+  without the explicit `AQP_CLI_AUTH_ALLOW_PLAINTEXT_FALLBACK=1`
+  opt-in. Operators choosing the plain fallback see a warning.
+- Don't decorate agent tokens with broader scopes than the human
+  granted. The Auth0 Custom Token Exchange Profile's
+  `ALLOWED_AGENT_SCOPES` list is the canonical whitelist — adding
+  a scope requires updating BOTH the Profile config in the
+  Dashboard AND the Action body.
+- Don't store broker secret values in `Organization.meta`, in any
+  Auth0 user_metadata field, in Redis, in audit details, or
+  anywhere outside the envelope-encrypted `broker_credentials`
+  table / external KMS. The `_PROVIDER_METADATA.meta_fields`
+  block is for SAFE metadata only (endpoint URL, account id,
+  region) — the route rejects payloads whose meta keys look like
+  secrets.
+- Don't call the Auth0 log-stream webhook from anywhere other
+  than Auth0's Custom Webhook log-stream delivery. The HMAC
+  compare blocks unauthorised callers.
+- Don't construct your own delegated token shape. Use the broker
+  + the standard Custom Token Exchange Profile so the `act` claim
+  semantics stay consistent across every MCP server.

@@ -44,7 +44,7 @@ State is local (`aqp_platform/terraform/environments/local/terraform.tfstate`).
 ## rpi Kubernetes environment
 
 ```bash
-aqp deploy publish-rpi --registry ghcr.io/<org> --tag <immutable-tag>
+aqp-cli deploy publish-rpi --registry ghcr.io/<org> --tag <immutable-tag>
 terraform -chdir=aqp_platform/terraform/environments/rpi init
 terraform -chdir=aqp_platform/terraform/environments/rpi plan
 terraform -chdir=aqp_platform/terraform/environments/rpi apply

@@ -44,11 +44,30 @@ def emit_audit_event(
     connection: str | None = None,
     request: Request | None = None,
     details: dict[str, Any] | None = None,
+    on_behalf_of_user_id: str | None = None,
+    agent_subject: str | None = None,
+    delegation_profile: str | None = None,
 ) -> None:
     """Write a SecurityAuditEvent row, swallowing any failures.
 
     Called from login / /me/* mutation / kill-switch / Auth0 Action sync.
     Always returns ``None`` and never raises.
+
+    Delegation chain (RFC 8693 / AGENTS hard rule 54):
+
+    - When an autonomous agent acts on behalf of a human via a
+      delegated token (``act`` claim present on the access token),
+      callers should pass ``user_id=<human user_id>``,
+      ``actor_user_id=<human user_id>``, ``agent_subject="agent|<client_id>"``,
+      ``on_behalf_of_user_id=<human user_id>``, and optionally
+      ``delegation_profile="aqp-agent-delegation"``.
+    - The FK-constrained ``user_id`` / ``actor_user_id`` columns stay
+      pointed at the human (otherwise the FK would reject the row),
+      while the agent identity + profile name land in ``details`` so
+      the audit query surface can filter by either dimension.
+    - When ``on_behalf_of_user_id`` differs from ``actor_user_id`` the
+      ``details["delegation"]`` block is set with the full chain so
+      downstream SIEM / dashboards see who-on-behalf-of-whom.
     """
     try:
         if not _audit_enabled():
@@ -57,6 +76,16 @@ def emit_audit_event(
         # Lazy imports keep auth flows resilient before audit migration lands.
         from aqp.persistence.db import get_session
         from aqp.persistence.models_audit import SecurityAuditEvent
+
+        merged_details: dict[str, Any] = dict(details or {})
+        if agent_subject or on_behalf_of_user_id or delegation_profile:
+            merged_details.setdefault("delegation", {}).update(
+                {
+                    "agent_subject": agent_subject,
+                    "on_behalf_of_user_id": on_behalf_of_user_id,
+                    "profile": delegation_profile,
+                }
+            )
 
         row = SecurityAuditEvent(
             user_id=user_id,
@@ -71,7 +100,7 @@ def emit_audit_event(
             request_id=_resolve_trace_id(),
             ip=_resolve_ip(request),
             user_agent=_resolve_user_agent(request),
-            details=dict(details or {}),
+            details=merged_details,
         )
         with get_session() as session:
             session.add(row)

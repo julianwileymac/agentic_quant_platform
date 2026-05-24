@@ -1,4 +1,10 @@
-import { getAccessToken, hasAuthBackend } from "@/lib/auth/tokenStore";
+import {
+  getAccessToken,
+  hasAuthBackend,
+  hasStepUpSupport,
+  requestStepUpToken,
+} from "@/lib/auth/tokenStore";
+import { parseWwwAuthenticate } from "@/lib/auth/useStepUp";
 import { getTenancyHeaders } from "@/store/tenancy";
 
 import { API_BASE_URL } from "./config";
@@ -84,7 +90,43 @@ export async function apiFetch<T = unknown>(
     ...rest,
   };
   if (body != null) fetchInit.body = body;
-  const response = await fetch(url.toString(), fetchInit);
+  let response = await fetch(url.toString(), fetchInit);
+
+  // RFC 9470 step-up: when a route returns 401 with
+  // ``WWW-Authenticate: Bearer error="insufficient_user_authentication"``
+  // the backend is asking for fresh MFA. Prompt the IdP interactively
+  // once and retry the original request. We deliberately retry at most
+  // once so a misconfigured route can't trigger an MFA loop. The
+  // ``X-AQP-Step-Up-Retried`` header on the retried request is a
+  // diagnostic marker the backend can log.
+  if (
+    response.status === 401 &&
+    hasStepUpSupport() &&
+    !composedHeaders["X-AQP-Step-Up-Retried"]
+  ) {
+    const challenge = parseWwwAuthenticate(response.headers.get("www-authenticate"));
+    if (challenge?.insufficientUserAuthentication) {
+      const freshToken = await requestStepUpToken({
+        acr_values: challenge.acrValues,
+        max_age: 0,
+      });
+      if (freshToken) {
+        const retriedHeaders: Record<string, string> = {
+          ...composedHeaders,
+          Authorization: `Bearer ${freshToken}`,
+          "X-AQP-Step-Up-Retried": "1",
+        };
+        const retriedInit: RequestInit = {
+          method,
+          headers: retriedHeaders,
+          credentials,
+          ...rest,
+        };
+        if (body != null) retriedInit.body = body;
+        response = await fetch(url.toString(), retriedInit);
+      }
+    }
+  }
 
   if (!response.ok) {
     let errBody: unknown = null;

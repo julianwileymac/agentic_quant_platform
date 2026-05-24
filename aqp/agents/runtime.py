@@ -162,6 +162,7 @@ class AgentRuntime:
         task_id: str | None = None,
         session_id: str | None = None,
         context: Any | None = None,
+        user_access_token: str | None = None,
     ) -> None:
         self.spec = spec
         self.run_id = run_id or str(uuid.uuid4())
@@ -179,6 +180,14 @@ class AgentRuntime:
             except Exception:
                 context = None
         self.context = context
+        # The originating human user's access token. When the
+        # WorkflowRuntime / AgentRuntime caller (an API route handler
+        # that already verified the human's JWT) passes this through,
+        # the runtime can mint RFC 8693 delegated tokens for outbound
+        # MCP HTTP calls (AGENTS hard rule 54). When unset, the agent
+        # falls back to the M2M token — the legacy non-delegated path.
+        self._user_access_token = user_access_token
+        self._delegated_token_cache: dict[tuple[str, str], str] = {}
         self._steps: list[StepRecord] = []
         self._cost = 0.0
         self._calls = 0
@@ -192,6 +201,100 @@ class AgentRuntime:
         self._tools_resolved: bool = False
         self._memory_instance: Any | None = None
         self._memory_resolved: bool = False
+
+    # ------------------------------------------------------------------ delegation
+    def delegated_token_for_mcp(
+        self,
+        *,
+        audience: str | None = None,
+        scopes: tuple[str, ...] | None = None,
+    ) -> str | None:
+        """Mint (or return cached) RFC 8693 delegated token for an MCP call.
+
+        Used by HTTP-driven MCP transports (Data MCP `/mcp/data/tools/...`
+        and Codebase MCP `/mcp/codebase/tools/...`). Returns ``None``
+        when:
+
+        - The feature flag ``auth_agent_token_exchange_enabled`` is off.
+        - The runtime was instantiated without a ``user_access_token``
+          (legacy callers — e.g. Celery beat tasks acting on behalf
+          of no specific user).
+        - The Auth0 broker rejects the exchange (logged + audited).
+
+        Callers fall back to passing the M2M token directly when this
+        returns ``None`` — Phase 2 of the rollout keeps both paths
+        active so the cutover is gradual. After the cutover, the
+        non-delegated fall-through will be removed by AGENTS rule 54
+        becoming strict.
+        """
+        token = self._user_access_token
+        user_sub = getattr(self.context, "user_id", None) if self.context else None
+        if not token or not user_sub:
+            return None
+        try:
+            from aqp.auth.m2m import M2MTokenIssuer
+            from aqp.auth.token_exchange import (
+                DEFAULT_AGENT_SCOPES,
+                TokenExchangeError,
+                get_token_exchange_broker,
+            )
+        except Exception:  # pragma: no cover - module unavailable
+            return None
+
+        broker = get_token_exchange_broker()
+        if not broker.is_enabled():
+            return None
+
+        scope_tuple = tuple(s for s in (scopes or DEFAULT_AGENT_SCOPES) if s)
+        target_audience = audience or str(getattr(self.context, "audience", "") or "")
+        if not target_audience:
+            try:
+                from aqp.config import settings
+
+                target_audience = str(settings.auth_oidc_audience)
+            except Exception:
+                return None
+
+        cache_key = (target_audience, " ".join(sorted(scope_tuple)))
+        cached = self._delegated_token_cache.get(cache_key)
+        if cached:
+            return cached
+
+        # Mint an actor assertion via the M2M issuer for the agent
+        # broker client. The broker's Custom Token Exchange Profile
+        # reads `act.sub` from this assertion and copies it into the
+        # delegated token.
+        try:
+            issuer = M2MTokenIssuer()
+            assertion = issuer.token_for(
+                service="auth_agent_broker",
+                purpose="actor_assertion",
+            )
+        except Exception:
+            assertion = None
+        if assertion is None or not getattr(assertion, "access_token", None):
+            return None
+
+        try:
+            delegated = broker.mint_for_agent(
+                user_access_token=token,
+                agent_actor_token=assertion.access_token,
+                agent_subject=f"agent|{self.spec.name}",
+                user_subject=str(user_sub),
+                scopes=scope_tuple,
+                audience=target_audience,
+            )
+        except TokenExchangeError as exc:
+            logger.warning(
+                "AgentRuntime delegated-token exchange failed for spec=%s: %s",
+                self.spec.name,
+                exc.code,
+            )
+            return None
+        if delegated is None:
+            return None
+        self._delegated_token_cache[cache_key] = delegated.access_token
+        return delegated.access_token
 
     # ------------------------------------------------------------------ public API
     def run(self, inputs: Mapping[str, Any]) -> AgentRunResult:

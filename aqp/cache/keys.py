@@ -66,6 +66,14 @@ CACHE_CATEGORIES: Final[tuple[str, ...]] = (
     # whitelist surfaced by ``data.oauth.list_connections`` + the
     # ``/me/oauth-connections`` wizard.
     "oauth_connections",
+    # AGENTS rule 55 — BYOK broker credentials. The per-user list of
+    # credential labels surfaced in the EntityPicker; secret values
+    # NEVER land in the cache.
+    "broker_credentials",
+    # AGENTS rule 55 — global provider catalog (Alpaca / IBKR / Polygon
+    # / etc.) with their credential_kind + payload-field metadata.
+    # Read-only from the frontend's perspective.
+    "broker_providers",
 )
 
 
@@ -88,6 +96,9 @@ ORG_SCOPED_CATEGORIES: Final[frozenset[str]] = frozenset(
         "analysis_specs",
         "workflows",
         "resources",
+        # AGENTS rule 55 — broker credentials are per-user but ALSO
+        # per-org so RLS-style isolation is mirrored in the cache.
+        "broker_credentials",
     }
 )
 

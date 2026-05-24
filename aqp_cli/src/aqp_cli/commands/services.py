@@ -1,17 +1,14 @@
-"""`aqp-cli services` — inspect the live state of the AQP stack.
+"""`aqp-cli services` — inspect the live state of the AQP stack."""
 
-Combines topology-from-control-plane with local probes (Docker socket,
-kubernetes context) to highlight discrepancies between configured and
-actually-running services.
-"""
 from __future__ import annotations
 
+import httpx
 import typer
 
-from aqp_cli.clients.control_plane import ControlPlaneClient
-from aqp_cli.clients.direct import DirectProbe
-from aqp_cli.config import get_settings
-from aqp_cli.ui.output import console, info, render_table
+from aqp_cli.clients import ControlPlaneClient, DirectProbe
+from aqp_cli.commands._common import exit_for_http_error
+from aqp_cli.config import get_settings, load_auth_state, resolve_access_token
+from aqp_cli.ui.output import console, info, render_json, render_table
 
 app = typer.Typer(no_args_is_help=True, help="Detect and inspect AQP services.")
 
@@ -24,13 +21,17 @@ def list_services(
 ) -> None:
     """List every AQP service the CLI can see."""
     settings = get_settings()
+    token = resolve_access_token(settings)
     rows: list[dict[str, str]] = []
 
     if not direct:
         try:
-            cp = ControlPlaneClient(settings.control_plane_url, settings.http_timeout_seconds)
+            cp = ControlPlaneClient(
+                settings.control_plane_url, settings.http_timeout_seconds, token
+            )
             for svc in cp.list_topology_services():
                 rows.append(svc)
+            cp.close()
         except Exception as exc:
             info(f"control-plane probe failed: {exc}; falling back to direct probe")
             direct = True
@@ -46,8 +47,10 @@ def list_services(
     render_table(
         "AQP services",
         ["name", "cluster", "namespace", "state"],
-        [[r.get("name", ""), r.get("cluster", ""), r.get("namespace", ""), r.get("state", "")]
-         for r in rows],
+        [
+            [r.get("name", ""), r.get("cluster", ""), r.get("namespace", ""), r.get("state", "")]
+            for r in rows
+        ],
     )
 
 
@@ -55,6 +58,23 @@ def list_services(
 def status(service: str = typer.Argument(..., help="Service name to inspect.")) -> None:
     """Show detailed status for one service."""
     settings = get_settings()
-    cp = ControlPlaneClient(settings.control_plane_url, settings.http_timeout_seconds)
-    info(f"Resolving {service} via control plane at {cp.base_url} (stub)")
-    console.print(f"[cyan]services status {service}: stub — will call /manage/deployments/{service}.[/cyan]")
+    token = resolve_access_token(settings)
+    cp = ControlPlaneClient(settings.control_plane_url, settings.http_timeout_seconds, token)
+    try:
+        payload = cp.service_status(service)
+    except httpx.HTTPStatusError as exc:
+        exit_for_http_error(exc)
+    finally:
+        cp.close()
+    render_json(payload)
+
+
+@app.command("auth-state")
+def auth_state() -> None:
+    """Inspect local auth cache metadata (token is redacted)."""
+    settings = get_settings()
+    state = load_auth_state(settings)
+    if "access_token" in state and isinstance(state["access_token"], str):
+        token = state["access_token"]
+        state["access_token"] = f"{token[:4]}..." if len(token) > 4 else "<redacted>"
+    render_json(state)

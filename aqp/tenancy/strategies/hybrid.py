@@ -11,6 +11,17 @@ Lookups go through a tiny in-process cache so we don't issue a
 ``SELECT tenancy_strategy FROM organizations`` on every session
 checkout; the cache TTL is short (30 s) so operators see the new
 strategy within one TTL after they flip the column.
+
+Phase 7 of the Auth0 Refactor adds Redis pub/sub-based cross-worker
+cache invalidation: when an admin flips an org's strategy via the
+:func:`/tenancy/orgs/{org_id}/migrate-strategy` endpoint, the
+backend publishes a ``{org_id}`` payload to
+``aqp:tenancy:strategy_changed``. Every worker subscribes on boot
+and drops the matching cache entry on receipt, so the flip
+propagates within one Redis round trip instead of waiting out the
+30s TTL. The pub/sub subscriber is best-effort; the TTL remains
+the authoritative cap so a network blip can't permanently strand
+a stale entry.
 """
 from __future__ import annotations
 
@@ -24,6 +35,12 @@ from aqp.tenancy.protocol import TenancyStrategy, TenancyStrategyError
 from aqp.tenancy.strategies.database_per_enterprise import DatabasePerEnterpriseStrategy
 from aqp.tenancy.strategies.schema_per_tenant import SchemaPerTenantStrategy
 from aqp.tenancy.strategies.shared_schema_rls import SharedSchemaRLSStrategy
+
+# Pub/sub channel for cross-worker invalidation. The publisher
+# writes the bare ``org_id`` as the payload; the subscriber drops
+# the matching cache entry. Reserved channel name (only the
+# tenancy strategy uses it).
+STRATEGY_CHANGED_CHANNEL: str = "aqp:tenancy:strategy_changed"
 
 logger = logging.getLogger(__name__)
 
@@ -132,4 +149,114 @@ def reset_strategy_cache() -> None:
         _STRATEGY_CACHE.clear()
 
 
-__all__ = ["HybridStrategy", "reset_strategy_cache"]
+def invalidate_org(org_id: str) -> None:
+    """Drop a single org's cached strategy entry.
+
+    Called by :func:`publish_strategy_changed` after the publisher
+    has flipped the column, and by the local pub/sub subscriber on
+    every received message so peers stay in sync.
+    """
+    if not org_id:
+        return
+    key = str(org_id)
+    with _STRATEGY_LOCK:
+        _STRATEGY_CACHE.pop(key, None)
+
+
+def publish_strategy_changed(org_id: str) -> bool:
+    """Announce a strategy change to every worker via Redis pub/sub.
+
+    Drops the local cache entry IMMEDIATELY (so the publisher worker
+    doesn't have to wait for its own pub/sub round trip) and then
+    publishes the bare ``org_id`` on
+    :data:`STRATEGY_CHANGED_CHANNEL`. Returns ``True`` when the
+    publish succeeded; ``False`` (logged) when Redis is unreachable
+    so the caller can decide whether to surface a warning to the
+    operator. Workers without an active subscriber still pick up
+    the change within the existing TTL.
+    """
+    invalidate_org(org_id)
+    try:
+        client = _redis_client()
+        if client is None:
+            return False
+        client.publish(STRATEGY_CHANGED_CHANNEL, str(org_id))
+        return True
+    except Exception:  # noqa: BLE001
+        logger.debug("strategy change publish failed", exc_info=True)
+        return False
+
+
+def _redis_client() -> Any:
+    """Return a synchronous Redis client or ``None`` when unreachable.
+
+    Mirrors :func:`aqp.ws.broker.publish` so the same Redis URL +
+    decode_responses config are used. Catches every exception so
+    a Redis outage never blocks the strategy lookup path.
+    """
+    try:
+        import redis  # type: ignore[import-not-found]
+
+        from aqp.config import settings
+
+        return redis.Redis.from_url(settings.redis_pubsub_url, decode_responses=True)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def start_strategy_invalidation_subscriber() -> threading.Thread | None:
+    """Spawn a daemon thread that subscribes to strategy-change events.
+
+    Idempotent — calling twice returns the existing thread. Best-
+    effort; if Redis is unreachable at boot we silently no-op, the
+    30s TTL keeps drift bounded.
+
+    Call this once at backend boot (FastAPI lifespan) so every
+    worker process picks up admin-driven strategy flips without
+    waiting for their cache TTL to expire.
+    """
+    global _SUBSCRIBER_THREAD
+    if _SUBSCRIBER_THREAD is not None and _SUBSCRIBER_THREAD.is_alive():
+        return _SUBSCRIBER_THREAD
+    client = _redis_client()
+    if client is None:
+        return None
+
+    def _loop() -> None:
+        try:
+            pubsub = client.pubsub(ignore_subscribe_messages=True)
+            pubsub.subscribe(STRATEGY_CHANGED_CHANNEL)
+            for message in pubsub.listen():
+                if message is None:
+                    continue
+                if message.get("type") != "message":
+                    continue
+                raw = message.get("data")
+                if isinstance(raw, bytes):
+                    raw = raw.decode("utf-8", errors="replace")
+                if isinstance(raw, str) and raw:
+                    invalidate_org(raw)
+        except Exception:  # noqa: BLE001
+            logger.warning("strategy invalidation subscriber crashed", exc_info=True)
+
+    thread = threading.Thread(
+        target=_loop,
+        name="aqp-tenancy-strategy-invalidator",
+        daemon=True,
+    )
+    thread.start()
+    _SUBSCRIBER_THREAD = thread
+    return thread
+
+
+_SUBSCRIBER_THREAD: threading.Thread | None = None
+
+
+__all__ = [
+    "HybridStrategy",
+    "STRATEGY_CHANGED_CHANNEL",
+    "invalidate_org",
+    "publish_strategy_changed",
+    "reset_strategy_cache",
+    "start_strategy_invalidation_subscriber",
+]

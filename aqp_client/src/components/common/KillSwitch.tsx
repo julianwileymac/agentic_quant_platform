@@ -5,6 +5,7 @@ import { ConfirmFrictionDialog } from "@/components/common/ConfirmFrictionDialog
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { apiFetch } from "@/lib/api/client";
+import { useStepUp } from "@/lib/auth/useStepUp";
 
 /**
  * Halt endpoints fanned out in parallel. The backend treats each as
@@ -88,10 +89,26 @@ const HALT_ENDPOINTS: ReadonlyArray<{ path: string; label: string }> = [
 export function KillSwitch() {
   const [open, setOpen] = useState(false);
   const [isHalting, setHalting] = useState(false);
+  const { isSupported: stepUpSupported, isStepUpInFlight, requestStepUp } = useStepUp();
 
   const onConfirm = async () => {
     setHalting(true);
     try {
+      // Per AGENTS rule 52, every halt endpoint requires fresh MFA on
+      // the backend (require_step_up). Prompt the IdP once UP FRONT so
+      // the parallel fan-out below carries the freshly minted token —
+      // otherwise apiFetch would have to retry every single endpoint
+      // independently, which spams the user with N MFA prompts.
+      if (stepUpSupported) {
+        const freshToken = await requestStepUp();
+        if (!freshToken) {
+          toast.warning("MFA required", {
+            description:
+              "The kill switch was cancelled because fresh MFA was not completed.",
+          });
+          return;
+        }
+      }
       const results = await Promise.allSettled(
         HALT_ENDPOINTS.map(({ path }) => apiFetch(path, { method: "POST" })),
       );
@@ -120,7 +137,7 @@ export function KillSwitch() {
         variant="destructive"
         size="sm"
         onClick={() => setOpen(true)}
-        disabled={isHalting}
+        disabled={isHalting || isStepUpInFlight}
         className="gap-2 font-semibold uppercase tracking-wide"
         aria-label="Kill switch — halt all running agents, bots, and paper sessions"
       >

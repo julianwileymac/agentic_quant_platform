@@ -66,6 +66,7 @@ otel = [
 [project.scripts]
 aqp-bots = "aqp_bots.cli:main"
 aqp-bots-operator = "aqp_bots.operator.cli:main"
+aqp-cli-bots = "aqp_bots.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]

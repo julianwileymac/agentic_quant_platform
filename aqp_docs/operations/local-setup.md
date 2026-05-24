@@ -59,13 +59,13 @@ Once everything is `Up (healthy)`:
 ### Option B — Terraform + k3d (canonical, hard rule 42)
 
 ```powershell
-aqp deploy build      # build + push images to the local registry
-aqp deploy up         # terraform apply -> k3d cluster + workloads
-aqp deploy status     # pod + service rollup
-aqp deploy logs api   # tail aqp-api logs
+aqp-cli deploy build      # build + push images to the local registry
+aqp-cli deploy up         # terraform apply -> k3d cluster + workloads
+aqp-cli deploy status     # pod + service rollup
+aqp-cli deploy logs api   # tail aqp-api logs
 ```
 
-`aqp deploy *` is the existing path that lands every state mutation in `terraform_runs`. The Docker Compose path is friendlier for fast iteration but doesn't update the ledger.
+`aqp-cli deploy *` is the existing path that lands every state mutation in `terraform_runs`. The Docker Compose path is friendlier for fast iteration but doesn't update the ledger.
 
 ## Step 4 — bring up the admin overlay (optional)
 
@@ -92,5 +92,5 @@ make test-providers      # aqp_control_plane provider contract tests
 | `make generate-config ENV=local` errors with `missing required fields` | The schema parser caught a malformed block in `.env.schema`. Open the file, look for the entry above the error line, ensure every block has `key:` / `description:` / `required:` / `targets:` / `classification:`. |
 | `docker compose up` fails with `port already in use` | The Vite dev server publishes 3001 by default; the compose stack publishes 3000. Stop whichever is running first or override via `docker-compose.override.yml`. |
 | `pnpm --dir aqp_client build` runs out of memory | `NODE_OPTIONS=--max-old-space-size=4096 pnpm --dir aqp_client build`. |
-| `aqp deploy up` fails with `terraform binary not found` | `choco install terraform` (Windows) or set `AQP_TERRAFORM_BINARY=/path/to/terraform`. |
+| `aqp-cli deploy up` fails with `terraform binary not found` | `choco install terraform` (Windows) or set `AQP_TERRAFORM_BINARY=/path/to/terraform`. |
 | `aqp_control_plane` shows `auth_disabled=true` in `/manage/health` | Set `AQP_AUTH_OIDC_ISSUER=https://your-tenant.us.auth0.com/` in `.env.local`, restart `aqp-cp`. |

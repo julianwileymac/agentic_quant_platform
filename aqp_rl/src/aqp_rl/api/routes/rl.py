@@ -29,10 +29,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from aqp.api.security import secure_router
+from aqp.api.security_stepup import require_step_up
 from aqp.api.schemas import TaskAccepted, TrainRLRequest
 from aqp_models.tasks.training_tasks import evaluate_rl, train_rl
 
@@ -58,7 +59,10 @@ def start_evaluation(config: dict, checkpoint: str) -> TaskAccepted:
     return TaskAccepted(task_id=async_result.id, stream_url=f"/chat/stream/{async_result.id}")
 
 
-@router.post("/halt-all")
+@router.post(
+    "/halt-all",
+    dependencies=[Depends(require_step_up(max_age_seconds=180))],
+)
 def halt_all_rl() -> dict[str, Any]:
     """Halt every running RL train / paper / evaluate / replay run.
 

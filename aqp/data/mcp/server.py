@@ -287,9 +287,23 @@ def build_mcp_router() -> APIRouter:
         # scopes the user is actually allowed to use (today that means
         # we accept whatever the user passes since the auth layer
         # doesn't yet emit a scope list — Phase 4 will tighten this).
+        #
+        # When the token is RFC 8693 delegated (carries an ``act``
+        # claim minted by the ``aqp-agent-delegation`` Auth0 Profile),
+        # we override the actor identity to the agent's ``act.sub``
+        # and propagate the human's ``sub`` as ``on_behalf_of_sub``
+        # so the bridged DataMCPTool's policy + audit lookups see the
+        # full delegation chain.
+        claims = getattr(request.state, "oidc_claims", None) or {}
+        act = claims.get("act") if isinstance(claims, dict) else None
+        on_behalf_of: str | None = None
+        agent_subject: str | None = None
+        if isinstance(act, dict):
+            agent_subject = str(act.get("sub") or "") or None
+            on_behalf_of = str(claims.get("sub") or "") or None
         mcp_ctx = MCPToolContext(
-            actor=user.id,
-            actor_kind=body.actor_kind or "user",
+            actor=agent_subject or user.id,
+            actor_kind="agent" if agent_subject else (body.actor_kind or "user"),
             session_id=body.session_id,
             workspace_id=ctx.workspace_id,
             project_id=ctx.project_id,
@@ -298,7 +312,13 @@ def build_mcp_router() -> APIRouter:
         )
         tool = cls()
         result = tool.invoke(ctx=mcp_ctx, **(body.arguments or {}))
-        return {"ok": result.ok, "result": result.to_json()}
+        payload = {"ok": result.ok, "result": result.to_json()}
+        if on_behalf_of:
+            payload["actor"] = {
+                "agent_sub": agent_subject,
+                "on_behalf_of_sub": on_behalf_of,
+            }
+        return payload
 
     return router
 

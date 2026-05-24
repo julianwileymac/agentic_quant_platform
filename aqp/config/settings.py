@@ -306,6 +306,47 @@ class Settings(BaseSettings):
     # mixed-mode handshake, programmatic clients via the Auth0
     # client-credentials grant with a DPoP header).
     dpop_enforcement_enabled: bool = Field(default=False)
+    # --- Step-up MFA (AGENTS hard rule 52, RFC 9470) ---
+    # Master kill switch for the step-up MFA enforcement deps in
+    # :mod:`aqp.api.security_stepup`. Set to ``False`` only as an
+    # incident-response break-glass; doing so flips kill-switch and
+    # every destructive endpoint into log-only mode.
+    auth_step_up_enabled: bool = Field(default=True)
+    # Default freshness window in seconds for ``require_step_up`` deps
+    # that don't pass an explicit override. 180s is short enough to
+    # neutralise stolen session tokens against a destructive op but
+    # long enough that operators who just MFA'd to open the dashboard
+    # don't get prompted on every halt click. Per-route overrides
+    # always win.
+    auth_step_up_default_max_age: int = Field(default=180)
+    # --- Auth0 Log Streams webhook (AGENTS hard rule 53, Phase 4) ---
+    # Shared secret presented by Auth0 in the ``Authorization`` header of
+    # custom-webhook log-stream POSTs to ``/_internal/auth0/log-stream``.
+    # Must mirror the secret configured in the Auth0 Dashboard
+    # (Monitoring -> Streams -> Custom Webhook). Generate via
+    # ``openssl rand -hex 32``. Empty disables the webhook (returns 503).
+    auth0_log_stream_secret: str = Field(default="")
+    # Maximum age in seconds to accept a log-stream payload by
+    # ``log_id`` timestamp. Auth0 retries failed deliveries with the
+    # same payload; this guards replay attempts beyond the retry
+    # window.
+    auth0_log_stream_max_age_seconds: int = Field(default=86_400)
+    # --- RFC 8693 Token Exchange for delegated agent tokens ---
+    # When True, :class:`aqp.auth.token_exchange.TokenExchangeBroker`
+    # is allowed to mint delegated tokens for agent runtimes via Auth0
+    # Custom Token Exchange Profile ``aqp-agent-delegation``. Off by
+    # default so existing agent runtimes that pass the M2M token
+    # directly keep working.
+    auth_agent_token_exchange_enabled: bool = Field(default=False)
+    # M2M client id + secret for the ``aqp-agent-broker`` Auth0 app
+    # that is permitted to call the Token Exchange endpoint. Resolved
+    # via :class:`aqp.credentials.CredentialResolver` in prod; env vars
+    # are the local-dev shortcut.
+    auth_agent_broker_client_id: str = Field(default="")
+    auth_agent_broker_client_secret: str = Field(default="")
+    # Lifetime ceiling (seconds) for minted delegated agent tokens.
+    # Auth0 enforces the lower of this and the API record's token TTL.
+    auth_agent_delegation_ttl_seconds: int = Field(default=300)
     # AQP-namespaced custom claim prefix injected by the Auth0 Action.
     # See ``aqp_docs/auth0-actions.md``. Decoupled from the issuer URL so
     # the same Action works against staging / prod tenants without

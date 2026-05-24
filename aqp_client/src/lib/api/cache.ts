@@ -52,7 +52,12 @@ export type CacheCategory =
   | "phoenix_projects"
   | "grafana_dashboards"
   | "lakehouse_tables"
-  | "topology_services";
+  | "topology_services"
+  // AGENTS rule 55 — BYOK broker credentials. The cache holds
+  // metadata only (label / provider / environment); secret values
+  // NEVER hit the cache.
+  | "broker_credentials"
+  | "broker_providers";
 
 export interface CacheItem {
   id: string;

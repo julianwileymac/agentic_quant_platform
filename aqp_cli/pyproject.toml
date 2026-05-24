@@ -26,7 +26,12 @@ dependencies = [
 [project.optional-dependencies]
 docker = ["docker>=7,<8"]
 kubernetes = ["kubernetes>=29,<32"]
-all-probes = ["aqp-cli[docker,kubernetes]"]
+# `keyring` enables OS-native credential storage (macOS Keychain,
+# Windows Credential Locker, Linux Secret Service). `keyrings.alt`
+# adds an AES-encrypted file backend so headless Linux servers
+# without a Secret Service still get encrypted persistence.
+keyring = ["keyring>=24,<26", "keyrings.alt>=5,<6"]
+all-probes = ["aqp-cli[docker,kubernetes,keyring]"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
@@ -34,10 +39,14 @@ dev = [
     "respx>=0.20",
     "ruff>=0.4",
     "mypy>=1.8",
+    # Match the `keyring` optional extra so the unit + integration
+    # tests can exercise the OS-native backend on developer machines.
+    "keyring>=24,<26",
 ]
 
 [project.scripts]
 aqp-cli = "aqp_cli.cli:app"
+aqp = "aqp_cli.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/julianwiley/agentic_quant_platform"

@@ -1,10 +1,12 @@
-"""`aqp-cli update` — pull repository + image updates."""
+"""`aqp-cli update` — check stack health + version surfaces."""
+
 from __future__ import annotations
 
+import httpx
 import typer
 
-from aqp_cli.config import get_settings
-from aqp_cli.ui.output import console, info
+from aqp_cli.commands._common import control_plane_client, exit_for_http_error
+from aqp_cli.ui.output import render_json
 
 app = typer.Typer(no_args_is_help=True, help="Check + apply updates to the AQP stack.")
 
@@ -12,15 +14,28 @@ app = typer.Typer(no_args_is_help=True, help="Check + apply updates to the AQP s
 @app.command("check")
 def check() -> None:
     """Compare local image / git versions against the control plane's latest."""
-    settings = get_settings()
-    info(f"Would compare versions against {settings.control_plane_url}/manage/versions (stub)")
-    console.print("[cyan]update check: stub.[/cyan]")
+    client = control_plane_client(require_token=True)
+    try:
+        topology = client.request("GET", "/manage/topology")
+        health = client.request("GET", "/manage/health")
+    except httpx.HTTPStatusError as exc:
+        exit_for_http_error(exc)
+    finally:
+        client.close()
+    render_json({"topology": topology, "health": health})
 
 
 @app.command("apply")
 def apply(
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would change without applying."),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would change without applying."
+    ),
 ) -> None:
     """Apply available updates (pull images, run migrations, restart in order)."""
-    info(f"dry_run={dry_run}; would request control plane to coordinate rolling update (stub)")
-    console.print("[cyan]update apply: stub — wire to /manage/updates once implemented.[/cyan]")
+    if dry_run:
+        render_json(
+            {"status": "dry-run", "message": "No mutating update endpoint is configured yet."}
+        )
+        return
+    typer.echo("No `/manage/updates` endpoint is available yet. Use deploy/cp commands explicitly.")
+    raise typer.Exit(code=1)

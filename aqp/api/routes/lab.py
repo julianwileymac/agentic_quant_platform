@@ -35,6 +35,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aqp.api.security import require_scope, secure_router
+from aqp.api.security_stepup import require_step_up
 from aqp.auth.audit import emit_audit_event
 from aqp.auth.context import RequestContext
 from aqp.auth.deps import current_context, current_user
@@ -1915,6 +1916,7 @@ async def halt_all(
     session: AsyncSession = Depends(async_session_dep),
     user: CurrentUser = Depends(require_scope("data:admin")),
     ctx: RequestContext = Depends(current_context),
+    _stepup: CurrentUser = Depends(require_step_up(max_age_seconds=180)),
 ) -> HaltAllResponse:
     """Halt every currently-running ``lab_runs`` row.
 

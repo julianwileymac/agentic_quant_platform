@@ -1,14 +1,16 @@
-"""`aqp-cli setup` — bootstrap a fresh local AQP environment.
+"""`aqp-cli setup` — bootstrap a fresh local AQP environment."""
 
-Stubs only. Real logic will resolve through the control plane's
-``/manage/bootstrap/*`` surface once it exists.
-"""
 from __future__ import annotations
+
+import json
+import shutil
+import socket
+from pathlib import Path
 
 import typer
 
-from aqp_cli.config import get_settings
-from aqp_cli.ui.output import console, info, warn
+from aqp_cli.config import get_settings, resolve_repo_root
+from aqp_cli.ui.output import info, render_json, warn
 
 app = typer.Typer(no_args_is_help=True, help="Bootstrap local AQP environment.")
 
@@ -20,16 +22,40 @@ def init(
 ) -> None:
     """Bootstrap a local AQP environment (derived .env, volumes, networks)."""
     settings = get_settings()
-    info(f"Would derive {env_file} from topology at {settings.api_url} (stub)")
+    output = Path(env_file)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if output.exists() and not overwrite:
+        warn(f"{output} already exists; pass --overwrite to replace it.")
+        raise typer.Exit(code=1)
+    payload = {
+        "AQP_API_URL": settings.api_url,
+        "AQP_CONTROL_PLANE_URL": settings.control_plane_url,
+        "AQP_CLIENT_URL": "http://localhost:3001",
+        "AQP_THEIA_URL": "http://localhost:3000",
+    }
+    lines = [f"{key}={value}" for key, value in payload.items()]
+    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
     if overwrite:
         warn("--overwrite specified; existing file would be replaced.")
-    console.print("[green]setup init: stub — wire to /manage/bootstrap once implemented.[/green]")
+    render_json({"status": "ok", "env_file": str(output), "values": payload})
 
 
 @app.command("verify")
 def verify() -> None:
     """Verify local prerequisites (Docker, kubectl, Python, ports)."""
-    console.print("[yellow]setup verify: stub — will probe local toolchain.[/yellow]")
+    checks = {
+        "python": shutil.which("python") or shutil.which("python.exe") or "",
+        "pnpm": shutil.which("pnpm") or shutil.which("pnpm.cmd") or "",
+        "yarn": shutil.which("yarn") or shutil.which("yarn.cmd") or "",
+        "docker": shutil.which("docker") or "",
+        "kubectl": shutil.which("kubectl") or "",
+    }
+    ports: dict[str, bool] = {}
+    for name, port in [("api", 8000), ("control_plane", 9000), ("client", 3001), ("theia", 3000)]:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.25)
+            ports[name] = sock.connect_ex(("127.0.0.1", port)) == 0
+    render_json({"binaries": checks, "ports_open": ports})
 
 
 @app.command("render-config")
@@ -38,4 +64,12 @@ def render_config(
 ) -> None:
     """Render derived local configuration from the topology service."""
     settings = get_settings()
-    info(f"Would render {output} from topology at {settings.api_url} (stub)")
+    payload = {
+        "api_url": settings.api_url,
+        "control_plane_url": settings.control_plane_url,
+        "repo_root": str(resolve_repo_root(settings)),
+    }
+    target = Path(output)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    info(f"rendered {target}")

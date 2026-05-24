@@ -12,7 +12,7 @@ Terraform runtime path. The source-of-truth HCL lives in
 - Immutable AQP image tag published with:
 
 ```bash
-aqp deploy publish-rpi --registry docker.io/<org> --tag <immutable-tag>
+aqp-cli deploy publish-rpi --registry docker.io/<org> --tag <immutable-tag>
 ```
 
 ## Configure
@@ -50,7 +50,7 @@ ledger rows and progress streams.
 For first-time bootstrap on a new machine, run in this order so each
 dependency exists before the next one:
 
-1. Build and push immutable AQP images (`aqp deploy publish-rpi ...`).
+1. Build and push immutable AQP images (`aqp-cli deploy publish-rpi ...`).
 2. Set image tags and Auth0 values in `aqp_platform/terraform/environments/rpi/terraform.tfvars`.
 3. Run Terraform from CLI (`init`, `plan`, `apply`) until the core stack
    is healthy.

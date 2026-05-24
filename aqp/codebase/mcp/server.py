@@ -25,6 +25,7 @@ from aqp.api.mcp_audience import (
     get_mcp_audience_mode,
     validate_mcp_audience,
 )
+from aqp.auth import CurrentUser, RequestContext, current_context
 from aqp.codebase.mcp import (
     CODEBASE_MCP_TOOLS,
     MCPToolContext,
@@ -73,12 +74,33 @@ def build_codebase_mcp_router() -> APIRouter:
             "tool": CODEBASE_MCP_TOOLS[name].to_mcp_tool_descriptor(),
         }
 
+    # Local import of require_authenticated keeps this module importable
+    # in worker contexts that don't boot a FastAPI app (e.g. the stdio
+    # entry point) — `aqp.api.security` pulls in OIDC bootstrap helpers
+    # that aren't always wanted there.
+    from aqp.api.security import require_authenticated
+
     @router.post("/tools/{name}/invoke")
-    def invoke_tool(name: str, body: MCPInvokeRequest, request: Request) -> dict[str, Any]:
-        # Auth is enforced by the FastAPI dependency stack at the
-        # main app level (mirroring /mcp/data). External callers must
-        # carry the AQP_M2M_TOKEN; local dev with auth_provider=local
-        # is allowed through unauthenticated.
+    def invoke_tool(
+        name: str,
+        body: MCPInvokeRequest,
+        request: Request,
+        user: CurrentUser = Depends(require_authenticated),
+        ctx_dep: RequestContext = Depends(current_context),
+    ) -> dict[str, Any]:
+        """Invoke a registered codebase MCP tool.
+
+        Mirrors the Data MCP `/mcp/data/tools/{name}/invoke` route
+        (AGENTS rule 22). `actor` / `workspace_id` / `project_id`
+        are taken from the verified JWT + tenancy headers, NOT the
+        request body — the body fields are accepted only when the
+        verified context is missing them (legacy stdio bridges).
+
+        When the caller is an agent (RFC 8693 delegated token with
+        an `act` claim), `user.id` is the agent identity while
+        `ctx_dep` still resolves the human's workspace / project —
+        the MCP tool sees both via `MCPToolContext`.
+        """
         if name not in CODEBASE_MCP_TOOLS:
             raise HTTPException(status_code=404, detail=f"unknown tool {name!r}")
         # RFC 8707 audience binding (workstream E). Mirrors the data
@@ -90,19 +112,41 @@ def build_codebase_mcp_router() -> APIRouter:
             get_codebase_mcp_canonical_uri(),
             mode=get_mcp_audience_mode(),
         )
+        # Extract the act claim if present (delegated agent token)
+        # so MCPToolContext carries both identities and the audit
+        # trail sees who-on-behalf-of-whom.
+        claims = getattr(request.state, "oidc_claims", None) or {}
+        act = claims.get("act") if isinstance(claims, dict) else None
+        on_behalf_of: str | None = None
+        agent_subject: str | None = None
+        if isinstance(act, dict):
+            agent_subject = str(act.get("sub") or "") or None
+            on_behalf_of = str(claims.get("sub") or "") or None
+        # Verified workspace / project from RequestContext beats
+        # body fields. The body fields remain for stdio fallbacks
+        # only (validated upstream by AQP_M2M_TOKEN).
         ctx = MCPToolContext(
-            actor=body.actor or "codebase_mcp_http",
-            actor_kind=body.actor_kind or "service",
+            actor=agent_subject or user.id,
+            actor_kind="agent" if agent_subject else "user",
             session_id=body.session_id,
-            workspace_id=body.workspace_id,
-            project_id=body.project_id,
+            workspace_id=ctx_dep.workspace_id or body.workspace_id,
+            project_id=ctx_dep.project_id or body.project_id,
             workspace_root=body.workspace_root,
             granted_scopes=tuple(body.granted_scopes or ("code:read",)),
             request_id=body.request_id,
         )
         tool = get_codebase_mcp_tool(name)
         result = tool.invoke(ctx=ctx, **(body.arguments or {}))
-        return {"ok": result.ok, "result": result.to_json()}
+        payload = {"ok": result.ok, "result": result.to_json()}
+        # Surface the delegation chain to the response so the caller
+        # (and any downstream audit consumer) can see the agent/
+        # user binding without re-decoding the token.
+        if on_behalf_of:
+            payload["actor"] = {
+                "agent_sub": agent_subject,
+                "on_behalf_of_sub": on_behalf_of,
+            }
+        return payload
 
     return router
 

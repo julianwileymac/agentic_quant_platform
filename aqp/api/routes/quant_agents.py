@@ -31,10 +31,11 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from aqp.api.security import secure_router
+from aqp.api.security_stepup import require_step_up
 
 logger = logging.getLogger(__name__)
 
@@ -484,7 +485,11 @@ def library_query(
 _QUANT_SPEC_NAMES: tuple[str, ...] = ("alpha_researcher", "strategy_executor")
 
 
-@router.post("/halt", status_code=200)
+@router.post(
+    "/halt",
+    status_code=200,
+    dependencies=[Depends(require_step_up(max_age_seconds=180))],
+)
 def halt_quant_agents() -> dict[str, Any]:
     """Halt only the two quant agents (AlphaResearcher + StrategyExecutor).
 

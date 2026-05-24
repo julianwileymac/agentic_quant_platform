@@ -131,15 +131,15 @@ zipped together). AQP wraps it through:
 - A curated repo bundle at [aqp_platform/deploy/superset/bundles/aqp_market_data/](../aqp_platform/deploy/superset/bundles/aqp_market_data/)
   that gets populated by a first export.
 
-The `aqp viz` CLI exposes the same operations:
+The `aqp-cli viz` CLI exposes the same operations:
 
 ```bash
-aqp viz sync                                                              # provision via REST
-aqp viz export --out aqp_platform/deploy/superset/bundles/aqp_market_data              # write YAML directory
-aqp viz import aqp_platform/deploy/superset/bundles/aqp_market_data --overwrite        # replay into Superset
-aqp viz render --dataset aqp_equity.sp500_daily --kind line --out chart.json
-aqp viz cache-clear --older-than-hours 24
-aqp viz datahub                                                           # push to DataHub (no-op when off)
+aqp-cli viz sync
+aqp-cli viz export --dashboard-id 1 --label aqp
+aqp-cli viz import aqp_platform/deploy/superset/bundles/aqp_market_data.zip
+aqp-cli viz render --dataset aqp_equity.sp500_daily --kind line
+aqp-cli viz cache-clear --older-than-hours 24
+aqp-cli viz datahub
 ```
 
 ## Caching
@@ -161,7 +161,7 @@ Two layers cooperate:
 Cache keys are derived from the spec **plus** the underlying Iceberg
 `current_snapshot.snapshot_id`, so any write to a source table naturally
 invalidates the chart by changing the key. Force-evict via the UI button,
-`POST /visualizations/cache/clear`, or `aqp viz cache-clear`.
+`POST /visualizations/cache/clear`, or `aqp-cli viz cache-clear`.
 
 ## Tracing
 
@@ -194,7 +194,7 @@ When enabled, the recipe pushes Superset databases, datasets, charts, and
 dashboards into DataHub against the AQP platform-instance set on
 `AQP_DATAHUB_PLATFORM_INSTANCE`, sinking through the canonical
 `datahub-rest` sink. Trigger via `POST /visualizations/datahub/sync`,
-`aqp viz datahub`, or schedule via the existing Celery beat surface.
+`aqp-cli viz datahub`, or schedule via the existing Celery beat surface.
 
 The Superset connector lives under the `acryl-datahub[superset]` extra
 which is now part of both the `datahub-sync` and `visualization` extras

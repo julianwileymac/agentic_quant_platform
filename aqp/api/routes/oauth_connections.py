@@ -27,6 +27,7 @@ from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from aqp.api.security import secure_router
+from aqp.api.security_stepup import require_step_up
 from aqp.auth import CurrentUser, current_user
 
 logger = logging.getLogger(__name__)
@@ -141,6 +142,7 @@ def callback(
 def revoke(
     connection_id: str,
     user: CurrentUser = Depends(current_user),
+    _stepup: CurrentUser = Depends(require_step_up(max_age_seconds=180)),
 ) -> dict[str, Any]:
     _require_feature()
     from aqp.persistence.db import get_session

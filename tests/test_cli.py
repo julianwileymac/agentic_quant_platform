@@ -1,9 +1,10 @@
-"""Smoke tests for the ``aqp`` CLI."""
+"""Smoke tests for legacy `aqp` compatibility shims."""
 from __future__ import annotations
 
+import pytest
 from typer.testing import CliRunner
 
-from aqp.cli.main import app
+from aqp.cli.main import app, main
 
 runner = CliRunner()
 
@@ -11,33 +12,36 @@ runner = CliRunner()
 def test_aqp_help() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "paper" in result.stdout.lower()
-    assert "backtest" in result.stdout.lower()
-    assert "data" in result.stdout.lower()
+    out = result.stdout.lower()
+    assert "config" in out
+    assert "cp" in out
+    assert "deploy" in out
+    assert "viz" in out
 
 
-def test_aqp_paper_help() -> None:
-    result = runner.invoke(app, ["paper", "--help"])
-    assert result.exit_code == 0
-    assert "run" in result.stdout.lower()
-    assert "stop" in result.stdout.lower()
+def test_aqp_forwards_unknown_top_level_commands(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: dict[str, object] = {}
+
+    def _fake_forward(argv: list[str]) -> int:
+        called["argv"] = argv
+        return 0
+
+    monkeypatch.setattr("aqp.cli.main.run_aqp_cli", _fake_forward)
+    monkeypatch.setattr("sys.argv", ["aqp", "paper", "run", "--symbol", "AAPL"])
+    result = main()
+    assert result == 0
+    assert called["argv"] == ["paper", "run", "--symbol", "AAPL"]
 
 
-def test_aqp_data_help() -> None:
-    result = runner.invoke(app, ["data", "--help"])
-    assert result.exit_code == 0
-    assert "load" in result.stdout.lower()
-    assert "ingest" in result.stdout.lower()
+def test_aqp_deploy_subcommand_forwards(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: dict[str, object] = {}
 
+    def _fake_forward(argv: list[str]) -> int:
+        called["argv"] = argv
+        return 0
 
-def test_aqp_backtest_help() -> None:
-    result = runner.invoke(app, ["backtest", "--help"])
-    assert result.exit_code == 0
-    assert "run" in result.stdout.lower()
-
-
-def test_aqp_dash_mounted_prints_url() -> None:
-    """``aqp dash`` (default --mounted) should not crash when API isn't running."""
-    result = runner.invoke(app, ["dash", "--mounted"])
-    assert result.exit_code == 0
-    assert "/dash/" in result.stdout
+    monkeypatch.setattr("aqp.cli.main.run_aqp_cli", _fake_forward)
+    monkeypatch.setattr("sys.argv", ["aqp", "deploy", "up", "--workspace-id", "ws1"])
+    result = main()
+    assert result == 0
+    assert called["argv"] == ["deploy", "up", "--workspace-id", "ws1"]

@@ -64,6 +64,7 @@ Issues = "https://github.com/julianwiley/agentic_quant_platform/issues"
 
 [project.scripts]
 aqp-control-plane = "aqp_cp.main:cli"
+aqp-cli-control-plane = "aqp_cp.main:cli"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/aqp_cp"]

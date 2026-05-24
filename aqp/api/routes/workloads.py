@@ -30,6 +30,7 @@ from fastapi import Depends, Header, Query, Request
 from pydantic import BaseModel, Field
 
 from aqp.api.security import require_dpop_token, require_scope, secure_router
+from aqp.api.security_stepup import require_step_up
 from aqp.auth import CurrentUser
 from aqp.auth.scopes import AQPScope
 from aqp_platform_core.runtime.workload import (
@@ -115,6 +116,7 @@ def halt_workloads(
     x_request_id: str | None = Header(default=None, alias="X-Request-Id"),
     user: CurrentUser = Depends(require_scope(AQPScope.WORKLOADS_HALT)),
     _dpop: CurrentUser = Depends(require_dpop_token()),
+    _stepup: CurrentUser = Depends(require_step_up(max_age_seconds=180)),
 ) -> HaltResponse:
     reason = (body.reason if body else None) or "kill-switch"
     alias = _resolve_provider_alias()

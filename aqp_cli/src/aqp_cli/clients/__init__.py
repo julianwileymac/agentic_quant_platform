@@ -1,4 +1,9 @@
-"""HTTP / local-probe clients used by the CLI commands."""
+"""Client wrappers used by aqp_cli command modules."""
+
 from __future__ import annotations
 
-__all__: list[str] = []
+from aqp_cli.clients.control_plane import ControlPlaneClient
+from aqp_cli.clients.direct import DirectAuth, DirectProbe
+from aqp_cli.clients.monolith import MonolithClient
+
+__all__ = ["ControlPlaneClient", "DirectAuth", "DirectProbe", "MonolithClient"]

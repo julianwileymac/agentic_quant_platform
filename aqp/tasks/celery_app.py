@@ -112,6 +112,12 @@ celery_app = Celery(
         # Workstream D (per-user OAuth) — Celery beat task that
         # refreshes external OAuth tokens nearing expiry.
         "aqp.tasks.token_refresh_tasks",
+        # AGENTS hard rule 53 — Auth0 log-stream-driven cleanup.
+        # Triggered by :func:`auth0_log_stream._handle_event` when an
+        # Auth0 session-revoke / user-delete / suspicious-API event
+        # fires; halts every in-flight runtime + revokes per-user OAuth
+        # tokens for the affected user. Idempotent: safe to re-run.
+        "aqp.tasks.session_revocation_tasks",
         # Phase 3 (orchestration refactor) — WorkflowRuntime dispatch
         # task + replay helper. Stays harmless when the orchestration
         # flags are off: the task body refuses to enqueue without a

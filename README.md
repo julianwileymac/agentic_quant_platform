@@ -66,12 +66,12 @@ make dev
 
 ### 2) Terraform-managed local k3d (ledgered control-plane path)
 
-Use this when you want `aqp deploy` lifecycle semantics and Terraform-run tracing:
+Use this when you want `aqp-cli deploy` lifecycle semantics and Terraform-run tracing:
 
 ```bash
-aqp deploy build
-aqp deploy up
-aqp deploy status
+aqp-cli deploy build
+aqp-cli deploy up
+aqp-cli deploy status
 ```
 
 ### 3) Kubernetes target deployment (cluster)
@@ -149,7 +149,7 @@ flowchart TB
 flowchart LR
     subgraph localDev [Local development]
         composeStack[Compose stack make dev]
-        tfK3d[Terraform k3d stack aqp deploy up]
+        tfK3d[Terraform k3d stack aqp-cli deploy up]
     end
 
     subgraph cluster [Tower cluster]

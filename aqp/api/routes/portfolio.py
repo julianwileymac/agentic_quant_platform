@@ -10,6 +10,7 @@ from sqlalchemy import desc, select
 from aqp.auth import CurrentUser, RequestContext, current_context, current_user
 from aqp.auth.audit import emit_audit_event
 from aqp.api.schemas import KillSwitchRequest
+from aqp.api.security_stepup import require_step_up
 from aqp.persistence.db import get_session
 from aqp.persistence.models import Fill, LedgerEntry, OrderRecord
 from aqp.risk.kill_switch import engage, release, status
@@ -100,7 +101,10 @@ def kill_switch_status() -> dict:
     return status()
 
 
-@router.post("/kill_switch")
+@router.post(
+    "/kill_switch",
+    dependencies=[Depends(require_step_up(max_age_seconds=180))],
+)
 def kill_switch_toggle(
     req: KillSwitchRequest,
     request: Request,

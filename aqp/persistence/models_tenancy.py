@@ -92,6 +92,13 @@ class Organization(Base):
     )
     tenancy_schema_name = Column(String(80), nullable=True)
     tenancy_dsn_vault_path = Column(String(240), nullable=True)
+    # AGENTS rule 55 — selects the backend BrokerCredentialStore
+    # dispatches to for this org. ``local`` = Postgres ``broker_credentials``
+    # table (B2C / trial / Pro tiers); ``hashicorp_vault`` / ``aws_sm`` /
+    # ``azure_kv`` / ``gcp_sm`` = enterprise tenant's external KMS.
+    broker_credential_backend = Column(
+        String(32), nullable=True, index=True, default="local"
+    )
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -330,8 +337,170 @@ class ConfigOverlayRow(Base):
     )
 
 
+# ---------------------------------------------------------------------------
+# Phase 5 — Per-org IdP connection records + external-group → AQP-role
+# mapping. Generalises beyond the existing ``EntraTenantLink`` (which is
+# Azure AD-specific) so each org can attach Google Workspace, AWS IAM
+# Identity Center, Okta, OneLogin, JumpCloud, or a generic SAML/OIDC
+# connection on top.
+# ---------------------------------------------------------------------------
+
+
+class IdpConnectionRecord(Base):
+    """Per-organization IdP connection configuration.
+
+    ``EntraTenantLink`` remains the canonical record for Azure AD-only
+    deployments (it carries the pending/active promotion lifecycle).
+    This table is the generalisation for the additional connection
+    kinds — one row per (organization, kind) tuple, with the
+    Auth0-side connection id (or vendor-native equivalent) recorded so
+    the admin UI can show "the GitHub Enterprise SSO config for Acme".
+
+    The ``config`` JSON blob carries connection-specific non-secret
+    fields (Workforce pool id, allowed email domains, default role,
+    etc.). Secret material (client secrets, signing certs) NEVER lives
+    here — it resolves via :class:`aqp.credentials.CredentialResolver`
+    under ``CredentialKey(f"idp:{connection_kind}:{org_id}", "client")``.
+    """
+
+    __tablename__ = "idp_connections"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    organization_id = Column(
+        String(36),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    connection_kind = Column(String(64), nullable=False, index=True)
+    auth0_connection_id = Column(String(120), nullable=True, index=True)
+    display_name = Column(String(240), nullable=True)
+    # "pending" — admin created the row but hasn't pushed to Auth0 yet.
+    # "active" — fully provisioned; users can sign in via this connection.
+    # "suspended" — temporarily disabled (e.g. license expired upstream).
+    # "revoked" — permanently torn down; kept for audit history.
+    status = Column(String(32), nullable=False, default="pending", index=True)
+    # Allowed email domains as a CSV. Empty means "any email accepted
+    # by the IdP". Operators usually pin to their owned domains to
+    # mitigate the JIT-on-unknown-domain attack vector.
+    allowed_email_domains = Column(Text, nullable=True)
+    config = Column(JSON, default=dict)
+    meta = Column(JSON, default=dict)
+    created_by_user_id = Column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "connection_kind", "auth0_connection_id",
+            name="uq_idp_connections_org_kind",
+        ),
+    )
+
+
+# Canonical connection-kind discriminators recognised by the platform.
+IDP_CONNECTION_ENTRA: str = "entra"
+IDP_CONNECTION_GOOGLE_WORKSPACE: str = "google_workspace"
+IDP_CONNECTION_AWS_IAM_IDENTITY_CENTER: str = "aws_iam_identity_center"
+IDP_CONNECTION_OKTA: str = "okta"
+IDP_CONNECTION_ONELOGIN: str = "onelogin"
+IDP_CONNECTION_JUMPCLOUD: str = "jumpcloud"
+IDP_CONNECTION_GENERIC_OIDC: str = "generic_oidc"
+IDP_CONNECTION_GENERIC_SAML: str = "generic_saml"
+
+IDP_CONNECTION_KINDS: frozenset[str] = frozenset(
+    {
+        IDP_CONNECTION_ENTRA,
+        IDP_CONNECTION_GOOGLE_WORKSPACE,
+        IDP_CONNECTION_AWS_IAM_IDENTITY_CENTER,
+        IDP_CONNECTION_OKTA,
+        IDP_CONNECTION_ONELOGIN,
+        IDP_CONNECTION_JUMPCLOUD,
+        IDP_CONNECTION_GENERIC_OIDC,
+        IDP_CONNECTION_GENERIC_SAML,
+    }
+)
+
+
+class IdpGroupMapping(Base):
+    """External IdP group → AQP role mapping.
+
+    Drives the post-login Action ``aqp-idp-group-sync``: when a user
+    signs in through an :class:`IdpConnectionRecord`, the Action reads
+    their group claim (Azure ``groups``, Google ``hd``-based group,
+    Okta ``groups``, ...) and upserts :class:`Membership` rows on the
+    org / team / workspace scopes listed in the mapping.
+
+    One mapping row maps ONE external group to ONE AQP role on ONE
+    scope. Operators add multiple rows for richer fan-out (e.g.
+    "AQP Quants" → admin on Org X AND editor on Workspace Y).
+    """
+
+    __tablename__ = "idp_group_mappings"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    organization_id = Column(
+        String(36),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    idp_connection_id = Column(
+        String(36),
+        ForeignKey("idp_connections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    external_group_name = Column(String(255), nullable=False)
+    aqp_role = Column(String(64), nullable=False)  # viewer | editor | admin | owner
+    # The scope this mapping grants on. Mirrors Membership.scope_kind /
+    # Membership.scope_id (which is the polymorphic discriminator
+    # explained in this module's header comment).
+    scope_kind = Column(String(32), nullable=False)  # org | team | workspace | project | lab
+    scope_id = Column(String(36), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    created_by_user_id = Column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "idp_connection_id",
+            "external_group_name",
+            "scope_kind",
+            "scope_id",
+            "aqp_role",
+            name="uq_idp_group_mappings_unique",
+        ),
+        Index(
+            "ix_idp_group_mappings_org_active",
+            "organization_id",
+            "is_active",
+        ),
+    )
+
+
 __all__ = [
     "ConfigOverlayRow",
+    "IDP_CONNECTION_AWS_IAM_IDENTITY_CENTER",
+    "IDP_CONNECTION_ENTRA",
+    "IDP_CONNECTION_GENERIC_OIDC",
+    "IDP_CONNECTION_GENERIC_SAML",
+    "IDP_CONNECTION_GOOGLE_WORKSPACE",
+    "IDP_CONNECTION_JUMPCLOUD",
+    "IDP_CONNECTION_KINDS",
+    "IDP_CONNECTION_OKTA",
+    "IDP_CONNECTION_ONELOGIN",
+    "IdpConnectionRecord",
+    "IdpGroupMapping",
     "Lab",
     "LabScopedMixin",
     "Membership",

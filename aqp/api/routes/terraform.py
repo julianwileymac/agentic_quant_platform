@@ -54,6 +54,7 @@ from aqp.api.security import (
     require_scope,
     secure_router,
 )
+from aqp.api.security_stepup import require_step_up
 from aqp.auth import CurrentUser, RequestContext, current_context
 from aqp.deployment.topology import get_deployment_topology, get_target
 
@@ -539,6 +540,7 @@ def apply_workspace(
     user: CurrentUser = Depends(require_scope("terraform:apply")),
     _ctx: RequestContext = Depends(require_membership("admin", "workspace")),
     _dpop: CurrentUser = Depends(require_dpop_token()),
+    _stepup: CurrentUser = Depends(require_step_up(max_age_seconds=180)),
 ) -> TaskAccepted:
     from aqp.persistence.db import get_session
     from aqp.persistence.models_terraform import TerraformRun
@@ -590,6 +592,7 @@ def destroy_workspace(
     user: CurrentUser = Depends(require_scope("terraform:destroy")),
     _ctx: RequestContext = Depends(require_membership("admin", "workspace")),
     _dpop: CurrentUser = Depends(require_dpop_token()),
+    _stepup: CurrentUser = Depends(require_step_up(max_age_seconds=180)),
 ) -> TaskAccepted:
     from aqp.persistence.db import get_session
     from aqp.persistence.models_terraform import (
@@ -813,6 +816,7 @@ def cancel_run(
 @router.post("/halt")
 def halt_all(
     user: CurrentUser = Depends(require_scope("terraform:admin")),
+    _stepup: CurrentUser = Depends(require_step_up(max_age_seconds=180)),
 ) -> dict[str, Any]:
     """Cancel every in-flight Terraform run and flip the kill switch.
 

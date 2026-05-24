@@ -9,7 +9,7 @@ import { MsalProvider as InnerMsalProvider, useMsal } from "@azure/msal-react";
 import { type ReactNode, useEffect, useMemo } from "react";
 
 import { authConfig } from "./config";
-import { setAccessTokenGetter } from "./tokenStore";
+import { setAccessTokenGetter, setStepUpTokenGetter, type StepUpHint } from "./tokenStore";
 
 /**
  * MSAL / Entra ID branch of the Vite frontend's auth bootstrap.
@@ -81,6 +81,7 @@ function MsalTokenStoreBinder({ children }: { children: ReactNode }) {
     const account = accounts[0] ?? null;
     if (!account) {
       setAccessTokenGetter(null);
+      setStepUpTokenGetter(null);
       return;
     }
     instance.setActiveAccount(account);
@@ -104,7 +105,43 @@ function MsalTokenStoreBinder({ children }: { children: ReactNode }) {
         return null;
       }
     });
-    return () => setAccessTokenGetter(null);
+    // Step-up via popup so the destructive operation can resume
+    // without a full redirect roundtrip. Entra honours the OIDC
+    // ``claims`` parameter for ACR enforcement; we request the
+    // standard MFA reference (``c1``) so the user must complete an
+    // MFA factor regardless of the existing session age.
+    setStepUpTokenGetter(async (hint?: StepUpHint) => {
+      // The hint.acr_values is the canonical OpenID Connect URI; for
+      // Entra we translate it to the ``claims`` parameter shape.
+      const claimsBody = hint?.acr_values
+        ? JSON.stringify({
+            id_token: {
+              acr: { essential: true, values: ["c1"] },
+            },
+          })
+        : undefined;
+      try {
+        const result = await instance.acquireTokenPopup({
+          account,
+          scopes,
+          prompt: "login",
+          ...(claimsBody ? { claims: claimsBody } : {}),
+          ...(typeof hint?.max_age === "number"
+            ? { extraQueryParameters: { max_age: String(hint.max_age) } }
+            : {}),
+        });
+        return result.accessToken || null;
+      } catch (err) {
+        // Most common: user closed the popup or browser blocked it.
+        // Surface as null so the caller can show a "MFA required"
+        // toast — never echo the raw error to console.
+        return null;
+      }
+    });
+    return () => {
+      setAccessTokenGetter(null);
+      setStepUpTokenGetter(null);
+    };
   }, [instance, accounts, scopes]);
 
   return <>{children}</>;

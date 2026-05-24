@@ -90,6 +90,11 @@ RLS_TABLES: tuple[RlsTable, ...] = (
     RlsTable(name="lab_runs"),
     RlsTable(name="lab_node_runs"),
     RlsTable(name="rag_eval_runs"),
+    # AGENTS rule 55 — BYOK broker credentials. Migration 0065 ships
+    # the matching policy DDL; the entry here means future operators
+    # running ``rls_policies.is_rls_enabled(...)`` see the table in
+    # the canonical list.
+    RlsTable(name="broker_credentials"),
 )
 
 

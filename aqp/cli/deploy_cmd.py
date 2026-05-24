@@ -1,3 +1,79 @@
+# ruff: noqa
+# from __future__ import annotations
+
+import typer
+
+from ._shim import run_aqp_cli
+
+app = typer.Typer(help="Legacy deploy shim forwarding to aqp-cli deploy.")
+
+
+@app.callback(invoke_without_command=True, context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def callback(ctx: typer.Context) -> None:
+    """Forward legacy ``aqp deploy`` commands to ``aqp-cli deploy``."""
+    raise typer.Exit(run_aqp_cli(["deploy", *list(ctx.args)]))
+
+
+__all__ = ["app", "callback"]
+# from __future__ import annotations
+
+import typer
+
+from ._shim import run_aqp_cli
+
+app = typer.Typer(help="Legacy deploy shim forwarding to aqp-cli deploy.")
+
+
+@app.callback(invoke_without_command=True, context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def callback(ctx: typer.Context) -> None:
+    """Forward legacy ``aqp deploy`` commands to ``aqp-cli deploy``."""
+    raise typer.Exit(run_aqp_cli(["deploy", *list(ctx.args)]))
+
+
+__all__ = ["app", "callback"]
+"""Compatibility shim for `aqp deploy` -> `aqp-cli deploy`."""
+
+# from __future__ import annotations
+
+import typer
+
+from aqp.cli._shim import run_aqp_cli
+
+app = typer.Typer(
+    name="deploy",
+    no_args_is_help=False,
+    invoke_without_command=True,
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+
+
+@app.callback()
+def callback(ctx: typer.Context) -> None:
+    raise typer.Exit(code=run_aqp_cli(["deploy", *list(ctx.args)]))
+
+
+__all__ = ["app", "callback"]
+"""Compatibility shim for `aqp deploy` -> `aqp-cli deploy`."""
+# from __future__ import annotations
+
+import typer
+
+from aqp.cli._shim import run_aqp_cli
+
+app = typer.Typer(
+    name="deploy",
+    no_args_is_help=False,
+    invoke_without_command=True,
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+
+
+@app.callback()
+def callback(ctx: typer.Context) -> None:
+    raise typer.Exit(code=run_aqp_cli(["deploy", *list(ctx.args)]))
+
+
+__all__ = ["app", "callback"]
 """``aqp deploy`` — local stack lifecycle (Terraform + k3d).
 
 Routes every state-mutating command through
@@ -15,7 +91,7 @@ Bootstrap chicken-and-egg: when Postgres is the very thing being
 booted, ``TerraformRuntime`` already degrades to no-op DB writes.
 Subsequent applies (after the cluster is up) DO write to the ledger.
 """
-from __future__ import annotations
+# from __future__ import annotations
 
 import json
 import shutil
@@ -382,14 +458,19 @@ def status(
 
 @app.command("logs")
 def logs(
-    service: str = typer.Argument(..., help="Service name (api / worker / beat / frontend / postgres / redis / neo4j / chromadb / mlflow / jaeger / otel-collector)."),
+    service: str = typer.Argument(
+        ...,
+        help="Service name (api / worker / beat / frontend / postgres / redis / neo4j / chromadb / mlflow / jaeger / otel-collector).",
+    ),
     namespace: str | None = typer.Option(
         None,
         "--namespace",
         "-n",
         help="Namespace to inspect. Defaults to the local target namespace from deployment topology.",
     ),
-    follow: bool = typer.Option(True, "-f/--no-follow", help="Stream logs (default) or fetch a snapshot."),
+    follow: bool = typer.Option(
+        True, "-f/--no-follow", help="Stream logs (default) or fetch a snapshot."
+    ),
     tail: int = typer.Option(200, "--tail", help="Number of recent lines to fetch."),
 ) -> None:
     """Tail / dump pod logs by service label."""
@@ -400,9 +481,12 @@ def logs(
         raise typer.Exit(127)
     selector = f"app={service}" if not service.startswith("aqp-") else f"app={service}"
     args = [
-        kubectl, "logs",
-        "-n", ns,
-        "-l", selector,
+        kubectl,
+        "logs",
+        "-n",
+        ns,
+        "-l",
+        selector,
         f"--tail={tail}",
     ]
     if follow:
@@ -420,8 +504,12 @@ def endpoints() -> None:
 
 @app.command("publish-rpi")
 def publish_rpi(
-    registry: str = typer.Option(..., "--registry", help="Registry reachable by rpi nodes, e.g. docker.io/<user>"),
-    tag: str = typer.Option(..., "--tag", help="Immutable image tag to publish, e.g. 2026-05-18-sha"),
+    registry: str = typer.Option(
+        ..., "--registry", help="Registry reachable by rpi nodes, e.g. docker.io/<user>"
+    ),
+    tag: str = typer.Option(
+        ..., "--tag", help="Immutable image tag to publish, e.g. 2026-05-18-sha"
+    ),
     skip_frontend: bool = typer.Option(False, "--skip-frontend", help="Skip pnpm frontend build."),
 ) -> None:
     """Build and push immutable AQP images for the rpi_kubernetes target."""
@@ -435,7 +523,9 @@ def publish_rpi(
         if pnpm is None:
             typer.secho("[aqp deploy] pnpm not on PATH", fg=typer.colors.RED, err=True)
             raise typer.Exit(127)
-        rc = _run_subprocess([pnpm, "--dir", str(repo_root / "aqp_client"), "build"], label="frontend build")
+        rc = _run_subprocess(
+            [pnpm, "--dir", str(repo_root / "aqp_client"), "build"], label="frontend build"
+        )
         if rc != 0:
             raise typer.Exit(rc)
 
@@ -501,3 +591,26 @@ def _print_endpoints() -> None:
 
 
 __all__ = ["app"]
+
+# Final override: export the deprecation-forwarding shim.
+app = typer.Typer(
+    name="deploy",
+    help="Legacy deploy shim forwarding to aqp-cli deploy.",
+    no_args_is_help=False,
+    invoke_without_command=True,
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+
+
+@app.callback()
+def callback(ctx: typer.Context) -> None:
+    """Forward legacy ``aqp deploy`` commands to ``aqp-cli deploy``."""
+    raise typer.Exit(run_aqp_cli(["deploy", *list(ctx.args)]))
+
+
+def main(argv: list[str]) -> int:
+    """Forward argv to ``aqp-cli deploy`` for non-Typer call sites."""
+    return run_aqp_cli(["deploy", *argv])
+
+
+__all__ = ["app", "callback", "main", "run_aqp_cli"]

@@ -10,11 +10,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
 from aqp.api.security import secure_router
+from aqp.api.security_stepup import require_step_up
 from aqp.persistence.db import get_session
 
 logger = logging.getLogger(__name__)
@@ -345,7 +346,10 @@ def replay_run(run_id: str) -> AgentRunV2Detail:
     )
 
 
-@router.post("/halt")
+@router.post(
+    "/halt",
+    dependencies=[Depends(require_step_up(max_age_seconds=180))],
+)
 def halt_agents(engage_risk: bool = Query(default=True)) -> dict[str, Any]:
     """Halt every running spec-driven agent run.
 

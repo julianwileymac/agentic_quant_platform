@@ -4,7 +4,7 @@ import { type ReactNode, useEffect } from "react";
 
 import { authConfig, isAuthEnabled } from "./config";
 import { MsalProvider } from "./MsalProvider";
-import { setAccessTokenGetter } from "./tokenStore";
+import { setAccessTokenGetter, setStepUpTokenGetter, type StepUpHint } from "./tokenStore";
 
 /**
  * Multi-IdP wrapper for the Vite frontend.
@@ -63,11 +63,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
  * `useAuth0()`. The MSAL branch lives in `MsalProvider.tsx`.
  */
 function Auth0TokenStoreBinder({ children }: { children: ReactNode }) {
-  const { getAccessTokenSilently, isAuthenticated } = useAuth0();
+  const { getAccessTokenSilently, getAccessTokenWithPopup, isAuthenticated } = useAuth0();
 
   useEffect(() => {
     if (!isAuthenticated) {
       setAccessTokenGetter(null);
+      setStepUpTokenGetter(null);
       return;
     }
     setAccessTokenGetter(async () => {
@@ -93,8 +94,33 @@ function Auth0TokenStoreBinder({ children }: { children: ReactNode }) {
         return null;
       }
     });
-    return () => setAccessTokenGetter(null);
-  }, [isAuthenticated, getAccessTokenSilently]);
+    // Step-up: force interactive MFA via popup. Auth0's
+    // getAccessTokenWithPopup honours acr_values + max_age on
+    // authorizationParams and routes through the IdP's MFA flow.
+    setStepUpTokenGetter(async (hint?: StepUpHint) => {
+      try {
+        const token = await getAccessTokenWithPopup({
+          authorizationParams: {
+            audience: authConfig.audience,
+            scope: authConfig.scope,
+            ...(hint?.acr_values ? { acr_values: hint.acr_values } : {}),
+            ...(typeof hint?.max_age === "number"
+              ? { max_age: String(hint.max_age) }
+              : {}),
+          },
+        });
+        return token || null;
+      } catch (err) {
+        const code = (err as { error?: string })?.error;
+        console.warn("getAccessTokenWithPopup failed: code=%s", code ?? "unknown");
+        return null;
+      }
+    });
+    return () => {
+      setAccessTokenGetter(null);
+      setStepUpTokenGetter(null);
+    };
+  }, [isAuthenticated, getAccessTokenSilently, getAccessTokenWithPopup]);
 
   return <>{children}</>;
 }

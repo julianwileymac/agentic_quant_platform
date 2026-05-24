@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
 from aqp.api.security import require_dpop_token, require_scope, secure_router
+from aqp.api.security_stepup import require_step_up
 from aqp.api.schemas import TaskAccepted
 from aqp.auth import CurrentUser
 from aqp.auth.scopes import AQPScope
@@ -83,7 +84,10 @@ def stop_paper(task_id: str, reason: str = "manual") -> dict[str, Any]:
     return {"task_id": task_id, "reason": reason, "ok": True}
 
 
-@router.post("/stop-all")
+@router.post(
+    "/stop-all",
+    dependencies=[Depends(require_step_up(max_age_seconds=180))],
+)
 def stop_all_paper(reason: str = "kill_switch") -> dict[str, Any]:
     """Halt every active paper trading session.
 

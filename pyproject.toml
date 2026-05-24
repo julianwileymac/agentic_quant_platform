@@ -396,17 +396,18 @@ dev = [
 ]
 
 [project.scripts]
-aqp = "aqp.cli.main:app"
-aqp-bootstrap = "scripts.bootstrap:main"
-aqp-download = "scripts.download_data:main"
-aqp-index = "scripts.index_metadata:main"
-aqp-train = "scripts.train_agent:main"
-aqp-backtest = "scripts.run_backtest:main"
-aqp-stream-ingest = "aqp.streaming.cli:main"
-aqp-bots = "aqp_bots.cli:main"
+aqp = "aqp.cli.main:main"
+aqp-cli = "aqp.cli.main:main"
+aqp-bootstrap = "aqp.cli.helpers_shim:bootstrap_main"
+aqp-download = "aqp.cli.helpers_shim:download_main"
+aqp-index = "aqp.cli.helpers_shim:index_main"
+aqp-train = "aqp.cli.helpers_shim:train_main"
+aqp-backtest = "aqp.cli.helpers_shim:backtest_main"
+aqp-stream-ingest = "aqp.cli.helpers_shim:stream_ingest_main"
+aqp-bots = "aqp.cli.helpers_shim:bots_main"
 aqp-data-mcp = "aqp.data.mcp.server:run_stdio"
 aqp-codebase-mcp = "aqp.codebase.mcp.server:run_stdio"
-aqp-export-schemas = "aqp.metadata.schema_export:cli"
+aqp-export-schemas = "aqp.cli.helpers_shim:export_schemas_main"
 
 [tool.setuptools.packages.find]
 # The root ``agentic-quant-platform`` distribution installs the

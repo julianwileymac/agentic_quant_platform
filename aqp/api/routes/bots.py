@@ -33,6 +33,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aqp.api.security import secure_router
+from aqp.api.security_stepup import require_step_up
 from aqp.api.schemas import TaskAccepted
 from aqp_bots.spec import BotSpec
 from aqp.persistence import async_session_dep
@@ -482,7 +483,10 @@ async def deploy_bot_route(
     return TaskAccepted(task_id=handle.id, stream_url=f"/chat/stream/{handle.id}")
 
 
-@router.post("/halt-all")
+@router.post(
+    "/halt-all",
+    dependencies=[Depends(require_step_up(max_age_seconds=180))],
+)
 async def halt_all_bots(
     session: AsyncSession = Depends(async_session_dep),
 ) -> dict[str, Any]:
@@ -537,7 +541,10 @@ async def halt_all_bots(
     }
 
 
-@router.post("/{bot_ref}/halt")
+@router.post(
+    "/{bot_ref}/halt",
+    dependencies=[Depends(require_step_up(max_age_seconds=180))],
+)
 async def halt_bot(
     bot_ref: str,
     session: AsyncSession = Depends(async_session_dep),

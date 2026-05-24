@@ -65,8 +65,22 @@ PUBLIC_ROUTERS: frozenset[str] = frozenset(
         "auth",            # /auth/login + /auth/callback + /auth/config
         "monitoring",      # node exporter scrape
         "invites_public",  # /tenancy/invites/{token}/accept public APIRouter marker
+        # AGENTS rule 53 — Auth0 Custom Webhook delivery cannot
+        # carry a user JWT; authorisation is via the shared-secret
+        # ``Authorization`` header verified inside the route.
+        "auth0-log-stream",
+        # Phase 4 — Auth0 Action sync endpoint authenticated via M2M
+        # token (verified inside the route by ``require_m2m_token``).
+        "auth0-sync",
     }
 )
+
+
+# Auth-required routers whose "internal" surfaces accept M2M-only
+# callers (Auth0 Actions, webhooks). These are NOT in
+# :data:`PUBLIC_ROUTERS` because they DO require authentication —
+# but the authentication path is M2M, not user JWT. The route
+# bodies validate the M2M token themselves.
 
 
 # ---------------------------------------------------------------------------

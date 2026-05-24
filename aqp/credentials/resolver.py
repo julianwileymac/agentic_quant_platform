@@ -174,6 +174,22 @@ def _build_default_resolver() -> CredentialResolver:
     except Exception:  # noqa: BLE001
         logger.debug("UserOAuthTokenStore auto-registration failed", exc_info=True)
 
+    # AGENTS rule 55 — BYOK broker credential store (priority 4, above
+    # UserOAuthToken=5). Always installed: the store internally
+    # decides per request whether to hit the local Postgres table or
+    # delegate to an enterprise tenant's external KMS via the rest of
+    # the chain. Never fails the resolver build on its own — if the
+    # broker ORM model isn't loaded yet (very early bootstrap), the
+    # store's get() returns None and the resolver moves on.
+    try:
+        from aqp.credentials.stores.broker_credential_store import (
+            BrokerCredentialStore,
+        )
+
+        resolver.add_store(BrokerCredentialStore())
+    except Exception:  # noqa: BLE001
+        logger.debug("BrokerCredentialStore auto-registration failed", exc_info=True)
+
     # Optional cloud layer (selected by AQP_DEFAULT_CLOUD_PROVIDER).
     try:
         from aqp.config import settings

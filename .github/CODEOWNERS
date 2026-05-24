@@ -1,0 +1,86 @@
+# CODEOWNERS — AGENTS hard rules 27, 44, 45, 50, 51, 52-55 require
+# extra-careful review of every change to the auth + tenancy +
+# credential + MCP-conformance surfaces. Touching any of the paths
+# below auto-requests review from the listed owners.
+#
+# Syntax: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+
+# Identity, auth providers, M2M, OIDC, audit, signing, token exchange
+/aqp/auth/                            @julianwiley
+/aqp/api/security.py                  @julianwiley
+/aqp/api/security_stepup.py           @julianwiley
+/aqp/api/routes/auth.py               @julianwiley
+/aqp/api/routes/auth_bff.py           @julianwiley
+/aqp/api/routes/auth0_sync.py         @julianwiley
+/aqp/api/routes/auth0_log_stream.py   @julianwiley
+/aqp/api/routes/msal_sync.py          @julianwiley
+/aqp/api/routes/oauth_connections.py  @julianwiley
+/aqp/api/routes/broker_credentials.py @julianwiley
+/aqp/api/routes/idp_connections.py    @julianwiley
+/aqp/api/routes/invites.py            @julianwiley
+/aqp/api/routes/me.py                 @julianwiley
+/aqp/api/routes/scim.py               @julianwiley
+/aqp/api/routes/security.py           @julianwiley
+/aqp/api/routes/tenancy.py            @julianwiley
+/aqp/api/middleware/                  @julianwiley
+/aqp/api/well_known.py                @julianwiley
+/aqp/api/mcp_audience.py              @julianwiley
+
+# Credential resolver chain + cloud KMS stores + Vault Transit
+/aqp/credentials/                     @julianwiley
+
+# Tenancy isolation strategies + RLS DDL + runtime contextvar
+/aqp/tenancy/                         @julianwiley
+
+# Session-revocation cleanup + token refresh tasks
+/aqp/tasks/session_revocation_tasks.py @julianwiley
+/aqp/tasks/token_refresh_tasks.py     @julianwiley
+
+# ORM models that hold sensitive identity data
+/aqp/persistence/models_tenancy.py    @julianwiley
+/aqp/persistence/models_audit.py      @julianwiley
+/aqp/persistence/models_broker.py     @julianwiley
+/aqp/persistence/models_billing.py    @julianwiley
+/aqp/persistence/models_oauth_tokens.py @julianwiley
+/aqp/persistence/models_terraform.py  @julianwiley
+
+# Alembic migrations that introduce auth-related tables / RLS DDL
+/alembic/versions/0050_*.py           @julianwiley
+/alembic/versions/0055_*.py           @julianwiley
+/alembic/versions/0062_*.py           @julianwiley
+/alembic/versions/0063_*.py           @julianwiley
+/alembic/versions/0064_*.py           @julianwiley
+/alembic/versions/0065_*.py           @julianwiley
+
+# Agent runtime delegated-token wiring + MCP server route deps
+/aqp/agents/runtime.py                @julianwiley
+/aqp/data/mcp/server.py               @julianwiley
+/aqp/codebase/mcp/server.py           @julianwiley
+/aqp/agents/tools/codebase_mcp_bridge.py @julianwiley
+
+# CLI auth modules (RFC 8628 device flow + OS keyring)
+/aqp_cli/src/aqp_cli/auth/            @julianwiley
+/aqp_cli/src/aqp_cli/commands/auth.py @julianwiley
+
+# Frontend auth surface
+/aqp_client/src/lib/auth/             @julianwiley
+/aqp_client/src/components/account/   @julianwiley
+/aqp_client/src/components/onboarding/ @julianwiley
+/aqp_client/src/components/common/KillSwitch.tsx @julianwiley
+/aqp_client/src/components/common/EntityPicker.tsx @julianwiley
+
+# Canonical docs + Cursor rules for the auth surface
+/AGENTS.md                            @julianwiley
+/aqp_docs/auth0-setup.md              @julianwiley
+/aqp_docs/auth0-actions.md            @julianwiley
+/aqp_docs/identity.md                 @julianwiley
+/aqp_docs/credentials.md              @julianwiley
+/aqp_docs/multi-tenancy.md            @julianwiley
+/aqp_docs/account-management.md       @julianwiley
+/.cursor/rules/identity.mdc           @julianwiley
+/.cursor/rules/auth-stepup-and-byok.mdc @julianwiley
+/.cursor/rules/external-oauth.mdc     @julianwiley
+/.cursor/rules/multitenant.mdc        @julianwiley
+/.cursor/rules/tenancy-strategy.mdc   @julianwiley
+/.cursor/rules/data-mcp.mdc           @julianwiley
+/.cursor/rules/mcp-rfc-conformance.mdc @julianwiley

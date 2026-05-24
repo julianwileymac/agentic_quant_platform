@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
 from aqp.api.security import secure_router
+from aqp.api.security_stepup import require_step_up
 from aqp.auth.context import RequestContext
 from aqp.auth.deps import current_context
 from aqp.config import settings
@@ -399,7 +400,10 @@ def get_run(run_id: str) -> AssistantRunDetail:
 # ----------------------------------------------------------------------------
 
 
-@router.post("/halt")
+@router.post(
+    "/halt",
+    dependencies=[Depends(require_step_up(max_age_seconds=180))],
+)
 def halt_assistants(req: AssistantHaltRequest | None = None) -> dict[str, Any]:
     """Halt one (or every) running assistant.
 

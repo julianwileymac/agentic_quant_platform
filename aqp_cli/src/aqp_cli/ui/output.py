@@ -1,7 +1,9 @@
 """rich-based output helpers (tables, colored info/warn/error, token redaction)."""
+
 from __future__ import annotations
 
-from typing import Iterable
+import json
+from collections.abc import Iterable
 
 from rich.console import Console
 from rich.table import Table
@@ -30,6 +32,10 @@ def render_table(title: str, columns: Iterable[str], rows: Iterable[list[str]]) 
     console.print(table)
 
 
+def render_json(payload: object) -> None:
+    console.print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+
+
 def redact_token(token: str) -> str:
     """Return the first 4 chars + ellipsis. Never print full tokens.
 
@@ -40,4 +46,4 @@ def redact_token(token: str) -> str:
         return "<empty>"
     if len(token) <= 4:
         return "<redacted>"
-    return f"{token[:4]}\u2026"
+    return f"{token[:4]}..."

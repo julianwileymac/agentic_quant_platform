@@ -11,7 +11,7 @@
 > FREEMODE).
 > [.cursor/rules/](.cursor/rules) — glob-scoped Cursor rules
 > derived from this file (a slim always-on `aqp.mdc` plus focused
-> domain-scoped sibling rules). The 45 hard rules below remain canonical
+> domain-scoped sibling rules). The 55 hard rules below remain canonical
 > (rules 40-45 cover the additive `WorkflowRuntime` +
 > `workflow_spec_versions` shipped by the orchestration refactor —
 > see [aqp_docs/workflow-studio.md](aqp_docs/workflow-studio.md) for the
@@ -681,6 +681,94 @@ These hold across the codebase. Any PR that violates one will be sent back.
  `engine.connect()` for an org-scoped query bypasses isolation and is
  forbidden in route / task code. Migrations: 0063 (RLS + columns),
  0064 (tenant_template + public_data schemas).
+52. **All step-up MFA enforcement goes through
+ [`aqp.api.security_stepup.require_step_up`](aqp/api/security_stepup.py)**
+ (RFC 9470). The kill-switch (`/portfolio/kill_switch`), every
+ `/halt` fan-out target (12 routes), all `/me/byok/*` + `/me/oauth-connections/*`
+ DELETE handlers, the create-invite route (`POST /tenancy/invites`),
+ every Terraform write op (`/terraform/workspaces/*/{apply,destroy}`,
+ `/terraform/halt`), every `/admin/orgs/*/broker-backend` PUT, and
+ the per-org tenancy-strategy migration MUST attach
+ ``Depends(require_step_up(max_age_seconds=180))``. Step-up gates
+ are **never** soft-failed even in
+ ``AQP_AUTH_ENFORCE=permissive`` mode — the dep raises 401 with an
+ RFC 9470 ``WWW-Authenticate: Bearer error="insufficient_user_authentication"``
+ header so the SPA / CLI helpers
+ ([`useStepUp`](aqp_client/src/lib/auth/useStepUp.ts) + the
+ `apiFetch` 401-retry middleware) prompt the IdP for fresh MFA and
+ retry the original request. Feature-flagged by
+ ``AQP_AUTH_STEP_UP_ENABLED=true`` (default) +
+ ``AQP_AUTH_STEP_UP_DEFAULT_MAX_AGE=180``. Auth0 Action support is
+ documented in
+ [aqp_docs/auth0-actions.md](aqp_docs/auth0-actions.md) (Phase 8).
+53. **CLI authentication goes through real RFC 8628 Device
+ Authorization Grant + OS keyring** (no plain JSON, no env-var
+ masquerading as device flow). The flow lives at
+ [`aqp_cli.auth.device_flow.DeviceFlowClient`](aqp_cli/src/aqp_cli/auth/device_flow.py)
+ and honours the standard slow_down / authorization_pending /
+ expired_token / access_denied semantics. Tokens persist via
+ [`aqp_cli.auth.keyring_store.KeyringStore`](aqp_cli/src/aqp_cli/auth/keyring_store.py)
+ — OS-native first (macOS Keychain / Windows Credential Locker /
+ Linux Secret Service), ``keyrings.alt`` encrypted-file fallback,
+ plain JSON only with explicit
+ ``AQP_CLI_AUTH_ALLOW_PLAINTEXT_FALLBACK=1`` opt-in. The
+ `aqp-cli auth login --device` subcommand is the new default;
+ `--direct` is deprecated and emits a warning. Auth0 log-stream
+ events (session revoke / user delete / suspicious-API) fan in
+ via [`/_internal/auth0/log-stream`](aqp/api/routes/auth0_log_stream.py)
+ and trigger
+ [`aqp.tasks.session_revocation_tasks.cleanup_for_user`](aqp/tasks/session_revocation_tasks.py)
+ which halts every in-flight runtime (agent_runs_v2,
+ paper_trading_runs, bot_deployments, rl_runs, workflow_runs,
+ non-destructive terraform_runs) and revokes the user's
+ :class:`UserOAuthToken` rows.
+54. **All delegated agent tokens for HTTP MCP calls go through
+ [`aqp.auth.token_exchange.TokenExchangeBroker`](aqp/auth/token_exchange.py)**
+ (RFC 8693 + Auth0 Custom Token Exchange Profile
+ ``aqp-agent-delegation``). When
+ [`AgentRuntime`](aqp/agents/runtime.py) is instantiated with the
+ originating user's access token, it calls
+ :meth:`AgentRuntime.delegated_token_for_mcp` to mint a per-call
+ delegated JWT that carries the human's ``sub`` AND an ``act``
+ claim identifying the agent (``agent|<spec_name>``). Both the
+ Data MCP and Codebase MCP `/tools/{name}/invoke` routes extract
+ the ``act`` claim, set ``MCPToolContext.actor=agent_sub`` +
+ ``actor_kind="agent"``, and emit
+ :func:`aqp.auth.audit.emit_audit_event` with
+ ``on_behalf_of_user_id`` / ``agent_subject`` /
+ ``delegation_profile`` populated. Feature-flagged by
+ ``AQP_AUTH_AGENT_TOKEN_EXCHANGE_ENABLED=true`` +
+ ``AQP_AUTH_AGENT_BROKER_CLIENT_ID`` +
+ ``AQP_AUTH_AGENT_BROKER_CLIENT_SECRET`` (resolved via
+ :class:`CredentialResolver` in prod). The Auth0 Custom Token
+ Exchange Profile setup is documented in
+ [aqp_docs/auth0-actions.md](aqp_docs/auth0-actions.md) (Phase 8).
+55. **All BYOK broker credentials (non-OAuth API keys for Alpaca,
+ Polygon, IBKR, Tradier, etc.) resolve through
+ [`aqp.credentials.stores.broker_credential_store.BrokerCredentialStore`](aqp/credentials/stores/broker_credential_store.py)
+ at priority 4** (above ``UserOAuthTokenStore``=5). The store
+ dispatches per ``Organization.broker_credential_backend``:
+ ``local`` reads from the envelope-encrypted
+ ``broker_credentials`` table (Alembic 0065, RLS-protected by
+ ``workspace_id``) using
+ [`aqp.credentials.vault_transit.encrypt`](aqp/credentials/vault_transit.py)
+ for the DEK wrap; ``hashicorp_vault`` / ``aws_sm`` / ``azure_kv``
+ / ``gcp_sm`` delegate to the matching existing cloud-KMS store
+ via a deterministic key convention
+ (``broker:{provider}:user:{user_id}:{label}``). New broker
+ providers register their metadata in
+ [`_PROVIDER_METADATA`](aqp/api/routes/broker_credentials.py)
+ and add a slug to
+ [`KNOWN_BROKER_PROVIDERS`](aqp/persistence/models_broker.py).
+ The wire surface is `/me/broker-credentials` (CRUD; create + delete
+ require step-up MFA per rule 52) and
+ `/admin/orgs/{org_id}/broker-backend` (admin-only backend switch,
+ step-up required). Secret values NEVER appear in any response
+ body, log line, or audit details payload — the create endpoint
+ accepts plaintext once, encrypts in memory, drops the plaintext.
+ Frontend uses
+ [`<EntityPicker kind="broker_credentials" />`](aqp_client/src/components/common/EntityPicker.tsx)
+ for strategy / bot config pickers.
 
 ## Common workflows
 

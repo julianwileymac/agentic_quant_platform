@@ -37,6 +37,7 @@ dev = [
 
 [project.scripts]
 aqp-admin-api = "aqp_admin.main:cli"
+aqp-cli-admin-api = "aqp_admin.main:cli"
 
 [project.urls]
 Homepage = "https://github.com/julianwiley/agentic_quant_platform"
