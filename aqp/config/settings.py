@@ -767,7 +767,22 @@ class Settings(BaseSettings):
 
     # --- DataHub metadata emission ---
     datahub_gms_url: str = Field(default="")
-    datahub_token: str = Field(default="")
+    # AGENTS Rule 26 — bootstrap-only credential. Never read this
+    # attribute outside `aqp/credentials/`. Production code resolves
+    # through `CredentialResolver.resolve(CredentialKey("datahub",
+    # "default"))` so the priority chain (M2M > File > Env > bootstrap)
+    # wins. The previous public name `datahub_token` was renamed to
+    # `bootstrap_datahub_token` in Phase 0 to make every direct read
+    # site fail the build (the `_token` suffix is already in the
+    # credential-resolver lint deny-list). The env var stays
+    # `AQP_DATAHUB_TOKEN` for operational continuity.
+    bootstrap_datahub_token: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "AQP_DATAHUB_TOKEN",
+            "AQP_BOOTSTRAP_DATAHUB_TOKEN",
+        ),
+    )
     datahub_env: str = Field(default="PROD")
     # Env var names AQP_DATAHUB_ASPECT_PUSH_ENABLED / AQP_DATAHUB_ASPECT_PULL_ENABLED
     # (env_prefix="AQP_" is applied automatically by pydantic-settings to the

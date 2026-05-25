@@ -57,7 +57,15 @@ export type CacheCategory =
   // metadata only (label / provider / environment); secret values
   // NEVER hit the cache.
   | "broker_credentials"
-  | "broker_providers";
+  | "broker_providers"
+  // AGENTS rule 29 — typed-entity inputs. `metadata_entity_types`
+  // exposes the DataHub-style kind whitelist (DATASET, MODEL, …)
+  // and `metadata_entity_urns` holds one row per URN with its kind
+  // alongside the URN itself, so <EntityPicker> can drive a typed
+  // dropdown instead of a free-text input on the metadata aspects
+  // route. Backed by `metadata_entities.entity_type` + `.urn`.
+  | "metadata_entity_types"
+  | "metadata_entity_urns";
 
 export interface CacheItem {
   id: string;
@@ -121,6 +129,12 @@ const CACHE_PATH: Record<CacheCategory, string> = {
   grafana_dashboards: "/cache/grafana_dashboards",
   lakehouse_tables: "/cache/lakehouse_tables",
   topology_services: "/cache/topology_services",
+  // AGENTS rule 55 — BYOK broker credentials.
+  broker_credentials: "/cache/broker_credentials",
+  broker_providers: "/cache/broker_providers",
+  // AGENTS rule 29 — typed-entity inputs (Phase 0).
+  metadata_entity_types: "/cache/metadata_entity_types",
+  metadata_entity_urns: "/cache/metadata_entity_urns",
 };
 
 export const CacheApi = {

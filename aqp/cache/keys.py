@@ -92,6 +92,12 @@ CACHE_CATEGORIES: Final[tuple[str, ...]] = (
     # Phase 5 — pending ingestion approvals (Alembic 0075)
     # surfaced to the Vite approval queue.
     "ingestion_approvals",
+    # AGENTS rule 29 — typed-entity inputs in the metadata UI. The
+    # Vite EntityPicker pulls the kind whitelist + per-kind URN list
+    # from these two categories, replacing the legacy free-text URN
+    # textarea (now banned by scripts/ci/check_entity_picker.py).
+    "metadata_entity_types",
+    "metadata_entity_urns",
 )
 
 

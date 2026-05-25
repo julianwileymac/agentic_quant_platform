@@ -107,6 +107,19 @@ class EnvSecretStore(SecretStore):
                 },
                 source=self.store_kind,
             )
+        if service == "datahub" and purpose == "default":
+            # Reads `bootstrap_datahub_token` directly here — this is
+            # the ONE place the field is allowed to surface, gated by
+            # the AGENTS Rule 26 EXEMPT_PREFIXES list in
+            # scripts/ci/check_credential_resolver.py.
+            return Credential(
+                fields={
+                    "gms_url": str(getattr(s, "datahub_gms_url", "") or ""),
+                    "token": str(getattr(s, "bootstrap_datahub_token", "") or ""),
+                    "env": str(getattr(s, "datahub_env", "") or "PROD"),
+                },
+                source=self.store_kind,
+            )
         return None
 
 

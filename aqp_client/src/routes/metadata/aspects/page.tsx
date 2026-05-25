@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Database, Network, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { DataTable, type ColumnDef } from "@/components/common/DataTable";
+import { EntityPicker } from "@/components/common/EntityPicker";
 import { PageContainer } from "@/components/shell/PageContainer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,10 +61,6 @@ export function MetadataAspectsListRoute() {
 
   const rows = listQuery.data?.items ?? [];
   const total = listQuery.data?.total ?? 0;
-  const entityTypeOptions = useMemo(
-    () => Object.keys(statsQuery.data?.entity_count_by_type ?? {}).sort(),
-    [statsQuery.data?.entity_count_by_type],
-  );
 
   const columns: ColumnDef<MetadataEntitySummary>[] = [
     {
@@ -132,23 +129,25 @@ export function MetadataAspectsListRoute() {
             <label className="text-xs text-[var(--text-muted)]" htmlFor="entity-type-filter">
               Entity type
             </label>
-            {/* TODO(cache): add metadata_entity_types to aqp/cache/keys.py::CACHE_CATEGORIES and replace with EntityPicker. */}
-            <select
-              id="entity-type-filter"
-              value={entityType}
-              onChange={(event) => {
-                setEntityType(event.target.value);
-                setPage(0);
-              }}
-              className="h-9 rounded-md border border-[var(--border-default)] bg-[var(--bg-app)] px-2 text-sm"
-            >
-              <option value="all">All types</option>
-              {entityTypeOptions.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
+            {/*
+              AGENTS rule 29 — typed entity input. Backed by the
+              `metadata_entity_types` cache category seeded by
+              `MetadataPrefetcher._populate_metadata_entity_types`.
+              `null` selection collapses to the "all types" filter so
+              the listing still renders every kind by default.
+            */}
+            <div className="w-64">
+              <EntityPicker
+                kind="metadata_entity_types"
+                value={entityType === "all" ? null : entityType}
+                onChange={(next) => {
+                  setEntityType(next ?? "all");
+                  setPage(0);
+                }}
+                placeholder="All types"
+                clearable
+              />
+            </div>
             <div className="ml-auto flex items-center gap-2">
               <Button
                 variant={isLineageLaunch ? "secondary" : "outline"}
@@ -181,31 +180,22 @@ export function MetadataAspectsListRoute() {
               <div className="min-w-[360px] flex-1">
                 <p className="mb-1 text-xs text-[var(--text-muted)]">Focal URN</p>
                 {/*
-                  Rule 29: URN selection is bound to the cached metadata entity
-                  list via a <datalist>, so this input is a Combobox over the
-                  same entitiesQuery that drives the table below. Free-text
-                  paste is preserved as a fallback for URNs that haven't yet
-                  been ingested into the metadata cache. TODO(cache): once
-                  metadata_entity_types and metadata_entity_urns are added to
-                  aqp/cache/keys.py::CACHE_CATEGORIES, swap this for the shared
-                  EntityPicker component.
+                  AGENTS rule 29 — typed entity input. The previous
+                  free-text Input + <datalist> combobox is replaced by
+                  the shared <EntityPicker> backed by the
+                  `metadata_entity_urns` cache category seeded by
+                  `MetadataPrefetcher._populate_metadata_entity_urns`.
+                  `allowCustom` stays OFF — `lineageUrn` is only ever
+                  set from the picker's whitelist, which guarantees
+                  the lineage route URL holds a known URN.
                 */}
-                <Input
-                  value={lineageUrn}
-                  onChange={(event) => setLineageUrn(event.target.value)}
-                  placeholder="urn:aqp:dataset:prod:aqp_silver_alpha_vantage.daily_bars"
-                  className="font-mono text-xs"
-                  list="metadata-aspects-urn-suggestions"
+                <EntityPicker
+                  kind="metadata_entity_urns"
+                  value={lineageUrn || null}
+                  onChange={(next) => setLineageUrn(next ?? "")}
+                  placeholder="Select metadata URN..."
+                  clearable
                 />
-                <datalist id="metadata-aspects-urn-suggestions">
-                  {rows.map((row) => (
-                    <option
-                      key={row.urn}
-                      value={row.urn}
-                      label={`${row.entity_type} - ${row.aspect_count} aspect(s)`}
-                    />
-                  ))}
-                </datalist>
               </div>
               <Button
                 onClick={() =>

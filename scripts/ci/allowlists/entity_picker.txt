@@ -1,0 +1,13 @@
+# scripts/ci/check_entity_picker.py allowlist
+#
+# One repo-relative path per line. Listed files are exempt from the
+# free-text typed-entity input ban. Every entry MUST include a
+# removal deadline in a trailing `# TODO(phase-N): ...` comment.
+#
+# Phase 0 (this commit) ports `routes/metadata/aspects/page.tsx` to
+# <EntityPicker>; the three remaining offenders are pre-existing and
+# tracked for Phase 1.
+
+aqp_client/src/routes/ml/training/page.tsx     # TODO(phase-1): port datasetId Input+datalist to <EntityPicker kind="datasets" />, remove by 2026-08-15
+aqp_client/src/routes/admin/labs/page.tsx      # TODO(phase-1): port workspace_id <select> to <EntityPicker kind="workspaces" />, remove by 2026-08-15
+aqp_client/src/routes/admin/projects/page.tsx  # TODO(phase-1): port workspace_id <select> to <EntityPicker kind="workspaces" />, remove by 2026-08-15

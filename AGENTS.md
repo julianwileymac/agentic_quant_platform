@@ -162,7 +162,15 @@ These hold across the codebase. Any PR that violates one will be sent back.
 6. **Migrations are immutable once committed.** Add a new migration
    under [alembic/versions/](alembic/versions/); never edit a shipped
    one. Migrations follow the `00NN_<short_slug>.py` naming
-   convention.
+   convention. Enforcement: every shipped migration is hashed into
+   [`alembic/versions/.hashes.lock`](alembic/versions/.hashes.lock)
+   and the
+   [`scripts/ci/check_migration_immutability.py`](scripts/ci/check_migration_immutability.py)
+   gate fails CI on any drift. Defective shipped migrations are
+   corrected by adding a new follow-up migration (or, when the chain
+   is unrecoverable, an explicit `alembic_version` repair script
+   shipped as its own migration); never by editing the original file
+   in-place.
 7. **Configuration is read once via
    `from aqp.config import settings`.** Don't construct
    `Settings()` directly — there's an `lru_cache(maxsize=1)` backing

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from aqp.config import settings
+from aqp.credentials import get_datahub_credential
 from aqp.tasks._progress import emit, emit_done, emit_error
 from aqp.tasks.celery_app import celery_app
 from aqp.visualization.superset_sync import sync_superset_assets
@@ -125,7 +126,9 @@ def push_superset_to_datahub_task(self) -> dict[str, Any]:
             result = {"skipped": True, "reason": "AQP_DATAHUB_SUPERSET_SYNC_ENABLED=false"}
             emit_done(task_id, result)
             return result
-        gms_url = (settings.datahub_gms_url or "").strip()
+        # AGENTS Rule 26 — pull DataHub creds through CredentialResolver.
+        cred = get_datahub_credential()
+        gms_url = (cred.get("gms_url") or settings.datahub_gms_url or "").strip()
         if not gms_url:
             result = {"skipped": True, "reason": "AQP_DATAHUB_GMS_URL not set"}
             emit_done(task_id, result)
@@ -139,6 +142,7 @@ def push_superset_to_datahub_task(self) -> dict[str, Any]:
                 "or pip install 'acryl-datahub[superset,datahub-rest]>=0.13'"
             ) from exc
 
+        datahub_token = cred.get("token", "") or ""
         recipe: dict[str, Any] = {
             "source": {
                 "type": "superset",
@@ -148,18 +152,14 @@ def push_superset_to_datahub_task(self) -> dict[str, Any]:
                     "password": settings.superset_password,
                     "provider": settings.superset_provider,
                     "platform_instance": settings.datahub_platform_instance or "agentic-quant-platform",
-                    "env": settings.datahub_env,
+                    "env": cred.get("env") or settings.datahub_env,
                 },
             },
             "sink": {
                 "type": "datahub-rest",
                 "config": {
                     "server": gms_url,
-                    **(
-                        {"token": settings.datahub_token}
-                        if settings.datahub_token
-                        else {}
-                    ),
+                    **({"token": datahub_token} if datahub_token else {}),
                 },
             },
         }

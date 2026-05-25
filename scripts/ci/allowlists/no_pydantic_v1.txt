@@ -1,0 +1,8 @@
+# scripts/ci/check_no_pydantic_v1.py allowlist
+#
+# One repo-relative path per line. Listed files are exempt from the
+# Pydantic V1 serialisation ban. Every entry MUST include a removal
+# deadline in a trailing `# TODO(phase-N): ...` comment.
+#
+# Empty by default — Phase 0 sweep converts every `.dict()` /
+# `.parse_obj()` / `.parse_raw()` / `.from_orm()` site.

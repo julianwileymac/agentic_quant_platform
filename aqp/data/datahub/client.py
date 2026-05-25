@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 
 from aqp.config import settings
+from aqp.credentials import get_datahub_credential
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +32,16 @@ class DataHubClient:
         token: str | None = None,
         env: str | None = None,
     ) -> None:
-        self.gms_url = (gms_url or settings.datahub_gms_url or "").rstrip("/")
-        self.token = token or settings.datahub_token or ""
-        self.env = env or settings.datahub_env or "PROD"
+        # AGENTS Rule 26 — credentials flow through CredentialResolver.
+        # The explicit kwargs win (test injection); when unset we ask
+        # the resolver, which will hit M2M / Vault / file stores before
+        # falling back to the bootstrap env value.
+        cred = get_datahub_credential()
+        self.gms_url = (
+            gms_url or cred.get("gms_url") or settings.datahub_gms_url or ""
+        ).rstrip("/")
+        self.token = token or cred.get("token", "") or ""
+        self.env = env or cred.get("env") or settings.datahub_env or "PROD"
 
     # ------------------------------------------------------------------
     # Reachability

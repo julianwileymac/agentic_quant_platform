@@ -53,6 +53,10 @@ const DEFAULT_SECONDARY: Partial<Record<CacheCategory, string>> = {
   strategy_templates: "framework",
   broker_credentials: "provider",
   broker_providers: "credential_kind",
+  // AGENTS rule 29 — typed-entity inputs. Show the URN's parent kind
+  // next to it in the dropdown so the user always sees DATASET / MODEL /
+  // DASHBOARD context alongside the URN itself.
+  metadata_entity_urns: "entity_type",
 };
 
 const PLACEHOLDER_LABEL: Record<CacheCategory, string> = {
@@ -97,6 +101,9 @@ const PLACEHOLDER_LABEL: Record<CacheCategory, string> = {
   // AGENTS rule 55 — BYOK broker credentials
   broker_credentials: "Select broker credential...",
   broker_providers: "Select broker provider...",
+  // AGENTS rule 29 — typed-entity inputs (Phase 0)
+  metadata_entity_types: "Select entity kind (DATASET, MODEL, ...)",
+  metadata_entity_urns: "Select entity URN...",
 };
 
 /**

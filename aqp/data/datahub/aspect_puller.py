@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from aqp.config import settings
+from aqp.credentials import get_datahub_credential
 from aqp.data.datahub.aspect_mapping import ASPECT_TO_DATAHUB_CLASS
 from aqp.data.datahub.client import get_client
 from aqp.data.datahub.mapping import parse_urn as parse_datahub_urn
@@ -218,16 +219,19 @@ def _resolve_aspect_client() -> tuple[Any | None, str | None]:
     except Exception:
         return None, _SDK_UNAVAILABLE_ERROR
 
-    gms_url = str(getattr(client, "gms_url", "") or settings.datahub_gms_url or "").strip()
+    cred = get_datahub_credential()
+    gms_url = str(
+        getattr(client, "gms_url", "") or cred.get("gms_url") or settings.datahub_gms_url or ""
+    ).strip()
     if not gms_url:
         return None, _SDK_UNAVAILABLE_ERROR
 
-    # Token resolution mirrors the DataHubClient pattern (rule 26 grandfathered
-    # for the legacy aqp/data/datahub/ tree). Prefer the already-resolved client
-    # token over a fresh settings read so credential rotation only happens in
-    # one place inside this module.
+    # AGENTS Rule 26 — token resolution flows through CredentialResolver
+    # so M2M / Vault / file stores override the bootstrap env value.
+    # Prefer the already-resolved client token (test injection) over the
+    # fresh resolver hit so credential rotation happens in one place.
     try:
-        token = str(getattr(client, "token", "") or settings.datahub_token or "")
+        token = str(getattr(client, "token", "") or cred.get("token") or "")
         config = DatahubClientConfig(
             server=gms_url,
             token=(token or None),

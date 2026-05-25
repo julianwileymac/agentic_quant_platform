@@ -13,9 +13,20 @@ setting ``AQP_ADMIN_AUTH_PROVIDER=auth0``.
 from __future__ import annotations
 
 from functools import lru_cache
+from urllib.parse import urlparse
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _is_loopback_url(url: str) -> bool:
+    """Return True when the URL host resolves to localhost/loopback."""
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").lower()
+    return host in {"localhost", "127.0.0.1", "::1"}
 
 
 class AdminSettings(BaseSettings):
@@ -140,6 +151,20 @@ class AdminSettings(BaseSettings):
             "Required when audit_sink == 'http'."
         ),
     )
+
+    @model_validator(mode="after")
+    def _derive_local_auth_default(self) -> "AdminSettings":
+        """Disable auth by default only for localhost-only topologies.
+
+        Production/staging deployments keep auth enabled unless explicitly
+        configured otherwise; local sandbox contributors can run the admin
+        surface without first wiring an IdP app registration.
+        """
+        if "auth_required" in self.model_fields_set:
+            return self
+        if _is_loopback_url(self.api_url) and _is_loopback_url(self.control_plane_url):
+            self.auth_required = False
+        return self
 
     @property
     def auth_enabled(self) -> bool:

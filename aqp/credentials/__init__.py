@@ -58,14 +58,26 @@ from aqp.credentials.resolver import (
     register_store,
     reset_resolver,
 )
+from aqp.credentials.datahub import (
+    DATAHUB_KEY,
+    get_datahub_credential,
+    get_datahub_env,
+    get_datahub_gms_url,
+    get_datahub_token,
+)
 
 __all__ = [
     "Credential",
     "CredentialKey",
     "CredentialNotFoundError",
     "CredentialResolver",
+    "DATAHUB_KEY",
     "SecretStore",
     "SecretStoreMeta",
+    "get_datahub_credential",
+    "get_datahub_env",
+    "get_datahub_gms_url",
+    "get_datahub_token",
     "get_resolver",
     "register_store",
     "reset_resolver",

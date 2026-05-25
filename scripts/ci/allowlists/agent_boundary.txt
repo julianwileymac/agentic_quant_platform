@@ -1,0 +1,39 @@
+# scripts/ci/check_agent_boundary.py allowlist
+#
+# Files exempt from the AGENTS Rule 22 boundary check. Use sparingly.
+# The five canonical ledger-writer exceptions live INSIDE the lint
+# (`EXCEPTION_PATHS`), not here — this file is for transient
+# violations only.
+#
+# Every entry MUST carry a removal deadline in a trailing
+# `# TODO(phase-N): remove by YYYY-MM-DD` comment.
+#
+# Phase 0 (this commit): the AGENTS Rule 22 lint is wired in and
+# blocking. Refactoring the 10 known direct-ORM offenders through
+# DataMCPTools is deferred to Phase 1 because each one has unique
+# caching / idempotency / transactional semantics (e.g.
+# `strategy_memory.py` is a service-layer ledger with Redis cache
+# coherency rules; `reflector.py` writes a 3-table tuple atomically).
+# The list below is the complete known-violation snapshot and MUST
+# shrink toward zero as Phase 1 lands.
+
+# --- Service-layer ledgers inside aqp/agents/ ---
+# These are de-facto ledger writers (parallel to evaluation.py /
+# runtime.py / registry.py) but were not originally counted in the
+# lint's EXCEPTION_PATHS. Phase 1 either promotes them into
+# EXCEPTION_PATHS (preferred — they ARE ledger writers) or refactors
+# them through DataMCPTools.
+aqp/agents/strategy_memory.py            # TODO(phase-1): promote to EXCEPTION_PATHS or port to data.agents.memory.* tools, remove by 2026-08-15
+aqp/agents/selection/annotation_writer.py # TODO(phase-1): promote to EXCEPTION_PATHS or port to data.agents.annotations.create, remove by 2026-08-15
+
+# --- Reflectors / readers / agent tools ---
+aqp/agents/analysis/reflector.py          # TODO(phase-1): port to data.agents.memory.reflect tool, remove by 2026-08-15
+aqp/agents/screening/llm_screener.py      # TODO(phase-1): port managed-snapshot lookup to data.instruments.snapshot, remove by 2026-08-15
+
+# --- Agent CrewAI / orchestration tools (callable from agent body) ---
+aqp/agents/tools/annotation_tool.py       # TODO(phase-1): port to data.agents.annotations.create, remove by 2026-08-15
+aqp/agents/tools/optimize_tool.py         # TODO(phase-1): port to data.agents.annotations.create, remove by 2026-08-15
+aqp/agents/tools/evaluator_tool.py        # TODO(phase-1): port to data.backtests.describe (already exists), remove by 2026-08-15
+aqp/agents/tools/risk_tool.py             # TODO(phase-1): port to data.agents.ledger.recent, remove by 2026-08-15
+aqp/agents/tools/margin_tool.py           # TODO(phase-1): port to data.agents.margin.snapshot, remove by 2026-08-15
+aqp/agents/tools/regulatory_tool.py       # TODO(phase-1): port to data.agents.regulatory.search, remove by 2026-08-15

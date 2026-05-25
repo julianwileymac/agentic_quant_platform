@@ -217,7 +217,14 @@ class CatalogRowSnapshot:
     updated_at: datetime | None = None
 
     @classmethod
-    def from_orm(cls, row: DatasetCatalog) -> "CatalogRowSnapshot":
+    def from_orm_row(cls, row: DatasetCatalog) -> "CatalogRowSnapshot":
+        """Build a detached snapshot from a SQLAlchemy ORM row.
+
+        Note: named ``from_orm_row`` rather than ``from_orm`` so the
+        ``no-pydantic-v1`` lint regex doesn't false-match — this is a
+        plain dataclass classmethod, NOT a Pydantic V1 ``BaseModel``
+        constructor.
+        """
         return cls(
             id=getattr(row, "id", None),
             description=getattr(row, "description", None),
@@ -242,7 +249,7 @@ def _catalog_row_for(identifier: str) -> CatalogRowSnapshot | None:
             ).scalar_one_or_none()
             if row is None:
                 return None
-            return CatalogRowSnapshot.from_orm(row)
+            return CatalogRowSnapshot.from_orm_row(row)
     except Exception:  # noqa: BLE001
         logger.debug("catalog lookup failed for %s", identifier, exc_info=True)
         return None
@@ -462,7 +469,7 @@ def list_tables(namespace: str | None = None) -> list[TableSummary]:
             stmt = select(DatasetCatalog).where(DatasetCatalog.iceberg_identifier.is_not(None))
             for row in session.execute(stmt).scalars().all():
                 if row.iceberg_identifier:
-                    catalog_rows[row.iceberg_identifier] = CatalogRowSnapshot.from_orm(row)
+                    catalog_rows[row.iceberg_identifier] = CatalogRowSnapshot.from_orm_row(row)
     except Exception:  # noqa: BLE001
         logger.debug("catalog batch lookup failed", exc_info=True)
 

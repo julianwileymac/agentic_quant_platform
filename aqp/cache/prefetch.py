@@ -137,6 +137,12 @@ class MetadataPrefetcher:
         # leak into the prefetcher's bulk read pattern that assumes
         # global / org-scoped data.
         results["broker_providers"] = self._populate_broker_providers()
+        # AGENTS rule 29 — typed-entity inputs. The Vite EntityPicker
+        # picks ``kind`` from `metadata_entity_types` and resolves the
+        # URN under that kind from `metadata_entity_urns`. Replaces the
+        # legacy free-text URN textarea on the metadata aspects route.
+        results["metadata_entity_types"] = self._populate_metadata_entity_types(session)
+        results["metadata_entity_urns"] = self._populate_metadata_entity_urns(session)
 
     def _stamp(self, pipe: Any, category: str) -> None:
         """Record a cache freshness stamp for the category."""
@@ -699,6 +705,90 @@ class MetadataPrefetcher:
             category_stamp("strategy_templates"), datetime.utcnow().isoformat()
         )
         return len(rows)
+
+    def _populate_metadata_entity_types(self, session: Session) -> int:
+        """Cache the distinct DataHub-style entity_type values (AGENTS rule 29).
+
+        Reads ``metadata_entities.entity_type`` (DATASET, MODEL,
+        DASHBOARD, …) and exposes them as the ``kind`` whitelist for
+        the Vite ``<EntityPicker>`` typed input. Each kind row is a
+        single-field hash — no payload beyond the type label and a
+        cheap counter.
+        """
+        try:
+            from aqp.persistence.models_aspects import MetadataEntity
+        except Exception:  # noqa: BLE001
+            return 0
+        zkey = names_zset("metadata_entity_types")
+        self.cache.delete(zkey)
+        try:
+            rows = session.execute(
+                select(
+                    MetadataEntity.entity_type,
+                ).group_by(MetadataEntity.entity_type)
+            ).all()
+        except SQLAlchemyError:
+            return 0
+        kinds = sorted({str(row[0]) for row in rows if row and row[0]})
+        if not kinds:
+            return 0
+        self.cache.zadd(zkey, {kind: 0.0 for kind in kinds})
+        for kind in kinds:
+            id_key = by_id_hash("metadata_entity_types", kind)
+            self.cache.hset(id_key, {"kind": kind, "name": kind})
+            self.cache.expire(id_key, settings.cache_master_ttl_s)
+        self.cache.expire(zkey, settings.cache_master_ttl_s)
+        self.cache.set_string(
+            category_stamp("metadata_entity_types"), datetime.utcnow().isoformat()
+        )
+        return len(kinds)
+
+    def _populate_metadata_entity_urns(self, session: Session) -> int:
+        """Cache the URN catalog for the EntityPicker (AGENTS rule 29).
+
+        Stores one hash per URN with ``urn`` + ``entity_type`` so the
+        frontend can group by kind in the dropdown. The zset score is
+        the entity_type's lexicographic position so kind-grouped
+        renders are stable. URNs are global by design — no
+        org-scoping in :data:`ORG_SCOPED_CATEGORIES` — because the
+        DataHub URN namespace is shared across the cluster; per-row
+        workspace gating still happens at read time via Rule 33.
+        """
+        try:
+            from aqp.persistence.models_aspects import MetadataEntity
+        except Exception:  # noqa: BLE001
+            return 0
+        zkey = names_zset("metadata_entity_urns")
+        self.cache.delete(zkey)
+        try:
+            rows = session.execute(
+                select(MetadataEntity.urn, MetadataEntity.entity_type)
+                .order_by(MetadataEntity.entity_type.asc(), MetadataEntity.urn.asc())
+            ).all()
+        except SQLAlchemyError:
+            return 0
+        urns = [
+            (str(urn), str(entity_type))
+            for urn, entity_type in rows
+            if urn and entity_type
+        ]
+        if not urns:
+            return 0
+        # Score = stable per-(kind, urn) ordinal so the frontend can
+        # render alphabetically without resorting client-side.
+        self.cache.zadd(zkey, {urn: float(idx) for idx, (urn, _) in enumerate(urns)})
+        for urn, entity_type in urns:
+            id_key = by_id_hash("metadata_entity_urns", urn)
+            self.cache.hset(id_key, {"urn": urn, "entity_type": entity_type, "name": urn})
+            self.cache.expire(id_key, settings.cache_master_ttl_s)
+            name_key = by_name_hash("metadata_entity_urns", urn)
+            self.cache.hset(name_key, {"urn": urn, "entity_type": entity_type})
+            self.cache.expire(name_key, settings.cache_master_ttl_s)
+        self.cache.expire(zkey, settings.cache_master_ttl_s)
+        self.cache.set_string(
+            category_stamp("metadata_entity_urns"), datetime.utcnow().isoformat()
+        )
+        return len(urns)
 
     def _populate_broker_providers(self) -> int:
         """Cache the global BYOK broker provider catalog (AGENTS rule 55).
