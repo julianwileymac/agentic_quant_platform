@@ -28,6 +28,38 @@ jobs:
       - name: ruff (format check)
         run: ruff format --check aqp_platform_core/src aqp_control_plane/src aqp_platform/build/scripts || true
 
+  phase0-lints:
+    name: Phase 0 audit-closure lints
+    runs-on: ubuntu-latest
+    # Phase 0 (Restructuring Plan §3) wires the five hard-rule lints
+    # to PR-blocking status. Each script ships with its own per-lint
+    # allowlist at `scripts/ci/allowlists/` so existing-tree violations
+    # carry an explicit Phase 1 removal deadline rather than silently
+    # passing. NEVER add `|| true` to these steps — that's the whole
+    # reason they exist (Phase 0 deliverable §3.6 + Phase 1 §4.6).
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install alembic (for migration-chain head/parent topology check)
+        run: |
+          python -m pip install --upgrade pip
+          pip install "alembic>=1.13"
+      - name: Rule 6 — migration immutability (sha256 lock at alembic/versions/.hashes.lock)
+        run: python scripts/ci/check_migration_immutability.py
+      - name: Rule 6 — migration chain (single head, no orphan parents, no shared down_revision)
+        run: python scripts/ci/check_migration_chain.py
+      - name: Rule 26 — CredentialResolver (no direct settings.*_token / _secret / _key reads)
+        run: python scripts/ci/check_credential_resolver.py
+      - name: Rule 29 — EntityPicker (no free-text URN inputs in .tsx)
+        run: python scripts/ci/check_entity_picker.py
+      - name: Rule 22 — agent boundary (no direct aqp.persistence imports inside aqp/agents/*)
+        run: python scripts/ci/check_agent_boundary.py
+      - name: Style — Pydantic V1 surface (.dict / .parse_obj / .parse_raw / .from_orm)
+        run: python scripts/ci/check_no_pydantic_v1.py
+
   test-platform-core:
     name: aqp_platform_core tests
     runs-on: ubuntu-latest

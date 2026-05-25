@@ -1,0 +1,80 @@
+# Pre-commit hooks — Phase 0 audit-closure gates.
+#
+# Mirrors the `phase0-lints` job in `.github/workflows/ci.yml` so the
+# same hard-rule checks run BEFORE the commit hits the remote, not
+# only on the PR. Install with:
+#
+#     pip install pre-commit
+#     pre-commit install
+#
+# Every hook here MUST stay in lockstep with the CI job — adding a
+# new lint script means adding it both here and in ci.yml.
+#
+# Per the Restructuring Plan §3.6 the five Phase 0 deliverable lints
+# are PR-blocking, never `|| true`. Hooks below intentionally have NO
+# `verbose: false` / `always_run: false` overrides that would skip
+# them.
+
+repos:
+  - repo: local
+    hooks:
+      # ---------------------------------------------------------------
+      # AGENTS Rule 6 — Alembic migrations are immutable + linear.
+      # ---------------------------------------------------------------
+      - id: aqp-migration-immutability
+        name: AQP Rule 6 — migration immutability (sha256 lock)
+        entry: python scripts/ci/check_migration_immutability.py
+        language: system
+        pass_filenames: false
+        # Migrations + the lock are the only things that can break it.
+        files: ^alembic/versions/
+
+      - id: aqp-migration-chain
+        name: AQP Rule 6 — migration chain (single head, no orphans)
+        entry: python scripts/ci/check_migration_chain.py
+        language: system
+        pass_filenames: false
+        files: ^alembic/versions/.*\.py$
+
+      # ---------------------------------------------------------------
+      # AGENTS Rule 26 — CredentialResolver-only access.
+      # ---------------------------------------------------------------
+      - id: aqp-credential-resolver
+        name: AQP Rule 26 — CredentialResolver (no settings.*_token reads)
+        entry: python scripts/ci/check_credential_resolver.py
+        language: system
+        pass_filenames: false
+        # The lint walks the full tree; run on any .py change so it
+        # catches violations regardless of where they land.
+        files: \.py$
+
+      # ---------------------------------------------------------------
+      # AGENTS Rule 29 — Typed entity inputs via <EntityPicker />.
+      # ---------------------------------------------------------------
+      - id: aqp-entity-picker
+        name: AQP Rule 29 — EntityPicker (no free-text URN inputs)
+        entry: python scripts/ci/check_entity_picker.py
+        language: system
+        pass_filenames: false
+        files: \.tsx$
+
+      # ---------------------------------------------------------------
+      # AGENTS Rule 22 — Agent boundary (no direct aqp.persistence
+      # imports inside aqp/agents/* outside ledger-writer exceptions).
+      # ---------------------------------------------------------------
+      - id: aqp-agent-boundary
+        name: AQP Rule 22 — agent boundary (no aqp.persistence imports)
+        entry: python scripts/ci/check_agent_boundary.py
+        language: system
+        pass_filenames: false
+        files: ^aqp/agents/.*\.py$
+
+      # ---------------------------------------------------------------
+      # Style — ban Pydantic V1 ``.dict()`` / ``.parse_obj()`` etc.
+      # ---------------------------------------------------------------
+      - id: aqp-no-pydantic-v1
+        name: AQP Style — Pydantic V1 surface ban (.dict / .parse_obj)
+        entry: python scripts/ci/check_no_pydantic_v1.py
+        language: system
+        pass_filenames: false
+        files: \.py$
