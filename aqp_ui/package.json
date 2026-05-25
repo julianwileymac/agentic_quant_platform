@@ -41,7 +41,9 @@
     "tailwind-merge": "^2.5.4",
     "dayjs": "^1.11.13",
     "jose": "^5.9.0",
-    "iron-session": "^8.0.4"
+    "iron-session": "^8.0.4",
+    "framer-motion": "^11.11.0",
+    "recharts": "^2.15.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

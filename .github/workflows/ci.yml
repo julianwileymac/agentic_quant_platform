@@ -23,10 +23,21 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install ruff mypy
-      - name: ruff (root)
-        run: ruff check aqp aqp_platform_core/src aqp_control_plane/src aqp_platform/build/scripts || true
-      - name: ruff (format check)
-        run: ruff format --check aqp_platform_core/src aqp_control_plane/src aqp_platform/build/scripts || true
+      # Phase 1 §4.6 — strict ruff on the proven-clean subset. NO
+      # `|| true` here. The narrow scope is what ratchets up over
+      # Phase 2 (the wider check below stays warning-only until each
+      # subtree's debt clears).
+      - name: ruff (clean subset, PR-blocking)
+        run: ruff check scripts/ci aqp_platform/build/scripts
+      - name: ruff format (clean subset, PR-blocking)
+        run: ruff format --check scripts/ci aqp_platform/build/scripts
+      # Wider ruff over the legacy tree. Stays soft-failing until each
+      # subtree is migrated into the strict scope above. Tracked in
+      # the restructuring plan §4.6 ratchet table.
+      - name: ruff (legacy scope, warning-only — Phase 2 ratchet)
+        run: ruff check aqp aqp_platform_core/src aqp_control_plane/src || true
+      - name: ruff format (legacy scope, warning-only — Phase 2 ratchet)
+        run: ruff format --check aqp_platform_core/src aqp_control_plane/src || true
 
   hard-rule-lints:
     name: AGENTS hard-rule lints (Phase 0 + Phase 1)
@@ -60,6 +71,29 @@ jobs:
         run: python scripts/ci/check_agent_boundary.py
       - name: Style — Pydantic V1 surface (.dict / .parse_obj / .parse_raw / .from_orm)
         run: python scripts/ci/check_no_pydantic_v1.py
+      # ------------------------------------------------------------------
+      # Phase 1 §4.5 — seven new rule-specific lints. Each ships with an
+      # allowlist at `scripts/ci/allowlists/<lint>.txt` for the existing
+      # tree's violations, with explicit Phase-2 (2026-09-30) removal
+      # deadlines.
+      # ------------------------------------------------------------------
+      - name: Rule 4 — `_progress.emit` (no direct redis.publish outside aqp/tasks/_progress.py / aqp/ws/ / aqp/cache/)
+        run: python scripts/ci/check_no_direct_redis_publish.py
+      - name: Rule 9 — logging discipline (ruff T201 + T203 print/pprint ban — application code only)
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ruff>=0.6"
+          ruff check --select T20 --no-fix
+      - name: Rule 11 — RAG entry points (no direct redis_client.ft outside aqp/rag/)
+        run: python scripts/ci/check_no_direct_redis_ft.py
+      - name: Rule 47 — topology service (no hardcoded *.svc.cluster.local URLs in application code)
+        run: python scripts/ci/check_no_hardcoded_svc_urls.py
+      - name: Rule 49 — MCP audience (RFC 8707 validation on every /mcp/* router)
+        run: python scripts/ci/check_mcp_audience.py
+      - name: Rule 52 — step-up MFA (RFC 9470 on every destructive route)
+        run: python scripts/ci/check_step_up_mfa.py
+      - name: Rule 55 — BYOK brokers (no direct settings.<broker>_* reads outside aqp/credentials/)
+        run: python scripts/ci/check_no_broker_settings.py
 
   boundary-lints:
     name: Cross-subproject boundary lint (${{ matrix.subproject }})

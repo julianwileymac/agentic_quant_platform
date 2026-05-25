@@ -1,0 +1,119 @@
+name: aqp-client
+
+# Phase 1 §4.4 — frontend test discipline for the Vite + React 19
+# `aqp_client/` SPA. Mirrors `.github/workflows/aqp-ui.yml` (Next.js
+# `aqp_ui/` workflow) so the two clients carry the same gating: lint
+# + typecheck + Vitest with PR-blocking 60% coverage threshold +
+# Playwright E2E.
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "aqp_client/**"
+      - ".github/workflows/aqp-client.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "aqp_client/**"
+      - ".github/workflows/aqp-client.yml"
+
+concurrency:
+  group: aqp-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: typecheck + lint + Vitest + coverage threshold
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: aqp_client
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: aqp_client/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      # Phase 1 §4.4 — Vitest with coverage thresholds at 60% baseline.
+      # The thresholds are declared in `aqp_client/vitest.config.ts`
+      # under `test.coverage.thresholds`; vitest exits non-zero when a
+      # threshold is crossed, which fails this step.
+      - name: Vitest with v8 coverage (60% threshold, PR-blocking)
+        run: pnpm test:coverage
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aqp-client-coverage
+          path: aqp_client/coverage
+          retention-days: 7
+
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: test
+    defaults:
+      run:
+        working-directory: aqp_client
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: aqp_client/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Phase 1 §4.4 — four canonical Playwright specs:
+      #   - tests/e2e/auth-tenant-workspace.spec.ts
+      #   - tests/e2e/paper-trading-progress.spec.ts
+      #   - tests/e2e/kill-switch-fanout.spec.ts
+      #   - tests/e2e/cross-tenant-deny.spec.ts
+      # plus the existing per-route smokes. `playwright.config.ts`
+      # auto-spawns `pnpm dev` on port 3001.
+      - name: Run Playwright tests
+        run: pnpm test:e2e
+        env:
+          CI: "1"
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aqp-client-playwright-report
+          path: aqp_client/playwright-report
+          retention-days: 7

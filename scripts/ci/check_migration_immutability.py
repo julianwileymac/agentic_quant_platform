@@ -19,6 +19,7 @@ Exit codes:
 * 1 — drift on existing entries (Rule 6 violation)
 * 2 — usage error / IO error
 """
+
 from __future__ import annotations
 
 import argparse
@@ -130,8 +131,7 @@ def cmd_check(*, strict_new: bool) -> int:
     if strict_new and new_unlocked:
         return 1
     print(
-        "[migration-immutability] OK: "
-        f"{len(expected)} locked, {len(new_unlocked)} new (unlocked)."
+        f"[migration-immutability] OK: {len(expected)} locked, {len(new_unlocked)} new (unlocked)."
     )
     return 0
 

@@ -26,6 +26,7 @@ Exit codes:
 * 0 - clean
 * 1 - at least one violation
 """
+
 from __future__ import annotations
 
 import argparse

@@ -30,6 +30,7 @@ Exit codes:
 * 0 - clean
 * 1 - at least one destructive route without step-up MFA
 """
+
 from __future__ import annotations
 
 import argparse
@@ -186,9 +187,8 @@ def _function_has_step_up_dep(func: ast.FunctionDef | ast.AsyncFunctionDef) -> b
 def _decorator_has_step_up_dep(decorator: ast.Call) -> bool:
     """Inspect ``@router.post('/x', dependencies=[...])`` for step-up."""
     for kw in decorator.keywords:
-        if kw.arg == "dependencies":
-            if _expr_contains_require_step_up(kw.value):
-                return True
+        if kw.arg == "dependencies" and _expr_contains_require_step_up(kw.value):
+            return True
     return False
 
 
@@ -229,9 +229,7 @@ class _RouteFinder(ast.NodeVisitor):
         if not decorator.args:
             return
         path_arg = decorator.args[0]
-        if not isinstance(path_arg, ast.Constant) or not isinstance(
-            path_arg.value, str
-        ):
+        if not isinstance(path_arg, ast.Constant) or not isinstance(path_arg.value, str):
             return
         path = path_arg.value
         full_path = (self.prefix.rstrip("/") + "/" + path.lstrip("/")).rstrip("/")
@@ -283,9 +281,7 @@ def _scan_file(path: Path) -> list[tuple[int, str]]:
 
 
 def _iter_files() -> list[Path]:
-    return [
-        p for p in REPO_ROOT.rglob("*.py") if not (SKIP_PARTS & set(p.parts))
-    ]
+    return [p for p in REPO_ROOT.rglob("*.py") if not (SKIP_PARTS & set(p.parts))]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -308,10 +304,7 @@ def main(argv: list[str] | None = None) -> int:
 
     filtered = filter_violations(raw, "step_up_mfa")
     if filtered:
-        print(
-            "[step-up-mfa] FAIL: destructive route without "
-            "`Depends(require_step_up(...))`."
-        )
+        print("[step-up-mfa] FAIL: destructive route without `Depends(require_step_up(...))`.")
         print(
             "Every route in the canonical destructive-route list MUST "
             "attach `require_step_up` (Rule 52). RFC 9470 step-up MFA "
@@ -328,8 +321,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {message}")
         return 1
     print(
-        f"[step-up-mfa] OK: scanned {len(files)} files, "
-        f"{len(raw)} raw match(es), 0 unallowlisted."
+        f"[step-up-mfa] OK: scanned {len(files)} files, {len(raw)} raw match(es), 0 unallowlisted."
     )
     return 0
 

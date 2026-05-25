@@ -22,6 +22,7 @@ Exit codes:
 * 0 - clean
 * 1 - at least one MCP router without audience validation
 """
+
 from __future__ import annotations
 
 import argparse
@@ -144,9 +145,7 @@ def _scan_file(path: Path) -> list[tuple[int, str]]:
 
 
 def _iter_files() -> list[Path]:
-    return [
-        p for p in REPO_ROOT.rglob("*.py") if not (SKIP_PARTS & set(p.parts))
-    ]
+    return [p for p in REPO_ROOT.rglob("*.py") if not (SKIP_PARTS & set(p.parts))]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -169,12 +168,9 @@ def main(argv: list[str] | None = None) -> int:
 
     filtered = filter_violations(raw, "mcp_audience")
     if filtered:
+        print("[mcp-audience] FAIL: MCP router without RFC 8707 audience validation.")
         print(
-            "[mcp-audience] FAIL: MCP router without RFC 8707 audience "
-            "validation."
-        )
-        print(
-            "Every `APIRouter(prefix=\"/mcp/...\")` MUST call "
+            'Every `APIRouter(prefix="/mcp/...")` MUST call '
             "`validate_mcp_audience(request, <canonical_uri>, "
             "mode=...)` (Rule 49). Without this check, a token minted "
             "for one MCP server can be replayed against another.\n"
@@ -187,8 +183,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {message}")
         return 1
     print(
-        f"[mcp-audience] OK: scanned {len(files)} files, "
-        f"{len(raw)} raw match(es), 0 unallowlisted."
+        f"[mcp-audience] OK: scanned {len(files)} files, {len(raw)} raw match(es), 0 unallowlisted."
     )
     return 0
 

@@ -147,3 +147,61 @@ repos:
         language: system
         pass_filenames: false
         files: ^aqp_bots/(?!templates/).*\.py$
+
+      # ---------------------------------------------------------------
+      # Phase 1 §4.5 — seven new rule-specific lints. Each ships with
+      # an allowlist at scripts/ci/allowlists/<lint>.txt for existing
+      # tree violations, with explicit Phase-2 (2026-09-30) deadlines.
+      # The hooks mirror the `hard-rule-lints` CI job 1:1 — adding a
+      # new lint script means adding it both here and in ci.yml.
+      # ---------------------------------------------------------------
+      - id: aqp-no-direct-redis-publish
+        name: AQP Rule 4 — no direct redis.publish (use _progress.emit)
+        entry: python scripts/ci/check_no_direct_redis_publish.py
+        language: system
+        pass_filenames: false
+        files: \.py$
+
+      - id: aqp-no-print
+        name: AQP Rule 9 — logging discipline (ruff T20 / no print/pprint)
+        entry: ruff check --select T20 --no-fix
+        language: system
+        pass_filenames: false
+        files: \.py$
+
+      - id: aqp-no-direct-redis-ft
+        name: AQP Rule 11 — no direct redis_client.ft outside aqp/rag/
+        entry: python scripts/ci/check_no_direct_redis_ft.py
+        language: system
+        pass_filenames: false
+        files: \.py$
+
+      - id: aqp-no-hardcoded-svc-urls
+        name: AQP Rule 47 — no hardcoded *.svc.cluster.local URLs
+        entry: python scripts/ci/check_no_hardcoded_svc_urls.py
+        language: system
+        pass_filenames: false
+        # Scan source-style files only; the lint exempts deployment
+        # surface internally.
+        files: \.(py|pyi|ts|tsx|js|jsx|yaml|yml|sh|env)$
+
+      - id: aqp-mcp-audience
+        name: AQP Rule 49 — MCP audience (RFC 8707 validation on /mcp/* routers)
+        entry: python scripts/ci/check_mcp_audience.py
+        language: system
+        pass_filenames: false
+        files: \.py$
+
+      - id: aqp-step-up-mfa
+        name: AQP Rule 52 — step-up MFA (RFC 9470 on destructive routes)
+        entry: python scripts/ci/check_step_up_mfa.py
+        language: system
+        pass_filenames: false
+        files: \.py$
+
+      - id: aqp-no-broker-settings
+        name: AQP Rule 55 — no direct settings.<broker>_* reads (BYOK only)
+        entry: python scripts/ci/check_no_broker_settings.py
+        language: system
+        pass_filenames: false
+        files: \.py$

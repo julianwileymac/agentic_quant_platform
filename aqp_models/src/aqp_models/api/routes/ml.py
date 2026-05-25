@@ -19,11 +19,12 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
 from aqp.api.security import secure_router
+from aqp.api.security_stepup import require_step_up
 from aqp.api.schemas import TaskAccepted
 from aqp.config import settings
 from aqp.core.types import Symbol
@@ -2181,7 +2182,15 @@ def serving_sessions() -> dict[str, Any]:
     return {"sessions": sessions, "n_sessions": len(sessions)}
 
 
-@router.post("/serving/halt-all")
+@router.post(
+    "/serving/halt-all",
+    # AGENTS Rule 52 — every kill-switch fan-out target requires fresh
+    # MFA. The frontend `KillSwitch.tsx` prompts the IdP once before
+    # the parallel POST burst, so this dependency rejects with 401
+    # `step_up_required` when the fan-out wasn't preceded by a step-up
+    # token.
+    dependencies=[Depends(require_step_up())],
+)
 def serving_halt_all() -> dict[str, Any]:
     """Halt every active serving session — kill-switch fan-out target.
 

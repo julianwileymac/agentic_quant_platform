@@ -25,6 +25,7 @@ Exit codes:
 * 1 - at least one violation
 * 2 - usage error / IO error
 """
+
 from __future__ import annotations
 
 import argparse
@@ -54,9 +55,7 @@ def _is_forbidden(name: str, forbids: list[str], allows: list[str]) -> bool:
     """
     if not any(_matches_prefix(name, f) for f in forbids):
         return False
-    if any(_matches_prefix(name, a) for a in allows):
-        return False
-    return True
+    return not any(_matches_prefix(name, a) for a in allows)
 
 
 class _BoundaryFinder(ast.NodeVisitor):
@@ -87,9 +86,7 @@ class _BoundaryFinder(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def _scan_file(
-    path: Path, forbids: list[str], allows: list[str]
-) -> list[tuple[int, str]]:
+def _scan_file(path: Path, forbids: list[str], allows: list[str]) -> list[tuple[int, str]]:
     try:
         source = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
@@ -130,8 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         "--lint-name",
         required=True,
         help=(
-            "Allowlist file stem under scripts/ci/allowlists/ "
-            "(e.g. `boundary_aqp_control_plane`)."
+            "Allowlist file stem under scripts/ci/allowlists/ (e.g. `boundary_aqp_control_plane`)."
         ),
     )
     parser.add_argument(
@@ -184,14 +180,8 @@ def main(argv: list[str] | None = None) -> int:
     if filtered:
         forbid_pretty = ", ".join(args.forbid)
         allow_pretty = ", ".join(args.allow) or "(none)"
-        print(
-            f"[{label}] FAIL: forbidden import(s) detected under "
-            f"{args.scan_root}."
-        )
-        print(
-            f"  forbid prefixes: {forbid_pretty}\n"
-            f"  allow overrides: {allow_pretty}"
-        )
+        print(f"[{label}] FAIL: forbidden import(s) detected under {args.scan_root}.")
+        print(f"  forbid prefixes: {forbid_pretty}\n  allow overrides: {allow_pretty}")
         print(
             "\nMove the import behind the documented boundary "
             "(typically `aqp_platform_core` shared types + an HTTP "
@@ -201,10 +191,7 @@ def main(argv: list[str] | None = None) -> int:
         for _, message in filtered:
             print(f"  - {message}")
         return 1
-    print(
-        f"[{label}] OK: scanned {len(files)} files, "
-        f"{len(raw)} raw match(es), 0 unallowlisted."
-    )
+    print(f"[{label}] OK: scanned {len(files)} files, {len(raw)} raw match(es), 0 unallowlisted.")
     return 0
 
 

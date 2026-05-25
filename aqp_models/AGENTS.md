@@ -72,17 +72,51 @@ spec library ([`configs/`](configs/)), and the test suite
   [`src/aqp_models/finetune/`](src/aqp_models/finetune/).
 - New custom-serving adapter (e.g. TGI, llama.cpp): add a new module
   under [`src/aqp_models/serving/`](src/aqp_models/serving/).
+- New agent-facing interface (e.g. an `Embedder` wrapper): subclass
+  [`PolymorphicInterface`](src/aqp_models/interfaces/base.py) under
+  [`src/aqp_models/interfaces/`](src/aqp_models/interfaces/); register
+  via `@register("Name", kind="interface")`. The wrap helper in
+  [`src/aqp_models/interfaces/wrap.py`](src/aqp_models/interfaces/wrap.py)
+  routes a kind alias to the right wrapper class.
+- New MLOps lifecycle handler (e.g. `EvictionHandler`): subclass
+  [`MLOpsHandler`](src/aqp_models/handlers/base.py) under
+  [`src/aqp_models/handlers/`](src/aqp_models/handlers/) — the base
+  enforces `policy_check` + lineage emission.
+- New compiler target (e.g. CoreML): subclass
+  [`BaseCompiler`](src/aqp_models/productionize/base.py) under
+  [`src/aqp_models/productionize/`](src/aqp_models/productionize/);
+  decorate with `@register_compiler("target")`.
+- New external registry adapter (e.g. a private MinIO model store):
+  subclass [`RegistryAdapter`](src/aqp_models/adapters/base.py) under
+  [`src/aqp_models/adapters/`](src/aqp_models/adapters/) — the
+  metaclass registers via `RegistryAdapterMeta`.
+- New OOD rule (e.g. drift detector): subclass
+  [`MLRule`](src/aqp_models/rules/base.py) under
+  [`src/aqp_models/rules/`](src/aqp_models/rules/); set
+  `rule_name` so the registry auto-registers. Add to a pack YAML
+  under [`configs/rules/`](configs/rules/) to expose it to skills.
+- New skill: drop a YAML under
+  [`configs/skills/`](configs/skills/) following the
+  [`MLSkillSpec`](src/aqp_models/spec.py) schema. The registry
+  auto-loads on first lookup; the runtime in
+  [`src/aqp_models/runtime.py`](src/aqp_models/runtime.py) snapshots
+  the hash into `ml_skill_versions` on first run.
 - New Celery task: extend the appropriate file in
   [`tasks/`](tasks/) — `ml_tasks.py` (training), `ml_test_tasks.py`
   (test workbench), `finetune_tasks.py` (LLM finetune),
-  `training_tasks.py` (job-flow training).
+  `training_tasks.py` (job-flow training), `ml_pull_tasks.py` (HF /
+  TorchHub pull), `ml_serving_tasks.py` (serving lifecycle),
+  `ml_productionize_tasks.py` (ONNX / TensorRT compile),
+  `ml_skill_tasks.py` (skill runtime invocations).
 - New REST surface: extend
-  [`api/routes/ml.py`](api/routes/ml.py) or
+  [`api/routes/ml.py`](api/routes/ml.py),
+  [`api/routes/ml_skills.py`](api/routes/ml_skills.py), or
   [`api/routes/analytics_ml.py`](api/routes/analytics_ml.py).
 - Tests: mirror the source path under [`tests/`](tests/).
 - Persistence models for ML run ledgers stay in the monolith ORM at
   [`../aqp/persistence/`](../aqp/persistence/) — this package depends
-  on those rows being there.
+  on those rows being there. The MLOps slice's ORM classes live at
+  [`../aqp/persistence/models_mlops.py`](../aqp/persistence/models_mlops.py).
 
 ## Dependency rules
 

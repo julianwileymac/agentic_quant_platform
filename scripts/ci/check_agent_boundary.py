@@ -19,6 +19,7 @@ Exit codes:
 * 0 — clean
 * 1 — at least one violation
 """
+
 from __future__ import annotations
 
 import argparse
@@ -64,9 +65,7 @@ class _BoundaryFinder(ast.NodeVisitor):
         module = node.module or ""
         if _module_target(module):
             names = ", ".join(alias.asname or alias.name for alias in node.names)
-            self.hits.append(
-                (node.lineno, f"from {module} import {names}")
-            )
+            self.hits.append((node.lineno, f"from {module} import {names}"))
         self.generic_visit(node)
 
     def visit_Import(self, node: ast.Import) -> None:  # noqa: N802

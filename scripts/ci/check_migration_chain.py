@@ -21,6 +21,7 @@ Exit codes:
 * 1 — any of the above invariants is violated
 * 2 — IO / parse error
 """
+
 from __future__ import annotations
 
 import re
@@ -71,9 +72,7 @@ def _parse_module(path: Path) -> tuple[str, list[str] | None]:
     if items:
         return revision, items
 
-    raise SystemExit(
-        f"{path.name}: cannot parse down_revision rhs {raw!r}"
-    )
+    raise SystemExit(f"{path.name}: cannot parse down_revision rhs {raw!r}")
 
 
 def _walk() -> dict[str, list[str] | None]:
@@ -86,9 +85,7 @@ def _walk() -> dict[str, list[str] | None]:
             continue
         rev, down = _parse_module(entry)
         if rev in graph:
-            raise SystemExit(
-                f"duplicate revision {rev!r} in {entry.name}"
-            )
+            raise SystemExit(f"duplicate revision {rev!r} in {entry.name}")
         graph[rev] = down
     return graph
 
@@ -106,9 +103,7 @@ def check_chain() -> list[str]:
             continue
         for parent in parents:
             if parent not in revisions:
-                errors.append(
-                    f"revision {rev!r} references unknown down_revision {parent!r}"
-                )
+                errors.append(f"revision {rev!r} references unknown down_revision {parent!r}")
 
     # Rule 3 — exactly one head.
     referenced: set[str] = set()
@@ -122,8 +117,7 @@ def check_chain() -> list[str]:
     elif len(heads) > 1:
         errors.append(
             "multiple heads detected (must be a single linear chain "
-            "or merged via a merge revision): "
-            + ", ".join(heads)
+            "or merged via a merge revision): " + ", ".join(heads)
         )
 
     # Rule 4 — no cycles. Walk every revision back to root via DFS,
@@ -140,9 +134,7 @@ def check_chain() -> list[str]:
                 continue
             nxt = remaining.pop()
             if nxt in seen_on_path:
-                errors.append(
-                    f"cycle detected: {' -> '.join(path)} -> {nxt}"
-                )
+                errors.append(f"cycle detected: {' -> '.join(path)} -> {nxt}")
                 continue
             parents = graph.get(nxt)
             if parents is None:

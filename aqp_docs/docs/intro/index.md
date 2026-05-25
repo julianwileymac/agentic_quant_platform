@@ -155,6 +155,7 @@ flowchart LR
 | [ml-preprocessing-pipeline.md](../concepts/strategy/ml-preprocessing-pipeline.md) | ML preprocessors as data-engine pipeline nodes |
 | [ml-builder.md](../concepts/strategy/ml-builder.md) | Graphical experiment builder UX |
 | [ml-testing.md](../concepts/strategy/ml-testing.md) | Interactive ML testing workbench |
+| [mlops-service.md](../concepts/strategy/mlops-service.md) | Initial MLOps service — agent-facing interfaces, lifecycle handlers, MLSkill spec/runtime, OOD rules, dedicated `aqp-ml-mcp` server |
 | [backtest-engines.md](../concepts/strategy/backtest-engines.md) | Engine catalogue + invariants (vbt-pro primary, event-driven, ZVT, AAT, fallback) |
 | [vbtpro-integration.md](../concepts/strategy/vbtpro-integration.md) | Deep vectorbt-pro integration: modes, hooks, agent + ML components, walk-forward |
 | [hft-backtest.md](../concepts/strategy/hft-backtest.md) | hftbacktest-driven LOB engine, ``LobStrategy`` API, latency / queue models |

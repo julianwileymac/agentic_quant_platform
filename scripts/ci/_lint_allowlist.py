@@ -9,12 +9,12 @@ the deadline / TODO marker (e.g. ``# TODO(phase-1): remove by 2026-08-15``).
 Allowlists are an escape hatch — they should never be empty for long.
 Every entry MUST carry a removal deadline in its trailing comment.
 """
+
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
-
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 ALLOWLIST_DIR = REPO_ROOT / "scripts" / "ci" / "allowlists"

@@ -18,6 +18,7 @@ Exit codes:
 * 0 - clean
 * 1 - at least one violation
 """
+
 from __future__ import annotations
 
 import argparse
@@ -73,10 +74,7 @@ from _lint_allowlist import filter_violations, normalise_path  # noqa: E402
 
 
 def _is_exempt(rel_path: str) -> bool:
-    for prefix in EXEMPT_PREFIXES:
-        if rel_path == prefix or rel_path.startswith(prefix):
-            return True
-    return False
+    return any(rel_path == prefix or rel_path.startswith(prefix) for prefix in EXEMPT_PREFIXES)
 
 
 class _RedisAliasFinder(ast.NodeVisitor):

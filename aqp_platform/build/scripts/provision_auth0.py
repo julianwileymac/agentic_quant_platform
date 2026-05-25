@@ -29,6 +29,7 @@ The Management API M2M client must have the ``read:client_grants``,
 ``update:resource_servers``, ``read:actions``, ``create:actions``,
 ``update:actions``, and ``deploy:actions`` permissions.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -51,8 +52,14 @@ logger = logging.getLogger("provision_auth0")
 
 SCOPES: list[dict[str, str]] = [
     {"value": "read:infrastructure", "description": "View deployments / pods / logs / configs."},
-    {"value": "manage:agents", "description": "Start / stop / restart agent + bot pods + RL experiments."},
-    {"value": "manage:infrastructure", "description": "Deploy / update services + edit ConfigMaps."},
+    {
+        "value": "manage:agents",
+        "description": "Start / stop / restart agent + bot pods + RL experiments.",
+    },
+    {
+        "value": "manage:infrastructure",
+        "description": "Deploy / update services + edit ConfigMaps.",
+    },
     {"value": "admin:cluster", "description": "Full cluster control + bypass resource scoping."},
 ]
 
@@ -105,11 +112,7 @@ class ProvisionSettings:
     def from_env_or_args(cls, args: argparse.Namespace) -> ProvisionSettings:
         repo_root = Path(__file__).resolve().parents[2]
         default_template = (
-            repo_root
-            / "terraform"
-            / "modules"
-            / "auth0_identity"
-            / "post_login_action.js.tftpl"
+            repo_root / "terraform" / "modules" / "auth0_identity" / "post_login_action.js.tftpl"
         )
         return cls(
             domain=_required(args.domain or os.environ.get("AUTH0_DOMAIN"), "AUTH0_DOMAIN"),
@@ -183,12 +186,15 @@ class Auth0Mgmt:
         json_body: Any | None = None,
     ) -> Any:
         if self._settings.dry_run and method.upper() not in {"GET", "HEAD"}:
-            logger.info("[dry-run] %s %s payload=%s", method, path, json.dumps(json_body)[:200] if json_body else "")
+            logger.info(
+                "[dry-run] %s %s payload=%s",
+                method,
+                path,
+                json.dumps(json_body)[:200] if json_body else "",
+            )
             return {}
         headers = {"Authorization": f"Bearer {self._get_token()}"}
-        resp = self._client.request(
-            method, path, params=params, json=json_body, headers=headers
-        )
+        resp = self._client.request(method, path, params=params, json=json_body, headers=headers)
         if resp.status_code == 204 or not resp.content:
             return {}
         try:
@@ -208,9 +214,7 @@ class Auth0Mgmt:
                 return item
         return None
 
-    def upsert_resource_server(
-        self, *, identifier: str, name: str, scopes: list[dict]
-    ) -> dict:
+    def upsert_resource_server(self, *, identifier: str, name: str, scopes: list[dict]) -> dict:
         existing = self.get_resource_server(identifier)
         payload = {
             "name": name,
@@ -255,7 +259,9 @@ class Auth0Mgmt:
     ) -> None:
         # Idempotent: list current grants, add only missing ones.
         current = self._request("GET", f"/api/v2/roles/{role_id}/permissions") or []
-        current_keys = {(p.get("resource_server_identifier"), p.get("permission_name")) for p in current}
+        current_keys = {
+            (p.get("resource_server_identifier"), p.get("permission_name")) for p in current
+        }
         new_perms = [
             {"resource_server_identifier": resource_server, "permission_name": s}
             for s in scopes
@@ -376,9 +382,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--domain", help="Auth0 domain (or AUTH0_DOMAIN env).")
     parser.add_argument("--m2m-client-id", help="Management M2M client id (or env).")
-    parser.add_argument(
-        "--m2m-client-secret", help="Management M2M client secret (or env)."
-    )
+    parser.add_argument("--m2m-client-secret", help="Management M2M client secret (or env).")
     parser.add_argument("--sync-url", help="Backend /_internal/auth0/sync URL.")
     parser.add_argument(
         "--api-audience",

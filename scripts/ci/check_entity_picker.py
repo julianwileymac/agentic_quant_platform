@@ -21,6 +21,7 @@ Exit codes:
 * 0 — no violations (after allowlist)
 * 1 — at least one violation
 """
+
 from __future__ import annotations
 
 import argparse
@@ -126,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "[entity-picker] FAIL: free-text input(s) capturing typed AQP "
             "entities detected.\n"
-            "Replace with `<EntityPicker kind=\"...\" value={...} "
+            'Replace with `<EntityPicker kind="..." value={...} '
             "onChange={...} />` (Rule 29) or allowlist with a removal "
             "deadline in scripts/ci/allowlists/entity_picker.txt.\n"
         )

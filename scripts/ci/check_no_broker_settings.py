@@ -22,6 +22,7 @@ Exit codes:
 * 0 - clean
 * 1 - at least one violation
 """
+
 from __future__ import annotations
 
 import argparse
@@ -91,12 +92,8 @@ class _SettingsAliasFinder(ast.NodeVisitor):
     * ``cfg = get_settings()``       (heuristic on common factory)
     """
 
-    SETTINGS_MODULES: frozenset[str] = frozenset(
-        {"aqp.config", "aqp.config.settings"}
-    )
-    SETTINGS_FACTORIES: frozenset[str] = frozenset(
-        {"get_settings", "Settings"}
-    )
+    SETTINGS_MODULES: frozenset[str] = frozenset({"aqp.config", "aqp.config.settings"})
+    SETTINGS_FACTORIES: frozenset[str] = frozenset({"get_settings", "Settings"})
 
     def __init__(self) -> None:
         self.settings_names: set[str] = set()
@@ -110,10 +107,9 @@ class _SettingsAliasFinder(ast.NodeVisitor):
 
     def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
         for alias in node.names:
-            if alias.name in self.SETTINGS_MODULES:
-                # rare: ``import aqp.config.settings as s``
-                if alias.asname:
-                    self.settings_names.add(alias.asname)
+            # rare: ``import aqp.config.settings as s``
+            if alias.name in self.SETTINGS_MODULES and alias.asname:
+                self.settings_names.add(alias.asname)
         self.generic_visit(node)
 
     def visit_Assign(self, node: ast.Assign) -> None:  # noqa: N802
@@ -125,10 +121,7 @@ class _SettingsAliasFinder(ast.NodeVisitor):
                     self.settings_names.add(target.id)
         elif isinstance(value, ast.Call):
             func = value.func
-            if (
-                isinstance(func, ast.Name)
-                and func.id in self.SETTINGS_FACTORIES
-            ):
+            if isinstance(func, ast.Name) and func.id in self.SETTINGS_FACTORIES:
                 for target in node.targets:
                     if isinstance(target, ast.Name):
                         self.settings_names.add(target.id)
@@ -172,9 +165,7 @@ def _scan_file(path: Path) -> list[tuple[int, str]]:
 
 
 def _iter_files() -> list[Path]:
-    return [
-        p for p in REPO_ROOT.rglob("*.py") if not (SKIP_PARTS & set(p.parts))
-    ]
+    return [p for p in REPO_ROOT.rglob("*.py") if not (SKIP_PARTS & set(p.parts))]
 
 
 def main(argv: list[str] | None = None) -> int:

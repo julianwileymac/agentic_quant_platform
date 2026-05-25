@@ -43,3 +43,28 @@ def _load_script(stem: str) -> ModuleType:
 def load_lint_script():
     """Factory: ``module = load_lint_script("check_credential_resolver")``."""
     return _load_script
+
+
+@pytest.fixture(autouse=True)
+def _isolate_allowlist_repo_root(monkeypatch, tmp_path) -> None:
+    """Redirect the shared allowlist module's REPO_ROOT to ``tmp_path``.
+
+    Without this, regression tests that synthesise tiny ``.py`` files
+    under ``tmp_path`` and assert they trigger a lint violation can be
+    silently dropped when the violation path coincides with an entry
+    already on the real allowlist (e.g. ``aqp/trading/brokerages/alpaca.py``
+    is on the Rule 55 allowlist). Pointing ``_lint_allowlist.REPO_ROOT``
+    at ``tmp_path`` guarantees the path-relative lookup never matches a
+    real entry. The empty allowlist directory under ``tmp_path`` means
+    every violation flows through.
+    """
+    import _lint_allowlist  # type: ignore[import-not-found]
+
+    monkeypatch.setattr(_lint_allowlist, "REPO_ROOT", tmp_path, raising=True)
+    # Point the allowlist directory at an empty subdir so no real
+    # allowlist files leak through.
+    empty_allowlists = tmp_path / "_test_allowlists"
+    empty_allowlists.mkdir(exist_ok=True)
+    monkeypatch.setattr(
+        _lint_allowlist, "ALLOWLIST_DIR", empty_allowlists, raising=True
+    )

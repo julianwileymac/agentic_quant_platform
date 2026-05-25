@@ -14,6 +14,7 @@ It never prints raw secret values. The generated files under
 `deployments/kubernetes/generated/` are git-ignored because Kubernetes Secret
 `data` fields are only base64-encoded, not encrypted.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -27,7 +28,9 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENV = REPO_ROOT / ".env"
-CONFIGMAP_PATH = REPO_ROOT / "deployments" / "kubernetes" / "base" / "configmaps" / "aqp-config.yaml"
+CONFIGMAP_PATH = (
+    REPO_ROOT / "deployments" / "kubernetes" / "base" / "configmaps" / "aqp-config.yaml"
+)
 ADMIN_CONFIGMAP_PATH = (
     REPO_ROOT / "deployments" / "kubernetes" / "base" / "configmaps" / "aqp-admin-config.yaml"
 )
@@ -35,7 +38,12 @@ SECRET_TEMPLATE_PATH = (
     REPO_ROOT / "deployments" / "kubernetes" / "base" / "secrets" / "aqp-secrets.yaml.template"
 )
 ADMIN_SECRET_TEMPLATE_PATH = (
-    REPO_ROOT / "deployments" / "kubernetes" / "base" / "secrets" / "aqp-admin-secrets.yaml.template"
+    REPO_ROOT
+    / "deployments"
+    / "kubernetes"
+    / "base"
+    / "secrets"
+    / "aqp-admin-secrets.yaml.template"
 )
 GENERATED_DIR = REPO_ROOT / "deployments" / "kubernetes" / "generated"
 
@@ -67,7 +75,9 @@ def _domain_to_issuer(domain: str) -> str:
 
 def derive_values(env: dict[str, str]) -> tuple[dict[str, str], dict[str, str], list[str]]:
     warnings: list[str] = []
-    domain = env.get("AQP_AUTH0_DOMAIN") or env.get("AUTH0_DOMAIN") or env.get("VITE_AUTH0_DOMAIN") or ""
+    domain = (
+        env.get("AQP_AUTH0_DOMAIN") or env.get("AUTH0_DOMAIN") or env.get("VITE_AUTH0_DOMAIN") or ""
+    )
     issuer = env.get("AQP_AUTH_OIDC_ISSUER") or _domain_to_issuer(domain)
     audience = (
         env.get("AQP_AUTH_OIDC_AUDIENCE")
@@ -92,7 +102,9 @@ def derive_values(env: dict[str, str]) -> tuple[dict[str, str], dict[str, str], 
     if not client_id:
         warnings.append("AUTH0_CLIENT_ID missing; SPA login cannot be enabled.")
     if not client_secret:
-        warnings.append("AUTH0_CLIENT_SECRET missing; backend confidential/M2M fallback remains unset.")
+        warnings.append(
+            "AUTH0_CLIENT_SECRET missing; backend confidential/M2M fallback remains unset."
+        )
     if not m2m_client_id or not m2m_secret:
         warnings.append(
             "AQP_AUTH_M2M_CLIENT_ID/AQP_AUTH_M2M_CLIENT_SECRET missing; "
@@ -216,7 +228,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.no_generated_secret:
         GENERATED_DIR.mkdir(parents=True, exist_ok=True)
-        write_generated_secret(GENERATED_DIR / "aqp-secrets.local.yaml", namespace="aqp", secrets_map=secret)
+        write_generated_secret(
+            GENERATED_DIR / "aqp-secrets.local.yaml", namespace="aqp", secrets_map=secret
+        )
         write_generated_secret(
             GENERATED_DIR / "aqp-admin-secrets.local.yaml",
             namespace="aqp-admin",

@@ -80,15 +80,18 @@ def _resolve_financial_terms() -> tuple[str, ...]:
 
 
 _FINANCIAL_TERMS = _resolve_financial_terms()
+
+
+def _build_term_pattern(term: str) -> re.Pattern[str]:
+    # Extracted out of the f-string so backslash escapes stay legal on
+    # Python 3.11 (which forbids backslashes inside f-string {expr}
+    # interpolations; relaxed in 3.12 by PEP 701).
+    escaped = re.escape(term).replace(r"\ ", r"\s+").replace(r"\-", r"[-\s]")
+    return re.compile(rf"(?<!\w){escaped}(?!\w)", re.IGNORECASE)
+
+
 _FINANCIAL_TERM_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
-    (
-        term,
-        re.compile(
-            rf"(?<!\w){re.escape(term).replace(r'\ ', r'\s+').replace(r'\-', r'[-\s]')}(?!\w)",
-            re.IGNORECASE,
-        ),
-    )
-    for term in _FINANCIAL_TERMS
+    (term, _build_term_pattern(term)) for term in _FINANCIAL_TERMS
 )
 
 

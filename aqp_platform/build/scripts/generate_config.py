@@ -18,14 +18,15 @@ Usage::
     python build/scripts/generate_config.py --env k8s --kind secret --out deployments/kubernetes/base/secrets/aqp-secrets.yaml.template
     python build/scripts/generate_config.py --env local --diff
 """
+
 from __future__ import annotations
 
 import argparse
 import difflib
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCHEMA = REPO_ROOT / "deployments" / "compose" / ".env.schema"
@@ -90,11 +91,13 @@ def parse_schema(path: Path) -> list[SchemaEntry]:
 
 
 def _finalize_entry(block: dict[str, str], *, path: Path) -> SchemaEntry:
-    missing = [field for field in ("key", "description", "required", "targets", "classification") if field not in block]
+    missing = [
+        field
+        for field in ("key", "description", "required", "targets", "classification")
+        if field not in block
+    ]
     if missing:
-        raise ValueError(
-            f"schema entry in {path} missing required fields: {missing} (got {block})"
-        )
+        raise ValueError(f"schema entry in {path} missing required fields: {missing} (got {block})")
 
     classification = block["classification"]
     if classification not in VALID_CLASSIFICATIONS:
@@ -181,7 +184,7 @@ def emit_configmap(entries: Iterable[SchemaEntry], *, name: str = "aqp-config") 
         value = entry.default.replace('"', '\\"')
         data.append(f'  {entry.key}: "{value}"')
 
-    body = "\n".join(data) if data else "  AQP_CONFIGMAP_PLACEHOLDER: \"empty\""
+    body = "\n".join(data) if data else '  AQP_CONFIGMAP_PLACEHOLDER: "empty"'
     return _yaml_doc(
         kind="ConfigMap",
         name=name,
@@ -290,9 +293,7 @@ def _write_or_diff(path: Path, payload: str, *, diff_only: bool) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Generate AQP config artifacts from .env.schema."
-    )
+    parser = argparse.ArgumentParser(description="Generate AQP config artifacts from .env.schema.")
     parser.add_argument(
         "--env",
         choices=VALID_ENVS,
@@ -339,12 +340,23 @@ def main(argv: list[str] | None = None) -> int:
     # args.env == "k8s"
     if args.kind == "configmap":
         payload = emit_configmap(entries)
-        out = args.out or REPO_ROOT / "deployments" / "kubernetes" / "base" / "configmaps" / "aqp-config.yaml"
+        out = (
+            args.out
+            or REPO_ROOT / "deployments" / "kubernetes" / "base" / "configmaps" / "aqp-config.yaml"
+        )
         return _write_or_diff(out, payload, diff_only=args.diff)
 
     if args.kind == "secret":
         payload = emit_secret(entries)
-        out = args.out or REPO_ROOT / "deployments" / "kubernetes" / "base" / "secrets" / "aqp-secrets.yaml.template"
+        out = (
+            args.out
+            or REPO_ROOT
+            / "deployments"
+            / "kubernetes"
+            / "base"
+            / "secrets"
+            / "aqp-secrets.yaml.template"
+        )
         return _write_or_diff(out, payload, diff_only=args.diff)
 
     parser.error("when --env=k8s, --kind must be configmap or secret")

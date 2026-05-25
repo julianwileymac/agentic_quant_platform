@@ -1,0 +1,65 @@
+# Dependabot configuration — GitHub Actions only.
+#
+# Phase 1 §4.7: Renovate (root `renovate.json`) owns every other
+# package ecosystem (Python pip / pep621 / poetry, npm, pre-commit,
+# lock-file maintenance). Dependabot is intentionally narrowed to
+# GitHub Actions because:
+#
+#   1. Action-version updates need to merge fast — they are typically
+#      patch-level metadata refreshes (digest pins) without runtime
+#      risk, so Dependabot's per-Action grouping + auto-rebase is the
+#      lighter-weight tool.
+#   2. Renovate's `github-actions` manager is disabled in
+#      `renovate.json` (`"github-actions": { "enabled": false }`) to
+#      avoid two bots opening duplicate PRs against the same workflow.
+#
+# All Action bumps land with the `dependencies` + `github-actions`
+# labels so the existing branch-protection / required-reviewer
+# policies pick them up.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      # Standard `actions/*` family — checkout / setup-* / cache /
+      # upload-artifact. Group together so a single PR covers the
+      # whole reusable-workflow surface.
+      actions-core:
+        patterns:
+          - "actions/*"
+      # Docker / build tooling group — qemu / buildx / build-push-
+      # action / login-action / setup-buildx-action / metadata-action.
+      docker-build:
+        patterns:
+          - "docker/*"
+      # Security tooling group — codeql / sarif uploaders / cosign /
+      # gitleaks / trivy / syft / grype installers.
+      security-tooling:
+        patterns:
+          - "github/codeql-action"
+          - "sigstore/*"
+          - "gitleaks/*"
+          - "aquasecurity/*"
+          - "anchore/*"
+      # Frontend toolchains — pnpm / setup-node / playwright.
+      frontend-tooling:
+        patterns:
+          - "pnpm/*"
+          - "actions/setup-node"
+          - "playwright/*"
+    reviewers:
+      - "julianwileymac"
+    assignees:
+      - "julianwileymac"

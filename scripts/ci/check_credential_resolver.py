@@ -23,11 +23,11 @@ Exit codes:
 * 0 — no violations (after allowlist)
 * 1 — at least one violation
 """
+
 from __future__ import annotations
 
 import argparse
 import ast
-import re
 import sys
 from pathlib import Path
 
@@ -123,9 +123,7 @@ class _CredentialReadFinder(ast.NodeVisitor):
             return
         # Direct binding: settings.foo_token
         if isinstance(node.value, ast.Name) and node.value.id in self.settings_names:
-            self.violations.append(
-                (node.lineno, f"{node.value.id}.{node.attr}")
-            )
+            self.violations.append((node.lineno, f"{node.value.id}.{node.attr}"))
         # Module alias: cfg.settings.foo_token
         elif (
             isinstance(node.value, ast.Attribute)
@@ -133,9 +131,7 @@ class _CredentialReadFinder(ast.NodeVisitor):
             and isinstance(node.value.value, ast.Name)
             and node.value.value.id in self.module_aliases
         ):
-            self.violations.append(
-                (node.lineno, f"{node.value.value.id}.settings.{node.attr}")
-            )
+            self.violations.append((node.lineno, f"{node.value.value.id}.settings.{node.attr}"))
         self.generic_visit(node)
 
 
@@ -191,10 +187,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if args.paths:
-        files = [Path(p) for p in args.paths]
-    else:
-        files = _iter_python_files()
+    files = [Path(p) for p in args.paths] if args.paths else _iter_python_files()
 
     raw: list[tuple[str, str]] = []
     for path in files:

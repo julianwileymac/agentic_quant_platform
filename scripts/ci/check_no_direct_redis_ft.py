@@ -15,6 +15,7 @@ Exit codes:
 * 0 - clean
 * 1 - at least one violation
 """
+
 from __future__ import annotations
 
 import argparse
@@ -138,9 +139,7 @@ def _scan_file(path: Path) -> list[tuple[int, str]]:
 
 
 def _iter_files() -> list[Path]:
-    return [
-        p for p in REPO_ROOT.rglob("*.py") if not (SKIP_PARTS & set(p.parts))
-    ]
+    return [p for p in REPO_ROOT.rglob("*.py") if not (SKIP_PARTS & set(p.parts))]
 
 
 def main(argv: list[str] | None = None) -> int:
