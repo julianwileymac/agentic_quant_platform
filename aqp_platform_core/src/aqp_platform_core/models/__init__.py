@@ -29,6 +29,22 @@ from aqp_platform_core.models.telemetry import (
     MetricPoint,
     MetricSeries,
 )
+from aqp_platform_core.models.tenancy import (
+    NetworkPolicyMode,
+    TenantLimitRange,
+    TenantNamespacePhase,
+    TenantNamespaceSpec,
+    TenantNamespaceStatus,
+    TenantPlan,
+    TenantQuotas,
+)
+from aqp_platform_core.models.terraform import (
+    TerraformRunKind,
+    TerraformRunResult,
+    TerraformRunStatus,
+    TerraformStackSpec,
+    TerraformStateBackend,
+)
 from aqp_platform_core.models.workloads import (
     SecretRotationResult,
     WorkloadAction,
@@ -60,6 +76,20 @@ __all__ = [
     "AlertSeverity",
     "MetricPoint",
     "MetricSeries",
+    # tenancy
+    "NetworkPolicyMode",
+    "TenantLimitRange",
+    "TenantNamespacePhase",
+    "TenantNamespaceSpec",
+    "TenantNamespaceStatus",
+    "TenantPlan",
+    "TenantQuotas",
+    # terraform (rule-42 relocation)
+    "TerraformRunKind",
+    "TerraformRunResult",
+    "TerraformRunStatus",
+    "TerraformStackSpec",
+    "TerraformStateBackend",
     # workloads (Management Engine — actions, runs, exec, logs, secrets)
     "SecretRotationResult",
     "WorkloadAction",

@@ -108,6 +108,15 @@ def _register_root(app: FastAPI) -> None:
                 "lakehouse": "/manage/lakehouse/clusters",
                 "timeseries": "/manage/timeseries/questdb/status",
                 "data_plane": "/manage/data-plane/services",
+                # Phase 1 maturation surfaces.
+                "tenants": "/manage/tenants/{tenant_id}",
+                "tenant_provision": "/manage/tenants/{tenant_id}/provision",
+                "builds": "/manage/builds",
+                "build_logs_ws": "/manage/builds/{run_id}/logs/stream",
+                "deployment_logs_ws": "/manage/deployments/{service_id}/logs/stream",
+                "terraform_plan": "/manage/terraform/workspaces/{workspace_id}/plan",
+                "terraform_apply": "/manage/terraform/workspaces/{workspace_id}/apply",
+                "terraform_halt": "/manage/terraform/halt",
             },
         }
 
@@ -147,6 +156,12 @@ def _register_routers(app: FastAPI) -> None:
         ("aqp_cp.api.routers.lakehouse", "router"),
         ("aqp_cp.api.routers.timeseries", "router"),
         ("aqp_cp.api.routers.data_plane", "router"),
+        # Phase 1 of the control-plane maturation: per-tenant
+        # namespace bootstrap, Kaniko in-cluster image builds, and the
+        # relocated Terraform IaC runtime (rule-42 modification).
+        ("aqp_cp.api.routers.tenants", "router"),
+        ("aqp_cp.api.routers.builds", "router"),
+        ("aqp_cp.api.routers.terraform", "router"),
     ):
         try:
             module = __import__(module_name, fromlist=[attr])

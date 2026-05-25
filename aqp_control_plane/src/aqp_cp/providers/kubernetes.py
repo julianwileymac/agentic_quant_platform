@@ -32,6 +32,11 @@ from aqp_platform_core.models.deployment import (
 )
 from aqp_platform_core.models.health import HealthStatus, ProviderHealth
 from aqp_platform_core.models.telemetry import MetricPoint
+from aqp_platform_core.models.tenancy import (
+    TenantNamespacePhase,
+    TenantNamespaceSpec,
+    TenantNamespaceStatus,
+)
 from aqp_platform_core.models.workloads import (
     SecretRotationResult,
     WorkloadExecResult,
@@ -44,6 +49,8 @@ from aqp_platform_core.providers.protocol import (
     ProviderKind,
 )
 from aqp_platform_core.providers.registry import register_provider_class
+
+from aqp_cp.builders.tenant import render_tenant_namespace_objects
 
 logger = logging.getLogger(__name__)
 
@@ -660,6 +667,190 @@ class KubernetesProvider(InfrastructureProvider):
             new_version=ts,
             rotated_at=_now(),
             metadata={"namespace": ns},
+        )
+
+    # ---- Tenancy (Phase 1 — per-tenant namespace bootstrap) ----------
+
+    async def provision_tenant_namespace(
+        self,
+        spec: TenantNamespaceSpec,
+    ) -> TenantNamespaceStatus:
+        """SSA Namespace + ResourceQuota + LimitRange + NetworkPolicy.
+
+        Idempotent: applies every rendered object via the kubernetes
+        SDK's create-or-replace path, using the ``aqp.io/tenant-controller``
+        field manager so future reconciliations don't fight us.
+        """
+        core, _apps, _co = await asyncio.to_thread(self._ensure_client)
+        try:
+            from kubernetes import client  # type: ignore[import-not-found]
+            from kubernetes.client.exceptions import ApiException  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise InfrastructureProviderUnavailable(
+                "kubernetes SDK not installed",
+                provider=self.provider_alias,
+            ) from exc
+
+        namespace = spec.namespace()
+        applied_at = _now()
+        objects = render_tenant_namespace_objects(spec, now=applied_at)
+        objects_applied: list[str] = []
+
+        networking_v1 = client.NetworkingV1Api()
+
+        def _apply_namespace(body: dict[str, Any]) -> None:
+            try:
+                core.read_namespace(name=namespace)
+                core.patch_namespace(name=namespace, body=body)
+            except ApiException as exc:
+                if exc.status == 404:
+                    core.create_namespace(body=body)
+                else:
+                    raise
+
+        def _apply_resource_quota(body: dict[str, Any]) -> None:
+            name = body["metadata"]["name"]
+            try:
+                core.read_namespaced_resource_quota(name=name, namespace=namespace)
+                core.replace_namespaced_resource_quota(
+                    name=name, namespace=namespace, body=body
+                )
+            except ApiException as exc:
+                if exc.status == 404:
+                    core.create_namespaced_resource_quota(namespace=namespace, body=body)
+                else:
+                    raise
+
+        def _apply_limit_range(body: dict[str, Any]) -> None:
+            name = body["metadata"]["name"]
+            try:
+                core.read_namespaced_limit_range(name=name, namespace=namespace)
+                core.replace_namespaced_limit_range(
+                    name=name, namespace=namespace, body=body
+                )
+            except ApiException as exc:
+                if exc.status == 404:
+                    core.create_namespaced_limit_range(namespace=namespace, body=body)
+                else:
+                    raise
+
+        def _apply_network_policy(body: dict[str, Any]) -> None:
+            name = body["metadata"]["name"]
+            try:
+                networking_v1.read_namespaced_network_policy(
+                    name=name, namespace=namespace
+                )
+                networking_v1.replace_namespaced_network_policy(
+                    name=name, namespace=namespace, body=body
+                )
+            except ApiException as exc:
+                if exc.status == 404:
+                    networking_v1.create_namespaced_network_policy(
+                        namespace=namespace, body=body
+                    )
+                else:
+                    raise
+
+        try:
+            for body in objects:
+                kind = str(body.get("kind", "")).strip()
+                name = body.get("metadata", {}).get("name", "<unknown>")
+                if kind == "Namespace":
+                    await asyncio.to_thread(_apply_namespace, body)
+                elif kind == "ResourceQuota":
+                    await asyncio.to_thread(_apply_resource_quota, body)
+                elif kind == "LimitRange":
+                    await asyncio.to_thread(_apply_limit_range, body)
+                elif kind == "NetworkPolicy":
+                    await asyncio.to_thread(_apply_network_policy, body)
+                else:
+                    logger.warning(
+                        "tenant_namespace render emitted unsupported kind=%s name=%s",
+                        kind,
+                        name,
+                    )
+                    continue
+                objects_applied.append(f"{kind}/{name}")
+        except ApiException as exc:
+            raise InfrastructureProviderError(
+                f"kubernetes tenant_namespace SSA failed: {exc}",
+                code="provision_tenant_failed",
+                provider=self.provider_alias,
+                details={"objects_applied": objects_applied},
+            ) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise InfrastructureProviderError(
+                f"kubernetes tenant_namespace SSA failed: {exc}",
+                code="provision_tenant_failed",
+                provider=self.provider_alias,
+                details={"objects_applied": objects_applied},
+            ) from exc
+
+        return TenantNamespaceStatus(
+            tenant_id=spec.tenant_id,
+            namespace=namespace,
+            provider=self.provider_alias,
+            phase=TenantNamespacePhase.APPLIED,
+            applied_at=applied_at,
+            objects_applied=objects_applied,
+            conditions=[
+                {
+                    "type": "Applied",
+                    "status": "True",
+                    "reason": "SsaCompleted",
+                    "message": f"Applied {len(objects_applied)} object(s)",
+                }
+            ],
+        )
+
+    async def deprovision_tenant_namespace(
+        self,
+        tenant_id: str,
+        *,
+        namespace_prefix: str = "tenant",
+    ) -> TenantNamespaceStatus:
+        """Tear down the tenant's namespace (cascading delete)."""
+        core, _apps, _co = await asyncio.to_thread(self._ensure_client)
+        try:
+            from kubernetes.client.exceptions import ApiException  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise InfrastructureProviderUnavailable(
+                "kubernetes SDK not installed",
+                provider=self.provider_alias,
+            ) from exc
+        namespace = f"{namespace_prefix}-{tenant_id}"
+        applied_at = _now()
+        try:
+
+            def _delete() -> None:
+                try:
+                    core.delete_namespace(name=namespace)
+                except ApiException as exc:
+                    if exc.status != 404:
+                        raise
+
+            await asyncio.to_thread(_delete)
+        except ApiException as exc:
+            raise InfrastructureProviderError(
+                f"kubernetes tenant_namespace teardown failed: {exc}",
+                code="deprovision_tenant_failed",
+                provider=self.provider_alias,
+            ) from exc
+        return TenantNamespaceStatus(
+            tenant_id=tenant_id,
+            namespace=namespace,
+            provider=self.provider_alias,
+            phase=TenantNamespacePhase.APPLIED,
+            applied_at=applied_at,
+            objects_applied=[f"Namespace/{namespace}"],
+            conditions=[
+                {
+                    "type": "Deleted",
+                    "status": "True",
+                    "reason": "DeleteCompleted",
+                    "message": "Namespace delete dispatched (cascading)",
+                }
+            ],
         )
 
     async def _find_pod_for_service(

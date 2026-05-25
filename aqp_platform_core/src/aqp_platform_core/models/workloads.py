@@ -23,7 +23,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class WorkloadAction(str, Enum):
-    """Set of audited control-plane actions (Management Engine)."""
+    """Set of audited control-plane actions (Management Engine).
+
+    Phase 1 of the control-plane maturation adds ``BUILD_IMAGE``
+    (Kaniko in-cluster image builds), ``PROVISION_TENANT`` (per-tenant
+    namespace bootstrap), ``HALT`` (kill-switch fan-out), and the
+    Terraform IaC actions relocated under the modified rule 42.
+    """
 
     START = "start"
     STOP = "stop"
@@ -34,6 +40,20 @@ class WorkloadAction(str, Enum):
     LOGS = "logs"
     DELETE = "delete"
     ROTATE_SECRET = "rotate_secret"
+    HALT = "halt"
+    # Phase 1 — tenant + build orchestration on the control plane.
+    PROVISION_TENANT = "provision_tenant"
+    DEPROVISION_TENANT = "deprovision_tenant"
+    BUILD_IMAGE = "build_image"
+    # Rule-42 relocation — Terraform IaC actions executed by the CP.
+    TERRAFORM_PLAN = "terraform_plan"
+    TERRAFORM_APPLY = "terraform_apply"
+    TERRAFORM_DESTROY = "terraform_destroy"
+    TERRAFORM_REFRESH = "terraform_refresh"
+    TERRAFORM_IMPORT = "terraform_import"
+    TERRAFORM_STATE_PULL = "terraform_state_pull"
+    TERRAFORM_VALIDATE = "terraform_validate"
+    TERRAFORM_UNLOCK = "terraform_unlock"
 
 
 class WorkloadRunStatus(str, Enum):

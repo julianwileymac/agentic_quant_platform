@@ -1,18 +1,25 @@
 """Shared runtime layer used by both ``aqp/`` and ``aqp_control_plane``.
 
-Currently exposes :class:`WorkloadRuntime` (AGENTS rule 45) — the single
-sanctioned entry point for runtime workload operations. Mirrors the
-spec-runtime pattern of :class:`aqp.terraform.runtime.TerraformRuntime`
-and :class:`aqp.agents.runtime.AgentRuntime`.
+Exposes:
 
-The runtime is intentionally provider-agnostic: it takes a
-:class:`aqp_platform_core.providers.InfrastructureProvider` alias and a
-pluggable :class:`AuditSink` and orchestrates the action lifecycle
-(start row -> dispatch -> finish row). Both the in-monolith routes and
-the sidecar micro-project import the same class.
+- :class:`WorkloadRuntime` (AGENTS rule 45) — single sanctioned
+  entry point for runtime workload operations.
+- :class:`ProgressEmitter` (AGENTS rule 4) — pluggable sink for
+  the canonical ``{task_id, stage, message, timestamp, **extras}``
+  frame shape. Enables runtimes to be relocated to the CP sidecar
+  without bringing the AQP-side Redis bus along (see the modified
+  rule 42 relocation of :class:`TerraformRuntime`).
+
+Both the in-monolith routes and the sidecar micro-project import
+the same classes.
 """
 from __future__ import annotations
 
+from aqp_platform_core.runtime.progress import (
+    NullProgressEmitter,
+    ProgressEmitter,
+    StructuredLogProgressEmitter,
+)
 from aqp_platform_core.runtime.workload import (
     AuditSink,
     LoggingAuditSink,
@@ -24,6 +31,9 @@ from aqp_platform_core.runtime.workload import (
 __all__ = [
     "AuditSink",
     "LoggingAuditSink",
+    "NullProgressEmitter",
+    "ProgressEmitter",
+    "StructuredLogProgressEmitter",
     "WorkloadHaltedError",
     "WorkloadRuntime",
     "WorkloadRuntimeError",

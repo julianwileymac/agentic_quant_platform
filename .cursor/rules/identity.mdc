@@ -1,20 +1,37 @@
 ---
-description: Auth0 enforcement primitives, JWT scope/membership deps, Auth0 Action sync endpoint.
+description: Identity enforcement primitives — Entra-primary post the control-plane maturation; Auth0 stays as the B2C fallback. JWT scope/membership deps, Auth0/Entra Action sync endpoints.
 globs:
   - "aqp/api/security.py"
   - "aqp/api/routes/auth0_sync.py"
+  - "aqp/api/routes/msal_sync.py"
   - "aqp/auth/**/*.py"
   - "aqp/api/routes/auth.py"
+  - "aqp_admin/src/aqp_admin/deps/identity.py"
+  - "aqp_admin/src/aqp_admin/audit/**/*.py"
+  - "aqp_admin/aqp_admin_ui/src/lib/auth/**/*.{ts,tsx}"
   - "aqp_client/src/lib/auth/**/*.{ts,tsx}"
   - "aqp_client/src/routes/auth/**/*.{ts,tsx}"
   - "aqp_client/src/components/shell/IdentityChip.tsx"
   - "aqp_client/src/components/shell/ContextBar.tsx"
+  - "aqp_platform_core/src/aqp_platform_core/auth/**/*.py"
 ---
 
 # Identity + auth enforcement
 
-Phase 4 + Phase 6 of the multi-tenant rollout. Hard rules 27 + 31
-(see [AGENTS.md](mdc:AGENTS.md)) plus the Phase 4 enforcement layer.
+Phase 4 + Phase 6 of the multi-tenant rollout + Phase 0.2 of the
+control-plane maturation. Hard rules 27 + 31 + 44 (see
+[AGENTS.md](mdc:AGENTS.md)) plus the Phase 4 enforcement layer.
+
+**Microsoft Entra ID is the platform's PRIMARY IdP** after the
+control-plane maturation. Auth0 stays registered as the B2C fallback
+for the self-signup pool + legacy deployments. Both
+[`aqp_admin`](mdc:aqp_admin) and
+[`aqp_control_plane`](mdc:aqp_control_plane) consume the platform-core
+[`MsalEntraValidator`](mdc:aqp_platform_core/src/aqp_platform_core/auth/providers/msal_entra.py)
+shim for inbound bearer validation and the
+[`M2MTokenBroker`](mdc:aqp_platform_core/src/aqp_platform_core/auth/m2m.py)
+for outbound M2M calls (admin -> CP, CP -> monolith). Neither
+package imports `aqp.*`.
 
 ## Backend
 

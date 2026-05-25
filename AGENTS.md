@@ -487,25 +487,44 @@ These hold across the codebase. Any PR that violates one will be sent back.
  [`OrchestrationAdapterMeta`](aqp/agents/orchestration/base.py)
  metaclass — never decorate them by hand.
 42. **All Terraform IaC PROVISIONING actions go through
- [`aqp/terraform/runtime.py::TerraformRuntime`](aqp/terraform/runtime.py).**
- Cluster bootstrap, IAM, Auth0 tenant + roles + Action, namespaces,
- secrets, network policies, and Ingress class registration are all
- "provisioning". The `terraform_runs` ledger, the
- `terraform_stack_spec_versions` hash-lock, the kill-switch hook
- (`/terraform/halt`), policy enforcement (OPA via
- [`aqp/terraform/policy.py`](aqp/terraform/policy.py)), and
- `experiment_id` / `test_id` stamping all depend on it. REST routes
- ([`aqp/api/routes/terraform.py`](aqp/api/routes/terraform.py)),
- Celery tasks ([`aqp/tasks/terraform_tasks.py`](aqp/tasks/terraform_tasks.py)),
- and DataMCP tools ([`aqp/data/mcp/tools/terraform.py`](aqp/data/mcp/tools/terraform.py))
+ [`aqp_control_plane/src/aqp_cp/terraform/runtime.py::TerraformRuntime`](aqp_control_plane/src/aqp_cp/terraform/runtime.py).**
+ Cluster bootstrap, IAM, Auth0 / Entra tenant + roles + Action,
+ namespaces, secrets, network policies, and Ingress class
+ registration are all "provisioning". Per the control-plane
+ maturation (Phase 0.1), the canonical owner of the Terraform
+ lifecycle is the management service (`aqp_control_plane`) — the
+ in-monolith [`aqp/terraform/`](aqp/terraform/) tree remains as a
+ thin HTTP broker until every internal call-site is brokered (gated
+ by ``AQP_TERRAFORM_USE_CONTROL_PLANE``; the legacy in-process path
+ is the fallback during rollout). `aqp/` retains the quant business
+ logic; `aqp_control_plane` owns deployment-target frameworks.
+ The `terraform_runs` ledger, the `terraform_stack_spec_versions`
+ hash-lock, the kill-switch hook (`/manage/terraform/halt`),
+ policy enforcement (OPA via
+ [`aqp_cp/terraform/policy.py`](aqp_control_plane/src/aqp_cp/terraform/),
+ placeholder until the AQP-side `aqp/terraform/policy.py` is
+ ported), and `experiment_id` / `test_id` stamping all depend on
+ it. REST routes
+ ([`aqp_cp/api/routers/terraform.py`](aqp_control_plane/src/aqp_cp/api/routers/terraform.py)),
+ the in-monolith broker ([`aqp/api/routes/terraform.py`](aqp/api/routes/terraform.py))
+ and the matching Celery + DataMCP wrappers
+ ([`aqp/tasks/terraform_tasks.py`](aqp/tasks/terraform_tasks.py),
+ [`aqp/data/mcp/tools/terraform.py`](aqp/data/mcp/tools/terraform.py))
  wrap it — nothing calls `subprocess.run(["terraform", ...])`
  directly outside
- [`aqp/terraform/runner.py::TerraformExecutor`](aqp/terraform/runner.py).
+ [`aqp_cp/terraform/runtime.py::TerraformExecutor`](aqp_control_plane/src/aqp_cp/terraform/runtime.py).
  CDKTF was deprecated by HashiCorp on 2025-12-10 — Python-side HCL
  codegen uses Jinja2 templates under
- [`aqp/terraform/codegen/templates/`](aqp/terraform/codegen/templates).
+ [`aqp_cp/builders/manifests/`](aqp_control_plane/src/aqp_cp/builders/manifests/)
+ (new tenant-namespace bundle) and the relocated
+ [`aqp/terraform/codegen/templates/`](aqp/terraform/codegen/templates/)
+ tree (pending move to `aqp_cp/terraform/codegen/templates/`).
  Runtime workload operations (start / stop / scale / restart / exec /
  logs / `apply_config`) DO NOT use TerraformRuntime — see rule 45.
+ The CP-side TerraformRuntime persists `terraform_runs` rows via
+ :class:`aqp_cp.audit.HttpAuditSink` -> monolith
+ `/_internal/audit/terraform-runs` so the Postgres ledger stays the
+ single source of truth even when the executor runs out-of-process.
 43. **`terraform_stack_spec_versions` rows are immutable,
  hash-locked snapshots.** Re-snapshotting via
  [`aqp/terraform/registry.py::persist_spec`](aqp/terraform/registry.py)

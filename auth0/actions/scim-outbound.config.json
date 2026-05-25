@@ -1,0 +1,48 @@
+{
+  "name": "aqp-scim-outbound",
+  "description": "Outbound SCIM provisioning to AWS IAM Identity Center + Microsoft Graph (Entra). Skeleton; payloads land in a follow-up PR. Per the always-on aqp-management-engine rule the Action MUST NOT log secret values.",
+  "supported_triggers": [
+    {
+      "id": "post-user-registration",
+      "version": "v2"
+    },
+    {
+      "id": "event-stream",
+      "version": "v1",
+      "event_types": [
+        "user.created",
+        "user.updated",
+        "user.deleted"
+      ]
+    }
+  ],
+  "runtime": "node18",
+  "dependencies": [
+    {
+      "name": "node-fetch",
+      "version": "3.3.2"
+    }
+  ],
+  "secrets": [
+    {
+      "name": "SCIM_AWS_BEARER",
+      "description": "AWS IAM Identity Center SCIM bearer token. Provisioned + rotated via AWS Secrets Manager; injected into the Action via Terraform from the auth0_action.scim-outbound module."
+    },
+    {
+      "name": "SCIM_AWS_TENANT_URL",
+      "description": "AWS IAM Identity Center SCIM endpoint base URL, e.g. https://scim.us-east-1.amazonaws.com/<tenant>/scim/v2."
+    },
+    {
+      "name": "GRAPH_TENANT_ID",
+      "description": "Microsoft Entra tenant id used to compose the Graph token endpoint."
+    },
+    {
+      "name": "GRAPH_CLIENT_ID",
+      "description": "Microsoft Graph app-reg client id (User.ReadWrite.All + Directory.ReadWrite.All)."
+    },
+    {
+      "name": "GRAPH_CLIENT_SECRET",
+      "description": "Microsoft Graph app-reg client secret. Rotated quarterly via Azure Key Vault; injected via Terraform."
+    }
+  ]
+}

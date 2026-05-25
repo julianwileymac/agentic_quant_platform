@@ -37,6 +37,10 @@ from aqp_platform_core.models.config import ConfigMapPatch, ServiceConfig
 from aqp_platform_core.models.deployment import DeploymentSpec, DeploymentStatus
 from aqp_platform_core.models.health import ProviderHealth
 from aqp_platform_core.models.telemetry import MetricPoint
+from aqp_platform_core.models.tenancy import (
+    TenantNamespaceSpec,
+    TenantNamespaceStatus,
+)
 from aqp_platform_core.models.workloads import (
     SecretRotationResult,
     WorkloadExecResult,
@@ -336,6 +340,41 @@ class InfrastructureProvider(metaclass=InfrastructureProviderMeta):
         """
         raise InfrastructureProviderUnavailable(
             f"{self.__class__.__name__} does not support rotate_secret",
+            provider=self.provider_alias,
+        )
+
+    # --- Tenancy (Phase 1 — per-tenant namespace bootstrap) -----------
+    #
+    # ``provision_tenant_namespace`` SSAs the four canonical tenant
+    # objects (Namespace + ResourceQuota + LimitRange + NetworkPolicy)
+    # in one idempotent call. ``deprovision_tenant_namespace`` is the
+    # admin-only teardown (destroy-by-namespace).
+
+    async def provision_tenant_namespace(
+        self,
+        spec: TenantNamespaceSpec,
+    ) -> TenantNamespaceStatus:
+        """Apply tenant namespace + quotas + limits + network policy.
+
+        Idempotent: re-applying with the same spec is a no-op
+        (server-side-apply with the ``aqp.io/tenant-controller``
+        field manager). Providers that don't support per-tenant
+        isolation raise :class:`InfrastructureProviderUnavailable`.
+        """
+        raise InfrastructureProviderUnavailable(
+            f"{self.__class__.__name__} does not support provision_tenant_namespace",
+            provider=self.provider_alias,
+        )
+
+    async def deprovision_tenant_namespace(
+        self,
+        tenant_id: str,
+        *,
+        namespace_prefix: str = "tenant",
+    ) -> TenantNamespaceStatus:
+        """Tear down a tenant's namespace + child objects (admin-only)."""
+        raise InfrastructureProviderUnavailable(
+            f"{self.__class__.__name__} does not support deprovision_tenant_namespace",
             provider=self.provider_alias,
         )
 

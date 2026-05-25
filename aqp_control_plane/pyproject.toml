@@ -22,6 +22,7 @@ dependencies = [
     "pydantic-settings>=2.0",
     "python-jose[cryptography]>=3.3",
     "PyYAML>=6.0",
+    "Jinja2>=3.1,<4",
     "websockets>=12,<14",
 ]
 
@@ -42,6 +43,9 @@ gcp = [
     "google-cloud-run>=0.10,<1",
     "google-cloud-secret-manager>=2.20,<3",
     "google-auth>=2.30,<3",
+]
+observability = [
+    "prometheus-api-client>=0.5,<1",
 ]
 all-providers = [
     "aqp-control-plane[docker_compose,kubernetes,aws,azure,gcp]",
@@ -68,6 +72,10 @@ aqp-cli-control-plane = "aqp_cp.main:cli"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/aqp_cp"]
+# Ship Jinja templates + JSON config bundled with the package so
+# importlib.resources finds them at runtime.
+[tool.hatch.build.targets.wheel.force-include]
+"src/aqp_cp/builders/manifests" = "aqp_cp/builders/manifests"
 
 [tool.hatch.build.targets.sdist]
 include = ["src/aqp_cp", "README.md", "pyproject.toml"]

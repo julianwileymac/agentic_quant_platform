@@ -1,9 +1,13 @@
-"""``/manage/deployments`` — list / start / stop / scale / status / delete."""
+"""``/manage/deployments`` — list / start / stop / scale / status / delete + WS logs."""
 from __future__ import annotations
 
+import asyncio
+import logging
+import time
+from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from aqp_cp.auth.deps import (
@@ -20,6 +24,8 @@ from aqp_cp.models import (
 )
 from aqp_cp.services.lifecycle import execute_with_audit, get_active_provider
 from aqp_platform_core.models.workloads import WorkloadExecResult, WorkloadLogEvent
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["deployments"])
 
@@ -299,6 +305,106 @@ async def delete_deployment(
             "note": "Stopped via scale-to-zero. Hard delete is a follow-up PR.",
         },
     )
+
+
+@router.websocket("/deployments/{service_id}/logs/stream")
+async def deployment_logs_ws(
+    websocket: WebSocket,
+    service_id: str,
+    namespace: str | None = None,
+    container: str | None = None,
+    tail: int = 200,
+    follow: bool = True,
+    max_lines: int | None = None,
+    throttle_ms: int = 100,
+) -> None:
+    """Stream a deployment's logs as canonical AGENTS-rule-4 frames.
+
+    Throttling: frames are coalesced at ``throttle_ms`` ticks (default
+    100ms per ``frontend.mdc``) to keep the WebSocket cheap on busy
+    streams. The frame shape is exactly
+    ``{task_id, stage, message, timestamp, **extras}``.
+
+    Authorization: the WebSocket handshake carries the bearer in the
+    ``Authorization`` header (browsers can't set custom headers on
+    WS, so the front-end falls back to ``Sec-WebSocket-Protocol``
+    OR a short-lived signed query token; the validator stays the
+    same). The skeleton here accepts the WS once topology is ready
+    and defers auth to a follow-up middleware PR.
+    """
+    await websocket.accept()
+    try:
+        provider = get_active_provider()
+    except Exception as exc:  # noqa: BLE001
+        await _send_frame(
+            websocket,
+            task_id=service_id,
+            stage="error",
+            message=str(exc),
+        )
+        await websocket.close(code=1011)
+        return
+
+    buffer: list[WorkloadLogEvent] = []
+    last_flush = time.monotonic()
+    interval = max(0.0, throttle_ms / 1000.0)
+
+    async def _flush() -> None:
+        nonlocal buffer, last_flush
+        if not buffer:
+            last_flush = time.monotonic()
+            return
+        for event in buffer:
+            await _send_frame(
+                websocket,
+                task_id=service_id,
+                stage="log",
+                message=event.line,
+                container=event.container,
+                namespace=event.namespace,
+                source=event.source,
+            )
+        buffer = []
+        last_flush = time.monotonic()
+
+    try:
+        async for event in provider.tail_logs(
+            service_id,
+            container=container,
+            tail=tail,
+            follow=follow,
+            max_lines=max_lines,
+            namespace=namespace,
+        ):
+            buffer.append(event)
+            if interval == 0.0 or (time.monotonic() - last_flush) >= interval:
+                await _flush()
+        await _flush()
+    except WebSocketDisconnect:
+        logger.debug("client disconnected from deployment logs WS service_id=%s", service_id)
+    except Exception as exc:  # noqa: BLE001
+        await _send_frame(
+            websocket,
+            task_id=service_id,
+            stage="error",
+            message=str(exc),
+        )
+    finally:
+        try:
+            await websocket.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+async def _send_frame(websocket: WebSocket, **payload: Any) -> None:
+    body = {
+        "task_id": payload.pop("task_id", ""),
+        "stage": payload.pop("stage", "log"),
+        "message": payload.pop("message", ""),
+        "timestamp": datetime.now(timezone.utc).timestamp(),
+    }
+    body.update(payload)
+    await websocket.send_json(body)
 
 
 __all__ = ["router"]

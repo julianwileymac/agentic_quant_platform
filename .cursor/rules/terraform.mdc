@@ -25,10 +25,7 @@ for the narrative walkthrough. AGENTS rules 42 + 43 in
 ## Hard rules
 
 1. **All Terraform lifecycle actions go through
-   [`TerraformRuntime`](mdc:aqp/terraform/runtime.py)** (rule 42).
-   Routes / Celery tasks / MCP tools wrap it; nothing calls
-   `subprocess.run(["terraform", ...])` directly outside
-   [`aqp/terraform/runner.py::TerraformExecutor`](mdc:aqp/terraform/runner.py).
+   [`TerraformRuntime`](mdc:aqp_control_plane/src/aqp_cp/terraform/runtime.py)** (rule 42 — the modified version after Phase 0.1 of the control-plane maturation). The CP is now the canonical owner; the in-monolith [`aqp/terraform/`](mdc:aqp/terraform/) tree is a thin HTTP broker gated by ``AQP_TERRAFORM_USE_CONTROL_PLANE``. Routes / Celery tasks / MCP tools wrap it; nothing calls `subprocess.run(["terraform", ...])` directly outside [`aqp_cp/terraform/runtime.py::TerraformExecutor`](mdc:aqp_control_plane/src/aqp_cp/terraform/runtime.py).
 2. **`terraform_stack_spec_versions` rows are immutable hash-locked
    snapshots** (rule 43). Re-snapshotting via
    [`aqp/terraform/registry.py::persist_spec`](mdc:aqp/terraform/registry.py)

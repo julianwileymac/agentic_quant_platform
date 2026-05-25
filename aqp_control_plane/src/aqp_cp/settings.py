@@ -129,6 +129,171 @@ class ControlPlaneSettings(BaseSettings):
             "logging. Empty disables file-based audit (relies on stdout)."
         ),
     )
+    audit_sink: str = Field(
+        default="jsonl",
+        alias="AQP_CP_AUDIT_SINK",
+        description=(
+            "Audit sink for WorkloadRun + TerraformRun rows. "
+            "'jsonl' writes locally (default); 'http' posts to the monolith "
+            "audit ingest URL (see audit_http_url); 'logging' is a no-op "
+            "fallback that only emits structured log lines."
+        ),
+    )
+    audit_http_url: str = Field(
+        default="",
+        alias="AQP_CP_AUDIT_HTTP_URL",
+        description=(
+            "Monolith audit ingest URL (e.g. "
+            "http://localhost:8000/_internal/audit/workload-runs). Required "
+            "when audit_sink == 'http'. The HTTP sink uses the M2M broker "
+            "to attach a Bearer token (Entra-primary, Auth0 fallback)."
+        ),
+    )
+
+    # --- Tenant namespace bootstrap (Phase 1) ---------------------------
+    tenant_namespace_prefix: str = Field(
+        default="tenant",
+        alias="AQP_CP_TENANT_NAMESPACE_PREFIX",
+        description="Prefix for tenant namespaces (Namespace becomes '{prefix}-{tenant_id}').",
+    )
+
+    # --- Kaniko in-cluster image builder (Phase 1) ----------------------
+    kaniko_image: str = Field(
+        default="ghcr.io/chainguard-dev/kaniko:latest",
+        alias="AQP_CP_KANIKO_IMAGE",
+        description=(
+            "Kaniko OCI image used for in-cluster builds. The original "
+            "GoogleContainerTools/kaniko repo was archived June 2025; the "
+            "Chainguard fork is the maintained continuation. Pin by SHA "
+            "in production."
+        ),
+    )
+    kaniko_builder_sa: str = Field(
+        default="kaniko-builder",
+        alias="AQP_CP_KANIKO_BUILDER_SA",
+        description=(
+            "ServiceAccount that the Kaniko Job pod assumes. Cloud "
+            "credentials resolve through EKS Pod Identity / IRSA / "
+            "Workload Identity Federation — NEVER through Kubernetes Secrets."
+        ),
+    )
+    kaniko_namespace_default: str = Field(
+        default="aqp-builds",
+        alias="AQP_CP_KANIKO_NAMESPACE_DEFAULT",
+        description="Namespace where Kaniko Jobs run by default.",
+    )
+    kaniko_ttl_seconds_after_finished: int = Field(
+        default=600,
+        alias="AQP_CP_KANIKO_TTL_SECONDS_AFTER_FINISHED",
+        ge=60,
+        le=86400,
+    )
+    kaniko_backoff_limit: int = Field(
+        default=2,
+        alias="AQP_CP_KANIKO_BACKOFF_LIMIT",
+        ge=0,
+        le=10,
+    )
+
+    # --- Terraform IaC runtime (Phase 0 / rule-42 relocation) -----------
+    terraform_workspaces_dir: str = Field(
+        default="./terraform_workspaces",
+        alias="AQP_CP_TERRAFORM_WORKSPACES_DIR",
+        description=(
+            "Filesystem root for per-workspace state + rendered HCL. "
+            "Must be writable by the runner pod."
+        ),
+    )
+    terraform_executor_image: str = Field(
+        default="hashicorp/terraform:1.10",
+        alias="AQP_CP_TERRAFORM_EXECUTOR_IMAGE",
+        description="OCI image used by the Terraform executor pod.",
+    )
+    terraform_state_backend: str = Field(
+        default="local",
+        alias="AQP_CP_TERRAFORM_STATE_BACKEND",
+        description="Default state backend: local / s3 / azurerm / gcs / hcp.",
+    )
+    terraform_hcp_org: str = Field(
+        default="",
+        alias="AQP_CP_TERRAFORM_HCP_ORG",
+        description=(
+            "HCP Terraform organization name. Empty disables the HCP path; "
+            "credentials still resolve through CredentialResolver."
+        ),
+    )
+    terraform_kill_switch_secret_path: str = Field(
+        default="/tmp/aqp-terraform-killswitch",  # noqa: S108
+        alias="AQP_CP_TERRAFORM_KILL_SWITCH_SECRET_PATH",
+        description=(
+            "Filesystem path (tmpfs) where the kill-switch sentinel "
+            "lives. Existence of the file blocks new apply / destroy."
+        ),
+    )
+
+    # --- Observability (Phase 1 — identity-aware Prometheus proxy) ------
+    prometheus_url: str = Field(
+        default="http://prometheus.monitoring.svc.cluster.local:9090",
+        alias="AQP_CP_PROMETHEUS_URL",
+        description="Prometheus base URL the identity-aware proxy talks to.",
+    )
+    prometheus_tenant_label: str = Field(
+        default="aqp_tenant",
+        alias="AQP_CP_PROMETHEUS_TENANT_LABEL",
+        description=(
+            "Label name injected into every PromQL selector so users only "
+            "see metrics from their own tenant namespace."
+        ),
+    )
+    prometheus_deny_metrics: list[str] = Field(
+        default_factory=lambda: [
+            "up",
+            "process_*",
+            "go_*",
+            "node_*",
+            "kube_node_*",
+            "prometheus_*",
+        ],
+        alias="AQP_CP_PROMETHEUS_DENY_METRICS",
+        description=(
+            "Metric-name patterns that are NEVER returned cross-tenant. "
+            "Used as a deny list during PromQL rewriting."
+        ),
+    )
+
+    # --- M2M broker (Phase 0 — admin -> CP, CP -> monolith) -------------
+    auth_provider: str = Field(
+        default="msal_entra",
+        alias="AQP_CP_AUTH_PROVIDER",
+        description=(
+            "Active identity provider alias. Entra ID is the primary "
+            "post the rule-27 + identity.mdc update; flip to 'auth0' "
+            "for legacy / B2C deployments."
+        ),
+    )
+    auth_entra_tenant: str = Field(
+        default="organizations",
+        alias="AQP_CP_ENTRA_TENANT",
+        description=(
+            "Entra tenant segment used to derive issuer + JWKS URLs."
+        ),
+    )
+    m2m_credential_service: str = Field(
+        default="aqp-cp-to-monolith",
+        alias="AQP_CP_M2M_CREDENTIAL_SERVICE",
+        description=(
+            "CredentialResolver service name for CP -> monolith client credentials."
+        ),
+    )
+    m2m_credential_purpose: str = Field(
+        default="client_credentials",
+        alias="AQP_CP_M2M_CREDENTIAL_PURPOSE",
+    )
+    m2m_monolith_audience: str = Field(
+        default="api://aqp-monolith",
+        alias="AQP_CP_M2M_MONOLITH_AUDIENCE",
+        description="Audience claim the monolith validates on incoming M2M tokens.",
+    )
 
     # --- Legacy rpi-k8s-management fallback ------------------------------
     legacy_fallback: bool = Field(

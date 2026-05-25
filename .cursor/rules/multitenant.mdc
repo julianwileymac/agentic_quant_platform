@@ -36,9 +36,16 @@ Phase 7 of the multi-tenant rollout. Hard rule 44 in
 3. **The MSAL provider is registered by
    [`IdentityProviderMeta`](mdc:aqp/auth/providers/protocol.py).**
    Set `provider_kind = "msal_entra"` and the metaclass auto-
-   registers. Auth0 + generic OIDC + Mock all stay registered for
-   fallback / migration / tests — flip
-   `AQP_AUTH_PROVIDER=msal_entra` to make MSAL the active provider.
+   registers. **Microsoft Entra ID is the platform's PRIMARY IdP**
+   after the control-plane maturation (Phase 0.2); Auth0 stays
+   registered as the B2C fallback for the self-signup pool +
+   legacy deployments. The platform-core helper
+   [`default_identity_provider_alias`](mdc:aqp_platform_core/src/aqp_platform_core/auth/__init__.py)
+   returns `msal_entra` when `AQP_AUTH_PROVIDER` is unset; flip to
+   `auth0` only for an explicit Auth0-first deployment. Both
+   `aqp_admin` and `aqp_control_plane` consume the platform-core
+   :class:`MsalEntraValidator` shim for inbound bearer validation
+   without importing `aqp.*`.
 4. **The multi-tenant authority is
    `https://login.microsoftonline.com/organizations`** by default
    (accepts users from any Entra tenant). Pin to

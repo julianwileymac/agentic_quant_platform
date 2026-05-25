@@ -1,0 +1,108 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ namespace }}
+  labels:
+    aqp.io/tenant: {{ tenant_id | tojson }}
+    aqp.io/plan: {{ plan | tojson }}
+    aqp.io/managed-by: aqp-control-plane
+    pod-security.kubernetes.io/enforce: {{ psa_enforce | tojson }}
+    pod-security.kubernetes.io/audit: {{ psa_audit | tojson }}
+    pod-security.kubernetes.io/warn: {{ psa_warn | tojson }}
+{% for key, value in labels.items() %}    {{ key }}: {{ value | tojson }}
+{% endfor %}
+  annotations:
+    aqp.io/managed-by: aqp-control-plane
+    aqp.io/applied-at: {{ applied_at | tojson }}
+{% for key, value in annotations.items() %}    {{ key }}: {{ value | tojson }}
+{% endfor %}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tenant-quota
+  namespace: {{ namespace }}
+  labels:
+    aqp.io/tenant: {{ tenant_id | tojson }}
+    aqp.io/managed-by: aqp-control-plane
+spec:
+  hard:
+    requests.cpu: {{ quotas.cpu | tojson }}
+    requests.memory: {{ quotas.memory | tojson }}
+{% if quotas.gpus and quotas.gpus > 0 %}    requests.nvidia.com/gpu: {{ quotas.gpus | tojson }}
+{% endif %}    persistentvolumeclaims: {{ quotas.pvcs | tojson }}
+    count/pods: {{ quotas.pods | tojson }}
+    count/services: {{ quotas.services | tojson }}
+    count/secrets: {{ quotas.secrets | tojson }}
+    count/configmaps: {{ quotas.configmaps | tojson }}
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: tenant-defaults
+  namespace: {{ namespace }}
+  labels:
+    aqp.io/tenant: {{ tenant_id | tojson }}
+    aqp.io/managed-by: aqp-control-plane
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: {{ limit_range.default_cpu | tojson }}
+        memory: {{ limit_range.default_memory | tojson }}
+      defaultRequest:
+        cpu: {{ limit_range.default_request_cpu | tojson }}
+        memory: {{ limit_range.default_request_memory | tojson }}
+      max:
+        cpu: {{ limit_range.max_cpu | tojson }}
+        memory: {{ limit_range.max_memory | tojson }}
+{% if network_policy_mode != "open" %}---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: {{ namespace }}
+  labels:
+    aqp.io/tenant: {{ tenant_id | tojson }}
+    aqp.io/managed-by: aqp-control-plane
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+{% endif %}{% if network_policy_mode == "intra_tenant" %}---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-intra-tenant
+  namespace: {{ namespace }}
+  labels:
+    aqp.io/tenant: {{ tenant_id | tojson }}
+    aqp.io/managed-by: aqp-control-plane
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              aqp.io/tenant: {{ tenant_id | tojson }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              aqp.io/tenant: {{ tenant_id | tojson }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+{% endif %}
