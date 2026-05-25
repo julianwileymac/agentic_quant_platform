@@ -6,6 +6,7 @@ import { BuildsIndex } from "./routes/builds/index";
 import { BuildDetail } from "./routes/builds/detail";
 import { DashboardRoute } from "./routes/dashboard";
 import { RunbooksIndex } from "./routes/runbooks/index";
+import { SettingsRoute } from "./routes/settings/index";
 import { ServicesRoute } from "./routes/services";
 import { TenantDetail } from "./routes/tenants/detail";
 import { TenantVendingWizard } from "./routes/tenants/new";
@@ -19,6 +20,7 @@ export function App() {
         <Route path="/accounts" element={<AccountsRoute />} />
         <Route path="/accounts/:orgId" element={<TenantDetail />} />
         <Route path="/services" element={<ServicesRoute />} />
+        <Route path="/settings" element={<SettingsRoute />} />
         <Route path="/tenants/new" element={<TenantVendingWizard />} />
         <Route path="/builds" element={<BuildsIndex />} />
         <Route path="/builds/:jobName" element={<BuildDetail />} />

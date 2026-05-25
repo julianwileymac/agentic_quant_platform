@@ -209,6 +209,52 @@ class ControlPlaneBroker(_BaseBroker):
         response = await self._request("GET", "/manage/deployments", params=params)
         return response.json()
 
+    async def get_config(
+        self,
+        service_id: str,
+        *,
+        namespace: str | None = None,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        params = {"namespace": namespace} if namespace else None
+        response = await self._request(
+            "GET",
+            f"/manage/config/{service_id}",
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def patch_config(
+        self,
+        service_id: str,
+        body: dict[str, Any],
+        *,
+        namespace: str | None = None,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        params = {"namespace": namespace} if namespace else None
+        response = await self._request(
+            "PATCH",
+            f"/manage/config/{service_id}",
+            json_body=body,
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def telemetry_snapshot(
+        self,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            "/manage/telemetry/snapshot",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
     async def provision_tenant(
         self,
         tenant_id: str,
@@ -289,6 +335,44 @@ class ControlPlaneBroker(_BaseBroker):
 
 class MonolithBroker(_BaseBroker):
     """Calls the AQP monolith REST + DataMCP surfaces."""
+
+    async def list_terraform_providers(
+        self,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            "/terraform/providers",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def create_terraform_provider(
+        self,
+        body: dict[str, Any],
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            "/terraform/providers",
+            json_body=body,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def cloudflare_health(
+        self,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            "/cloudflare/health",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
 
     async def list_organizations(
         self, *, bearer_passthrough: str | None = None

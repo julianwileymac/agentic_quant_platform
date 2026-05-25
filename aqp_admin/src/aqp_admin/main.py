@@ -92,6 +92,7 @@ def _register_root(app: FastAPI, settings: AdminSettings) -> None:
                 "docs": "/docs",
                 "accounts": "/admin/accounts/organizations",
                 "services": "/admin/services",
+                "settings": "/admin/settings/framework",
                 "tenants": "/admin/tenants",
                 "halt_all": "/admin/halt/all",
                 "audit_runs": "/admin/audit/runs",
@@ -113,6 +114,7 @@ def _register_routers(app: FastAPI) -> None:
     for module_name, attr in (
         ("aqp_admin.api.routers.accounts", "router"),
         ("aqp_admin.api.routers.services", "router"),
+        ("aqp_admin.api.routers.settings", "router"),
         ("aqp_admin.api.routers.tenants", "router"),
         ("aqp_admin.api.routers.halt", "router"),
         ("aqp_admin.api.routers.audit", "router"),
