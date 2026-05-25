@@ -170,9 +170,13 @@ class _BaseBroker:
                 # registration handy. Log + continue without the
                 # header so the upstream (which itself may have auth
                 # disabled) can still respond.
+                if get_settings().auth_enabled:
+                    raise AdminBrokerError(
+                        "admin broker bearer mint failed",
+                        code="m2m_bearer_mint_failed",
+                    ) from exc
                 logger.warning(
-                    "admin broker bearer mint failed; sending unauthenticated: %s",
-                    exc,
+                    "admin broker bearer mint failed; sending unauthenticated in local mode"
                 )
                 bearer = ""
         headers: dict[str, str] = {}
@@ -207,6 +211,141 @@ class ControlPlaneBroker(_BaseBroker):
     async def list_deployments(self, namespace: str | None = None) -> dict[str, Any]:
         params = {"namespace": namespace} if namespace else None
         response = await self._request("GET", "/manage/deployments", params=params)
+        return response.json()
+
+    async def get_deployment(
+        self,
+        service_id: str,
+        *,
+        namespace: str | None = None,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        params = {"namespace": namespace} if namespace else None
+        response = await self._request(
+            "GET",
+            f"/manage/deployments/{service_id}",
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def start_deployment(
+        self,
+        service_id: str,
+        spec: dict[str, Any],
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            f"/manage/deployments/{service_id}/start",
+            json_body=spec,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def stop_deployment(
+        self,
+        service_id: str,
+        *,
+        namespace: str | None = None,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        params = {"namespace": namespace} if namespace else None
+        response = await self._request(
+            "POST",
+            f"/manage/deployments/{service_id}/stop",
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def scale_deployment(
+        self,
+        service_id: str,
+        *,
+        replicas: int,
+        namespace: str | None = None,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"replicas": replicas}
+        if namespace:
+            params["namespace"] = namespace
+        response = await self._request(
+            "PATCH",
+            f"/manage/deployments/{service_id}/scale",
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def restart_deployment(
+        self,
+        service_id: str,
+        *,
+        namespace: str | None = None,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        params = {"namespace": namespace} if namespace else None
+        response = await self._request(
+            "POST",
+            f"/manage/deployments/{service_id}/restart",
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def exec_deployment(
+        self,
+        service_id: str,
+        body: dict[str, Any],
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            f"/manage/deployments/{service_id}/exec",
+            json_body=body,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def deployment_logs(
+        self,
+        service_id: str,
+        *,
+        namespace: str | None = None,
+        container: str | None = None,
+        tail: int = 200,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"tail": tail}
+        if namespace:
+            params["namespace"] = namespace
+        if container:
+            params["container"] = container
+        response = await self._request(
+            "GET",
+            f"/manage/deployments/{service_id}/logs",
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def delete_deployment(
+        self,
+        service_id: str,
+        *,
+        namespace: str | None = None,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        params = {"namespace": namespace} if namespace else None
+        response = await self._request(
+            "DELETE",
+            f"/manage/deployments/{service_id}",
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
         return response.json()
 
     async def get_config(
@@ -293,11 +432,63 @@ class ControlPlaneBroker(_BaseBroker):
         )
         return response.json()
 
+    async def workloads_halt_status(
+        self,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            "/manage/workloads/halt/status",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
     async def halt_terraform(self, reason: str) -> dict[str, Any]:
         response = await self._request(
             "POST",
             "/manage/terraform/halt",
             json_body={"reason": reason},
+        )
+        return response.json()
+
+    async def terraform_run(
+        self,
+        workspace_id: str,
+        action: str,
+        body: dict[str, Any],
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            f"/manage/terraform/workspaces/{workspace_id}/{action}",
+            json_body=body,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def terraform_halt_status(
+        self,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            "/manage/terraform/halt/status",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def clear_terraform_halt(
+        self,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "DELETE",
+            "/manage/terraform/halt",
+            bearer_passthrough=bearer_passthrough,
         )
         return response.json()
 
@@ -358,6 +549,299 @@ class MonolithBroker(_BaseBroker):
             "POST",
             "/terraform/providers",
             json_body=body,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def list_terraform_stacks(
+        self,
+        *,
+        module_kind: str | None = None,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        params = {"module_kind": module_kind} if module_kind else None
+        response = await self._request(
+            "GET",
+            "/terraform/stacks",
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def get_terraform_stack(
+        self,
+        stack_id: str,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            f"/terraform/stacks/{stack_id}",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def list_terraform_stack_versions(
+        self,
+        stack_id: str,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            f"/terraform/stacks/{stack_id}/versions",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def get_terraform_stack_version(
+        self,
+        stack_id: str,
+        version_id: str,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            f"/terraform/stacks/{stack_id}/versions/{version_id}",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def list_terraform_workspaces(
+        self,
+        *,
+        environment: str | None = None,
+        archived: bool = False,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"archived": archived}
+        if environment:
+            params["environment"] = environment
+        response = await self._request(
+            "GET",
+            "/terraform/workspaces",
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def create_terraform_workspace(
+        self,
+        body: dict[str, Any],
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            "/terraform/workspaces",
+            json_body=body,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def get_terraform_workspace(
+        self,
+        workspace_id: str,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            f"/terraform/workspaces/{workspace_id}",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def archive_terraform_workspace(
+        self,
+        workspace_id: str,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "DELETE",
+            f"/terraform/workspaces/{workspace_id}",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def terraform_state_outputs(
+        self,
+        workspace_id: str,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            f"/terraform/workspaces/{workspace_id}/state/outputs",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def unlock_terraform_workspace(
+        self,
+        workspace_id: str,
+        body: dict[str, Any],
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            f"/terraform/workspaces/{workspace_id}/unlock",
+            json_body=body,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def list_terraform_runs(
+        self,
+        *,
+        workspace_id: str | None = None,
+        status_filter: str | None = None,
+        limit: int = 50,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit}
+        if workspace_id:
+            params["workspace_id"] = workspace_id
+        if status_filter:
+            params["status"] = status_filter
+        response = await self._request(
+            "GET",
+            "/terraform/runs",
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def get_terraform_run(
+        self,
+        run_id: str,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            f"/terraform/runs/{run_id}",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def cancel_terraform_run(
+        self,
+        run_id: str,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            f"/terraform/runs/{run_id}/cancel",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def terraform_halt(
+        self,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            "/terraform/halt",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def cluster_status(
+        self,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            "/cluster/status",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def list_pods(
+        self,
+        namespace: str,
+        *,
+        label_selector: str | None = None,
+        bearer_passthrough: str | None = None,
+    ) -> list[dict[str, Any]]:
+        params = {"label_selector": label_selector} if label_selector else None
+        response = await self._request(
+            "GET",
+            f"/cluster/pods/{namespace}",
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def exec_in_pod(
+        self,
+        namespace: str,
+        name: str,
+        body: dict[str, Any],
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            f"/cluster/pods/{namespace}/{name}/exec",
+            json_body=body,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def put_pod_archive(
+        self,
+        namespace: str,
+        name: str,
+        body: dict[str, Any],
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            f"/cluster/pods/{namespace}/{name}/archive",
+            json_body=body,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def get_pod_archive(
+        self,
+        namespace: str,
+        name: str,
+        *,
+        path: str,
+        container: str | None = None,
+        bearer_passthrough: str | None = None,
+    ) -> httpx.Response:
+        params: dict[str, Any] = {"path": path}
+        if container:
+            params["container"] = container
+        return await self._request(
+            "GET",
+            f"/cluster/pods/{namespace}/{name}/archive",
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
+
+    async def list_admin_audit_runs(
+        self,
+        *,
+        limit: int = 100,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            "/_internal/audit/admin-runs",
+            params={"limit": limit},
             bearer_passthrough=bearer_passthrough,
         )
         return response.json()

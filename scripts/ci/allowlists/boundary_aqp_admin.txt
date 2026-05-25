@@ -1,0 +1,5 @@
+# scripts/ci/check_boundary.py --lint-name boundary_aqp_admin allowlist
+#
+# Phase 1 §4.2. `aqp_admin` is strictly isolated from both `aqp.*`
+# and `aqp_cp.*`; `aqp_platform_core` + `aqp_admin` are the only
+# allowed roots. Empty allowlist confirms zero migration debt.

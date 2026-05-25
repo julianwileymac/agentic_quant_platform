@@ -1,0 +1,10 @@
+# scripts/ci/check_boundary.py --lint-name boundary_aqp_ratelimit allowlist
+#
+# Phase 1 §4.2. `aqp_ratelimit` bans `aqp.persistence` + `aqp.api`.
+# Two CLI modules still reach into `aqp.persistence.models_ratelimit`
+# during the extraction window — Phase 2 promotes
+# `RateLimitKey` / `RateLimitPolicy` into `aqp_platform_core` or
+# wraps them behind an `aqp_control_plane` /ratelimit HTTP route.
+
+aqp_ratelimit/src/aqp_ratelimit/cli/keys_cmd.py      # TODO(phase-2): route through aqp_control_plane /ratelimit/keys HTTP, remove by 2026-10-15
+aqp_ratelimit/src/aqp_ratelimit/cli/ratelimit_cmd.py # TODO(phase-2): route through aqp_control_plane /ratelimit HTTP, remove by 2026-10-15

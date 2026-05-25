@@ -1,0 +1,20 @@
+# Default OOD safety rule pack.
+#
+# Loaded by ``MLSkillRuntime`` when the spec's ``guardrails.rule_pack``
+# is set to ``ood_default``. Operators ship custom packs by dropping a
+# sibling YAML in this directory; the loader merges them at runtime.
+#
+# Tightening these thresholds in production is encouraged — defaults
+# are deliberately permissive so the seed skill pack runs end-to-end
+# on the test fixtures.
+
+rules:
+  - rule_name: ood.zscore
+    threshold: 4.0
+  - rule_name: ood.range
+    min_value: -1.0e9
+    max_value: 1.0e9
+  - rule_name: ood.tensor_shape
+  - rule_name: circuit_breaker
+    max_failures: 5
+    window_seconds: 60

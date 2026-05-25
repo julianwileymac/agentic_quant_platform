@@ -188,7 +188,7 @@ class BaseRLEnv(gym.Env, RLComponent):
 
     def render(self):  # pragma: no cover
         st = self._collect_env_state()
-        print(f"t={st.get('step_idx')} | pv={st.get('portfolio_value'):.2f}")
+        print(f"t={st.get('step_idx')} | pv={st.get('portfolio_value'):.2f}")  # noqa: T201 - gymnasium env.render() writes to stdout per gym contract (Rule 9)
 
 
 __all__ = ["BaseRLEnv"]

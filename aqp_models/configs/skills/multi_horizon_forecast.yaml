@@ -1,0 +1,37 @@
+# MLSkillSpec: multi_horizon_forecast
+#
+# Two-step skill that projects a price / volatility surface over a
+# configurable horizon and overlays a textual sentiment signal pulled
+# via the HuggingFace adapter.
+
+name: multi_horizon_forecast
+description: >-
+  Produce an H-step forecast for the supplied series, then attach a
+  sentiment overlay from the most-recent news / filing text on the
+  same instrument. The forecaster fills the ``forecast`` alias; the
+  analyzer fills the ``sentiment`` alias.
+kind: multi_horizon_forecast
+annotations:
+  - forecast
+  - sentiment
+guardrails:
+  rule_pack: ood_default
+  cost_budget_usd: 0.75
+  max_runtime_ms: 8000
+  require_workspace: true
+steps:
+  - name: horizon_forecaster
+    interface_kind: forecaster
+    model_ref: SktimeReductionForecastModel
+    kwargs:
+      strategy: recursive
+      window_length: 30
+    output_alias: forecast
+  - name: sentiment_overlay
+    interface_kind: analyzer
+    model_ref: HuggingFaceTextSignalModel
+    kwargs:
+      model_name: ProsusAI/finbert
+      text_column: text
+      batch_size: 8
+    output_alias: sentiment

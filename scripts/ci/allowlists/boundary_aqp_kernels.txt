@@ -1,0 +1,9 @@
+# scripts/ci/check_boundary.py --lint-name boundary_aqp_kernels allowlist
+#
+# Phase 1 §4.2. `aqp_kernels` bans `aqp.persistence` + `aqp.api`.
+# The kernel CLI module touches `aqp.persistence.models_kernels`
+# directly during the extraction window — Phase 2 promotes
+# `KernelSession` into `aqp_platform_core` or wraps it behind an
+# `aqp_control_plane` /kernels HTTP route.
+
+aqp_kernels/src/aqp_kernels/cli/kernel_cmd.py    # TODO(phase-2): route through aqp_control_plane /kernels HTTP, remove by 2026-10-15

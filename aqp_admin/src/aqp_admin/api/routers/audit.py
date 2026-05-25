@@ -12,14 +12,21 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from aqp_admin.deps.identity import AdminUser, require_admin_scope
+from aqp_admin.integrations import AdminBrokerError, get_brokers
 from aqp_admin.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin/audit", tags=["audit"])
+
+
+def _bearer_from_header(header_value: str | None) -> str | None:
+    if not header_value or not header_value.lower().startswith("bearer "):
+        return None
+    return header_value.split(None, 1)[1].strip()
 
 
 @router.get(
@@ -29,20 +36,20 @@ router = APIRouter(prefix="/admin/audit", tags=["audit"])
 async def list_runs(
     limit: int = 100,
     user: AdminUser = Depends(require_admin_scope("read:audit")),
+    authorization: str | None = Header(default=None, alias="Authorization"),
 ) -> dict[str, Any]:
     settings = get_settings()
     if settings.audit_sink != "jsonl":
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail={
-                "error": "audit_sink_not_jsonl",
-                "error_description": (
-                    "audit runs are queried through the monolith when "
-                    "audit_sink != 'jsonl'"
-                ),
-                "audit_sink": settings.audit_sink,
-            },
-        )
+        try:
+            return await get_brokers().monolith.list_admin_audit_runs(
+                limit=limit,
+                bearer_passthrough=_bearer_from_header(authorization),
+            )
+        except AdminBrokerError as exc:
+            raise HTTPException(
+                status_code=exc.status_code or status.HTTP_502_BAD_GATEWAY,
+                detail={"error": exc.code, "error_description": str(exc)},
+            ) from exc
     path = Path(settings.audit_jsonl_path)
     if not path.exists():
         return {"runs": [], "path": str(path), "available": False}

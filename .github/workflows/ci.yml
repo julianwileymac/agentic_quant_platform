@@ -28,15 +28,16 @@ jobs:
       - name: ruff (format check)
         run: ruff format --check aqp_platform_core/src aqp_control_plane/src aqp_platform/build/scripts || true
 
-  phase0-lints:
-    name: Phase 0 audit-closure lints
+  hard-rule-lints:
+    name: AGENTS hard-rule lints (Phase 0 + Phase 1)
     runs-on: ubuntu-latest
-    # Phase 0 (Restructuring Plan §3) wires the five hard-rule lints
-    # to PR-blocking status. Each script ships with its own per-lint
-    # allowlist at `scripts/ci/allowlists/` so existing-tree violations
-    # carry an explicit Phase 1 removal deadline rather than silently
-    # passing. NEVER add `|| true` to these steps — that's the whole
-    # reason they exist (Phase 0 deliverable §3.6 + Phase 1 §4.6).
+    # Phase 0 (Restructuring Plan §3) + Phase 1 (§4.5) wire the
+    # AGENTS hard-rule lints to PR-blocking status. Each script
+    # ships with its own per-lint allowlist at
+    # `scripts/ci/allowlists/` so existing-tree violations carry an
+    # explicit Phase-N removal deadline rather than silently passing.
+    # NEVER add `|| true` to these steps — that's the whole reason
+    # they exist (Phase 0 deliverable §3.6 + Phase 1 §4.6).
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -59,6 +60,89 @@ jobs:
         run: python scripts/ci/check_agent_boundary.py
       - name: Style — Pydantic V1 surface (.dict / .parse_obj / .parse_raw / .from_orm)
         run: python scripts/ci/check_no_pydantic_v1.py
+
+  boundary-lints:
+    name: Cross-subproject boundary lint (${{ matrix.subproject }})
+    runs-on: ubuntu-latest
+    # Phase 1 §4.2 — generic subproject import-boundary lint. Each
+    # matrix slot represents one extracted subproject + its allowed
+    # roots + its forbidden prefixes. Existing-tree violations are
+    # captured in `scripts/ci/allowlists/boundary_<subproject>.txt`
+    # with Phase 2 (2026-10-15) closure deadlines.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - subproject: aqp_control_plane
+            scan_root: aqp_control_plane/src
+            forbid: aqp
+            allow: aqp_platform_core,aqp_cp
+            exclude: ""
+          - subproject: aqp_admin
+            scan_root: aqp_admin/src
+            forbid: aqp,aqp_cp
+            allow: aqp_platform_core,aqp_admin
+            exclude: ""
+          - subproject: aqp_cli
+            scan_root: aqp_cli/src
+            forbid: aqp,aqp_cp
+            allow: aqp_platform_core,aqp_cli
+            exclude: ""
+          - subproject: aqp_ingest
+            scan_root: aqp_ingest/src
+            forbid: aqp.api,aqp.persistence
+            allow: ""
+            exclude: ""
+          - subproject: aqp_kernels
+            scan_root: aqp_kernels/src
+            forbid: aqp.persistence,aqp.api
+            allow: ""
+            exclude: ""
+          - subproject: aqp_ratelimit
+            scan_root: aqp_ratelimit/src
+            forbid: aqp.persistence,aqp.api
+            allow: ""
+            exclude: ""
+          - subproject: aqp_rl
+            scan_root: aqp_rl/src
+            forbid: aqp
+            allow: aqp_platform_core,aqp_rl,aqp.llm.providers.router,aqp.data.iceberg_catalog,aqp.risk.limits
+            exclude: ""
+          - subproject: aqp_models
+            scan_root: aqp_models/src
+            forbid: aqp
+            allow: aqp_platform_core,aqp_models,aqp.llm.providers.router
+            exclude: ""
+          - subproject: aqp_bots
+            scan_root: aqp_bots
+            forbid: aqp.api,aqp.persistence
+            allow: ""
+            exclude: __pycache__,templates
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Run check_boundary.py for ${{ matrix.subproject }}
+        # The lint accepts repeated --forbid / --allow / --exclude
+        # flags; we expand the comma-separated matrix entry into
+        # individual flags using a bash array.
+        run: |
+          args=(--scan-root "${{ matrix.scan_root }}" --lint-name "boundary_${{ matrix.subproject }}")
+          IFS=',' read -ra FORBID <<< "${{ matrix.forbid }}"
+          for f in "${FORBID[@]}"; do
+            [ -n "$f" ] && args+=(--forbid "$f")
+          done
+          IFS=',' read -ra ALLOW <<< "${{ matrix.allow }}"
+          for a in "${ALLOW[@]}"; do
+            [ -n "$a" ] && args+=(--allow "$a")
+          done
+          IFS=',' read -ra EXCLUDE <<< "${{ matrix.exclude }}"
+          for e in "${EXCLUDE[@]}"; do
+            [ -n "$e" ] && args+=(--exclude "$e")
+          done
+          python scripts/ci/check_boundary.py "${args[@]}"
 
   test-platform-core:
     name: aqp_platform_core tests
@@ -91,16 +175,171 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ./aqp_platform_core
           pip install -e ./aqp_control_plane[dev,docker_compose,kubernetes]
-      - name: Strict-isolation lint (NO aqp.* imports inside aqp_control_plane)
-        run: |
-          # Allow aqp_platform_core / aqp_cp / aqp- (in strings); fail on bare `aqp.`
-          if grep -RnE '^(from|import)\s+aqp(\.|\s|$)' aqp_control_plane/src \
-               | grep -vE '(aqp_platform_core|aqp_cp)'; then
-            echo "FAIL: aqp_control_plane imports forbidden aqp.* module (ADR 005)"
-            exit 1
-          fi
+      # Strict-isolation lint moved to the `boundary-lints` matrix
+      # job (Phase 1 §4.2). That job runs `check_boundary.py` for
+      # every extracted subproject, including `aqp_control_plane`,
+      # so the inline grep gate here is removed.
       - name: Test
         run: cd aqp_control_plane && pytest -ra --cov=aqp_cp --cov-report=term
+
+  test-subprojects:
+    name: ${{ matrix.subproject }} tests
+    runs-on: ubuntu-latest
+    needs: test-platform-core
+    # Phase 1 §4.1 — multi-subproject test matrix. Each slot installs
+    # `aqp_platform_core` first (shared base) + the subproject with
+    # its `[dev]` extras + runs pytest. `fail-fast: false` ensures one
+    # subproject regression doesn't mask another's status.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - subproject: aqp_admin
+            path: aqp_admin
+            cov_package: aqp_admin
+          - subproject: aqp_cli
+            path: aqp_cli
+            cov_package: aqp_cli
+          - subproject: aqp_rl
+            path: aqp_rl
+            cov_package: aqp_rl
+          - subproject: aqp_models
+            path: aqp_models
+            cov_package: aqp_models
+          - subproject: aqp_ingest
+            path: aqp_ingest
+            cov_package: aqp_ingest_cdk
+          - subproject: aqp_kernels
+            path: aqp_kernels
+            cov_package: aqp_kernels
+          - subproject: aqp_ratelimit
+            path: aqp_ratelimit
+            cov_package: aqp_ratelimit
+          - subproject: aqp_bots
+            path: aqp_bots
+            cov_package: aqp_bots
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ./aqp_platform_core
+          pip install -e ./${{ matrix.path }}[dev]
+      - name: Test
+        # Some subprojects intentionally ship lightweight smoke
+        # suites (e.g. aqp_bots until Phase 2). Coverage is reported
+        # for visibility; thresholds are not enforced at the matrix
+        # level — that's a per-subproject responsibility.
+        run: cd ${{ matrix.path }} && pytest -ra --cov=${{ matrix.cov_package }} --cov-report=term
+
+  mypy-wave1:
+    name: mypy --strict (wave 1, PR-blocking) — ${{ matrix.subproject }}
+    runs-on: ubuntu-latest
+    # Phase 1 §4.3 wave 1: mature subprojects with clean type
+    # surfaces run `mypy --strict` and FAIL the PR on any error.
+    # Adding a new file to one of these subprojects without proper
+    # annotations is an opt-out from the AQP type contract.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - subproject: aqp_platform_core
+            path: aqp_platform_core
+            package: src/aqp_platform_core
+          - subproject: aqp_control_plane
+            path: aqp_control_plane
+            package: src/aqp_cp
+          - subproject: aqp_cli
+            path: aqp_cli
+            package: src/aqp_cli
+          - subproject: aqp_admin
+            path: aqp_admin
+            package: src/aqp_admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ./aqp_platform_core
+          pip install -e ./${{ matrix.path }}[dev]
+          pip install "mypy>=1.8"
+      - name: mypy --strict
+        run: cd ${{ matrix.path }} && mypy --strict ${{ matrix.package }}
+
+  mypy-wave2:
+    name: mypy --strict (wave 2, warning-only) — ${{ matrix.subproject }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    # Phase 1 §4.3 wave 2: extracted subprojects with legacy type
+    # debt. Runs `mypy --strict` in WARNING-ONLY mode — failures are
+    # surfaced via the GitHub Actions step summary but do NOT block
+    # the PR. Each subproject is promoted into wave 1 in a follow-up
+    # PR once its tree is clean (see plan §4.3 promotion track).
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - subproject: aqp_rl
+            path: aqp_rl
+            package: src/aqp_rl
+          - subproject: aqp_models
+            path: aqp_models
+            package: src/aqp_models
+          - subproject: aqp_bots
+            path: aqp_bots
+            package: "."
+          - subproject: aqp_ingest
+            path: aqp_ingest
+            package: src/aqp_ingest_cdk
+          - subproject: aqp_kernels
+            path: aqp_kernels
+            package: src/aqp_kernels
+          - subproject: aqp_ratelimit
+            path: aqp_ratelimit
+            package: src/aqp_ratelimit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ./aqp_platform_core
+          pip install -e ./${{ matrix.path }}[dev]
+          pip install "mypy>=1.8"
+      - name: mypy --strict (warning-only)
+        id: mypy
+        run: |
+          set +e
+          cd ${{ matrix.path }} && mypy --strict ${{ matrix.package }} > /tmp/mypy-${{ matrix.subproject }}.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            error_count=$(grep -cE '^.+: error:' /tmp/mypy-${{ matrix.subproject }}.log || echo 0)
+            {
+              echo "### mypy wave-2 warnings — ${{ matrix.subproject }}"
+              echo ""
+              echo "**${error_count} errors** (warning-only — not blocking)"
+              echo ""
+              echo '```'
+              head -200 /tmp/mypy-${{ matrix.subproject }}.log
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+          # Always exit 0 so `continue-on-error: true` doesn't mark
+          # the run as failed under retry. Promotion happens by
+          # moving the subproject into the wave-1 matrix above.
+          exit 0
 
   validate-config:
     name: validate config schema

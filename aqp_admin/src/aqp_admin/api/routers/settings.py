@@ -13,7 +13,6 @@ finalise with ``succeeded`` / ``failed`` after.
 """
 from __future__ import annotations
 
-import logging
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -24,9 +23,17 @@ from aqp_admin.deps.identity import AdminUser, require_admin_scope
 from aqp_admin.integrations import AdminBrokerError, get_brokers
 from aqp_admin.settings import get_settings
 
-logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/admin/settings", tags=["settings"])
+
+_SECRETY_KEY_TOKENS = (
+    "SECRET",
+    "TOKEN",
+    "PASSWORD",
+    "CLIENT_SECRET",
+    "API_KEY",
+    "PRIVATE_KEY",
+    "JWT",
+)
 
 
 def _bearer_from_header(header_value: str | None) -> str | None:
@@ -52,6 +59,41 @@ def _runtime_settings_payload() -> dict[str, Any]:
         "m2m_credential_purpose": settings.m2m_credential_purpose,
         "m2m_cp_audience": settings.m2m_cp_audience,
     }
+
+
+def _validate_framework_keys(
+    *,
+    values: dict[str, str],
+    delete_keys: list[str],
+) -> None:
+    invalid_prefix = sorted(
+        {key for key in (*values.keys(), *delete_keys) if not key.startswith("AQP_ADMIN_")}
+    )
+    if invalid_prefix:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "invalid_settings_key",
+                "error_description": "Only AQP_ADMIN_* keys are allowed on framework settings patch.",
+                "invalid_keys": invalid_prefix,
+            },
+        )
+    secretish = sorted(
+        {
+            key
+            for key in values.keys()
+            if any(token in key.upper() for token in _SECRETY_KEY_TOKENS)
+        }
+    )
+    if secretish:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "plaintext_secret_not_allowed",
+                "error_description": "Secret-like settings must be provided through secret_refs, not plaintext values.",
+                "invalid_keys": secretish,
+            },
+        )
 
 
 class FrameworkPatchBody(BaseModel):
@@ -127,6 +169,7 @@ async def patch_framework_settings(
     audit: AuditContext = Depends(audit_context_dep("admin.settings.framework.patch")),
     authorization: str | None = Header(default=None, alias="Authorization"),
 ) -> dict[str, Any]:
+    _validate_framework_keys(values=body.values, delete_keys=body.delete_keys)
     audit.target = body.service_id
     audit.start(payload=body.model_dump())
     bearer = _bearer_from_header(authorization)
@@ -249,7 +292,16 @@ async def connect_cloud_provider(
     authorization: str | None = Header(default=None, alias="Authorization"),
 ) -> dict[str, Any]:
     audit.target = f"{body.provider_kind}:{body.slug}"
-    audit.start(payload=body.model_dump())
+    audit.start(
+        payload={
+            "provider_kind": body.provider_kind,
+            "slug": body.slug,
+            "name": body.name,
+            "default_region": body.default_region,
+            "credential_key": body.credential_key,
+            "config_keys": sorted(body.config_json.keys()),
+        }
+    )
     bearer = _bearer_from_header(authorization)
     payload = {
         "slug": body.slug,

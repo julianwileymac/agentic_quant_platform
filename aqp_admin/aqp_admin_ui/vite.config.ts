@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,4 +29,4 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./tests/setup.ts"],
   },
-});
+} as Parameters<typeof defineConfig>[0]);

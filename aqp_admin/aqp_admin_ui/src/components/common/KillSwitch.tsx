@@ -24,8 +24,8 @@ export function KillSwitch() {
     try {
       const result = await adminApi.haltAll(reason);
       setLastResult(result);
-    } catch (err) {
-      console.error("kill-switch fan-out failed", err);
+    } catch {
+      console.error("kill-switch fan-out failed");
     } finally {
       setBusy(false);
       setOpen(false);

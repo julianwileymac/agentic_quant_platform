@@ -78,3 +78,72 @@ repos:
         language: system
         pass_filenames: false
         files: \.py$
+
+      # ---------------------------------------------------------------
+      # Phase 1 §4.2 — generic cross-subproject boundary lint. One
+      # hook per extracted subproject so violations are reported per
+      # boundary instead of mixed together. Each hook fires only when
+      # the relevant subproject's source tree changes.
+      # ---------------------------------------------------------------
+      - id: aqp-boundary-aqp-control-plane
+        name: AQP §4.2 — boundary lint (aqp_control_plane)
+        entry: python scripts/ci/check_boundary.py --scan-root aqp_control_plane/src --lint-name boundary_aqp_control_plane --forbid aqp --allow aqp_platform_core --allow aqp_cp
+        language: system
+        pass_filenames: false
+        files: ^aqp_control_plane/src/.*\.py$
+
+      - id: aqp-boundary-aqp-admin
+        name: AQP §4.2 — boundary lint (aqp_admin)
+        entry: python scripts/ci/check_boundary.py --scan-root aqp_admin/src --lint-name boundary_aqp_admin --forbid aqp --forbid aqp_cp --allow aqp_platform_core --allow aqp_admin
+        language: system
+        pass_filenames: false
+        files: ^aqp_admin/src/.*\.py$
+
+      - id: aqp-boundary-aqp-cli
+        name: AQP §4.2 — boundary lint (aqp_cli)
+        entry: python scripts/ci/check_boundary.py --scan-root aqp_cli/src --lint-name boundary_aqp_cli --forbid aqp --forbid aqp_cp --allow aqp_platform_core --allow aqp_cli
+        language: system
+        pass_filenames: false
+        files: ^aqp_cli/src/.*\.py$
+
+      - id: aqp-boundary-aqp-ingest
+        name: AQP §4.2 — boundary lint (aqp_ingest)
+        entry: python scripts/ci/check_boundary.py --scan-root aqp_ingest/src --lint-name boundary_aqp_ingest --forbid aqp.api --forbid aqp.persistence
+        language: system
+        pass_filenames: false
+        files: ^aqp_ingest/src/.*\.py$
+
+      - id: aqp-boundary-aqp-kernels
+        name: AQP §4.2 — boundary lint (aqp_kernels)
+        entry: python scripts/ci/check_boundary.py --scan-root aqp_kernels/src --lint-name boundary_aqp_kernels --forbid aqp.persistence --forbid aqp.api
+        language: system
+        pass_filenames: false
+        files: ^aqp_kernels/src/.*\.py$
+
+      - id: aqp-boundary-aqp-ratelimit
+        name: AQP §4.2 — boundary lint (aqp_ratelimit)
+        entry: python scripts/ci/check_boundary.py --scan-root aqp_ratelimit/src --lint-name boundary_aqp_ratelimit --forbid aqp.persistence --forbid aqp.api
+        language: system
+        pass_filenames: false
+        files: ^aqp_ratelimit/src/.*\.py$
+
+      - id: aqp-boundary-aqp-rl
+        name: AQP §4.2 — boundary lint (aqp_rl)
+        entry: python scripts/ci/check_boundary.py --scan-root aqp_rl/src --lint-name boundary_aqp_rl --forbid aqp --allow aqp_platform_core --allow aqp_rl --allow aqp.llm.providers.router --allow aqp.data.iceberg_catalog --allow aqp.risk.limits
+        language: system
+        pass_filenames: false
+        files: ^aqp_rl/src/.*\.py$
+
+      - id: aqp-boundary-aqp-models
+        name: AQP §4.2 — boundary lint (aqp_models)
+        entry: python scripts/ci/check_boundary.py --scan-root aqp_models/src --lint-name boundary_aqp_models --forbid aqp --allow aqp_platform_core --allow aqp_models --allow aqp.llm.providers.router
+        language: system
+        pass_filenames: false
+        files: ^aqp_models/src/.*\.py$
+
+      - id: aqp-boundary-aqp-bots
+        name: AQP §4.2 — boundary lint (aqp_bots)
+        entry: python scripts/ci/check_boundary.py --scan-root aqp_bots --lint-name boundary_aqp_bots --forbid aqp.api --forbid aqp.persistence --exclude __pycache__ --exclude templates
+        language: system
+        pass_filenames: false
+        files: ^aqp_bots/(?!templates/).*\.py$

@@ -1,0 +1,32 @@
+# Allowlist for `scripts/ci/check_step_up_mfa.py` (Rule 52).
+# Format: one repo-relative POSIX path per line. Lines starting with # are
+# comments. Every entry MUST carry a Phase-2 removal deadline.
+#
+# Spirit of the rule: every destructive route attaches
+# `Depends(require_step_up(...))` somewhere in its decorator stack.
+# Entries below are subprojects whose halts currently rely on a
+# scope-only gate (`require_scope("workloads:halt")` etc.) and need
+# the same `_require_step_up()` shim pattern that
+# `aqp_ratelimit/api/routes/ratelimit.py` already uses to import
+# the monolith dep when mounted.
+#
+# Phase-2 deadlines target 2026-09-30 unless otherwise noted.
+
+# `aqp_control_plane` halts — workloads / lakehouse / streaming /
+# terraform. All currently gate on `require_scope` only. Need a shared
+# `aqp_control_plane.api.security_stepup` shim that defers to
+# `aqp.api.security_stepup.require_step_up` when the monolith is
+# importable, mirroring `aqp_ratelimit/api/routes/ratelimit.py`.
+# TODO(phase-2, 2026-09-30): add control-plane step-up shim and attach
+# `Depends(_require_step_up(max_age_seconds=180))` on each halt.
+aqp_control_plane/src/aqp_cp/api/routers/lakehouse.py
+aqp_control_plane/src/aqp_cp/api/routers/streaming.py
+aqp_control_plane/src/aqp_cp/api/routers/terraform.py
+aqp_control_plane/src/aqp_cp/api/routers/workloads.py
+
+# `aqp_admin` halt-all — admin halt fan-out across managed services
+# and company accounts. Same Phase-2 architectural fix as the
+# control-plane routers.
+# TODO(phase-2, 2026-09-30): add admin step-up shim and attach
+# `Depends(_require_step_up(max_age_seconds=180))` on /admin/halt/all.
+aqp_admin/src/aqp_admin/api/routers/halt.py

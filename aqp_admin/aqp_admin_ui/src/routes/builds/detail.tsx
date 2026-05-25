@@ -50,11 +50,11 @@ export function BuildDetail() {
           const next = [...prev, frame];
           return next.length > MAX_LINES ? next.slice(-MAX_LINES) : next;
         });
-      } catch (err) {
-        console.warn("malformed log frame", err);
+      } catch {
+        console.warn("malformed log frame");
       }
     };
-    ws.onerror = (err) => console.warn("build log WS error", err);
+    ws.onerror = () => console.warn("build log WS error");
     return () => {
       try {
         ws.close();

@@ -85,6 +85,23 @@ def _codebase_mcp_uri() -> str:
     return ""
 
 
+def _ml_mcp_uri() -> str:
+    """Return the canonical URI for the MLOps MCP server.
+
+    Mirrors :func:`_data_mcp_uri` / :func:`_codebase_mcp_uri`. The
+    operator MUST set ``AQP_MCP_ML_CANONICAL_URI`` in production so
+    the audience-bound tokens minted by the AS match what
+    ``aqp-ml-mcp`` advertises here (Hard Rule 49).
+    """
+    explicit = str(getattr(settings, "mcp_ml_canonical_uri", "") or "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    origin = _safe_origin()
+    if origin:
+        return f"{origin}/mcp/ml"
+    return ""
+
+
 def _docs_mcp_uri() -> str:
     """Return the canonical URI for the docs.aqp.fund MCP Worker.
 
@@ -132,6 +149,17 @@ def _scopes_supported_data() -> list[str]:
 
 def _scopes_supported_codebase() -> list[str]:
     return ["code:read", "code:write", "agents:invoke"]
+
+
+def _scopes_supported_ml() -> list[str]:
+    """Scopes the MLOps MCP server recognises.
+
+    Aligned with the ``required_scopes`` declared on every
+    ``data.ml.*`` :class:`DataMCPTool` subclass — read-only browse
+    tools default to ``data:read``; mutating handlers (compile, pull,
+    serve) declare ``data:write``.
+    """
+    return ["data:read", "data:write", "agents:invoke"]
 
 
 def _scopes_supported_docs() -> list[str]:
@@ -202,6 +230,20 @@ def build_well_known_router() -> APIRouter:
             resource=_codebase_mcp_uri(),
             scopes=_scopes_supported_codebase(),
             description="AQP Codebase MCP",
+        )
+
+    @router.get("/oauth-protected-resource/mcp/ml", response_model=None)
+    def ml_mcp_metadata() -> dict[str, Any]:
+        """Documents the dedicated MLOps MCP server at ``/mcp/ml``.
+
+        Backed by :mod:`aqp.ml_mcp.server`. Operator sets
+        ``AQP_MCP_ML_CANONICAL_URI`` so tokens minted by the AS carry
+        the matching ``aud`` claim (Hard Rule 49).
+        """
+        return _metadata_document(
+            resource=_ml_mcp_uri(),
+            scopes=_scopes_supported_ml(),
+            description="AQP MLOps MCP",
         )
 
     @router.get("/oauth-protected-resource/mcp/docs", response_model=None)

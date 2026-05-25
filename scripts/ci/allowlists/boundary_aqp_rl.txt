@@ -1,0 +1,84 @@
+# scripts/ci/check_boundary.py --lint-name boundary_aqp_rl allowlist
+#
+# Phase 1 §4.2. `aqp_rl` is extraction-in-progress; the strict
+# narrow allowed prefixes are:
+#   - aqp.llm.providers.router   (Rule 20 — central LLM gateway)
+#   - aqp.data.iceberg_catalog   (Rule 18 — central data layer)
+#   - aqp.risk.limits            (Rule 38 — central risk + kill switch)
+# Every other `aqp.*` import is migration debt and MUST be closed
+# by Phase 2 (2026-10-15). Each entry below corresponds to a file
+# still reaching into the legacy monolith — typically for
+# `aqp.core.registry` (DI registry move to aqp_platform_core),
+# `aqp.config` (settings — Rule 7 move to aqp_platform_core),
+# `aqp.core.types` / `aqp.core.interfaces` (move to
+# aqp_platform_core.entities), or `aqp.tasks.*` (Celery plumbing).
+#
+# All 65 entries have the same Phase 2 deadline. Closure order is
+# tracked in the AQP repo split runbook
+# (aqp_docs/docs/concepts/platform/repository-split.md).
+
+aqp_rl/src/aqp_rl/agents/actor_critic/actor_critic.py            # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/actor_critic/actor_critic_duel.py       # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/actor_critic/actor_critic_recurrent.py  # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/almgren_chriss_residual.py              # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/avellaneda_stoikov_residual.py          # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/classical/abcd.py                       # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/classical/moving_average.py             # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/classical/signal_rolling.py             # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/classical/turtle.py                     # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/evolutionary/es.py                      # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/evolutionary/neuro.py                   # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/evolutionary/novelty.py                 # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/llm_hybrid.py                           # TODO(phase-2): port aqp.core.registry + aqp.config use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/llm_hybrid_layered.py                   # TODO(phase-2): port aqp.core.registry + aqp.config use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/q_family/curiosity_q.py                 # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/q_family/double_q.py                    # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/q_family/duel_q.py                      # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/q_family/q_learning.py                  # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/q_family/recurrent_q.py                 # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/spm/__init__.py                         # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/agents/spm/agents.py                           # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/analytical/avellaneda_stoikov.py               # TODO(phase-2): port aqp.* analytics imports, remove by 2026-10-15
+aqp_rl/src/aqp_rl/analytical/cartea_jaimungal.py                 # TODO(phase-2): port aqp.* analytics imports, remove by 2026-10-15
+aqp_rl/src/aqp_rl/api/routes/rl.py                               # TODO(phase-2): port aqp.persistence + aqp.tasks + aqp.api.security to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/applications/cryptocurrency_trading.py         # TODO(phase-2): port aqp.config use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/applications/ensemble_strategy.py              # TODO(phase-2): port aqp.* imports, remove by 2026-10-15
+aqp_rl/src/aqp_rl/applications/fundamental_portfolio_drl.py      # TODO(phase-2): port aqp.config use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/applications/portfolio_allocation.py           # TODO(phase-2): port aqp.config use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/applications/stock_trading.py                  # TODO(phase-2): port aqp.config use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/core/base.py                                   # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/core/data.py                                   # TODO(phase-2): port aqp.data.feature_engineer use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/core/observation.py                            # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/core/reward.py                                 # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/core/schemas.py                                # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/data_pipelines/alpaca.py                       # TODO(phase-2): port aqp.config use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/data_pipelines/iceberg.py                      # TODO(phase-2): port aqp.config + aqp.data.* use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/data_pipelines/medallion_replay.py             # TODO(phase-2): port aqp.data.catalog.* use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/data_pipelines/streaming.py                    # TODO(phase-2): port aqp.config use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/ensemblers/best_of_n.py                        # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/ensemblers/meta_ensemble.py                    # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/ensemblers/walk_forward.py                     # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/envs/base.py                                   # TODO(phase-2): port aqp.config + aqp.core.types + aqp.data.* use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/envs/execution_env.py                          # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/envs/finrl_crypto_env.py                       # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/envs/finrl_portfolio_cov_env.py                # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/envs/finrl_stock_env.py                        # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/envs/finrl_stock_np_env.py                     # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/envs/lucic_tse_options_env.py                  # TODO(phase-2): port aqp.analysis.pricing + aqp.options.* use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/envs/market_making_env.py                      # TODO(phase-2): port aqp.optimal_control.* use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/envs/options_env.py                            # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/envs/portfolio_env.py                          # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/envs/rl_backtest_env.py                        # TODO(phase-2): port aqp.backtest.broker_sim + aqp.core.types, remove by 2026-10-15
+aqp_rl/src/aqp_rl/envs/stock_trading_discrete.py                 # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/envs/stock_trading_env.py                      # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/evaluator.py                                   # TODO(phase-2): port aqp.* imports, remove by 2026-10-15
+aqp_rl/src/aqp_rl/execution/weight_to_orders.py                  # TODO(phase-2): port aqp.core.domain + aqp.risk.kill_switch use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/experiments/alpha_backtest.py                  # TODO(phase-2): port aqp.backtest.runner use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/policies/feature_extractors.py                 # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_rl/src/aqp_rl/registry.py                                    # TODO(phase-2): port aqp.core.registry use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/runtime.py                                     # TODO(phase-2): port aqp.* runtime imports to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/tagging.py                                     # TODO(phase-2): port aqp.* tagging imports, remove by 2026-10-15
+aqp_rl/src/aqp_rl/tasks/rl_tasks.py                              # TODO(phase-2): port aqp.tasks.* to aqp_platform_core celery plumbing, remove by 2026-10-15
+aqp_rl/src/aqp_rl/trainer.py                                     # TODO(phase-2): port aqp.* trainer imports, remove by 2026-10-15
+aqp_rl/src/aqp_rl/trajectories/duckdb_views.py                   # TODO(phase-2): port aqp.config use to aqp_platform_core, remove by 2026-10-15
+aqp_rl/src/aqp_rl/trajectories/iceberg_writer.py                 # TODO(phase-2): port aqp.config use to aqp_platform_core, remove by 2026-10-15

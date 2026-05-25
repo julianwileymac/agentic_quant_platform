@@ -79,5 +79,6 @@
   "0077_connector_marketplace_extras.py": "bfbde647cb1bc6355fc7f7185dc9706049c3e19cb8f9c70d28eb487568221f15",
   "0078_replay_cache_entries.py": "85ef80b5b71ec0fa6e33db6404312aaea3b9fc73a1124c094276987f602edf2a",
   "0079_audit_log_hash_chain.py": "e8d7b142f1f244fad9650fe87eb755895f04b31e8d4e5a86cbd7837c62111578",
-  "0080_team_airbyte_workspaces.py": "1ff16b28187d4e87578a80cd89143bbf1350a3a959e3c530b99b7b46dd53dda9"
+  "0080_team_airbyte_workspaces.py": "1ff16b28187d4e87578a80cd89143bbf1350a3a959e3c530b99b7b46dd53dda9",
+  "0081_mlops_skills_and_artifacts.py": "e86d46d02d3299a8a0dab6e337176fc89f20bae9c843e35c8f7df65a69d0517e"
 }

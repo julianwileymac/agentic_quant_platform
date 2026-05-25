@@ -439,6 +439,15 @@ app.include_router(entities.router)
 app.include_router(market_data_live.router)
 app.include_router(factors.router)
 app.include_router(ml.router)
+# MLOps skill REST surface (initial slice); mounted next to /ml so the
+# operator UI + the data.ml.skills.* DataMCPTools share the same
+# request/response shape.
+try:
+    from aqp_models.api.routes import ml_skills as ml_skills_routes  # noqa: E402
+
+    app.include_router(ml_skills_routes.router)
+except Exception:  # noqa: BLE001 - skills router is best-effort
+    logger.warning("ml_skills router not mounted", exc_info=True)
 app.include_router(metadata_catalog.router)
 app.include_router(
     metadata_aspects_routes.router,
@@ -688,6 +697,17 @@ try:
     app.include_router(_build_codebase_mcp_router())
 except Exception:  # noqa: BLE001 - codebase MCP is optional at boot
     logger.warning("CodebaseMCP HTTP router not mounted", exc_info=True)
+
+
+# Dedicated MLOps MCP server (Hard Rule 49). Audience-bound canonical
+# URI is settings.mcp_ml_canonical_uri; the matching RFC 9728 metadata
+# document lives at /.well-known/oauth-protected-resource/mcp/ml.
+try:
+    from aqp.ml_mcp.server import build_ml_mcp_router as _build_ml_mcp_router
+
+    app.include_router(_build_ml_mcp_router())
+except Exception:  # noqa: BLE001 - MLOps MCP is optional at boot
+    logger.warning("MLOps MCP HTTP router not mounted", exc_info=True)
 
 
 # ---------------------------------------------------------------------------

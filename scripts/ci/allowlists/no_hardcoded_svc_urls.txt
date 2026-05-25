@@ -1,0 +1,52 @@
+# Allowlist for `scripts/ci/check_no_hardcoded_svc_urls.py` (Rule 47).
+# Format: one repo-relative POSIX path per line. Lines starting with # are
+# comments. Every entry MUST carry a Phase-2 removal deadline.
+#
+# Spirit of the rule: application code must resolve service URLs through
+# the topology service (`topology.service_url(...)`). Files listed here
+# still embed an `*.svc.cluster.local` URL and need to be refactored.
+# Files in deployment-surface directories (k8s manifests, templates,
+# Terraform, cluster_install, rollback, deploy/k8s) are exempt via
+# `EXEMPT_PREFIXES` and so do not appear here.
+#
+# Phase-2 deadlines target 2026-09-30 unless otherwise noted.
+
+# Kernel-pod proxy code embeds the rl-proxy service DNS directly. The
+# pod manifests already inject the URL via env vars; the proxy code
+# falls back to this hardcoded default when the env var is unset.
+# Migrate to `topology.service_url("rl-proxy")`.
+# TODO(phase-2, 2026-09-30): refactor kernel proxy default URLs to
+# topology service lookup; remove the hardcoded fallback.
+aqp_kernels/gateway/process_proxy.py
+aqp_kernels/src/aqp_kernels/sdk_proxy.py
+aqp_kernels/src/aqp_kernels/pipes/local_to_cloud.py
+
+# Control-plane settings hardcode the Prometheus URL fallback. Should
+# go through the topology service so prom-per-cell works.
+# TODO(phase-2, 2026-09-30): replace prometheus_url default with
+# `topology.service_url("prometheus")`.
+aqp_control_plane/src/aqp_cp/settings.py
+
+# Legacy AQPControlPlaneClient default base URL. Once topology service
+# resolves the control-plane endpoint per cell, drop this default.
+# TODO(phase-2, 2026-09-30): replace control_plane_client default URL
+# with topology lookup.
+aqp/services/control_plane_client.py
+
+# QuestDB ingest path hardcodes the timeseries service DNS. The
+# topology service should resolve `questdb` per cell.
+# TODO(phase-2, 2026-09-30): replace QuestDB ingest URL default with
+# topology service lookup.
+aqp/data/timeseries/questdb_ingest.py
+
+# dbt profiles.yml embeds the QuestDB host literally. Templating the
+# profiles via `dbt-jinja` and resolving the host through the topology
+# service is the Phase-2 plan.
+# TODO(phase-2, 2026-09-30): template dbt profiles via topology service.
+aqp/data/dbt/projects/core/profiles.yml
+
+# Airbyte asset definition embeds the airbyte-server URL. Resolve via
+# topology service when ELT cells go live.
+# TODO(phase-2, 2026-09-30): replace airbyte connection URL with
+# topology service lookup.
+aqp/dagster/assets/airbyte_connections.py

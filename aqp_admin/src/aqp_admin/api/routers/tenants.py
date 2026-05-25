@@ -55,7 +55,18 @@ class TenantVendingBody(BaseModel):
         default=False,
         description=(
             "When true the wizard also kicks off the hosted PaaS "
-            "Terraform stack. Deferred to follow-up PR."
+            "Terraform stack through the control plane."
+        ),
+    )
+    terraform_workspace_id: str | None = Field(
+        default=None,
+        description="Control-plane Terraform workspace id for hosted-PaaS provisioning.",
+    )
+    terraform_spec: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "TerraformStackSpec payload to send to the control plane. "
+            "Required when enable_paas_terraform is true."
         ),
     )
 
@@ -86,7 +97,18 @@ async def vend_tenant(
     authorization: str | None = Header(default=None, alias="Authorization"),
 ) -> TenantVendingResponse:
     audit.target = body.org_id
-    audit.start(payload=body.model_dump())
+    audit.start(
+        payload={
+            "org_id": body.org_id,
+            "org_name": body.org_name,
+            "plan": body.plan,
+            "entra_tenant_id": body.entra_tenant_id,
+            "namespace_spec_present": body.namespace_spec is not None,
+            "enable_paas_terraform": body.enable_paas_terraform,
+            "terraform_workspace_id": body.terraform_workspace_id,
+            "terraform_spec_present": body.terraform_spec is not None,
+        }
+    )
     bearer = _bearer_from_header(authorization)
     phases: list[dict[str, Any]] = []
     success = True
@@ -138,15 +160,51 @@ async def vend_tenant(
         )
         logger.exception("namespace_provision phase failed for %s", body.org_id)
 
-    # Phase 3: optional hosted PaaS Terraform (deferred).
+    # Phase 3: optional hosted PaaS Terraform through the CP TerraformRuntime.
     if body.enable_paas_terraform:
-        phases.append(
-            {
-                "phase": "paas_terraform",
-                "status": "skipped",
-                "note": "hosted-PaaS Terraform broker arrives in follow-up PR",
-            }
-        )
+        if not body.terraform_workspace_id or not body.terraform_spec:
+            success = False
+            phases.append(
+                {
+                    "phase": "paas_terraform",
+                    "status": "failed",
+                    "error": "terraform_workspace_id and terraform_spec are required",
+                    "remediation": (
+                        "Select a Terraform workspace and stack version in the "
+                        "admin UI, then retry the hosted-PaaS phase."
+                    ),
+                }
+            )
+        else:
+            try:
+                result = await brokers.control_plane.terraform_run(
+                    body.terraform_workspace_id,
+                    "apply",
+                    {
+                        "spec": body.terraform_spec,
+                        "extra_args": [],
+                    },
+                    bearer_passthrough=bearer,
+                )
+                phases.append(
+                    {
+                        "phase": "paas_terraform",
+                        "status": "succeeded",
+                        "workspace_id": body.terraform_workspace_id,
+                        "result": result.get("data") if isinstance(result, dict) else result,
+                    }
+                )
+            except AdminBrokerError as exc:
+                success = False
+                phases.append(
+                    {
+                        "phase": "paas_terraform",
+                        "status": "failed",
+                        "error": str(exc),
+                        "code": exc.code,
+                    }
+                )
+                logger.exception("paas_terraform phase failed for %s", body.org_id)
 
     if success:
         audit.succeed({"phases": phases})

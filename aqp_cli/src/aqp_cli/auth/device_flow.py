@@ -151,7 +151,7 @@ class DeviceFlowClient:
         self._owns_http = http_client is None
         self._timeout = timeout_seconds
         self._sleep = sleep_fn
-        self._announce = announce_fn or (lambda msg: print(msg, flush=True))
+        self._announce = announce_fn or (lambda msg: print(msg, flush=True))  # noqa: T201 - announce_fn fallback prints OAuth verification URL to user (Rule 9)
         self._open_browser = open_browser_fn or _default_open_browser
 
     # -- public ----------------------------------------------------------

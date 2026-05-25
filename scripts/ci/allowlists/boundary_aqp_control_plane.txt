@@ -1,0 +1,8 @@
+# scripts/ci/check_boundary.py --lint-name boundary_aqp_control_plane allowlist
+#
+# Replaces the inline grep gate at
+# `.github/workflows/ci.yml:62-69` (Phase 0). This subproject is
+# under a strict `aqp.*` ban with `aqp_platform_core` + `aqp_cp` as
+# the only allowed roots. Empty allowlist means zero migration debt.
+#
+# Every entry MUST carry a `# TODO(phase-N): ...` removal deadline.

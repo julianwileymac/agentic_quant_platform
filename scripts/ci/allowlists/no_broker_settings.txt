@@ -1,0 +1,56 @@
+# Allowlist for `scripts/ci/check_no_broker_settings.py` (Rule 55).
+# Format: one repo-relative POSIX path per line. Lines starting with # are
+# comments. Every entry MUST carry a Phase-2 removal deadline.
+#
+# Spirit of the rule: broker credentials are BYOK — go through the
+# `BrokerCredentialStore` chain, never `settings.alpaca_*` / `settings.ibkr_*`
+# / `settings.tradier_*` etc. The entries below are the existing brokerage
+# integration modules that still read settings directly; they will be
+# refactored in Phase 2 to use `BrokerCredentialStore.get(...)` /
+# `CredentialResolver` so multi-tenant BYOK works end-to-end.
+#
+# Phase-2 deadlines target 2026-09-30 unless otherwise noted.
+
+# IBKR historical data puller — reads ibkr_host / ibkr_port / ibkr_client_id
+# from settings as a bootstrap default. Migrate to per-workspace BrokerCred.
+# TODO(phase-2, 2026-09-30): refactor ibkr_historical to BrokerCredentialStore.
+aqp/data/ibkr_historical.py
+
+# Alpaca brokerage adapter — reads api_key / secret / paper / base_url.
+# Migrate to per-workspace BrokerCredentialStore lookups.
+# TODO(phase-2, 2026-09-30): refactor alpaca brokerage to BrokerCredentialStore.
+aqp/trading/brokerages/alpaca.py
+
+# IBKR brokerage adapter — host / port / client_id.
+# TODO(phase-2, 2026-09-30): refactor ibkr brokerage to BrokerCredentialStore.
+aqp/trading/brokerages/ibkr.py
+
+# Tradier brokerage adapter — token / base_url / account_id.
+# TODO(phase-2, 2026-09-30): refactor tradier brokerage to BrokerCredentialStore.
+aqp/trading/brokerages/tradier.py
+
+# Alpaca data feed — api_key / secret_key.
+# TODO(phase-2, 2026-09-30): refactor alpaca feed to BrokerCredentialStore.
+aqp/trading/feeds/alpaca_feed.py
+
+# IBKR data feed — host / port / client_id.
+# TODO(phase-2, 2026-09-30): refactor ibkr feed to BrokerCredentialStore.
+aqp/trading/feeds/ibkr_feed.py
+
+# Alpaca streaming ingester — api_key / secret / feed.
+# TODO(phase-2, 2026-09-30): refactor alpaca ingester to BrokerCredentialStore.
+aqp/streaming/ingesters/alpaca.py
+
+# IBKR streaming ingester — host / port / client_id.
+# TODO(phase-2, 2026-09-30): refactor ibkr ingester to BrokerCredentialStore.
+aqp/streaming/ingesters/ibkr.py
+
+# Brokers API route — exposes status / health endpoints that still hit
+# the bootstrap settings for the canonical broker defaults. Will move
+# to per-workspace credential lookup in Phase 2.
+# TODO(phase-2, 2026-09-30): refactor brokers route to per-workspace creds.
+aqp/api/routes/brokers.py
+
+# Data API route — alpaca polygon settings for historical data fetches.
+# TODO(phase-2, 2026-09-30): refactor data route broker reads to creds.
+aqp/api/routes/data.py

@@ -75,6 +75,14 @@ const HALT_ENDPOINTS: ReadonlyArray<{ path: string; label: string }> = [
   // ``aqp:lab:halt:<run_id>`` Redis flag the inline-canvas / Celery
   // task / Dagster sandbox dispatchers poll between nodes.
   { path: "/lab/halt-all", label: "data lab runs (LabRuntime dispatches)" },
+  // MLOps service (initial slice) — halts every active continuous-
+  // batching ``ml_serving_sessions`` row managed by
+  // :class:`ServeHandler`. Pulls the in-process LRU drain on each
+  // worker; matching ``ml_serving_sessions.halted=True`` rows live
+  // across pods so the operator UI can confirm cluster-wide halt
+  // state. New runtime-bearing services land here per
+  // ``.cursor/rules/frontend.mdc`` Hard Rule 2.
+  { path: "/ml/serving/halt-all", label: "ML continuous-batching sessions (ServeHandler)" },
 ];
 
 /**

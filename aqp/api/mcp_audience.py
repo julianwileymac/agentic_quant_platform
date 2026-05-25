@@ -314,10 +314,27 @@ def get_codebase_mcp_canonical_uri() -> str:
         return ""
 
 
+def get_ml_mcp_canonical_uri() -> str:
+    """Return ``settings.mcp_ml_canonical_uri`` defensively (Hard Rule 49).
+
+    The dedicated ``aqp-ml-mcp`` server passes the result here to
+    :func:`validate_mcp_audience` on every ``tools/call`` so a token
+    minted for the data MCP cannot be replayed against the MLOps
+    surface (CVE-2025-49596 / CVE-2025-6514 reference vector).
+    """
+    try:
+        from aqp.config import settings
+
+        return str(getattr(settings, "mcp_ml_canonical_uri", "") or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 __all__ = [
     "AudienceMode",
     "build_resource_metadata_header",
     "get_codebase_mcp_canonical_uri",
+    "get_ml_mcp_canonical_uri",
     "get_data_mcp_canonical_uri",
     "get_mcp_audience_mode",
     "validate_mcp_audience",

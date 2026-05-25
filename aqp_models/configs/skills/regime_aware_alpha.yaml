@@ -1,0 +1,38 @@
+# MLSkillSpec: regime_aware_alpha
+#
+# Two-step skill that first classifies the current market regime and
+# then routes the feature vector through a regime-specialised
+# predictor. Default models are deliberately tiny (sklearn /
+# LGBM-style) so the seed pack runs without optional GPU deps.
+
+name: regime_aware_alpha
+description: >-
+  Classify the current market regime, then run a regime-specialised
+  alpha predictor on the same feature row. The downstream predictor
+  reads the ``regime`` alias set by the classifier step.
+kind: regime_aware_alpha
+annotations:
+  - alpha
+  - regime
+guardrails:
+  rule_pack: ood_default
+  cost_budget_usd: 0.50
+  max_runtime_ms: 5000
+  require_workspace: true
+steps:
+  - name: regime_detector
+    interface_kind: classifier
+    model_ref: LGBModel
+    kwargs:
+      objective: multiclass
+      num_leaves: 31
+      n_estimators: 100
+    output_alias: regime
+  - name: regime_specialised_alpha
+    interface_kind: predictor
+    model_ref: XGBModel
+    kwargs:
+      max_depth: 4
+      learning_rate: 0.05
+      n_estimators: 200
+    output_alias: alpha_score

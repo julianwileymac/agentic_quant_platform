@@ -205,7 +205,8 @@ class StockTradingDiscreteEnv(gym.Env, RLComponent):
         return self._obs(), float(reward), bool(done), False, info
 
     def render(self):  # pragma: no cover
-        print(
+        # noqa-next-marker: gymnasium env.render() writes to stdout per gym contract (Rule 9)
+        print(  # noqa: T201
             f"t={self.idx} | price={self.prices[self.idx]:.2f} | "
             f"cash={self.cash:.2f} | shares={self.shares} | pv={self.portfolio_value:.2f}"
         )

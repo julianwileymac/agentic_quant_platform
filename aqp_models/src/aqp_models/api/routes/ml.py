@@ -2063,3 +2063,151 @@ def get_recipe(recipe_id: str) -> dict[str, Any]:
         "model_cfg": body.get("model") or body.get("model_cfg") or {},
         "records": body.get("records") or [],
     }
+
+
+# ---------------------------------------------------------------------------
+# MLOps service additions (initial slice)
+# ---------------------------------------------------------------------------
+#
+# These endpoints expose the new ``aqp_models`` MLOps subpackages
+# (interfaces / handlers / adapters / skills / rules) to operators.
+# Long-running ops dispatch to the matching Celery tasks in
+# ``aqp_models.tasks.ml_pull_tasks`` / ``ml_serving_tasks`` /
+# ``ml_productionize_tasks``; everything synchronous runs in-process
+# via the same handler classes the ``data.ml.*`` DataMCPTools use.
+
+
+class ModelPullRequest(BaseModel):
+    """Body for ``POST /ml/models/pull``."""
+
+    source: str = Field(
+        ..., description="External registry adapter kind: 'huggingface' or 'torchhub'."
+    )
+    model_name: str = Field(..., description="Repo id / model identifier.")
+    revision: str | None = None
+    include_examples: bool = False
+
+
+@router.post("/models/pull", response_model=TaskAccepted)
+def models_pull(req: ModelPullRequest) -> TaskAccepted:
+    """Queue an external-registry model pull.
+
+    Routes through :mod:`aqp_models.adapters` so the HuggingFace /
+    TorchHub credentials flow through ``CredentialResolver``
+    (Hard Rule 26) and the result lands in the platform's shared cache
+    volume.
+    """
+    from aqp_models.tasks.ml_pull_tasks import pull_model
+
+    async_result = pull_model.delay(
+        source=req.source,
+        model_name=req.model_name,
+        revision=req.revision,
+        include_examples=bool(req.include_examples),
+    )
+    return TaskAccepted(
+        task_id=async_result.id,
+        stream_url=f"/chat/stream/{async_result.id}",
+    )
+
+
+class ProductionizeRequest(BaseModel):
+    """Body for ``POST /ml/models/{id}/productionize``."""
+
+    target: str = Field(
+        ..., description="onnx | tensorrt | torchscript | quantize"
+    )
+    compile_kwargs: dict[str, Any] = Field(default_factory=dict)
+    output_path: str | None = None
+
+
+@router.post("/models/{model_version_id}/productionize", response_model=TaskAccepted)
+def productionize_model(model_version_id: str, req: ProductionizeRequest) -> TaskAccepted:
+    """Queue an ONNX / TensorRT / TorchScript / quantisation compile."""
+    from aqp_models.tasks.ml_productionize_tasks import productionize_model_version
+
+    async_result = productionize_model_version.delay(
+        model_version_id=model_version_id,
+        target=req.target,
+        compile_kwargs=dict(req.compile_kwargs or {}),
+        output_path=req.output_path,
+    )
+    return TaskAccepted(
+        task_id=async_result.id,
+        stream_url=f"/chat/stream/{async_result.id}",
+    )
+
+
+class CacheWarmRequest(BaseModel):
+    """Body for ``POST /ml/models/{id}/cache/warm``."""
+
+    cache_key: str | None = None
+
+
+@router.post("/models/{model_version_id}/cache/warm")
+def cache_warm(model_version_id: str, req: CacheWarmRequest) -> dict[str, Any]:
+    """Synchronously load + cache a registered model.
+
+    Wraps :class:`aqp_models.handlers.LoadHandler` + ``CacheHandler``;
+    returns the cache entry descriptor so the operator UI can show
+    the new entry immediately.
+    """
+    from aqp_models.handlers import CacheHandler, LoadHandler
+
+    loader_handler = LoadHandler()
+    load_result = loader_handler.invoke(model_version_id=model_version_id)
+    if not load_result.ok:
+        raise HTTPException(400, detail=load_result.error or "load failed")
+
+    cache = _get_shared_cache_handler()
+    entry = cache.warm(
+        key=(req.cache_key or model_version_id),
+        loader=lambda: load_result.data,
+        extras={"model_version_id": model_version_id, "load_metadata": load_result.metadata},
+    )
+    return {"cached": entry.to_descriptor(), "load": load_result.to_json()}
+
+
+@router.get("/serving/sessions")
+def serving_sessions() -> dict[str, Any]:
+    """Return descriptors for every active continuous-batching session.
+
+    Read-only; powers the operator dashboard. The matching
+    ``data.ml.serving.list`` DataMCPTool returns the same payload.
+    """
+    from aqp_models.handlers import ServeHandler
+
+    sessions = ServeHandler.list_sessions()
+    return {"sessions": sessions, "n_sessions": len(sessions)}
+
+
+@router.post("/serving/halt-all")
+def serving_halt_all() -> dict[str, Any]:
+    """Halt every active serving session — kill-switch fan-out target.
+
+    The topbar ``KillSwitch`` component issues a single ``POST`` per
+    runtime in parallel; this is the new MLOps slot alongside
+    ``/agents/halt`` / ``/paper/stop-all`` / ``/bots/halt-all`` /
+    ``/rl/halt-all`` / ``/workflows/halt`` / ``/quant-agents/halt``.
+    """
+    from aqp_models.handlers import ServeHandler
+
+    n_halted = ServeHandler.halt_all()
+    logger.warning("ml.serving.halt-all halted %d sessions", n_halted)
+    return {"halted": int(n_halted)}
+
+
+# Process-local CacheHandler singleton — lazy to keep import-time cost
+# at zero. The handler keeps the LRU + budget; routes share the same
+# instance so a ``cache_warm`` followed by ``GET /ml/serving/sessions``
+# sees the new entry.
+_SHARED_CACHE_HANDLER: Any | None = None
+
+
+def _get_shared_cache_handler() -> Any:
+    global _SHARED_CACHE_HANDLER
+    if _SHARED_CACHE_HANDLER is None:
+        from aqp_models.handlers import CacheHandler
+
+        _SHARED_CACHE_HANDLER = CacheHandler()
+    return _SHARED_CACHE_HANDLER

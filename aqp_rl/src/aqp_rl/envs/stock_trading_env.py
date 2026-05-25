@@ -201,7 +201,8 @@ class StockTradingEnv(gym.Env, RLComponent):
         return self._obs(), reward, bool(done), False, info
 
     def render(self):  # pragma: no cover
-        print(
+        # gymnasium env.render() writes to stdout per gym contract (Rule 9)
+        print(  # noqa: T201
             f"t={self.step_idx} | pv={self.portfolio_value:.2f} | "
             f"weights={np.round(self.weights, 3).tolist()}"
         )

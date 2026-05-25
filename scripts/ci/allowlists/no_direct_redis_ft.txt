@@ -1,0 +1,7 @@
+# Allowlist for `scripts/ci/check_no_direct_redis_ft.py` (Rule 11).
+# Format: one repo-relative POSIX path per line. Lines starting with # are
+# comments. Every entry MUST carry a Phase-2 removal deadline.
+#
+# Currently empty: Rule 11 is being enforced from green. Add entries here
+# with a `TODO(phase-2, YYYY-MM-DD)` deadline if a temporary exception is
+# required during refactoring.

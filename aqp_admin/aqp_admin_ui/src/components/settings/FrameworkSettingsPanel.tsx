@@ -28,6 +28,16 @@ function _defaultEntry() {
   return { id: _entryId(), key: "", value: "" };
 }
 
+const SECRETY_KEY_TOKENS = [
+  "SECRET",
+  "TOKEN",
+  "PASSWORD",
+  "CLIENT_SECRET",
+  "API_KEY",
+  "PRIVATE_KEY",
+  "JWT",
+];
+
 function _seedValues(data: FrameworkSettingsResponse | undefined): KeyValueEntry[] {
   const persisted = data?.persisted_config?.values;
   if (persisted && Object.keys(persisted).length > 0) {
@@ -114,6 +124,21 @@ export function FrameworkSettingsPanel({
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean);
+    const allKeys = [...Object.keys(values), ...cleanedDeleteKeys];
+    const invalidPrefix = allKeys.filter((key) => !key.startsWith("AQP_ADMIN_"));
+    if (invalidPrefix.length > 0) {
+      setLocalError(`Only AQP_ADMIN_* keys are allowed. Invalid: ${invalidPrefix.join(", ")}`);
+      return;
+    }
+    const secretish = Object.keys(values).filter((key) =>
+      SECRETY_KEY_TOKENS.some((token) => key.toUpperCase().includes(token)),
+    );
+    if (secretish.length > 0) {
+      setLocalError(
+        `Secret-like keys must use secret refs, not plaintext values: ${secretish.join(", ")}`,
+      );
+      return;
+    }
     save.mutate({
       service_id: serviceId.trim() || "aqp-admin",
       namespace: namespace.trim() || null,

@@ -31,6 +31,7 @@ from aqp.data.mcp.tools import (  # noqa: F401  (side-effect imports)
     kubernetes,
     lab,
     lineage_graph,
+    ml,
     namespace_policy,
     oauth_connections,
     observability,

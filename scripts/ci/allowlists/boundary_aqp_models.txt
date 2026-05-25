@@ -1,0 +1,91 @@
+# scripts/ci/check_boundary.py --lint-name boundary_aqp_models allowlist
+#
+# Phase 1 §4.2. `aqp_models` is extraction-in-progress; the strict
+# narrow allowed prefix is:
+#   - aqp.llm.providers.router   (Rule 2 — central LLM gateway)
+# Every other `aqp.*` import is migration debt and MUST be closed
+# by Phase 2 (2026-10-15). Each entry below corresponds to a file
+# still reaching into the legacy monolith — typically for
+# `aqp.core.registry` (DI registry move to aqp_platform_core),
+# `aqp.config` (settings — Rule 7 move to aqp_platform_core),
+# `aqp.core.types` / `aqp.core.interfaces` (move to
+# aqp_platform_core.entities), or `aqp.tasks.*` (Celery plumbing).
+#
+# All 75 entries have the same Phase 2 deadline.
+
+aqp_models/src/aqp_models/adhoc/embeddings.py                              # TODO(phase-2): port aqp.* embedding imports, remove by 2026-10-15
+aqp_models/src/aqp_models/alpha_backtest_experiment.py                     # TODO(phase-2): port aqp.* backtest imports, remove by 2026-10-15
+aqp_models/src/aqp_models/api/routes/analytics_ml.py                       # TODO(phase-2): port aqp.api.security to aqp_platform_core, remove by 2026-10-15
+aqp_models/src/aqp_models/api/routes/ml.py                                 # TODO(phase-2): port aqp.persistence + aqp.api.security + aqp.metadata + aqp.streaming use, remove by 2026-10-15
+aqp_models/src/aqp_models/applications/forecaster/alpha.py                 # TODO(phase-2): port aqp.core.* + aqp.core.types use, remove by 2026-10-15
+aqp_models/src/aqp_models/applications/forecaster/auto_arima.py            # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/applications/forecaster/forecaster.py            # TODO(phase-2): port aqp.llm.ollama_client + aqp.agents.tools use, remove by 2026-10-15
+aqp_models/src/aqp_models/applications/forecaster/prophet_adapter.py       # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/applications/forecaster/sktime_adapter.py        # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/applications/forecaster/statsmodels_adapter.py   # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/applications/sentiment/processor.py              # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/applications/sentiment/scorer.py                 # TODO(phase-2): port aqp.config use to aqp_platform_core, remove by 2026-10-15
+aqp_models/src/aqp_models/dataset.py                                       # TODO(phase-2): port aqp.* dataset imports, remove by 2026-10-15
+aqp_models/src/aqp_models/experiments.py                                   # TODO(phase-2): port aqp.* experiment imports, remove by 2026-10-15
+aqp_models/src/aqp_models/features/alpha158.py                             # TODO(phase-2): port aqp.* feature imports, remove by 2026-10-15
+aqp_models/src/aqp_models/features/alpha360.py                             # TODO(phase-2): port aqp.* feature imports, remove by 2026-10-15
+aqp_models/src/aqp_models/finetune/trainer.py                              # TODO(phase-2): port aqp.* trainer imports, remove by 2026-10-15
+aqp_models/src/aqp_models/flows.py                                         # TODO(phase-2): port aqp.* flow imports, remove by 2026-10-15
+aqp_models/src/aqp_models/handler.py                                       # TODO(phase-2): port aqp.* handler imports, remove by 2026-10-15
+aqp_models/src/aqp_models/labeling/meta_labeling.py                        # TODO(phase-2): port aqp.* labeling imports, remove by 2026-10-15
+aqp_models/src/aqp_models/labeling/tail_set.py                             # TODO(phase-2): port aqp.* labeling imports, remove by 2026-10-15
+aqp_models/src/aqp_models/labeling/trend_scanning.py                       # TODO(phase-2): port aqp.* labeling imports, remove by 2026-10-15
+aqp_models/src/aqp_models/labeling/triple_barrier.py                       # TODO(phase-2): port aqp.* labeling imports, remove by 2026-10-15
+aqp_models/src/aqp_models/loader.py                                        # TODO(phase-2): port aqp.* loader imports, remove by 2026-10-15
+aqp_models/src/aqp_models/models/anomaly.py                                # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/ensemble.py                               # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/forecasting.py                            # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/highfreq_gbdt.py                          # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/huggingface.py                            # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/keras.py                                  # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/linear.py                                 # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/naive_bayes.py                            # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/notebooks/logistic_walk_forward.py        # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/notebooks/ridge_voc.py                    # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/sae/keras_mlp_regressor.py                # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/sklearn.py                                # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/spm/classical.py                          # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/spm/forecasters.py                        # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/tensorflow.py                             # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/adarnn.py                           # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/add.py                              # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/alstm.py                            # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/attention_all.py                    # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/bidirectional.py                    # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/dnn.py                              # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/gats.py                             # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/general_nn.py                       # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/gru.py                              # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/hist.py                             # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/igmtf.py                            # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/krnn.py                             # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/localformer.py                      # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/lstm.py                             # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/sandwich.py                         # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/seq2seq.py                          # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/sfm.py                              # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/tabnet.py                           # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/tcn.py                              # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/tcts.py                             # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/tra.py                              # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/transformer.py                      # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/ts_aliases.py                       # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/two_path.py                         # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/torch/vanilla_rnn.py                      # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/models/tree.py                                   # TODO(phase-2): port aqp.core.registry use, remove by 2026-10-15
+aqp_models/src/aqp_models/pipeline_recipes.py                              # TODO(phase-2): port aqp.* pipeline imports, remove by 2026-10-15
+aqp_models/src/aqp_models/planning.py                                      # TODO(phase-2): port aqp.* planning imports, remove by 2026-10-15
+aqp_models/src/aqp_models/predictors/spec.py                               # TODO(phase-2): port aqp.* predictor imports, remove by 2026-10-15
+aqp_models/src/aqp_models/processors.py                                    # TODO(phase-2): port aqp.* processor imports, remove by 2026-10-15
+aqp_models/src/aqp_models/recorder.py                                      # TODO(phase-2): port aqp.* recorder imports, remove by 2026-10-15
+aqp_models/src/aqp_models/serving/ollama.py                                # TODO(phase-2): port aqp.* serving imports, remove by 2026-10-15
+aqp_models/src/aqp_models/serving/vllm.py                                  # TODO(phase-2): port aqp.* serving imports, remove by 2026-10-15
+aqp_models/src/aqp_models/tasks/finetune_tasks.py                          # TODO(phase-2): port aqp.tasks.* to aqp_platform_core celery plumbing, remove by 2026-10-15
+aqp_models/src/aqp_models/tasks/ml_tasks.py                                # TODO(phase-2): port aqp.tasks.* + aqp.persistence + aqp.config use, remove by 2026-10-15
+aqp_models/src/aqp_models/tasks/ml_test_tasks.py                           # TODO(phase-2): port aqp.tasks.* + aqp.strategies.* + aqp.data.* + aqp.config use, remove by 2026-10-15
+aqp_models/src/aqp_models/tasks/training_tasks.py                          # TODO(phase-2): port aqp.tasks.* + aqp.rl.* to aqp_platform_core, remove by 2026-10-15

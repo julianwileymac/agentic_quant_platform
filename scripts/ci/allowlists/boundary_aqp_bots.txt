@@ -1,0 +1,15 @@
+# scripts/ci/check_boundary.py --lint-name boundary_aqp_bots allowlist
+#
+# Phase 1 §4.2. `aqp_bots` bans `aqp.api` + `aqp.persistence`.
+# Bot deployment + state-store modules reach `aqp.persistence`
+# during the extraction window — Phase 2 promotes the bot model
+# rows into `aqp_platform_core.entities.bots` or wraps writes
+# behind an `aqp_control_plane` /bots HTTP route.
+
+aqp_bots/deploy.py            # TODO(phase-2): port BotRow/BotDeployment access to aqp_platform_core or HTTP, remove by 2026-10-15
+aqp_bots/registry.py          # TODO(phase-2): port BotRow/BotVersion CRUD to aqp_platform_core or HTTP, remove by 2026-10-15
+aqp_bots/runtime.py           # TODO(phase-2): port BotRow/BotDeployment access to aqp_platform_core or HTTP, remove by 2026-10-15
+aqp_bots/state/replay.py      # TODO(phase-2): port BotEvent stream replay to aqp_platform_core or HTTP, remove by 2026-10-15
+aqp_bots/state/snapshots.py   # TODO(phase-2): port BotSnapshot CRUD + LedgerWriter to aqp_platform_core or HTTP, remove by 2026-10-15
+aqp_bots/state/store.py       # TODO(phase-2): port BotEvent append/read + LedgerWriter to aqp_platform_core or HTTP, remove by 2026-10-15
+aqp_bots/risk/reg/stress.py   # TODO(phase-2): port stress-test BotEvent reads to aqp_platform_core or HTTP, remove by 2026-10-15

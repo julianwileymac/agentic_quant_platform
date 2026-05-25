@@ -1,0 +1,5 @@
+# scripts/ci/check_boundary.py --lint-name boundary_aqp_ingest allowlist
+#
+# Phase 1 §4.2. `aqp_ingest` (AWS CDK shim) bans `aqp.api` +
+# `aqp.persistence` only. Empty allowlist confirms zero migration
+# debt.

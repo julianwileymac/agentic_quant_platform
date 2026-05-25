@@ -115,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         show_metadata_for=args.metadata_for,
         table_limit_per_namespace=int(args.limit),
     )
-    print(json.dumps(status, default=str, indent=2, sort_keys=True))
+    print(json.dumps(status, default=str, indent=2, sort_keys=True))  # noqa: T201 - operator CLI diagnostic, prints JSON to stdout (Rule 9)
     health = status.get("health") or {}
     return 0 if health.get("ok") else 1
 

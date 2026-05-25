@@ -90,6 +90,24 @@ services:
     health_path: /manage/readyz
     restartable: true
     logs_enabled: true
+  - id: aqp-ml-mcp
+    label: AQP MLOps MCP Server
+    # Dedicated MCP server publishing the ``data.ml.*`` slice of
+    # the DataMCP catalog under its own audience claim. Initial
+    # deployment piggybacks on the API pod (the FastAPI router at
+    # ``/mcp/ml``); production rollouts can split it into its own
+    # sidecar / pod when GPU isolation matters. See AGENTS rule 49.
+    role: mcp
+    workload: deployment
+    app_label: aqp-core
+    container: api
+    image_key: api
+    port: 8000
+    health_path: /mcp/ml/tools
+    restartable: true
+    logs_enabled: true
+    endpoints:
+      http: http://aqp-core.aqp.svc.cluster.local:8000/mcp/ml
   - id: aqp-docs
     aliases: [aqp-docs-edge, docs-aqp-fund]
     label: AQP Docs (Edge Property)

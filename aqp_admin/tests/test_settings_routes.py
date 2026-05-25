@@ -222,3 +222,36 @@ def test_patch_framework_maps_broker_failure_to_http(
     assert response.status_code == 503
     body = response.json()
     assert body["detail"]["error"] == "upstream_unreachable"
+
+
+def test_patch_framework_rejects_non_admin_or_secret_like_keys(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_brokers(monkeypatch)
+
+    bad_prefix = client.patch(
+        "/admin/settings/framework",
+        json={
+            "service_id": "aqp-admin",
+            "values": {"CLOUDFLARE_ACCOUNT_ID": "abc"},
+            "delete_keys": [],
+            "trigger_restart": True,
+        },
+    )
+    assert bad_prefix.status_code == 422
+    bad_prefix_body = bad_prefix.json()
+    assert bad_prefix_body["detail"]["error"] == "invalid_settings_key"
+
+    bad_secret = client.patch(
+        "/admin/settings/framework",
+        json={
+            "service_id": "aqp-admin",
+            "values": {"AQP_ADMIN_API_TOKEN": "plaintext"},
+            "delete_keys": [],
+            "trigger_restart": True,
+        },
+    )
+    assert bad_secret.status_code == 422
+    bad_secret_body = bad_secret.json()
+    assert bad_secret_body["detail"]["error"] == "plaintext_secret_not_allowed"

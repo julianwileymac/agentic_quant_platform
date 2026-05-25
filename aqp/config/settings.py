@@ -227,6 +227,40 @@ class Settings(BaseSettings):
     # server get the same RFC 9728 + 8707 guarantees as data + codebase.
     # See aqp_docs/workers/mcp/index.ts and aqp_docs/concepts/data/data-mcp.
     mcp_docs_canonical_uri: str = Field(default="")
+    # ``mcp_ml_canonical_uri`` is the fourth MCP audience claim, scoped
+    # to the dedicated MLOps MCP server at ``/mcp/ml`` (see
+    # :mod:`aqp.ml_mcp`). Audience-bound tokens minted by the AS MUST
+    # include this URI in ``aud`` / ``resource`` for ``data.ml.*``
+    # tool calls to succeed under
+    # ``mcp_require_rfc8707="strict"``. Defaults to empty; production
+    # deployments set it to e.g. ``https://api.aqp.fund/mcp/ml``.
+    mcp_ml_canonical_uri: str = Field(default="")
+    # ``mcp_ml_url`` — internal URL of the MLOps MCP server. Resolved
+    # via the topology service (Hard Rule 47) when set, otherwise
+    # defaults to the backend's external URL plus ``/mcp/ml``.
+    mcp_ml_url: str = Field(default="")
+    # --- MLOps service knobs (initial slice) ---
+    # ``ml_cache_max_entries`` / ``ml_cache_max_vram_bytes`` are the
+    # LRU + memory budgets the in-process :class:`CacheHandler` honours.
+    # Defaults are conservative — production GPU pods MAY scale them.
+    ml_cache_max_entries: int = Field(default=16)
+    ml_cache_max_vram_bytes: int = Field(default=32 * 1024**3)
+    # Continuous-batching scheduler defaults. ``max_batch_size`` is
+    # the upper bound on a single fan-in; ``max_wait_ms`` is the
+    # latency budget the scheduler grants before flushing a partial
+    # batch. The same defaults appear in
+    # :class:`aqp_models.handlers.ServeHandler`.
+    ml_serving_max_batch_size: int = Field(default=64)
+    ml_serving_max_wait_ms: int = Field(default=25)
+    # Default z-score threshold used by
+    # :class:`aqp_models.rules.OODGuard`. The skill runtime gates each
+    # step against this before invoking the underlying interface.
+    ml_ood_zscore_threshold: float = Field(default=4.0)
+    # Operator can force the HuggingFace + TorchHub adapters into a
+    # fully offline mode (only cached snapshots) by flipping these to
+    # ``true`` (e.g., in an air-gapped deployment).
+    ml_hf_hub_offline: bool = Field(default=False)
+    ml_torchhub_offline: bool = Field(default=False)
     # --- Docs freshness watchdog (Phase 6 of the docs migration) ---
     # The Celery beat task ``aqp.tasks.docs_freshness_tasks.scan_stale_pages``
     # opens a GitHub Issue per page whose ``last_reviewed`` frontmatter

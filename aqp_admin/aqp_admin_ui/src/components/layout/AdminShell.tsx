@@ -6,6 +6,7 @@ import {
   Package,
   Settings,
   ServerCog,
+  TerminalSquare,
   Users,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -25,6 +26,8 @@ const NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { to: "/accounts", label: "Accounts", Icon: Building2 },
   { to: "/services", label: "Services", Icon: ServerCog },
+  { to: "/terraform", label: "Terraform", Icon: TerminalSquare },
+  { to: "/kubernetes", label: "Kubernetes", Icon: ServerCog },
   { to: "/settings", label: "Settings", Icon: Settings },
   { to: "/tenants/new", label: "Vend tenant", Icon: Users },
   { to: "/builds", label: "Builds", Icon: Package },

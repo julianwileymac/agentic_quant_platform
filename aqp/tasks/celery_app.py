@@ -48,6 +48,15 @@ celery_app = Celery(
         # compatibility.
         "aqp_models.tasks.ml_tasks",
         "aqp_models.tasks.ml_test_tasks",
+        # MLOps service additions (initial slice) — async pulls,
+        # productionise compiles, serving lifecycle, and skill runtime
+        # invocations. ``name=`` strings keep the
+        # ``aqp_models.tasks.<file>.*`` prefix to avoid colliding with
+        # the legacy ``aqp.tasks.ml_*`` namespace.
+        "aqp_models.tasks.ml_pull_tasks",
+        "aqp_models.tasks.ml_serving_tasks",
+        "aqp_models.tasks.ml_productionize_tasks",
+        "aqp_models.tasks.ml_skill_tasks",
         "aqp.tasks.optimize_tasks",
         "aqp.tasks.feature_set_tasks",
         "aqp.tasks.equity_report_tasks",
@@ -165,6 +174,10 @@ celery_app.conf.update(
         "aqp.tasks.factor_tasks.*": {"queue": "factors"},
         "aqp.tasks.ml_tasks.*": {"queue": "ml"},
         "aqp.tasks.ml_test_tasks.*": {"queue": "ml"},
+        "aqp_models.tasks.ml_pull_tasks.*": {"queue": "ml"},
+        "aqp_models.tasks.ml_serving_tasks.*": {"queue": "ml"},
+        "aqp_models.tasks.ml_productionize_tasks.*": {"queue": "ml"},
+        "aqp_models.tasks.ml_skill_tasks.*": {"queue": "ml"},
         "aqp.tasks.optimize_tasks.*": {"queue": "backtest"},
         "aqp.tasks.feature_set_tasks.*": {"queue": "ml"},
         "aqp.tasks.equity_report_tasks.*": {"queue": "agents"},

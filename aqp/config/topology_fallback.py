@@ -106,6 +106,11 @@ URL_FALLBACK_FIELDS: tuple[_Mapping, ...] = (
     # declared in topology.yaml. Setting AQP_LINEAGE_OPENLINEAGE_MARQUEZ_URL
     # explicitly overrides.
     _Mapping("lineage_openlineage_marquez_url", "marquez", "http"),
+    # --- MLOps service (Hard Rule 47). ---
+    # ``aqp-ml-mcp`` runs as a sidecar in the GPU pod; its URL is
+    # declared once in topology.yaml so the FastAPI client + the
+    # frontend resolver share a single source of truth.
+    _Mapping("mcp_ml_url", "aqp-ml-mcp", "http"),
 )
 
 

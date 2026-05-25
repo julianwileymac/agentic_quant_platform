@@ -1,0 +1,17 @@
+# Allowlist for `scripts/ci/check_no_direct_redis_publish.py` (Rule 4).
+# Format: one repo-relative POSIX path per line. Lines starting with # are
+# comments. Every entry MUST carry a Phase-2 removal deadline.
+#
+# Phase 2 deadlines target 2026-09-30 unless otherwise noted.
+
+# Paper-trading stop-signal control channel (NOT a progress event).
+# `publish_stop_signal` and the matching subscriber form a dedicated
+# control plane that asks an in-flight Celery paper-trading session to
+# shut down. It is not a `ProgressEvent` and so the `_progress.emit`
+# fanout is the wrong layer.
+#
+# TODO(phase-2, 2026-09-30): refactor into a dedicated
+# `aqp/tasks/_stop.py` helper module mirroring `_progress.py` (i.e.
+# `publish_stop(...)` / `subscribe_stop(...)`) and add it to
+# EXEMPT_PREFIXES instead of carrying this allowlist entry.
+aqp/tasks/paper_tasks.py

@@ -1,0 +1,5 @@
+# scripts/ci/check_boundary.py --lint-name boundary_aqp_cli allowlist
+#
+# Phase 1 §4.2. `aqp_cli` is strictly isolated; the standalone
+# operator CLI is HTTP-only. Empty allowlist confirms zero migration
+# debt.

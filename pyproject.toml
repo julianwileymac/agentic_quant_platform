@@ -435,11 +435,38 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "SIM"]
+# T20 = flake8-print (T201 = `print`, T203 = `pprint`). Rule 9 bans
+# stray prints in application code — every emit must go through the
+# structured logger so OTel + audit trails see it. Per-file-ignores
+# below carve out the legitimate user-facing or ops surfaces.
+select = ["E", "F", "I", "B", "UP", "SIM", "T20"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
-"aqp/cli/*.py" = ["B008"]
+# Existing carve-out: CLI Depends() defaults intentionally use mutable
+# default arguments via FastAPI's `Depends(...)` factory.
+"aqp/cli/*.py" = ["B008", "T20"]
+# CLI tooling — every CLI subproject prints user-facing output.
+"aqp_bots/cli.py" = ["T20"]
+"aqp_bots/src/**/cli.py" = ["T20"]
+"aqp_cli/**/*.py" = ["T20"]
+"aqp_platform/pipelines/cli.py" = ["T20"]
+# Documentation / migration / build / example scripts — these are
+# operator tooling, not application code.
+"aqp_docs/scripts/**/*.py" = ["T20"]
+"aqp_platform/build/scripts/**/*.py" = ["T20"]
+"aqp_platform/scripts/**/*.py" = ["T20"]
+"aqp_platform/pipelines/examples/**/*.py" = ["T20"]
+"aqp_kernels/scripts/**/*.py" = ["T20"]
+# Top-level operator / smoke scripts and CI lint scripts.
+"scripts/**/*.py" = ["T20"]
+# Tests legitimately print debug breadcrumbs; pytest captures them
+# anyway and `caplog` is overkill for ad-hoc instrumentation.
+"tests/**/*.py" = ["T20"]
+"**/tests/**/*.py" = ["T20"]
+# Notebooks routinely show outputs via print().
+"notebooks/**/*.py" = ["T20"]
+"notebooks/**/*.ipynb" = ["T20"]
 
 [tool.mypy]
 python_version = "3.11"
