@@ -1,0 +1,49 @@
+# fern/generators.yml — typed SDK emission for @aqp/sdk.
+#
+# Phase 1: TS SDK only. Python SDK is Phase 6 (aqp-sdk on PyPI).
+# Run locally with: fern generate --group local
+# In CI: fern generate --group release  (publishes to npm)
+
+api:
+  specs:
+    - openapi: ../openapi/aqp.json
+      overrides: overrides.yml
+
+groups:
+  local:
+    generators:
+      - name: fernapi/fern-typescript-node-sdk
+        version: 0.42.0
+        output:
+          location: local-file-system
+          path: ../../sdk/typescript
+        config:
+          namespaceExport: AqpSdk
+          packagePath: ""
+          allowCustomFetcher: true
+          private: false
+          # Keep the dist lean — no inlined OpenAPI ref docs in the
+          # published package; consumers look at docs.aqp.fund/api
+          includeApiReference: false
+
+  release:
+    generators:
+      - name: fernapi/fern-typescript-node-sdk
+        version: 0.42.0
+        github:
+          repository: julianwileymac/aqp-sdk-typescript
+          mode: pull-request
+        output:
+          location: npm
+          url: registry.npmjs.org
+          package-name: '@aqp/sdk'
+          token: ${NPM_TOKEN}
+        config:
+          namespaceExport: AqpSdk
+          allowCustomFetcher: true
+          private: false
+
+# Hard rule reminder:
+#   - AGENTS rule 26 (CredentialResolver): NPM_TOKEN comes from
+#     Vault → ExternalSecret → Cloudflare Pages build env.
+#     Never inline a token here.

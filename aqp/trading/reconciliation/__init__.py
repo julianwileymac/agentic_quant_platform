@@ -11,7 +11,7 @@ report cites:
   accumulate on every restart.
 
 The fix is documented in detail in
-[aqp_docs/reconciliation.md](../../aqp_docs/reconciliation.md): a
+[aqp_docs/docs/concepts/data/reconciliation.md](../../aqp_docs/docs/concepts/data/reconciliation.md): a
 composite-key two-way reconciliation loop that bridges venue
 positions/orders into the cache using the venue's natural id, never
 a fresh client UUID.

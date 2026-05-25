@@ -12,9 +12,9 @@ Scoped rule for Phase 4: the gs-quant-inspired
 statistical-arbitrage math primitives in :mod:`aqp.math.arbitrage`.
 
 Narrative walkthroughs:
-[aqp_docs/pricing-context.md](mdc:aqp_docs/pricing-context.md),
-[aqp_docs/risk-measures.md](mdc:aqp_docs/risk-measures.md),
-[aqp_docs/statistical-arbitrage.md](mdc:aqp_docs/statistical-arbitrage.md).
+[aqp_docs/docs/concepts/data/pricing-context.md](mdc:aqp_docs/docs/concepts/data/pricing-context.md),
+`aqp_docs/docs/concepts/data/pricing-context.md` (risk-measures content),
+[aqp_docs/docs/concepts/strategy/statistical-arbitrage.md](mdc:aqp_docs/docs/concepts/strategy/statistical-arbitrage.md).
 
 ## Hard rules
 

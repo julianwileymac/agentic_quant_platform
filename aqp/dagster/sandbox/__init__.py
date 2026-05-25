@@ -18,7 +18,7 @@ Public surface::
     runtime.execute()  # streams AssetMaterialization events
     runtime.teardown()
 
-Narrative: :file:`aqp_docs/dagster-sandbox.md`. Phase plan:
+Narrative: :file:`aqp_docs/docs/concepts/data/dagster-sandbox.md`. Phase plan:
 :file:`.cursor/plans/data-self-service-phase-3.plan.md`.
 """
 from __future__ import annotations

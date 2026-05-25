@@ -5,7 +5,7 @@ Kedro-style typed catalog primitive that the discovery browser, the
 Airbyte builder codegen, and the Dagster sandbox all share.
 
 Narrative walkthrough lives in
-[aqp_docs/datasets-catalog.md](mdc:aqp_docs/datasets-catalog.md). The master
+[aqp_docs/docs/concepts/data/datasets-catalog.md](mdc:aqp_docs/docs/concepts/data/datasets-catalog.md). The master
 plan is `~/.cursor/plans/self-service_data_fabric_phased_*.plan.md`
 and Phase 0 details are in
 [.cursor/plans/data-self-service-phase-0.plan.md](mdc:.cursor/plans/data-self-service-phase-0.plan.md).

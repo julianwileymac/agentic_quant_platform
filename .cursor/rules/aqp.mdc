@@ -116,6 +116,6 @@ file references.
 1. Read the relevant **scoped** rule above.
 2. Read [AGENTS.md](mdc:AGENTS.md) for the full hard-rule list (45
    rules + Don'ts).
-3. Read the canonical doc from [aqp_docs/index.md](mdc:aqp_docs/index.md).
+3. Read the canonical doc from [aqp_docs/docs/intro/index.md](mdc:aqp_docs/docs/intro/index.md).
 4. Search the code: `rg "<symbol>" aqp/`.
 5. Still stuck → ask. Don't guess and ship.

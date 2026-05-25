@@ -1,0 +1,36 @@
+name: crowdin-upload-translations
+
+# Pushes the latest English sources to Crowdin on every merge to main.
+# Phase 5 of the docs migration plan.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "aqp_docs/docs/**/*.md"
+      - "aqp_docs/docs/**/*.mdx"
+      - "aqp_docs/i18n/en/**"
+      - "aqp_docs/crowdin.yml"
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crowdin/github-action@v2
+        with:
+          upload_sources: true
+          upload_translations: false
+          download_translations: false
+          create_pull_request: false
+          source: aqp_docs
+          base_url: https://api.crowdin.com
+          base_path: aqp_docs
+          config: aqp_docs/crowdin.yml
+        env:
+          # Resolved by Vault via ExternalSecret on the runner
+          # (AGENTS rule 26). Never echoed in logs.
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_API_TOKEN }}

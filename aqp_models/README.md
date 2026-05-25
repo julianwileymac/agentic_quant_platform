@@ -107,7 +107,7 @@ aqp_models/
 | Persistence models | `../aqp/persistence/models_ml.py`, `../aqp/persistence/models_alpha_backtest.py` (monolith — stays) |
 | Spec library | `configs/` |
 | Tests | `tests/` |
-| Canonical doc | `../aqp_docs/ml-framework.md` |
+| Canonical doc | `../aqp_docs/docs/concepts/strategy/ml-framework.md` |
 
 ## Dependencies
 
@@ -140,14 +140,14 @@ Legacy import paths `aqp.ml.*` and `aqp.llm.{vllm_runner,ollama_client}`
 are preserved through deprecation-warning shims. Old call sites keep
 working through one release cycle; new code should import from
 `aqp_models.*` directly. Strangler-migration policy is documented in
-[`../aqp_docs/repository-split.md`](../aqp_docs/repository-split.md).
+[`../aqp_docs/docs/concepts/platform/repository-split.md`](../aqp_docs/docs/concepts/platform/repository-split.md).
 
 ## Canonical doc
 
-[../aqp_docs/ml-framework.md](../aqp_docs/ml-framework.md) plus the
+[../aqp_docs/docs/concepts/strategy/ml-framework.md](../aqp_docs/docs/concepts/strategy/ml-framework.md) plus the
 existing companion docs:
 
-- `../aqp_docs/ml-libraries.md`
-- `../aqp_docs/ml-flows.md`
-- `../aqp_docs/ml-alpha-backtest.md`
-- `../aqp_docs/predictor-hub.md`
+- `../aqp_docs/docs/concepts/strategy/ml-libraries.md`
+- `../aqp_docs/docs/concepts/strategy/ml-flows.md`
+- `../aqp_docs/docs/concepts/strategy/ml-alpha-backtest.md`
+- `../aqp_docs/docs/concepts/strategy/predictor-hub.md`

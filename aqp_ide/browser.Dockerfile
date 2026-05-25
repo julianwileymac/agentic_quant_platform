@@ -111,7 +111,7 @@ ENV USE_LOCAL_GIT=true
 # AQP Research Copilot (theia-ide-aqp-research-copilot-ext, AQP rule 2):
 #   AQP_THEIA_SERA_ENABLED          - "true" to default code-focused agents
 #                                     to AQP's SERA-32B model (see
-#                                     aqp_docs/sera.md). Off by default.
+#                                     aqp_docs/docs/concepts/data/sera.md). Off by default.
 #   AQP_THEIA_ROUTER_COMPLETE_PATH  - override the default
 #                                     /llm/router/complete path (rare).
 ENV AQP_THEIA_AUTH0_DOMAIN="" \

@@ -11,10 +11,10 @@
 - FastAPI route: `api/routes/rl.py`.
 - Persistence models (in monolith): `../aqp/persistence/models_rl.py`.
 - Spec library: `configs/`.
-- Canonical docs: `../aqp_docs/rl-framework.md`,
-  `../aqp_docs/rl-lab.md`, `../aqp_docs/rl-components.md`,
-  `../aqp_docs/rl-iceberg.md`, `../aqp_docs/rl-policy-backbones.md`,
-  `../aqp_docs/weight-centric-pipeline.md`.
+- Canonical docs: `../aqp_docs/docs/concepts/rl/rl-framework.md`,
+  `../aqp_docs/docs/concepts/rl/rl-lab.md`, `../aqp_docs/docs/concepts/rl/rl-components.md`,
+  `../aqp_docs/docs/concepts/rl/rl-iceberg.md`, `../aqp_docs/docs/concepts/rl/rl-policy-backbones.md`,
+  `../aqp_docs/docs/concepts/rl/weight-centric-pipeline.md`.
 
 ## Core abstraction families
 
@@ -49,4 +49,4 @@
 
 When all four are met, `aqp_rl` is ready to extract into its own
 repository per the Future Repo Split Gate in
-[`../aqp_docs/repository-split.md`](../aqp_docs/repository-split.md).
+[`../aqp_docs/docs/concepts/platform/repository-split.md`](../aqp_docs/docs/concepts/platform/repository-split.md).

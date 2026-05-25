@@ -97,9 +97,9 @@ Walk these inputs in this order:
 2. `agentic_quant_platform/.cursor/rules/` -> any new, renamed, or
    deleted `.mdc` file.
 3. `agentic_quant_platform/aqp_docs/` -> all canonical prose, with
-   special attention to `aqp_docs/repository-split.md`,
-   `aqp_docs/aqp-monorepo-paths.md`, `aqp_docs/index.md`,
-   `aqp_docs/architecture.md`, and any file whose path matches the
+   special attention to `aqp_docs/docs/concepts/platform/repository-split.md`,
+   `aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md`, `aqp_docs/docs/intro/index.md`,
+   `aqp_docs/docs/concepts/platform/architecture.md`, and any file whose path matches the
    trigger commit.
 4. `agentic_quant_platform/configs/` -> any new YAML or schema change.
 5. Public surface of each `aqp_*` top-level package: read the package's

@@ -133,12 +133,12 @@ rg --type ts "auth0\.getSession" src/app/api  # every handler should call it
 ## See Also
 
 - [README.md](README.md) — Dev quickstart and env matrix.
-- [aqp_docs/identity.md](../aqp_docs/identity.md) — Existing `IdentityProvider`
+- [aqp_docs/docs/concepts/identity/identity.md](../aqp_docs/docs/concepts/identity/identity.md) — Existing `IdentityProvider`
   chain, Auth0 / Entra / OIDC / Cloudflare Access providers.
-- [aqp_docs/tenancy-strategies.md](../aqp_docs/tenancy-strategies.md) —
+- [aqp_docs/docs/concepts/identity/multi-tenancy.md](../aqp_docs/docs/concepts/identity/multi-tenancy.md) —
   Four `TenancyStrategy` implementations (RLS / schema-per-tenant /
   db-per-enterprise / hybrid).
-- [aqp_docs/account-management.md](../aqp_docs/account-management.md) —
+- [aqp_docs/docs/concepts/identity/account-management.md](../aqp_docs/docs/concepts/identity/account-management.md) —
   Auth0 Management API client, `EntraTenantLink`, invites.
 - [.cursor/rules/aqp-ui.mdc](../.cursor/rules/aqp-ui.mdc) — Glob-scoped
   enforcement of this contract.

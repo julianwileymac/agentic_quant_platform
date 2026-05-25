@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy import desc, func, select
 
 from aqp.api.security import secure_router
@@ -20,7 +21,7 @@ from aqp.llm.prompts import SYSTEM_QUANT_ASSISTANT
 from aqp.persistence.db import get_session
 from aqp.persistence.models import ChatMessage
 from aqp.persistence.models import Session as ChatSession
-from aqp.ws.broker import asubscribe
+from aqp.ws.broker import asubscribe, replay_frames
 from aqp.ws.manager import manager
 
 logger = logging.getLogger(__name__)
@@ -208,6 +209,57 @@ def _load_history(session_id: str, include_meta: bool = False) -> list[dict]:
                 item["created_at"] = str(r.created_at)
             out.append(item)
         return out
+
+
+@router.get("/replay/{task_id}")
+def replay(
+    task_id: str,
+    since: str | None = None,
+    limit: int = 500,
+) -> dict[str, Any]:
+    """Replay buffered progress frames for ``task_id``.
+
+    Phase 3 (WS replay): the BFF / frontend calls this on every
+    WebSocket reconnect to fill the gap between ``since`` (the last
+    ``frame_id`` it saw) and the next live frame. The response shape
+    is::
+
+        {
+            "task_id": "<task_id>",
+            "since": "<input since or null>",
+            "frames": [
+                {"frame_id": "1716...-0", "task_id": "...",
+                 "stage": "...", "message": "...",
+                 "timestamp": 1716..., "...": "..."},
+                ...
+            ],
+            "last_frame_id": "1716...-N" | null
+        }
+
+    Frames are ordered by Redis Stream id (chronological). The
+    ``last_frame_id`` value is what the client persists for the next
+    reconnect — it's deliberately the id of the last returned frame
+    (NOT the stream's tail) so the WS resume window starts strictly
+    after this replay.
+
+    AGENTS rule 4: frames carry the canonical
+    ``{task_id, stage, message, timestamp, **extras}`` shape; we
+    only ADD a ``frame_id`` key for replay bookkeeping. We never
+    rename or drop existing keys.
+
+    Limits: ``limit`` is clamped to ``[1, 10_000]`` upstream; the
+    default of 500 is small enough that a slow client doesn't hold
+    the BFF event loop for long.
+    """
+    bounded_limit = max(1, min(int(limit), 10_000))
+    frames = replay_frames(task_id, since=since, limit=bounded_limit)
+    last_frame_id = frames[-1].get("frame_id") if frames else None
+    return {
+        "task_id": task_id,
+        "since": since,
+        "frames": frames,
+        "last_frame_id": last_frame_id,
+    }
 
 
 @router.websocket("/stream/{task_id}")

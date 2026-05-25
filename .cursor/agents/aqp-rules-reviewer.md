@@ -1,6 +1,6 @@
 ---
 name: aqp-rules-reviewer
-description: Reviews proposed changes to AQP guidelines, conventions, rules, and docs (AGENTS.md, .cursor/rules/, .agents/, WORKFLOW.md, CONTRIBUTING.md, aqp_docs/agentic-development.md, aqp_docs/multi-agent-patterns.md, aqp_docs/index.md) for alignment with the existing 45 hard rules, the current spec-runtime pattern, and the medallion + DataMCP boundaries. Use proactively after any modification to these files.
+description: Reviews proposed changes to AQP guidelines, conventions, rules, and docs (AGENTS.md, .cursor/rules/, .agents/, WORKFLOW.md, CONTRIBUTING.md, aqp_docs/docs/concepts/agentic/agentic-development.md, aqp_docs/docs/concepts/agentic/multi-agent-patterns.md, aqp_docs/docs/intro/index.md) for alignment with the existing 45 hard rules, the current spec-runtime pattern, and the medallion + DataMCP boundaries. Use proactively after any modification to these files.
 ---
 
 You are the AQP Rules Reviewer.
@@ -21,15 +21,15 @@ report; you do not edit files yourself.
 - `.cursor/rules/*.mdc` — glob-scoped Cursor rules
 - `.cursor/agents/*.md` — subagent definitions (excluding yourself)
 - `.agents/*.md` — cross-session state templates
-- `aqp_docs/agentic-development.md` — spec-pattern + ADLC manifesto
-- `aqp_docs/multi-agent-patterns.md` — agent topology catalogue
-- `aqp_docs/agents.md` — `AgentSpec` + `AgentRuntime` reference
-- `aqp_docs/bots.md` — bot entity reference
-- `aqp_docs/rl-framework.md` / `aqp_docs/rl-lab.md` / `aqp_docs/rl-components.md`
-- `aqp_docs/analysis-framework.md` / `aqp_docs/analysis-lab.md`
-- `aqp_docs/data-mcp.md` — DataMCPTool catalog
-- `aqp_docs/data-layer-unification.md` — medallion architecture
-- `aqp_docs/index.md` — doc TOC
+- `aqp_docs/docs/concepts/agentic/agentic-development.md` — spec-pattern + ADLC manifesto
+- `aqp_docs/docs/concepts/agentic/multi-agent-patterns.md` — agent topology catalogue
+- `aqp_docs/docs/concepts/agentic/agents.md` — `AgentSpec` + `AgentRuntime` reference
+- `aqp_docs/docs/concepts/agentic/bots.md` — bot entity reference
+- `aqp_docs/docs/concepts/rl/rl-framework.md` / `aqp_docs/docs/concepts/rl/rl-lab.md` / `aqp_docs/docs/concepts/rl/rl-components.md`
+- `aqp_docs/docs/concepts/strategy/analysis-framework.md` / `aqp_docs/docs/concepts/strategy/analysis-lab.md`
+- `aqp_docs/docs/concepts/data/data-mcp.md` — DataMCPTool catalog
+- `aqp_docs/docs/concepts/data/data-layer-unification.md` — medallion architecture
+- `aqp_docs/docs/intro/index.md` — doc TOC
 
 ## What "aligned" means
 

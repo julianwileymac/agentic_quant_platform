@@ -115,7 +115,7 @@ The configmap default
 assumes both workloads live in the same cluster. Override it in an
 overlay to point at an external Kafka.
 
-See [../../aqp_docs/streaming.md](../../aqp_docs/streaming.md) for the full
+See [../../aqp_docs/docs/concepts/data/streaming.md](../../aqp_docs/docs/concepts/data/streaming.md) for the full
 ingester + Flink + KafkaDataFeed architecture.
 
 ## Observability

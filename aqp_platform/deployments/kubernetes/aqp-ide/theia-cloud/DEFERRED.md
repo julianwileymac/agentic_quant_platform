@@ -48,5 +48,5 @@ at https://theia-cloud.io/documentation/. The plan to follow:
    service.
 4. Tear down or down-scale the single-pod overlay at `../`.
 
-Cross-link: [../../../../aqp_docs/aqp-ide-roadmap.md](../../../../aqp_docs/aqp-ide-roadmap.md)
+Cross-link: [../../../../aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md](../../../../aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md)
 Phase B section.

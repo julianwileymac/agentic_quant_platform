@@ -18,7 +18,7 @@ alwaysApply: false
 # Terraform IaC control plane
 
 Phase 7 of the multi-tenant rollout — see
-[aqp_docs/terraform-control-plane.md](mdc:aqp_docs/terraform-control-plane.md)
+[aqp_docs/docs/concepts/infrastructure/terraform-control-plane.md](mdc:aqp_docs/docs/concepts/infrastructure/terraform-control-plane.md)
 for the narrative walkthrough. AGENTS rules 42 + 43 in
 [AGENTS.md](mdc:AGENTS.md) are the source of truth.
 
@@ -70,5 +70,5 @@ for the narrative walkthrough. AGENTS rules 42 + 43 in
   via `ExternalSecret` -> `ClusterSecretStore` -> Vault / cloud
   secret manager.
 
-Canonical doc: [aqp_docs/terraform-control-plane.md](mdc:aqp_docs/terraform-control-plane.md).
+Canonical doc: [aqp_docs/docs/concepts/infrastructure/terraform-control-plane.md](mdc:aqp_docs/docs/concepts/infrastructure/terraform-control-plane.md).
 Module roster: [aqp_platform/terraform/DISCOVERY.md](mdc:aqp_platform/terraform/DISCOVERY.md).

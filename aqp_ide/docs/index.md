@@ -43,13 +43,13 @@ Canonical documentation map for this workspace.
 
 | Doc | Purpose |
 | --- | --- |
-| [../../aqp_docs/aqp-ide.md](../../aqp_docs/aqp-ide.md) | SSoT pointer from AQP docs side |
-| [../../aqp_docs/aqp-ide-roadmap.md](../../aqp_docs/aqp-ide-roadmap.md) | Blueprint → AQP phasing |
-| [../../aqp_docs/data-mcp.md](../../aqp_docs/data-mcp.md) | AQP DataMCP boundary (rule 22) |
-| [../../aqp_docs/codebase-mcp.md](../../aqp_docs/codebase-mcp.md) | AQP Codebase MCP (rule 22) |
-| [../../aqp_docs/providers.md](../../aqp_docs/providers.md) | `router_complete` LLM gateway (rule 2) |
-| [../../aqp_docs/identity.md](../../aqp_docs/identity.md) | Auth0 / IdentityProvider (rule 27) |
-| [../../aqp_docs/management-engine.md](../../aqp_docs/management-engine.md) | WorkloadRuntime (rule 45) |
+| [../../aqp_docs/docs/concepts/infrastructure/aqp-ide.md](../../aqp_docs/docs/concepts/infrastructure/aqp-ide.md) | SSoT pointer from AQP docs side |
+| [../../aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md](../../aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md) | Blueprint → AQP phasing |
+| [../../aqp_docs/docs/concepts/data/data-mcp.md](../../aqp_docs/docs/concepts/data/data-mcp.md) | AQP DataMCP boundary (rule 22) |
+| [../../aqp_docs/docs/concepts/data/codebase-mcp.md](../../aqp_docs/docs/concepts/data/codebase-mcp.md) | AQP Codebase MCP (rule 22) |
+| [../../aqp_docs/docs/concepts/data/providers.md](../../aqp_docs/docs/concepts/data/providers.md) | `router_complete` LLM gateway (rule 2) |
+| [../../aqp_docs/docs/concepts/identity/identity.md](../../aqp_docs/docs/concepts/identity/identity.md) | Auth0 / IdentityProvider (rule 27) |
+| [../../aqp_docs/docs/concepts/identity/management-engine.md](../../aqp_docs/docs/concepts/identity/management-engine.md) | WorkloadRuntime (rule 45) |
 
 ## Governance docs
 

@@ -1,7 +1,7 @@
 """Compatibility shim for the extracted ``aqp_models`` package.
 
 The machine-learning subsystem was extracted into a top-level
-:mod:`aqp_models` boundary package per ``aqp_docs/repository-split.md``.
+:mod:`aqp_models` boundary package per ``aqp_docs/docs/concepts/platform/repository-split.md``.
 This shim aliases every submodule of :mod:`aqp_models` under the legacy
 ``aqp.ml`` name so existing imports (``from aqp.ml.alpha_backtest_experiment
 import AlphaBacktestExperiment`` etc.) keep working through one release

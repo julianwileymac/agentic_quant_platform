@@ -10,7 +10,7 @@ Run locally with::
     dagster api grpc -m aqp.dagster.definitions
 
 The cluster picks this up via ``values-pipelines-user-code.yaml`` in
-the rpi_kubernetes repo (separate PR; see ``aqp_docs/dagster.md``).
+the rpi_kubernetes repo (separate PR; see ``aqp_docs/docs/concepts/data/dagster.md``).
 """
 
 from __future__ import annotations

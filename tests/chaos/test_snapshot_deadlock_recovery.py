@@ -1,7 +1,7 @@
 """Chaos test: dbt snapshot pool deadlock recovery.
 
 Verifies the canonical fix from
-`aqp_docs/runbooks/snapshot-deadlock.md`: the
+`aqp_docs/docs/how-to/runbooks/snapshot-deadlock.md`: the
 `free_slots_after_run_end_seconds=300` knob on the
 `dbt_snapshots` pool prevents the deadlock the Dagster docs
 describe ("a single cancelled run will permanently deadlock all

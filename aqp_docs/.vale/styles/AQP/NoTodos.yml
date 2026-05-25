@@ -1,0 +1,11 @@
+# AQP/NoTodos — TODO / FIXME / XXX should never ship to docs.aqp.fund.
+extends: existence
+message: "Resolve or open a GitHub Issue. Found '%s' in user-facing docs."
+level: error
+ignorecase: false
+tokens:
+  - TODO
+  - FIXME
+  - XXX
+  - WIP
+  - HACK

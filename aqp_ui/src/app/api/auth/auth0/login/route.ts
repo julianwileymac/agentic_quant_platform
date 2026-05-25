@@ -49,7 +49,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       returnTo,
       authorizationParameters: params,
     });
-    return NextResponse.next({ request, headers: upstream.headers });
+    // The SDK returns a Response whose Location header points at
+    // Auth0's /authorize. App-router handlers can't return
+    // NextResponse.next() (that's a middleware-only call), so we
+    // extract the upstream Location + Set-Cookie headers and emit a
+    // proper 302 from the route.
+    const location = upstream.headers.get("location");
+    if (location) {
+      const redirect = NextResponse.redirect(location, { status: 302 });
+      for (const cookie of upstream.headers.getSetCookie?.() ?? []) {
+        redirect.headers.append("set-cookie", cookie);
+      }
+      return redirect;
+    }
+    // SDK didn't produce a Location — fall through to the manual
+    // Universal Login URL below.
   }
 
   const url = new URL(`https://${authConfig.auth0.domain}/authorize`);

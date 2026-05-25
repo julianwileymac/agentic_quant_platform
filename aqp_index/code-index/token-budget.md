@@ -1,8 +1,21 @@
 # Token budgets
 
-> Last refreshed: 2026-05-24 by aqp-index-curator (trigger: AQP IDE
-> enhancement — added `aqp_ide/theia-extensions/aqp*/` row + a row for
-> `aqp/notebook/`).
+> Last refreshed: 2026-05-25 by aqp-index-curator (trigger: enterprise
+> docs migration Phase 0 — revalidated every row against the new
+> `aqp_docs/docs/<category>/<slug>.md` shape).
+>
+> **Phase 0 revalidation note.** The 171+ `aqp_docs/` file moves changed
+> the per-file path depth (everything is now one or two levels deeper
+> under `aqp_docs/docs/<category>/`) but did NOT change file content.
+> The rows below all cover Python / TypeScript **source-read** budgets
+> for files under `aqp_*/src/...` or `aqp/`; none reference `aqp_docs/`.
+> Per-file token counts are intrinsic to source content, so the docs
+> restructure leaves these budgets unchanged. The marginal token cost
+> of citing the new deeper paths in source-file docstrings is bounded
+> by the small number of legacy doc citations rewritten by
+> [`aqp_docs/scripts/sweep-links.py`](../../aqp_docs/scripts/sweep-links.py)
+> (each reference grows by roughly 30 characters; negligible vs. the
+> per-file budget granularity of ~1 K tokens).
 
 The curator publishes per-area token budgets that other agents use to
 decide whether to read source directly or consult the code index first.

@@ -1,0 +1,140 @@
+/**
+ * AQP docs site — design tokens aligned with aqp_client (shadcn + Tailwind).
+ *
+ * The colour ramp matches the operator UI so that the in-product
+ * <DocsPanel /> embed renders consistently with the rest of the
+ * frontend. Phase 5 of the migration plan wires this CSS into the
+ * Pages Function that returns sanitised HTML fragments.
+ */
+
+:root {
+  --ifm-color-primary: #2563eb;
+  --ifm-color-primary-dark: #1e40af;
+  --ifm-color-primary-darker: #1d4ed8;
+  --ifm-color-primary-darkest: #1e3a8a;
+  --ifm-color-primary-light: #3b82f6;
+  --ifm-color-primary-lighter: #60a5fa;
+  --ifm-color-primary-lightest: #93c5fd;
+
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(37, 99, 235, 0.1);
+
+  --ifm-font-family-base: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  --ifm-font-family-monospace: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
+    'Liberation Mono', monospace;
+
+  --ifm-h1-font-size: 2.25rem;
+  --ifm-h2-font-size: 1.5rem;
+  --ifm-h3-font-size: 1.25rem;
+
+  --aqp-status-banner-bg: #0b1220;
+  --aqp-status-banner-fg: #e2e8f0;
+  --aqp-callout-warning-bg: rgba(234, 179, 8, 0.08);
+  --aqp-callout-warning-border: rgba(234, 179, 8, 0.4);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #60a5fa;
+  --ifm-color-primary-dark: #3b82f6;
+  --ifm-color-primary-darker: #2563eb;
+  --ifm-color-primary-darkest: #1e40af;
+  --ifm-color-primary-light: #93c5fd;
+  --ifm-color-primary-lighter: #bfdbfe;
+  --ifm-color-primary-lightest: #dbeafe;
+
+  --docusaurus-highlighted-code-line-bg: rgba(96, 165, 250, 0.18);
+  --aqp-status-banner-bg: #020617;
+  --aqp-status-banner-fg: #f1f5f9;
+}
+
+article header h1 {
+  letter-spacing: -0.01em;
+}
+
+article h2 {
+  margin-top: 2.5rem;
+  scroll-margin-top: 4rem;
+}
+
+article h3 {
+  margin-top: 1.75rem;
+  scroll-margin-top: 4rem;
+}
+
+.aqp-status-banner {
+  background: var(--aqp-status-banner-bg);
+  color: var(--aqp-status-banner-fg);
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.aqp-status-banner[data-state='operational'] {
+  background: #064e3b;
+  color: #d1fae5;
+}
+
+.aqp-status-banner[data-state='degraded'] {
+  background: #78350f;
+  color: #fde68a;
+}
+
+.aqp-status-banner[data-state='outage'] {
+  background: #7f1d1d;
+  color: #fecaca;
+}
+
+.aqp-feedback-widget {
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-top: 2rem;
+}
+
+.aqp-runnable-code {
+  position: relative;
+}
+
+.aqp-runnable-code .aqp-run-button {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: var(--ifm-color-primary);
+  color: white;
+  border: none;
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.aqp-deprecated-banner {
+  border: 1px solid var(--aqp-callout-warning-border);
+  background: var(--aqp-callout-warning-bg);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+
+.aqp-was-this-helpful {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 1.5rem;
+}
+
+.aqp-was-this-helpful button {
+  border: 1px solid var(--ifm-color-emphasis-300);
+  background: transparent;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+
+.aqp-was-this-helpful button:hover {
+  background: var(--ifm-color-emphasis-100);
+}

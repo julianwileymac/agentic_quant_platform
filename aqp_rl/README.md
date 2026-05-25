@@ -96,7 +96,7 @@ aqp_rl/
 | Persistence models | `../aqp/persistence/models_rl.py` (monolith — stays) |
 | Spec library | `configs/` |
 | Tests | `tests/` |
-| Canonical doc | `../aqp_docs/rl-framework.md` |
+| Canonical doc | `../aqp_docs/docs/concepts/rl/rl-framework.md` |
 
 ## Dependencies
 
@@ -124,15 +124,15 @@ Legacy import path `aqp.rl.*` is preserved through deprecation-warning
 shims in [`../aqp/rl/__init__.py`](../aqp/rl/__init__.py). Old call sites
 keep working through one release cycle; new code should import from
 `aqp_rl.*` directly. Strangler-migration policy is documented in
-[`../aqp_docs/repository-split.md`](../aqp_docs/repository-split.md).
+[`../aqp_docs/docs/concepts/platform/repository-split.md`](../aqp_docs/docs/concepts/platform/repository-split.md).
 
 ## Canonical doc
 
-[../aqp_docs/rl-framework.md](../aqp_docs/rl-framework.md) plus the
+[../aqp_docs/docs/concepts/rl/rl-framework.md](../aqp_docs/docs/concepts/rl/rl-framework.md) plus the
 existing companion docs:
 
-- `../aqp_docs/rl-lab.md`
-- `../aqp_docs/rl-components.md`
-- `../aqp_docs/rl-iceberg.md`
-- `../aqp_docs/rl-policy-backbones.md`
-- `../aqp_docs/weight-centric-pipeline.md`
+- `../aqp_docs/docs/concepts/rl/rl-lab.md`
+- `../aqp_docs/docs/concepts/rl/rl-components.md`
+- `../aqp_docs/docs/concepts/rl/rl-iceberg.md`
+- `../aqp_docs/docs/concepts/rl/rl-policy-backbones.md`
+- `../aqp_docs/docs/concepts/rl/weight-centric-pipeline.md`

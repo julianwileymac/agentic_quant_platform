@@ -1,14 +1,16 @@
 # Repository boundaries
 
-> Last refreshed: 2026-05-24 by aqp-index-curator (trigger: AQP IDE
-> enhancement — refreshed `aqp_ide/` row description to reflect six
-> compile-time extensions + `aqp-cli ide` entrypoint).
+> Last refreshed: 2026-05-25 by aqp-index-curator (trigger: enterprise
+> docs migration Phase 0 — rewrote `repository-split.md`,
+> `aqp-monorepo-paths.md`, `aqp-ide.md`, and `aqp-ide-roadmap.md`
+> pointers to the new `aqp_docs/docs/concepts/<subsystem>/` shape per
+> `CONCEPT_MAPPING` in `aqp_docs/scripts/migrate-content.py`).
 
 ## Canonical sources
 
-- [../../aqp_docs/repository-split.md](../../aqp_docs/repository-split.md)
+- [../../aqp_docs/docs/concepts/platform/repository-split.md](../../aqp_docs/docs/concepts/platform/repository-split.md)
   - The full repository-split map.
-- [../../aqp_docs/aqp-monorepo-paths.md](../../aqp_docs/aqp-monorepo-paths.md)
+- [../../aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md](../../aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md)
   - Canonical paths mirrored by sibling repos.
 - [../../AGENTS.md](../../AGENTS.md) section "Repository split routing".
 - [../../.cursor/rules/repository-boundaries.mdc](../../.cursor/rules/repository-boundaries.mdc).
@@ -22,7 +24,7 @@
 | `aqp_cli/` | Standalone operator CLI. Includes the [`ide`](../../aqp_cli/src/aqp_cli/commands/ide.py) command group as the sanctioned production entrypoint for the AQP IDE. |
 | `aqp_admin/` | Internal admin (managed services + company accounts). |
 | `aqp_index/` | Curator-owned single source of truth. |
-| `aqp_docs/` | Canonical AQP documentation (renamed from `docs/`). Now also hosts the AQP IDE SSoT pair: [`aqp-ide.md`](../../aqp_docs/aqp-ide.md) + [`aqp-ide-roadmap.md`](../../aqp_docs/aqp-ide-roadmap.md). |
+| `aqp_docs/` | Canonical AQP documentation (renamed from `docs/`, now restructured in place as a Docusaurus 3 package with a Diátaxis IA under [`aqp_docs/docs/`](../../aqp_docs/docs/)). Hosts the AQP IDE SSoT pair: [`docs/concepts/infrastructure/aqp-ide.md`](../../aqp_docs/docs/concepts/infrastructure/aqp-ide.md) + [`docs/concepts/infrastructure/aqp-ide-roadmap.md`](../../aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md). |
 
 These are additive. The pre-existing split between `aqp/`, `aqp_client/`,
 `aqp_control_plane/`, `aqp_platform_core/`, `aqp_bots/`, `aqp_rl/`,

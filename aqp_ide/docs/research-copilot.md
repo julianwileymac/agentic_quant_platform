@@ -74,7 +74,7 @@ Default: AQP's `gpt-4o` provider alias (configurable via the chat input).
 
 When `AQP_THEIA_SERA_ENABLED=true` is set on the Theia backend, the
 copilot defaults code-focused tasks to SERA-32B via the `sera` provider
-alias. See `aqp_docs/sera.md` for the SERA opt-in contract.
+alias. See `aqp_docs/docs/concepts/data/sera.md` for the SERA opt-in contract.
 
 ## SERA opt-in
 
@@ -105,5 +105,5 @@ tenancy via `AQP: Set Tenancy` immediately reroutes both surfaces.
 
 - [mcp-integration.md](mcp-integration.md) — how MCP servers are wired
 - [extensions.md](extensions.md) — full extension reference
-- `aqp_docs/providers.md` — AQP `router_complete` contract
-- `aqp_docs/sera.md` — SERA-32B opt-in
+- `aqp_docs/docs/concepts/data/providers.md` — AQP `router_complete` contract
+- `aqp_docs/docs/concepts/data/sera.md` — SERA-32B opt-in

@@ -65,7 +65,7 @@ with the discovery payload pre-filled into the builder state.
 
 `LineageEvent.transform_kind` already accepts free-form strings; add
 `"discovery.created"` and `"discovery.promoted"` to the doc list in
-`aqp_docs/data-discovery.md` so reviewers can see the canonical
+`aqp_docs/docs/concepts/data/data-discovery.md` so reviewers can see the canonical
 vocabulary, but no code change to `LINEAGE_TRANSFORM_KINDS` is
 required.
 
@@ -98,7 +98,7 @@ emit the URL.
 
 ## Docs + rules
 
-- `aqp_docs/data-discovery.md` — narrative, the four-source merge, the
+- `aqp_docs/docs/concepts/data/data-discovery.md` — narrative, the four-source merge, the
   promote handoff.
 - `.cursor/rules/discovery.mdc` — AGENTS rule 30 scope.
 - `AGENTS.md` rule 30 — discovery.* surfaces are the only operator

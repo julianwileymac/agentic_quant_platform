@@ -1,0 +1,38 @@
+# TerraformStackSpec for the AQP docs edge property.
+#
+# AGENTS rules respected:
+#   - 42 (TerraformRuntime): applied via `aqp deploy --stack docs-edge`.
+#   - 43 (hash-locked spec versions): every content change here lands
+#     in a new `terraform_stack_spec_versions` row.
+#   - 26 (CredentialResolver): every `value: secret://...` ref
+#     resolves via the resolver chain at apply time.
+
+name: docs-edge
+description: |
+  Cloudflare Pages edge property at docs.aqp.fund + archive.aqp.fund
+  + Access policies + Logpush to R2. Provisioned out of the cluster
+  so docs stay up when the cluster is degraded.
+
+owner: platform-team
+environment: prod
+module: cloudflare_pages_docs
+backend: hcp
+
+inputs:
+  account_id:
+    value: secret://vault/kv/data/aqp/cloudflare/account_id
+  zone_id:
+    value: secret://vault/kv/data/aqp/cloudflare/zone_id_aqp_fund
+  internal_oidc_group_ids:
+    value:
+      - secret://vault/kv/data/aqp/okta/engineering_group_id
+  enterprise_customer_organization_ids:
+    value: hydrate://data.tenancy.list_orgs?status=active
+  primary_hostname:
+    value: docs.aqp.fund
+  archive_hostname:
+    value: archive.aqp.fund
+
+outputs_to_topology:
+  pages_subdomain: aqp-docs.endpoints.cdn_url
+  primary_hostname: aqp-docs.endpoints.public_url

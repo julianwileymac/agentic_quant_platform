@@ -83,8 +83,8 @@ python -m pytest tests/bots
 
 ## ADRs
 
-- [ADR 006 — QuantBot Operator Pattern](../aqp_docs/architecture/decisions/006-quantbot-operator-pattern.md)
-- [ADR 007 — QuantBot Latency Classes](../aqp_docs/architecture/decisions/007-quantbot-latency-classes.md)
-- [ADR 008 — Bot Event Sourcing](../aqp_docs/architecture/decisions/008-quantbot-event-sourcing.md)
-- [ADR 009 — RTS 6 / SEC 15c3-5 Conformance](../aqp_docs/architecture/decisions/009-quantbot-rts6-conformance.md)
-- [ADR 010 — Canary PnL Gates](../aqp_docs/architecture/decisions/010-quantbot-canary-pnl-gates.md)
+- [ADR 006 — QuantBot Operator Pattern](../aqp_docs/docs/architecture/decisions/006-quantbot-operator-pattern.md)
+- [ADR 007 — QuantBot Latency Classes](../aqp_docs/docs/architecture/decisions/007-quantbot-latency-classes.md)
+- [ADR 008 — Bot Event Sourcing](../aqp_docs/docs/architecture/decisions/008-quantbot-event-sourcing.md)
+- [ADR 009 — RTS 6 / SEC 15c3-5 Conformance](../aqp_docs/docs/architecture/decisions/009-quantbot-rts6-conformance.md)
+- [ADR 010 — Canary PnL Gates](../aqp_docs/docs/architecture/decisions/010-quantbot-canary-pnl-gates.md)

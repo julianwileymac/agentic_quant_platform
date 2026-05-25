@@ -1,0 +1,89 @@
+{
+  "name": "aqp_docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Docusaurus 3 documentation site for the Agentic Quant Platform. Deploys to docs.aqp.fund via Cloudflare Pages.",
+  "scripts": {
+    "start": "docusaurus start --port 3100",
+    "build": "pnpm run extract-python && pnpm run generate-openapi-mdx && docusaurus build && pnpm run generate-llms-txt && pnpm run pagefind",
+    "swizzle": "docusaurus swizzle",
+    "deploy": "echo 'Use Cloudflare Pages CI deployment. See aqp_platform/terraform/modules/cloudflare_pages_docs/.'",
+    "clear": "docusaurus clear",
+    "serve": "docusaurus serve --port 3100",
+    "write-translations": "docusaurus write-translations",
+    "write-heading-ids": "docusaurus write-heading-ids",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'docs-ci.yml runs the full quality matrix'",
+    "extract-python": "tsx scripts/extract-python.ts",
+    "generate-llms-txt": "tsx scripts/generate-llms-txt.ts",
+    "generate-openapi-mdx": "tsx scripts/generate-openapi-mdx.ts",
+    "pagefind": "pagefind --site build --output-path build/pagefind",
+    "stamp-frontmatter": "python scripts/stamp-frontmatter.py",
+    "sweep-links": "python scripts/sweep-links.py",
+    "check-doc-links": "bash scripts/check-doc-links.sh",
+    "crowdin:upload": "crowdin upload sources --config crowdin.yml",
+    "crowdin:download": "crowdin download --config crowdin.yml",
+    "vale": "vale --config .vale.ini docs/",
+    "markdown-lint": "markdownlint-cli2 \"docs/**/*.md\" \"docs/**/*.mdx\"",
+    "lychee": "lychee --config lychee.toml \"docs/**/*.md\" \"docs/**/*.mdx\"",
+    "axe": "axe http://localhost:3100 --tags wcag22aa --exit"
+  },
+  "dependencies": {
+    "@docusaurus/core": "~3.8.1",
+    "@docusaurus/preset-classic": "~3.8.1",
+    "@docusaurus/plugin-content-docs": "~3.8.1",
+    "@docusaurus/plugin-content-blog": "~3.8.1",
+    "@docusaurus/plugin-content-pages": "~3.8.1",
+    "@docusaurus/plugin-sitemap": "~3.8.1",
+    "@docusaurus/theme-mermaid": "~3.8.1",
+    "@docusaurus/theme-classic": "~3.8.1",
+    "@docusaurus/theme-common": "~3.8.1",
+    "@docusaurus/utils": "~3.8.1",
+    "@easyops-cn/docusaurus-search-local": "^0.46.1",
+    "@inkeep/widgets": "^0.2.290",
+    "@keystatic/core": "^0.5.45",
+    "@keystatic/next": "^5.0.4",
+    "@mdx-js/react": "^3.1.0",
+    "@scalar/docusaurus": "^0.4.1",
+    "@signalwire/docusaurus-plugin-llms-txt": "^1.4.0",
+    "clsx": "^2.1.1",
+    "docusaurus-plugin-openapi-docs": "^4.4.0",
+    "docusaurus-theme-openapi-docs": "^4.4.0",
+    "prism-react-renderer": "^2.4.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@docusaurus/module-type-aliases": "~3.8.1",
+    "@docusaurus/tsconfig": "~3.8.1",
+    "@docusaurus/types": "~3.8.1",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.0",
+    "alex": "^11.0.1",
+    "axe-core": "^4.10.2",
+    "gray-matter": "^4.0.3",
+    "lychee": "^0.0.0",
+    "markdownlint-cli2": "^0.15.0",
+    "pagefind": "^1.1.1",
+    "remark-frontmatter": "^5.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "~5.6.3",
+    "yaml": "^2.6.1"
+  },
+  "browserslist": {
+    "production": [
+      ">0.5%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 3 chrome version",
+      "last 3 firefox version",
+      "last 5 safari version"
+    ]
+  },
+  "engines": {
+    "node": ">=20.10.0"
+  }
+}

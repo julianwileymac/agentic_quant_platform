@@ -1,0 +1,14 @@
+{
+  "theme.docs.versions.unreleasedVersionLabel": {
+    "message": "Esta es una versión en desarrollo de la documentación de {siteTitle}.",
+    "description": "The label used to tell the user that he's reading an unreleased doc version"
+  },
+  "theme.docs.versions.unmaintainedVersionLabel": {
+    "message": "Esta es una versión {versionLabel} de la documentación de {siteTitle}; ya no se mantiene activamente.",
+    "description": "The label used to tell the user that he's reading an unmaintained doc version"
+  },
+  "theme.docs.paginator.previous": { "message": "Anterior" },
+  "theme.docs.paginator.next": { "message": "Siguiente" },
+  "theme.NotFound.title": { "message": "Página no encontrada" },
+  "theme.NotFound.p1": { "message": "No pudimos encontrar lo que buscabas." }
+}

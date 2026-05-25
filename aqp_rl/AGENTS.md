@@ -117,5 +117,5 @@ ruff check src tests
 The legacy import path `aqp.rl.*` is preserved through deprecation-warning
 shims in [`../aqp/rl/__init__.py`](../aqp/rl/__init__.py). Old call sites
 keep working through one release cycle; new code should import from
-`aqp_rl.*` directly. See [`../aqp_docs/repository-split.md`](../aqp_docs/repository-split.md)
+`aqp_rl.*` directly. See [`../aqp_docs/docs/concepts/platform/repository-split.md`](../aqp_docs/docs/concepts/platform/repository-split.md)
 for the full strangler-migration policy.

@@ -83,9 +83,9 @@ Phase 7 of the multi-tenant rollout. Hard rule 44 in
 
 Canonical docs:
 
-- [aqp_docs/msal-entra-setup.md](mdc:aqp_docs/msal-entra-setup.md) — Entra
+- [aqp_docs/docs/concepts/identity/msal-entra-setup.md](mdc:aqp_docs/docs/concepts/identity/msal-entra-setup.md) — Entra
   app-reg walkthrough (app roles, redirect URIs, B2B).
-- [aqp_docs/multi-tenancy.md](mdc:aqp_docs/multi-tenancy.md) —
+- [aqp_docs/docs/concepts/identity/multi-tenancy.md](mdc:aqp_docs/docs/concepts/identity/multi-tenancy.md) —
   Organization -> EntraTenantLink -> User -> Membership flow.
 - [configs/tenants/](mdc:configs/tenants) — default tenant /
   roles / invite YAML templates.

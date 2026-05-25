@@ -1,0 +1,74 @@
+---
+title: 'Monthly content audit'
+summary: 'Top traffic + bottom helpfulness + 180-day stale pages. Refreshed monthly by the docs-freshness watchdog.'
+owner: docs-team
+last_reviewed: 2026-05-25
+audience: internal
+---
+
+# Monthly content audit
+
+Phase 6 of the docs-migration plan. Refreshed automatically by the
+`aqp.tasks.docs_freshness_tasks.scan_stale_pages` Celery beat task
+(every Monday at 09:00 UTC).
+
+This page lives under `/internal/*` and is gated by Cloudflare
+Access — only the engineering OIDC group can read it.
+
+## Top traffic (last 30 days)
+
+Top-1000 pages by pageview count. PostHog + Plausible feed this
+list via the dashboard query at
+[`/internal/audit/data/top-traffic.json`](./data/top-traffic.json).
+
+| Rank | Route | Pageviews | Avg time on page | Bounce rate |
+| --- | --- | --- | --- | --- |
+| 1 | `/intro/quickstart` | TBD | TBD | TBD |
+| 2 | `/reference/api` | TBD | TBD | TBD |
+| 3 | `/concepts/platform/architecture` | TBD | TBD | TBD |
+| ... | ... | ... | ... | ... |
+
+The full list is in the linked JSON. The watchdog populates this
+section automatically; do not hand-edit.
+
+## Bottom helpfulness (last 30 days)
+
+Bottom-50 pages by "Was this helpful?" downvote rate, ignoring
+pages with fewer than 5 votes.
+
+| Route | Downvotes / total | Most common complaint (from comments) | Owner |
+| --- | --- | --- | --- |
+| ... | ... | ... | ... |
+
+The full list is in [`/internal/audit/data/bottom-helpfulness.json`](./data/bottom-helpfulness.json).
+
+## Staleness (>180 days)
+
+Pages with `last_reviewed` more than 180 days old, as detected by
+the Celery beat task. One GitHub Issue per page is opened on
+detection.
+
+| Route | Last reviewed | Age (days) | Owner | Issue |
+| --- | --- | --- | --- | --- |
+| ... | ... | ... | ... | ... |
+
+Live data: [`/internal/audit/data/stale-pages.json`](./data/stale-pages.json).
+
+## Action items
+
+The docs team reviews this page at the start of every month and:
+
+1. Reassigns ownership where the CODEOWNERS routing was wrong.
+2. Closes issues that are no longer relevant.
+3. Opens follow-up PRs for the top 5 highest-traffic +
+   lowest-helpfulness pages.
+4. Rolls up findings into the next release-notes entry under
+   `audience: technical`.
+
+## See also
+
+- [Conventions](../../intro/conventions.md) — frontmatter contract.
+- [Recipe: query data via MCP](../../how-to/recipes/query-data-via-mcp.md) —
+  how to programmatically read this audit data.
+- [aqp.tasks.docs_freshness_tasks](https://github.com/julianwileymac/agentic_quant_platform/blob/main/aqp/tasks/docs_freshness_tasks.py) —
+  the watchdog source.

@@ -1,7 +1,7 @@
 """Compatibility shim for ``aqp_models.serving.ollama``.
 
 Custom model pulling + serving was extracted into the :mod:`aqp_models`
-boundary package per ``aqp_docs/repository-split.md``. This shim
+boundary package per ``aqp_docs/docs/concepts/platform/repository-split.md``. This shim
 re-exports everything from :mod:`aqp_models.serving.ollama` so existing
 imports (``from aqp.llm.ollama_client import deep_llm, quick_llm,
 complete, get_crewai_llm, check_health, list_local_models, pull_model,

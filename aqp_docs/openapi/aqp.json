@@ -1,0 +1,70 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Agentic Quant Platform API",
+    "description": "Public API for the AQP platform. Stripe-style date-epoch versioning; first epoch 2026-06-01. See https://docs.aqp.fund/reference/api/ for the rendered reference.",
+    "version": "2026-06-01",
+    "contact": {
+      "name": "AQP Platform Team",
+      "url": "https://docs.aqp.fund"
+    },
+    "license": {
+      "name": "Proprietary"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.aqp.fund",
+      "description": "Production"
+    },
+    {
+      "url": "http://localhost:8000",
+      "description": "Local dev (compose stack)"
+    }
+  ],
+  "tags": [
+    { "name": "health", "description": "Liveness + readiness probes." },
+    { "name": "strategies", "description": "Strategy CRUD + dispatch." },
+    { "name": "backtest", "description": "Backtest dispatch, status, cancel." },
+    { "name": "bots", "description": "Bot CRUD, snapshot, paper, deploy." },
+    { "name": "rl", "description": "RL train, replay, walk-forward, halt." },
+    { "name": "agents", "description": "Agent dispatch, halt, watchdog." },
+    { "name": "workflows", "description": "Workflow runtime endpoints." },
+    { "name": "paper", "description": "Paper trading session controls." },
+    { "name": "analytics", "description": "QuantStats portfolio metrics + tearsheet." },
+    { "name": "mcp", "description": "Data MCP + Codebase MCP servers." }
+  ],
+  "paths": {
+    "/livez": {
+      "get": {
+        "tags": ["health"],
+        "summary": "Liveness probe.",
+        "responses": {
+          "200": { "description": "Service is alive." }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": ["health"],
+        "summary": "Readiness probe — confirms migrations applied + downstreams reachable.",
+        "responses": {
+          "200": { "description": "Service is ready." },
+          "503": { "description": "One or more downstreams unhealthy." }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {},
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Auth0 / Entra ID access token. Resolve via `aqp-cli auth login --device`."
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }]
+}

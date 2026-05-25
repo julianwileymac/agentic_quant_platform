@@ -110,7 +110,7 @@ Set per-session via `AQP: Set Tenancy` in the Theia command palette.
 ## See also
 
 - [extensions.md](extensions.md)
-- `aqp_docs/data-mcp.md` (DataMCP boundary)
-- `aqp_docs/credentials.md` (CredentialResolver)
+- `aqp_docs/docs/concepts/data/data-mcp.md` (DataMCP boundary)
+- `aqp_docs/docs/concepts/identity/credentials.md` (CredentialResolver)
 - FINOS Perspective docs: https://perspective.finos.org/
 - Apache Arrow IPC: https://arrow.apache.org/docs/format/Columnar.html

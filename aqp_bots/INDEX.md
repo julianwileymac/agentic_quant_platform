@@ -7,7 +7,7 @@
 - Celery tasks: `../aqp/tasks/bot_tasks.py`
 - Persistence: `../aqp/persistence/models_bots.py`
 - Sample specs: `templates/trading/` and `templates/research/`
-- Canonical docs: `../aqp_docs/bots.md`
+- Canonical docs: `../aqp_docs/docs/concepts/agentic/bots.md`
 
 ## Template Categories
 

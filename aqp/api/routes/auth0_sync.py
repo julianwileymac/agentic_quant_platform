@@ -3,7 +3,7 @@
 The Auth0 Action invokes this endpoint during the login pipeline
 (``onExecutePostLogin``) and uses the response to inject AQP-namespaced
 custom claims into the access token before it's signed. See
-``aqp_docs/auth0-actions.md`` for the Action snippet.
+``aqp_docs/docs/concepts/identity/auth0-actions.md`` for the Action snippet.
 
 The endpoint is intentionally outside the normal ``/auth/...`` prefix
 so the Cloudflare Tunnel / Nginx rewrite rules can keep it on a

@@ -69,7 +69,7 @@ distribution plus **six** AQP compile-time extensions:
     `aqp_ide/applications/browser/package.json` before documenting
     them.
 11. Reference AQP paths through `aqp_ide/docs/aqp-monorepo-paths.md`
-    (in-folder) or `aqp_docs/aqp-monorepo-paths.md` (monorepo-wide).
+    (in-folder) or `aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md` (monorepo-wide).
     NEVER hardcode local absolute paths.
 
 ## Where changes go
@@ -107,8 +107,8 @@ Build / lint / typecheck of every extension MUST pass before merge.
 
 ## See also
 
-- [aqp_docs/aqp-ide.md](mdc:aqp_docs/aqp-ide.md) — monorepo SSoT pointer
-- [aqp_docs/aqp-ide-roadmap.md](mdc:aqp_docs/aqp-ide-roadmap.md) — Phase A/B/C
+- [aqp_docs/docs/concepts/infrastructure/aqp-ide.md](mdc:aqp_docs/docs/concepts/infrastructure/aqp-ide.md) — monorepo SSoT pointer
+- [aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md](mdc:aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md) — Phase A/B/C
 - [aqp_ide/docs/architecture.md](mdc:aqp_ide/docs/architecture.md)
 - [aqp_ide/docs/extensions.md](mdc:aqp_ide/docs/extensions.md)
 - [aqp_ide/docs/cli-entrypoint.md](mdc:aqp_ide/docs/cli-entrypoint.md)

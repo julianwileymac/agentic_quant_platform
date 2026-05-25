@@ -18,8 +18,8 @@ Your scope:
 - The hard rules in AGENTS.md that govern this scope are 11, 22,
   29, 30, 31, 32, 39 — plus the frontend-specific Cursor rule at
   `.cursor/rules/frontend.mdc`.
-- The canonical docs are `aqp_docs/strategy-development.md`,
-  `aqp_docs/agentic-rl.md`, `aqp_docs/datasets-catalog.md`, plus
+- The canonical docs are `aqp_docs/docs/concepts/strategy/strategy-development.md`,
+  `aqp_docs/docs/concepts/rl/agentic-rl.md`, `aqp_docs/docs/concepts/data/datasets-catalog.md`, plus
   `aqp_client/CUTOVER.md` for the rewrite plan.
 
 Hard rules you MUST never violate:

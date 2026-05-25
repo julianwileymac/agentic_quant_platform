@@ -1,0 +1,32 @@
+{
+  "extends": "@docusaurus/tsconfig",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@aqp-docs/*": ["src/*"],
+      "@aqp-docs/components": ["src/components/index.ts"],
+      "@aqp-docs/lib/*": ["src/lib/*"]
+    },
+    "resolveJsonModule": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "jsx": "preserve",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/**/*",
+    "scripts/**/*.ts",
+    "docusaurus.config.ts",
+    "sidebars.ts"
+  ],
+  "exclude": [
+    ".docusaurus",
+    "build",
+    "node_modules",
+    "i18n"
+  ]
+}

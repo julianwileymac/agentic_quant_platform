@@ -45,5 +45,5 @@ tools.
 
 - [../../docs/research-copilot.md](../../docs/research-copilot.md)
 - [../../docs/mcp-integration.md](../../docs/mcp-integration.md)
-- `aqp_docs/providers.md` (the router_complete contract, AQP rule 2)
-- `aqp_docs/sera.md` (the SERA-32B opt-in)
+- `aqp_docs/docs/concepts/data/providers.md` (the router_complete contract, AQP rule 2)
+- `aqp_docs/docs/concepts/data/sera.md` (the SERA-32B opt-in)

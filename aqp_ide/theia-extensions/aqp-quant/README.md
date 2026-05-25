@@ -34,5 +34,5 @@ right AQP REST endpoint).
 ## See also
 
 - [../../docs/quant-widgets.md](../../docs/quant-widgets.md)
-- `aqp_docs/agents.md`, `aqp_docs/bots.md`, `aqp_docs/rl-framework.md`,
-  `aqp_docs/analysis-framework.md`, `aqp_docs/workflow-studio.md`
+- `aqp_docs/docs/concepts/agentic/agents.md`, `aqp_docs/docs/concepts/agentic/bots.md`, `aqp_docs/docs/concepts/rl/rl-framework.md`,
+  `aqp_docs/docs/concepts/strategy/analysis-framework.md`, `aqp_docs/docs/concepts/agentic/workflow-studio.md`

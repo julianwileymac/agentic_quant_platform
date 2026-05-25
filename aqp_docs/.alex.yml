@@ -1,0 +1,11 @@
+# .alex.yml — alex.js (inclusive language linter) configuration.
+# https://github.com/get-alex/alex
+
+profile: 'doc'
+
+allow:
+  - 'black'         # 'black box' is everywhere in CS literature
+  - 'white'         # 'whitelist' deliberately rejected; allow the colour
+  - 'master'        # mostly historical references in code paths
+
+noBinary: false

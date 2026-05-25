@@ -52,7 +52,7 @@ Usage::
 
 The Auth0-specific knobs (custom domain, organization param) are
 forwarded transparently — any RFC 8628-compliant IdP works because
-the wire format is standardised. See ``aqp_docs/auth0-setup.md``
+the wire format is standardised. See ``aqp_docs/docs/concepts/identity/auth0-setup.md``
 for the Auth0 Native Application configuration that pairs with
 this client.
 """

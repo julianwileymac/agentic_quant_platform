@@ -1,0 +1,43 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AQP Control-Plane API",
+    "description": "Workload lifecycle + Terraform driver + provider adapters + audit ledger. Served at manage.aqp.fund. Owns the workload_runs ledger (AGENTS rule 45).",
+    "version": "2026-06-01",
+    "contact": { "name": "AQP Platform Team", "url": "https://docs.aqp.fund" },
+    "license": { "name": "Proprietary" }
+  },
+  "servers": [
+    { "url": "https://manage.aqp.fund", "description": "Production control plane" },
+    { "url": "http://localhost:8001", "description": "Local dev sidecar" }
+  ],
+  "tags": [
+    { "name": "workloads", "description": "start / stop / scale / restart / exec / logs." },
+    { "name": "topology", "description": "Service URL resolution (AGENTS rule 47)." },
+    { "name": "terraform", "description": "TerraformRuntime (AGENTS rules 42, 43)." },
+    { "name": "cloudflare", "description": "Tunnel + DNS + Access app CRUD." },
+    { "name": "auth", "description": "IdP wiring (Auth0, Entra)." },
+    { "name": "tenancy", "description": "EntraTenantLink lifecycle (AGENTS rule 44)." },
+    { "name": "kill-switch", "description": "Halt fan-out." }
+  ],
+  "paths": {
+    "/manage/livez": {
+      "get": {
+        "tags": ["workloads"],
+        "summary": "Control-plane liveness probe.",
+        "responses": { "200": { "description": "Alive." } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {},
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }]
+}

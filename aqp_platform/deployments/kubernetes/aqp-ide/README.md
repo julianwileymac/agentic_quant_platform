@@ -91,4 +91,4 @@ kubectl -n aqp-ide port-forward svc/aqp-ide 3000:3000
 
 - [../../../aqp_ide/docs/deployment.md](../../../aqp_ide/docs/deployment.md)
 - [theia-cloud/README.md](theia-cloud/README.md) (Phase B)
-- `aqp_docs/management-engine.md`
+- `aqp_docs/docs/concepts/identity/management-engine.md`

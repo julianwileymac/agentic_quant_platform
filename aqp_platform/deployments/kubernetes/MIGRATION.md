@@ -12,7 +12,7 @@
 > This document is retained only to explain why the layout looks the
 > way it does. Do not use it as a rollout runbook for new
 > deployments - see
-> [aqp_docs/operations/kubernetes-deploy.md](../../aqp_docs/operations/kubernetes-deploy.md)
+> [aqp_docs/docs/how-to/operations/kubernetes-deploy.md](../../aqp_docs/docs/how-to/operations/kubernetes-deploy.md)
 > instead.
 
 ## Final ownership

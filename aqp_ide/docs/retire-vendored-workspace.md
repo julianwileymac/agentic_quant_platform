@@ -137,5 +137,5 @@ But there's no reason to — this doc preserves the audit + the entire
 ## See also
 
 - `aqp_ide/AGENTS.md` — the AQP-IDE-side governance contract
-- `aqp_docs/aqp-ide.md` — monorepo-side SSoT pointer
+- `aqp_docs/docs/concepts/infrastructure/aqp-ide.md` — monorepo-side SSoT pointer
 - `.cursor/rules/aqp-ide.mdc` — always-on boundary rule

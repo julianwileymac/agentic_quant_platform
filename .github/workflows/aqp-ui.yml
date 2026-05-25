@@ -123,3 +123,48 @@ jobs:
             AQP_UI_BASE_URL=https://aqp.fund
             AQP_CLAIMS_NAMESPACE=https://aqp.internal/
             NEXT_PUBLIC_AQP_UI_VERSION=${{ github.sha }}
+
+  cloudflare-cache-purge:
+    name: Purge Cloudflare CDN cache
+    runs-on: ubuntu-latest
+    needs: [build, docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    timeout-minutes: 5
+    steps:
+      # ADR 011 (CDN-fronted standalone for aqp_ui): after every
+      # production rollout we purge the Cloudflare edge cache for
+      # the aqp.fund / app.aqp.fund / www.aqp.fund hostnames so
+      # operators see the new `/_next/static/*` hashes immediately.
+      # Hashed filenames are inherently safe to keep but the rare
+      # case of an unchanged asset name with new content (icons,
+      # public/* manual assets) demands an explicit purge.
+      #
+      # AGENTS rule 26 + the always-on aqp-management-engine.mdc:
+      # CLOUDFLARE_API_TOKEN is sourced from the CredentialResolver
+      # chain via the External Secrets Operator entry under
+      # aqp_platform/deployments/kubernetes/base/aqp-ui/external-secret.yaml.
+      # NEVER echo the token; the redacted prefix rule applies.
+      - name: Purge zone cache
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ZONE_ID}" ]; then
+            echo "Cloudflare credentials not configured; skipping purge."
+            exit 0
+          fi
+          curl --silent --show-error --fail \
+            --request POST \
+            --url "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data '{"hosts":["aqp.fund","www.aqp.fund","app.aqp.fund"]}' \
+            > /tmp/cf-purge.json
+          # Print a redacted success line ONLY; never echo the body
+          # in case Cloudflare surfaces token-bearing diagnostics.
+          if grep -q '"success":true' /tmp/cf-purge.json; then
+            echo "Cloudflare cache purged for aqp.fund + aliases"
+          else
+            echo "Cloudflare purge response did NOT report success."
+            exit 1
+          fi

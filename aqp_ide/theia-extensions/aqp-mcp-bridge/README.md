@@ -47,5 +47,5 @@ Both registrations carry:
 
 - [../../docs/mcp-integration.md](../../docs/mcp-integration.md)
 - [../../docs/research-copilot.md](../../docs/research-copilot.md)
-- `aqp_docs/data-mcp.md` (DataMCP boundary, AQP rule 22)
-- `aqp_docs/codebase-mcp.md` (Codebase MCP, AQP rule 22)
+- `aqp_docs/docs/concepts/data/data-mcp.md` (DataMCP boundary, AQP rule 22)
+- `aqp_docs/docs/concepts/data/codebase-mcp.md` (Codebase MCP, AQP rule 22)

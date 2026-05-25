@@ -112,7 +112,7 @@ aqp_bots/
   pattern.
 - **Rule 45**: Workload ops route through `WorkloadRuntime`.
 
-See [aqp_docs/bots.md](../aqp_docs/bots.md) for the full architectural
+See [aqp_docs/docs/concepts/agentic/bots.md](../aqp_docs/docs/concepts/agentic/bots.md) for the full architectural
 walkthrough.
 
 ## Validation
@@ -143,4 +143,4 @@ docker exec aqp-api python -m pytest tests/bots
 | API routes | [../aqp/api/routes/bots.py](../aqp/api/routes/bots.py) |
 | Celery tasks | [../aqp/tasks/bot_tasks.py](../aqp/tasks/bot_tasks.py) |
 | ORM models | [../aqp/persistence/models_bots.py](../aqp/persistence/models_bots.py) |
-| ADRs | [../aqp_docs/architecture/decisions/006-quantbot-operator-pattern.md](../aqp_docs/architecture/decisions/006-quantbot-operator-pattern.md) and 007-010 |
+| ADRs | [../aqp_docs/docs/architecture/decisions/006-quantbot-operator-pattern.md](../aqp_docs/docs/architecture/decisions/006-quantbot-operator-pattern.md) and 007-010 |

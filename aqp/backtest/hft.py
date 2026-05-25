@@ -75,7 +75,7 @@ _HFTBACKTEST_INSTALL_HINT = (
     "hftbacktest is not installed. Install the [hft] extra:\n"
     "    pip install -e \".[hft]\"\n"
     "and ensure a Rust toolchain + Maturin are available "
-    "(see aqp_docs/installation.md)."
+    "(see aqp_docs/docs/intro/installation.md)."
 )
 
 
@@ -127,7 +127,7 @@ class LobBacktestEngine(BaseBacktestEngine):
         license="MIT",
         notes=(
             "Requires the [hft] extra (hftbacktest + numba + polars). "
-            "See aqp_docs/hft-backtest.md."
+            "See aqp_docs/docs/concepts/strategy/hft-backtest.md."
         ),
     )
 
@@ -269,7 +269,7 @@ class LobBacktestEngine(BaseBacktestEngine):
         raise ImportError(
             "Installed hftbacktest does not expose a recognised builder; "
             "tried HashMapMarketDepthBacktest, BacktestAsset, and "
-            "MultiAssetMultiExchangeBacktest. See aqp_docs/hft-backtest.md."
+            "MultiAssetMultiExchangeBacktest. See aqp_docs/docs/concepts/strategy/hft-backtest.md."
         )
 
     def _drive(
@@ -290,7 +290,7 @@ class LobBacktestEngine(BaseBacktestEngine):
 
         For pure-Numba performance, advanced users can instead author a
         thin njit'd wrapper that calls into pre-extracted strategy
-        parameters; that path is documented under aqp_docs/hft-backtest.md
+        parameters; that path is documented under aqp_docs/docs/concepts/strategy/hft-backtest.md
         but does not flow through this engine.
         """
         equity_snapshots: list[float] = []

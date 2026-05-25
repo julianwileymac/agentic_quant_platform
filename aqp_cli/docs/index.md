@@ -48,8 +48,8 @@ flowchart LR
 ## Hard contracts (mirrored from [../AGENTS.md](../AGENTS.md))
 
 1. The CLI never imports `aqp.*` or `aqp_control_plane.*` source.
-2. Identity flows go through [aqp_docs/identity.md](../../aqp_docs/identity.md) (`IdentityProvider`).
-3. Credentials resolve through [aqp_docs/credentials.md](../../aqp_docs/credentials.md) (`CredentialResolver`).
+2. Identity flows go through [aqp_docs/docs/concepts/identity/identity.md](../../aqp_docs/docs/concepts/identity/identity.md) (`IdentityProvider`).
+3. Credentials resolve through [aqp_docs/docs/concepts/identity/credentials.md](../../aqp_docs/docs/concepts/identity/credentials.md) (`CredentialResolver`).
 4. Token output is redacted to a 4-char prefix; secrets are `<redacted>`.
 5. Service URLs come from the topology service, not constants.
 
@@ -86,4 +86,4 @@ aqp-cli ide stop
 ```
 
 The full IDE deep-dive lives at [../../aqp_ide/docs/cli-entrypoint.md](../../aqp_ide/docs/cli-entrypoint.md)
-and [../../aqp_docs/aqp-ide.md](../../aqp_docs/aqp-ide.md).
+and [../../aqp_docs/docs/concepts/infrastructure/aqp-ide.md](../../aqp_docs/docs/concepts/infrastructure/aqp-ide.md).

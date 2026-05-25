@@ -1,9 +1,10 @@
 # Deployment configs
 
-> Last refreshed: 2026-05-24 by aqp-index-curator (trigger: AQP IDE
-> enhancement — added the single-pod `aqp-ide/` overlay row, the
-> Phase B `theia-cloud/` scaffolding, and the `AQP_THEIA_*` runtime
-> env block).
+> Last refreshed: 2026-05-25 by aqp-index-curator (trigger: enterprise
+> docs migration Phase 0 — rewrote the legacy identity-doc pointer in
+> the Overrides table to the new
+> `aqp_docs/docs/concepts/identity/identity.md` shape per
+> `CONCEPT_MAPPING` in `aqp_docs/scripts/migrate-content.py`).
 
 | Config | Purpose | Owner |
 | --- | --- | --- |
@@ -30,7 +31,7 @@
 | Topology | `aqp_platform/configs/deployment/topology.yaml` -> [aqp/config/topology_fallback.py](../../aqp/config/topology_fallback.py) -> Settings fields |
 | Topology override path | `AQP_DEPLOYMENT_TOPOLOGY_PATH` env var |
 | Provider selection | `AQP_PROVIDER` (see [aqp_control_plane/](../../aqp_control_plane/) settings) |
-| Identity | `AQP_AUTH_*` (see [../../aqp_docs/identity.md](../../aqp_docs/identity.md)) |
+| Identity | `AQP_AUTH_*` (see [../../aqp_docs/docs/concepts/identity/identity.md](../../aqp_docs/docs/concepts/identity/identity.md)) |
 | AQP IDE (Theia Node backend) | `AQP_THEIA_*` env block read by [aqp_ide/theia-extensions/aqp/src/node/aqp-config-endpoint.ts](../../aqp_ide/theia-extensions/aqp/src/node/aqp-config-endpoint.ts) and served on `GET /aqp/config` (no bake-time inlining; same image runs in dev / staging / prod). Source of truth for the env list: [`aqp_cli/src/aqp_cli/commands/ide.py::_THEIA_ENV_KEYS`](../../aqp_cli/src/aqp_cli/commands/ide.py). |
 | AQP IDE (CLI entrypoint) | `AQP_CLI_THEIA_PORT` / `AQP_CLI_THEIA_URL` / `AQP_CLI_THEIA_WORKSPACE` / `AQP_CLI_THEIA_YARN_OFFLINE` / `AQP_CLI_THEIA_DOCKER_IMAGE` ([aqp_cli/src/aqp_cli/config.py](../../aqp_cli/src/aqp_cli/config.py)) |
 

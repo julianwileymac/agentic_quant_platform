@@ -1,0 +1,35 @@
+{
+  "name": "agentic-quant-platform-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Root monorepo orchestrator for the Agentic Quant Platform (aqp_docs, aqp_client, aqp_ui, aqp_admin, webui).",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20.10.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "build:docs": "turbo run build --filter=aqp_docs",
+    "dev:docs": "pnpm --filter aqp_docs start",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,mdx,yml,yaml}\"",
+    "check-doc-links": "bash aqp_docs/scripts/check-doc-links.sh",
+    "changeset": "changeset",
+    "changeset:version": "changeset version",
+    "changeset:status": "changeset status --since=main"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.9",
+    "prettier": "^3.3.3",
+    "turbo": "^2.3.3",
+    "typescript": "~5.6.3"
+  },
+  "pnpm": {
+    "peerDependencyRules": {
+      "ignoreMissing": ["react", "react-dom"]
+    }
+  }
+}

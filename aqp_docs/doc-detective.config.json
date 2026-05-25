@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/doc-detective/doc-detective/main/schema/v3/config.schema.json",
+  "input": ["docs"],
+  "fileTypes": [
+    {
+      "name": "Markdown",
+      "extensions": [".md", ".mdx"],
+      "inlineStatements": {
+        "openTestStatement": "<!-- test ",
+        "openActionStatement": "<!-- action ",
+        "closeTestStatement": " -->"
+      },
+      "markup": [
+        {
+          "name": "code-block",
+          "regex": ["^```(?<language>[a-z0-9]+)?(?<attributes>[^\\n]*)?\\n(?<content>.*?)\\n```$"]
+        }
+      ]
+    }
+  ],
+  "runOn": [
+    {
+      "name": "default",
+      "platforms": ["linux", "darwin"]
+    }
+  ],
+  "concurrentRunners": 1,
+  "logLevel": "info",
+  "telemetry": { "send": false }
+}

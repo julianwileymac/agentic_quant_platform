@@ -20,10 +20,10 @@ globs:
 
 Scopes AGENTS hard rules **52, 53, 54, 55**. Read this when touching
 any of the globbed files. The narrative walkthrough is in
-[aqp_docs/auth0-setup.md](mdc:aqp_docs/auth0-setup.md); the matching
+[aqp_docs/docs/concepts/identity/auth0-setup.md](mdc:aqp_docs/docs/concepts/identity/auth0-setup.md); the matching
 Auth0 Action bodies (post-login MFA gate, Custom Token Exchange
 Profile, IdP group sync) are in
-[aqp_docs/auth0-actions.md](mdc:aqp_docs/auth0-actions.md).
+[aqp_docs/docs/concepts/identity/auth0-actions.md](mdc:aqp_docs/docs/concepts/identity/auth0-actions.md).
 
 ## Hard rules
 

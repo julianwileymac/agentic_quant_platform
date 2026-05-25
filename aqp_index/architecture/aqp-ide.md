@@ -1,8 +1,10 @@
 # AQP IDE
 
-> Last refreshed: 2026-05-24 by aqp-index-curator (trigger: Phase A
-> AQP IDE landing — six compile-time Theia extensions + `aqp-cli ide`
-> entrypoint + single-pod K8s overlay).
+> Last refreshed: 2026-05-25 by aqp-index-curator (trigger: enterprise
+> docs migration Phase 0 — rewrote `aqp-ide.md` and
+> `aqp-ide-roadmap.md` pointers to the new
+> `aqp_docs/docs/concepts/infrastructure/` shape per `CONCEPT_MAPPING`
+> in `aqp_docs/scripts/migrate-content.py`).
 
 SSoT pointer hub for the AQP IDE. The IDE is a cross-package surface:
 the extensions live in [`aqp_ide/`](../../aqp_ide/), the operator
@@ -17,8 +19,8 @@ concept crosses ≥3 `aqp_*` packages).
 
 | Surface | Canonical doc | Hard rule(s) |
 | --- | --- | --- |
-| Monorepo SSoT pointer | [../../aqp_docs/aqp-ide.md](../../aqp_docs/aqp-ide.md) | AGENTS root project map row for `aqp_ide/` |
-| Phased roadmap | [../../aqp_docs/aqp-ide-roadmap.md](../../aqp_docs/aqp-ide-roadmap.md) | – |
+| Monorepo SSoT pointer | [../../aqp_docs/docs/concepts/infrastructure/aqp-ide.md](../../aqp_docs/docs/concepts/infrastructure/aqp-ide.md) | AGENTS root project map row for `aqp_ide/` |
+| Phased roadmap | [../../aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md](../../aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md) | – |
 | In-folder index | [../../aqp_ide/AGENTS.md](../../aqp_ide/AGENTS.md) + [../../aqp_ide/docs/index.md](../../aqp_ide/docs/index.md) | – |
 | Process + extension architecture | [../../aqp_ide/docs/architecture.md](../../aqp_ide/docs/architecture.md) | – |
 | Per-extension reference | [../../aqp_ide/docs/extensions.md](../../aqp_ide/docs/extensions.md) | – |

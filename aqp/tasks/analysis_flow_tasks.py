@@ -3,8 +3,8 @@
 NB: this module is intentionally distinct from
 :mod:`aqp.tasks.analysis_tasks` (which hosts the analysis-AGENTS
 interpretation tasks). Both share the ``agents`` queue but they are
-separate code paths — see [aqp_docs/analysis-framework.md] vs
-[aqp_docs/analysis-agents.md].
+separate code paths — see [aqp_docs/docs/concepts/strategy/analysis-framework.md] vs
+[aqp_docs/docs/concepts/strategy/analysis-agents.md].
 
 Two tasks:
 

@@ -12,7 +12,7 @@ alwaysApply: false
 # DataMCP — the agent-read boundary
 
 This rule scopes AGENTS.md hard rule **22**. The narrative is
-[aqp_docs/data-mcp.md](mdc:aqp_docs/data-mcp.md).
+[aqp_docs/docs/concepts/data/data-mcp.md](mdc:aqp_docs/docs/concepts/data/data-mcp.md).
 
 ## Why this is a boundary
 
@@ -63,13 +63,13 @@ DataMCP collapses both problems into one catalog with two transports:
    the catalog MCP tools (e.g. `data.catalog.lineage`,
    `data.catalog.describe_dataset`) rather than relying on cached /
    static knowledge. The static surface in
-   [aqp_docs/data-dictionary.md](mdc:aqp_docs/data-dictionary.md) bit-rots
+   [aqp_docs/docs/reference/data-dictionary/index.mdx](mdc:aqp_docs/docs/reference/data-dictionary/index.mdx) bit-rots
    between releases — MCP is the live source.
 5. **Entity-centric data products go through DataMCP too.**
    Subclass [`BaseDataProduct`](mdc:aqp/data/products/base.py) under
    [aqp/data/products/](mdc:aqp/data/products), then add a matching
    `data.entities.*` MCP tool and a `/data/entities/...` REST route.
-   See [aqp_docs/data-products.md](mdc:aqp_docs/data-products.md).
+   See [aqp_docs/docs/concepts/data/data-products.md](mdc:aqp_docs/docs/concepts/data/data-products.md).
 6. **The same catalog backs the FastAPI router and the stdio
    binary.** Do not author tool variants per transport — register
    once, both transports pick it up.

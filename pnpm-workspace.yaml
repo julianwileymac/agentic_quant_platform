@@ -1,0 +1,8 @@
+packages:
+  - aqp_docs
+  - aqp_client
+  - aqp_ui
+  - aqp_admin/aqp_admin_ui
+  - webui
+  # NB: aqp_ide intentionally excluded — it has its own Theia/lerna monorepo
+  # with its own pnpm/yarn lockfile (.cursor/rules/aqp-ide.mdc).

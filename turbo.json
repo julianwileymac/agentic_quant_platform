@@ -1,0 +1,65 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "stream",
+  "globalDependencies": [
+    "**/.env.example",
+    "**/tsconfig.json"
+  ],
+  "globalEnv": [
+    "CI",
+    "NODE_ENV",
+    "AQP_DOCS_SITE_URL",
+    "AQP_DOCS_BASE_URL",
+    "AQP_DOCS_INKEEP_API_KEY",
+    "AQP_DOCS_POSTHOG_KEY",
+    "AQP_DOCS_PLAUSIBLE_DOMAIN",
+    "AQP_DOCS_INSTATUS_PAGE_ID"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["build/**", ".docusaurus/**", "dist/**", ".next/**", "!.next/cache/**"]
+    },
+    "start": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "outputs": []
+    },
+    "typecheck": {
+      "outputs": []
+    },
+    "test": {
+      "outputs": ["coverage/**"]
+    },
+    "check-doc-links": {
+      "inputs": [
+        "aqp_docs/docs/**/*.{md,mdx}",
+        "AGENTS.md",
+        ".cursor/rules/**/*.mdc",
+        "aqp_*/AGENTS.md",
+        "CONTRIBUTING.md",
+        "WORKFLOW.md",
+        "README.md"
+      ],
+      "outputs": []
+    },
+    "generate-llms-txt": {
+      "dependsOn": ["build"],
+      "inputs": ["aqp_docs/docs/**/*.{md,mdx}", "aqp_docs/scripts/generate-llms-txt.ts"],
+      "outputs": ["aqp_docs/static/llms.txt", "aqp_docs/static/llms-full.txt"]
+    },
+    "extract-python": {
+      "inputs": [
+        "aqp/**/*.py",
+        "aqp_platform_core/src/**/*.py",
+        "aqp_control_plane/src/**/*.py",
+        "aqp_rl/src/**/*.py",
+        "aqp_models/src/**/*.py",
+        "aqp_docs/scripts/extract-python.ts"
+      ],
+      "outputs": ["aqp_docs/docs/reference/python/**"]
+    }
+  }
+}

@@ -1,0 +1,49 @@
+# lychee.toml — Rust-based link checker.
+# https://github.com/lycheeverse/lychee
+
+# Inputs are passed on the command line; see pnpm run lychee.
+exclude_all_private = false
+exclude_loopback = false
+exclude_mail = true
+
+include_verbatim = false
+include_fragments = true
+
+# Some upstream sites return 5xx during link-check storms; retry.
+max_retries = 2
+max_concurrency = 32
+timeout = 20
+user_agent = "lychee/0.16 (+https://docs.aqp.fund)"
+
+# Allow these statuses (the page resolves; we don't want a flaky 429
+# from rate-limited GitHub Search blocking the whole CI run).
+accept = ["200", "203", "204", "206", "301", "302", "303", "307", "308", "429"]
+
+# Skip internal/private hosts.
+exclude = [
+  # Localhost / lan
+  "^https?://localhost",
+  "^https?://127\\.",
+  "^https?://0\\.0\\.0\\.0",
+  "^https?://10\\.",
+  "^https?://192\\.168\\.",
+  "^https?://172\\.(?:1[6-9]|2\\d|3[0-1])\\.",
+  # In-cluster service DNS that won't resolve from CI.
+  "\\.svc\\.cluster\\.local",
+  # Cloudflare tunnel placeholders (used in docs as examples).
+  "\\.cfargotunnel\\.com",
+  # Pages dev preview hostnames.
+  "\\.pages\\.dev",
+  # GitHub raw / internal admin endpoints (rate-limited).
+  "^https?://api\\.github\\.com/(?!repos/julianwileymac)",
+  # IDP endpoints — checking these from CI is annoying for everyone.
+  "auth0\\.com/oauth",
+  "login\\.microsoftonline\\.com",
+  # Status pages that may legitimately be DOWN.
+  "^https?://status\\.aqp\\.fund",
+]
+
+# Cache map. Re-runs within an hour reuse the cache and don't
+# re-hit external sites.
+cache = true
+max_cache_age = "1h"

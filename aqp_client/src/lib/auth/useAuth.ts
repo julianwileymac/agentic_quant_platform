@@ -26,7 +26,7 @@ export interface AuthSurface {
   };
   /**
    * AQP-namespaced custom claims injected by the Auth0 Action (see
-   * ``aqp_docs/auth0-actions.md``). Phase 4/6 use these to hydrate the
+   * ``aqp_docs/docs/concepts/identity/auth0-actions.md``). Phase 4/6 use these to hydrate the
    * tenancy store + drive the ContextBar without an extra round-trip.
    */
   claims: {

@@ -22,4 +22,4 @@ context. Lifted from `rpi_kubernetes/flink-jobs/` during the rpi ↔ AQP decoupl
 bash aqp_platform/scripts/cluster_install/build-flink-jobs.sh --push
 ```
 
-Canonical doc: [aqp_docs/streaming.md](../../aqp_docs/streaming.md).
+Canonical doc: [aqp_docs/docs/concepts/data/streaming.md](../../aqp_docs/docs/concepts/data/streaming.md).

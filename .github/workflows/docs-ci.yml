@@ -1,0 +1,249 @@
+name: docs-ci
+
+# Runs on every PR + push to main that touches the docs surface.
+# Path filtering keeps the heavy backend test matrix from running
+# for typo PRs (and vice versa).
+
+on:
+  pull_request:
+    paths:
+      - "aqp_docs/**"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - ".github/workflows/docs-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "aqp_docs/**"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: docs-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PNPM_VERSION: "9.12.0"
+  NODE_VERSION: "20"
+
+jobs:
+  # -----------------------------------------------------------------
+  # Build the static site. Every subsequent job that needs the build
+  # output downloads the artifact rather than re-building.
+  # -----------------------------------------------------------------
+  build:
+    name: build docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: "${{ env.PNPM_VERSION }}" }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "${{ env.NODE_VERSION }}"
+          cache: "pnpm"
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Generate OpenAPI MDX pages
+        run: pnpm --filter aqp_docs generate-openapi-mdx
+      - name: Generate llms.txt + llms-full.txt
+        run: pnpm --filter aqp_docs generate-llms-txt
+      - name: Build
+        run: pnpm --filter aqp_docs build
+        env:
+          AQP_DOCS_SITE_URL: "https://docs.aqp.fund"
+          # Secrets are intentionally empty in CI — production values
+          # come from Vault via ExternalSecret on the Pages env
+          # (AGENTS rule 26).
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-build
+          path: aqp_docs/build
+          retention-days: 7
+
+  # -----------------------------------------------------------------
+  # Doc-link guard. Fails the PR if any file outside the new
+  # aqp_docs/docs/ tree still references legacy aqp_docs/<slug>.md.
+  # -----------------------------------------------------------------
+  link-shape-guard:
+    name: link-shape guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ripgrep
+        run: sudo apt-get install -y ripgrep
+      - name: Check
+        run: bash aqp_docs/scripts/check-doc-links.sh
+
+  # -----------------------------------------------------------------
+  # Prose linters.
+  # -----------------------------------------------------------------
+  vale:
+    name: vale (Microsoft style + AQP vocab)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: errata-ai/vale-action@reviewdog
+        with:
+          version: 3.7.1
+          files: aqp_docs/docs
+          fail_on_error: false
+          reporter: github-pr-review
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  alex:
+    name: alex (inclusive language)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: "${{ env.PNPM_VERSION }}" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: "pnpm" }
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Run alex
+        run: cd aqp_docs && npx --yes alex docs/
+
+  markdownlint:
+    name: markdownlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: "${{ env.PNPM_VERSION }}" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: "pnpm" }
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Run markdownlint
+        run: cd aqp_docs && npx --yes markdownlint-cli2
+
+  # -----------------------------------------------------------------
+  # Broken-link check (slow; only on PRs against main).
+  # -----------------------------------------------------------------
+  lychee:
+    name: lychee (link check)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: lycheeverse/lychee-action@v2
+        with:
+          args: --config aqp_docs/lychee.toml 'aqp_docs/docs/**/*.md' 'aqp_docs/docs/**/*.mdx'
+          fail: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # -----------------------------------------------------------------
+  # Performance + accessibility (Lighthouse + axe).
+  # -----------------------------------------------------------------
+  lighthouse:
+    name: lighthouse (perf budgets)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: "${{ env.PNPM_VERSION }}" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: "pnpm" }
+      - uses: actions/download-artifact@v4
+        with:
+          name: docs-build
+          path: aqp_docs/build
+      - name: Install Lighthouse CI
+        run: npm install -g @lhci/cli@0.14.0
+      - name: Run Lighthouse CI
+        run: lhci autorun --config aqp_docs/.lighthouserc.json
+        continue-on-error: true
+
+  axe:
+    name: axe-core (WCAG 2.2 AA)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ env.NODE_VERSION }}" }
+      - uses: actions/download-artifact@v4
+        with:
+          name: docs-build
+          path: aqp_docs/build
+      - name: Install + run axe
+        run: |
+          npm install -g serve@14 @axe-core/cli@4.10
+          serve aqp_docs/build -l 3100 &
+          sleep 4
+          axe http://localhost:3100 --tags wcag22aa --exit || echo "::warning::axe found WCAG 2.2 AA issues. See logs."
+
+  # -----------------------------------------------------------------
+  # Executable code blocks — Python via pytest-markdown-docs.
+  # -----------------------------------------------------------------
+  pytest-markdown-docs:
+    name: pytest-markdown-docs (Python snippets)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-markdown-docs
+      - name: Run executable Markdown snippets
+        run: |
+          pytest --markdown-docs aqp_docs/docs/tutorials aqp_docs/docs/how-to/recipes || \
+            echo "::warning::pytest-markdown-docs reported failures; doc snippets may need a refresh."
+
+  # -----------------------------------------------------------------
+  # Doc Detective — CLI + UI test cases embedded in Markdown.
+  # Phase 3 ships with the config; the actual UI-flow tests roll in
+  # via the cross-cut-content-depth todo.
+  # -----------------------------------------------------------------
+  doc-detective:
+    name: doc-detective (CLI/UI flows)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: "${{ env.PNPM_VERSION }}" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: "pnpm" }
+      - name: Install
+        run: npm install -g doc-detective@latest
+      - name: Run Doc Detective
+        run: cd aqp_docs && doc-detective runTests --config doc-detective.config.json || \
+              echo "::warning::Doc Detective reported failures; see job output."
+
+  # -----------------------------------------------------------------
+  # Chromatic visual regression (Phase 5 spike; gated on availability
+  # of CHROMATIC_PROJECT_TOKEN from Vault via ExternalSecret).
+  # -----------------------------------------------------------------
+  chromatic:
+    name: chromatic (visual regression)
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ secrets.CHROMATIC_PROJECT_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: "${{ env.PNPM_VERSION }}" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: "pnpm" }
+      - name: Install + run chromatic
+        run: |
+          pnpm install --frozen-lockfile
+          npx --yes chromatic --project-token=${{ secrets.CHROMATIC_PROJECT_TOKEN }} \
+            --working-dir=aqp_docs \
+            --exit-zero-on-changes

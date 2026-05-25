@@ -49,8 +49,8 @@ aqp_admin/
   `src/aqp_admin/api/routers/`; the frontend calls them through
   `aqp_admin_ui/src/lib/api.ts`.
 - **Credentials + identity** route through the same chain documented in
-  [aqp_docs/credentials.md](../aqp_docs/credentials.md) and
-  [aqp_docs/identity.md](../aqp_docs/identity.md). No vendor SDK calls
+  [aqp_docs/docs/concepts/identity/credentials.md](../aqp_docs/docs/concepts/identity/credentials.md) and
+  [aqp_docs/docs/concepts/identity/identity.md](../aqp_docs/docs/concepts/identity/identity.md). No vendor SDK calls
   from route handlers.
 - **Audit-first**: every mutating route writes a structured audit record
   before performing the action. Failure modes never leave the audit ledger

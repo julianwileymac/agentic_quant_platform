@@ -11,7 +11,7 @@ alwaysApply: false
 
 Phase 3 of the agentic-RL rollout. Hard rule **37** in
 [AGENTS.md](mdc:AGENTS.md) is the source of truth. Companion doc:
-[aqp_docs/rl-policy-backbones.md](mdc:aqp_docs/rl-policy-backbones.md).
+[aqp_docs/docs/concepts/rl/rl-policy-backbones.md](mdc:aqp_docs/docs/concepts/rl/rl-policy-backbones.md).
 
 ## What this scope covers
 

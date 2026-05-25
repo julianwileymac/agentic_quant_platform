@@ -1,0 +1,18 @@
+# AQP/Simplicity — ban hollow words.
+#
+# Inspired by GitLab's tiered Vale rules. These words rarely add
+# meaning; removing them produces tighter, less hedging prose.
+extends: existence
+message: "'%s' is a filler word. Try removing it or rephrasing."
+level: warning
+ignorecase: true
+tokens:
+  - simply
+  - just
+  - really
+  - very
+  - quite
+  - basically
+  - actually
+  - obviously
+  - clearly

@@ -179,7 +179,7 @@ import { KafkaTopicDetailRoute } from "@/routes/streaming/kafka/topics/[name]/pa
 import { FlinkJobDetailRoute } from "@/routes/streaming/flink/jobs/[name]/page";
 import { ProducerDetailRoute } from "@/routes/streaming/producers/[name]/page";
 import { StrategyNewRoute } from "@/routes/strategies/new/page";
-// Consolidated `/strategy-development/*` umbrella — see aqp_docs/strategy-development.md.
+// Consolidated `/strategy-development/*` umbrella — see aqp_docs/docs/concepts/strategy/strategy-development.md.
 import { StrategyDevLayoutRoute } from "@/routes/strategy-development/layout";
 import { StrategyDevIndexRoute } from "@/routes/strategy-development/page";
 import { StrategyComposerRoute as StrategyDevComposerPage } from "@/routes/strategy-development/composer/page";

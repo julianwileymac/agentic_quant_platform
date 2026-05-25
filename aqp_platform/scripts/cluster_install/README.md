@@ -46,7 +46,7 @@ version.
 - `cluster-admin` for the active context (operators install CRDs).
 - A container registry the cluster can pull from for the AQP app images
   (separate prerequisite documented in
-  `aqp_docs/operations/kubernetes-deploy.md`).
+  `aqp_docs/docs/how-to/operations/kubernetes-deploy.md`).
 
 The cluster bootstrap itself (k3s install, node prep, USB SSD mounts on
 RPi hardware) stays in `rpi_kubernetes/bootstrap/` because it is

@@ -106,6 +106,10 @@ celery_app = Celery(
         # Phase 5 (agent stall watchdog) — Celery beat task that
         # revokes stalled agent_runs_v2 rows + emits a halt frame.
         "aqp.tasks.agent_watchdog_tasks",
+        # Phase 6 of the docs-migration plan — weekly scan of
+        # aqp_docs/docs/ for >180-day-stale frontmatter; opens
+        # a GitHub Issue per stale page tagged with the CODEOWNER.
+        "aqp.tasks.docs_freshness_tasks",
         # Workstream B (OpenLineage relay) — Celery beat task that
         # drains ``lineage_openlineage_outbox`` to Marquez.
         "aqp.tasks.openlineage_relay_tasks",
@@ -179,6 +183,8 @@ celery_app.conf.update(
         "aqp.tasks.analytics_tasks.*": {"queue": "default"},
         # Phase 5 — agent stall watchdog scans on the default queue.
         "aqp.tasks.agent_watchdog_tasks.*": {"queue": "default"},
+        # Phase 6 (docs-migration) — weekly stale-page scan.
+        "aqp.tasks.docs_freshness_tasks.*": {"queue": "default"},
         # Bot lifecycle: route to the matching execution queues so backtest /
         # paper / chat workloads inherit the existing per-queue capacity caps.
         "aqp.tasks.bot_tasks.run_bot_backtest": {"queue": "backtest"},
@@ -295,6 +301,22 @@ celery_app.conf.update(
             "task": "aqp.tasks.agent_watchdog_tasks.scan_for_stalled_workflow_runs",
             "schedule": float(
                 getattr(settings, "agent_watchdog_period_seconds", 60) or 60
+            ),
+        },
+        # Phase 6 of the docs-migration plan — weekly scan of
+        # aqp_docs/docs/ for >180-day-stale frontmatter; opens
+        # GitHub Issues per stale page tagged with CODEOWNERS.
+        # The threshold comes from
+        # ``settings.docs_freshness_threshold_days`` (default 180).
+        # Runs Mondays at 09:00 UTC. The interval below is the
+        # internal-tick cadence; the task body itself reads
+        # ``last_reviewed`` frontmatter and only flags pages older
+        # than the threshold.
+        "docs-stale-content-scan": {
+            "task": "aqp.tasks.docs_freshness_tasks.scan_stale_pages",
+            "schedule": float(
+                getattr(settings, "docs_freshness_scan_period_seconds", 7 * 24 * 3600)
+                or (7 * 24 * 3600)
             ),
         },
         # Phase 7 (terraform refactor) — drift scan. Opens a ``refresh``

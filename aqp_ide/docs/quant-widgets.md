@@ -96,11 +96,11 @@ the task pre-attached.
 - Re-implement the kill-switch. That lives in `theia-ide-aqp-ext` with
   the `ctrlcmd+alt+h` shortcut and the 9-endpoint halt fan-out.
 - Implement RTC (real-time collaboration). Deferred to a Phase B
-  iteration; see [../../aqp_docs/aqp-ide-roadmap.md](../../aqp_docs/aqp-ide-roadmap.md).
+  iteration; see [../../aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md](../../aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md).
 
 ## See also
 
 - [extensions.md](extensions.md) — full extension reference
-- `aqp_docs/agents.md`, `aqp_docs/bots.md`, `aqp_docs/rl-framework.md`,
-  `aqp_docs/analysis-framework.md`, `aqp_docs/workflow-studio.md`
+- `aqp_docs/docs/concepts/agentic/agents.md`, `aqp_docs/docs/concepts/agentic/bots.md`, `aqp_docs/docs/concepts/rl/rl-framework.md`,
+  `aqp_docs/docs/concepts/strategy/analysis-framework.md`, `aqp_docs/docs/concepts/agentic/workflow-studio.md`
 - `aqp/tasks/_progress.py` — canonical progress frame (rule 4)

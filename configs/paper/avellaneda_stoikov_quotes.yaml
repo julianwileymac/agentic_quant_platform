@@ -25,7 +25,7 @@ strategy:
   # The following kwargs are *whitelisted* for the
   # data.strategy_config.update DataMCPTool — the regime adapter
   # rewrites them in place when toxicity flips. See
-  # aqp_docs/microstructure-toxicity.md for the loop.
+  # aqp_docs/docs/concepts/strategy/microstructure-toxicity.md for the loop.
   kwargs:
     gamma: 0.1
     sigma: 0.01

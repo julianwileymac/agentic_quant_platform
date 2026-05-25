@@ -7,7 +7,7 @@ import { apiFetch } from "./client";
  * All routes return 503 when `AQP_ORCHESTRATION_STUDIO_ENABLED` is
  * off. Callers should surface that as a "studio disabled" banner
  * rather than treating it as a generic error — see
- * `aqp_docs/orchestration-refactor-rollout.md`.
+ * `aqp_docs/docs/concepts/agentic/orchestration-refactor-rollout.md`.
  */
 
 export interface WorkflowSpecSummary {

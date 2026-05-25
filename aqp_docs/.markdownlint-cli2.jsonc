@@ -1,0 +1,28 @@
+{
+  // markdownlint-cli2 — Markdown hygiene linter.
+  // https://github.com/DavidAnson/markdownlint-cli2
+  "config": {
+    "default": true,
+    "MD003": { "style": "atx" },         // ATX-style headers (#)
+    "MD004": { "style": "dash" },        // unordered list dashes
+    "MD007": { "indent": 2 },            // 2-space list indent
+    "MD013": false,                       // line length — disabled (prose)
+    "MD024": { "siblings_only": true },  // duplicate headers OK in different sections
+    "MD025": { "front_matter_title": "" },
+    "MD026": false,                       // trailing punctuation in headers OK
+    "MD029": { "style": "ordered" },     // ordered list 1., 2., 3.
+    "MD033": false,                       // inline HTML OK (MDX needs it)
+    "MD034": false,                       // bare URLs OK in MDX
+    "MD036": false,                       // emphasis-as-header OK
+    "MD041": false,                       // first line H1 — frontmatter wins
+    "MD046": { "style": "fenced" }       // fenced code blocks
+  },
+  "globs": ["docs/**/*.md", "docs/**/*.mdx"],
+  "ignores": [
+    "docs/archive/**",
+    "docs/reference/python/**",
+    "**/node_modules/**",
+    "**/build/**",
+    "**/.docusaurus/**"
+  ]
+}

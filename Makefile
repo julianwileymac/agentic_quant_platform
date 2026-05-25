@@ -216,7 +216,7 @@ frontend-typecheck:
 # ---------------------------------------------------------------------------
 # Refactor — /build/ + /deployments/ + aqp_platform_core + aqp_control_plane
 # Drives the docker-compose-based local + admin stacks alongside the existing
-# `aqp-cli deploy` (TerraformRuntime) workflow. See aqp_docs/architecture/decisions/.
+# `aqp-cli deploy` (TerraformRuntime) workflow. See aqp_docs/docs/architecture/decisions/.
 # ---------------------------------------------------------------------------
 
 COMPOSE_DIR := aqp_platform/deployments/compose

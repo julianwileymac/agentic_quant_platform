@@ -1,7 +1,7 @@
 """Compatibility shim for the extracted ``aqp_rl`` package.
 
 The reinforcement-learning subsystem was extracted into a top-level
-:mod:`aqp_rl` boundary package per ``aqp_docs/repository-split.md``.
+:mod:`aqp_rl` boundary package per ``aqp_docs/docs/concepts/platform/repository-split.md``.
 This shim aliases every submodule of :mod:`aqp_rl` under the legacy
 ``aqp.rl`` name so existing imports (``from aqp.rl.runtime import
 RLRuntime`` etc.) keep working through one release cycle.

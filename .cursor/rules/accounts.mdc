@@ -11,8 +11,8 @@ in-memory ``AccountData`` to persistent rows, the
 :class:`ReconciliationEngine`, and the upgraded pre-trade risk surface.
 
 Narrative walkthroughs:
-[aqp_docs/accounts-balances.md](mdc:aqp_docs/accounts-balances.md),
-[aqp_docs/reconciliation.md](mdc:aqp_docs/reconciliation.md).
+[aqp_docs/docs/concepts/data/accounts-balances.md](mdc:aqp_docs/docs/concepts/data/accounts-balances.md),
+[aqp_docs/docs/concepts/data/reconciliation.md](mdc:aqp_docs/docs/concepts/data/reconciliation.md).
 
 ## Hard rules
 

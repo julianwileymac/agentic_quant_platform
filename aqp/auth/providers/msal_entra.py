@@ -29,7 +29,7 @@ This module deliberately does NOT subclass :class:`GenericOidcProvider`
 that we want to use directly so per-user PKCE / nonce state stays
 consistent with the SPA's ``@azure/msal-react`` client.
 
-Setup runbook: see [aqp_docs/msal-entra-setup.md](aqp_docs/msal-entra-setup.md).
+Setup runbook: see [aqp_docs/docs/concepts/identity/msal-entra-setup.md](aqp_docs/docs/concepts/identity/msal-entra-setup.md).
 """
 from __future__ import annotations
 

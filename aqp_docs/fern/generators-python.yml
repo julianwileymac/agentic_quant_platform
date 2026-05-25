@@ -1,0 +1,46 @@
+# fern/generators-python.yml — Python SDK emission for `aqp-sdk` on PyPI.
+#
+# Phase 6 of the migration plan. Activates the Python SDK published
+# from the same OpenAPI spec as the TypeScript SDK; this lets bot /
+# RL / agent authors integrate AQP without writing httpx boilerplate.
+#
+# Hard rules respected:
+#   - AGENTS rule 26 (CredentialResolver): PYPI_API_TOKEN comes from
+#     Vault via ExternalSecret on the Pages build env.
+
+api:
+  specs:
+    - openapi: ../openapi/aqp.json
+      overrides: overrides.yml
+
+groups:
+  local-python:
+    generators:
+      - name: fernapi/fern-python-sdk
+        version: 4.1.0
+        output:
+          location: local-file-system
+          path: ../../sdk/python
+        config:
+          client_class_name: AqpSdk
+          improved_imports: true
+          inline_request_params: true
+          package_name: aqp-sdk
+          pyproject_python_version: "^3.10"
+
+  release-python:
+    generators:
+      - name: fernapi/fern-python-sdk
+        version: 4.1.0
+        github:
+          repository: julianwileymac/aqp-sdk-python
+          mode: pull-request
+        output:
+          location: pypi
+          url: https://upload.pypi.org/legacy/
+          package-name: 'aqp-sdk'
+          token: ${PYPI_API_TOKEN}
+        config:
+          client_class_name: AqpSdk
+          improved_imports: true
+          pyproject_python_version: "^3.10"

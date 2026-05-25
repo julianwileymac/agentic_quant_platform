@@ -1,8 +1,15 @@
+import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import { ApiError } from "@/lib/api/errors";
 import { cn } from "@/lib/cn";
+
+// Vitest 2 uses the classic JSX runtime when react/jsx-runtime isn't
+// auto-imported by the bundler config; this import keeps the inline
+// <h1/> below resolvable without depending on Vitest's `jsx: "automatic"`.
+void React;
+void vi;
 
 describe("aqp_ui smoke test", () => {
   it("the testing harness is wired correctly", () => {
@@ -37,10 +44,16 @@ describe("aqp_ui smoke test", () => {
 
 describe("environment", () => {
   it("can be configured with AQP_UI_BASE_URL", () => {
-    const spy = vi.spyOn(process, "env", "get").mockReturnValue({
-      AQP_UI_BASE_URL: "http://localhost:3002",
-    });
-    expect(process.env.AQP_UI_BASE_URL).toBe("http://localhost:3002");
-    spy.mockRestore();
+    const previous = process.env.AQP_UI_BASE_URL;
+    process.env.AQP_UI_BASE_URL = "http://localhost:3002";
+    try {
+      expect(process.env.AQP_UI_BASE_URL).toBe("http://localhost:3002");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AQP_UI_BASE_URL;
+      } else {
+        process.env.AQP_UI_BASE_URL = previous;
+      }
+    }
   });
 });

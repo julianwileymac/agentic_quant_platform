@@ -13,6 +13,6 @@ Task names retain the legacy ``aqp.tasks.rl_tasks.*`` prefix so
 in-flight Celery messages keep routing to the same handler. Import-time
 registration happens when ``aqp/tasks/celery_app.py`` includes
 ``aqp_rl.tasks.rl_tasks`` (per the strangler migration in
-``aqp_docs/repository-split.md``).
+``aqp_docs/docs/concepts/platform/repository-split.md``).
 """
 from __future__ import annotations

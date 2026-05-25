@@ -38,7 +38,7 @@ flowchart LR
 | 1 | **Compile-time Theia extensions** | Built into the bundle via npm/yarn deps + `theiaExtensions` entry in package.json | Full Theia API + InversifyJS DI, no sandbox | All six AQP extensions use this mechanism |
 | 2 | VS Code extensions (emulation) | Runtime install from Open VSX OR pre-installed via `theiaPlugins` | VS Code extension API (1.105.0 in Theia 1.66) | Pre-installed: `vscode-builtin-extensions`, `vscjava.vscode-java-pack`, `vscjava.vscode-java-dependency` |
 | 3 | Theia plugins | Runtime; superset of VS Code API but Theia-only | VS Code API + Theia frontend APIs | Not used (the upstream guidance steers extensions to mechanism #1) |
-| 4 | Headless plugins | Runtime; per-backend, no frontend connection | Custom backend APIs only | Reserved for future long-running quant agents (documented as Phase B in `aqp_docs/aqp-ide-roadmap.md`) |
+| 4 | Headless plugins | Runtime; per-backend, no frontend connection | Custom backend APIs only | Reserved for future long-running quant agents (documented as Phase B in `aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md`) |
 
 ## InversifyJS dependency injection
 
@@ -83,7 +83,7 @@ process call goes through HTTP (`AqpApiService`) or WebSocket (`AqpWsClient`
 in `aqp-quant-ext`). The native Theia JSON-RPC pattern is documented at
 [theia-ide.org/docs/json_rpc](https://theia-ide.org/docs/json_rpc) and is
 the path to use if a future AQP extension needs a backend RPC service —
-e.g. an Arrow Flight gateway (`aqp_docs/aqp-ide-roadmap.md` Phase B).
+e.g. an Arrow Flight gateway (`aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md` Phase B).
 
 ## MCP wiring
 

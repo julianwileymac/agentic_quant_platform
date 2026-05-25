@@ -90,6 +90,46 @@ services:
     health_path: /manage/readyz
     restartable: true
     logs_enabled: true
+  - id: aqp-docs
+    aliases: [aqp-docs-edge, docs-aqp-fund]
+    label: AQP Docs (Edge Property)
+    role: docs
+    # Edge property — NOT a cluster workload. Hosted on Cloudflare
+    # Pages at https://docs.aqp.fund. See AGENTS rule 47 +
+    # aqp_platform/terraform/modules/cloudflare_pages_docs/.
+    workload: external
+    restartable: false
+    logs_enabled: false
+    endpoints:
+      url: https://docs.aqp.fund
+      public_url: https://docs.aqp.fund
+      mcp_url: https://docs.aqp.fund/mcp
+      llms_txt: https://docs.aqp.fund/llms.txt
+      llms_full_txt: https://docs.aqp.fund/llms-full.txt
+  - id: aqp-docs-status
+    aliases: [status-aqp-fund]
+    label: AQP Status (Instatus)
+    role: status-page
+    # Separate Cloudflare zone; lives at https://status.aqp.fund.
+    # Standalone for incident-time resilience — must stay up when
+    # the rest of the stack is degraded.
+    workload: external
+    restartable: false
+    logs_enabled: false
+    endpoints:
+      url: https://status.aqp.fund
+      public_url: https://status.aqp.fund
+  - id: aqp-docs-archive
+    aliases: [archive-aqp-fund]
+    label: AQP Docs (Sunset Archive)
+    role: docs-archive
+    # Sunset Stripe-style API epochs freeze on archive.aqp.fund.
+    workload: external
+    restartable: false
+    logs_enabled: false
+    endpoints:
+      url: https://archive.aqp.fund
+      public_url: https://archive.aqp.fund
   - id: postgres
     label: PostgreSQL pgvector
     role: database

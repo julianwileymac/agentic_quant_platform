@@ -5,9 +5,9 @@ AQP combines strategy research, backtesting, RL, data pipelines, and runtime
 operations while keeping infrastructure and data under operator control.
 
 > **New here?**
-> Humans: [CONTRIBUTING.md](CONTRIBUTING.md), [aqp_docs/architecture.md](aqp_docs/architecture.md)  
+> Humans: [CONTRIBUTING.md](CONTRIBUTING.md), [aqp_docs/docs/concepts/platform/architecture.md](aqp_docs/docs/concepts/platform/architecture.md)  
 > Agents: [AGENTS.md](AGENTS.md)  
-> Full docs map: [aqp_docs/index.md](aqp_docs/index.md)
+> Full docs map: [aqp_docs/docs/intro/index.md](aqp_docs/docs/intro/index.md)
 
 ## Overview
 
@@ -16,8 +16,8 @@ operations while keeping infrastructure and data under operator control.
 - **Reinforcement-learning subsystem**: [aqp_rl/](aqp_rl/) (`RLRuntime`, hash-locked specs, advantage estimators, policy backbones, weight-centric portfolio pipeline, Iceberg trajectory store)
 - **Custom model boundary**: [aqp_models/](aqp_models/) (qlib-style ML framework, Predictor Hub, AlphaBacktestExperiment, walk-forward, finetune trainers, custom model serving via vLLM + Ollama)
 - **Primary deployment assets**: [aqp_platform/deployments/](aqp_platform/deployments/) and [aqp_platform/terraform/](aqp_platform/terraform/)
-- **Primary local setup runbook**: [aqp_docs/operations/local-setup.md](aqp_docs/operations/local-setup.md)
-- **Primary Kubernetes runbook**: [aqp_docs/operations/kubernetes-deploy.md](aqp_docs/operations/kubernetes-deploy.md)
+- **Primary local setup runbook**: [aqp_docs/docs/how-to/operations/local-setup.md](aqp_docs/docs/how-to/operations/local-setup.md)
+- **Primary Kubernetes runbook**: [aqp_docs/docs/how-to/operations/kubernetes-deploy.md](aqp_docs/docs/how-to/operations/kubernetes-deploy.md)
 
 ## Repository Structure (May 2026)
 
@@ -47,8 +47,8 @@ operations while keeping infrastructure and data under operator control.
 
 > The former root-level `deployments/`, `terraform/`, `build/`, and `deploy/` folders, plus root `Dockerfile`, `.dockerignore`, and `docker-compose*.yml`, now live under [aqp_platform/](aqp_platform/). The former `configs/deployment/` and `configs/terraform/` subfolders moved to `aqp_platform/configs/`. `scripts/cluster_install/` moved to `aqp_platform/scripts/cluster_install/`.
 
-For canonical boundary ownership, see [aqp_docs/repository-split.md](aqp_docs/repository-split.md)
-and [aqp_docs/aqp-monorepo-paths.md](aqp_docs/aqp-monorepo-paths.md).
+For canonical boundary ownership, see [aqp_docs/docs/concepts/platform/repository-split.md](aqp_docs/docs/concepts/platform/repository-split.md)
+and [aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md](aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md).
 
 ## Deployment Architectures
 
@@ -61,7 +61,7 @@ make generate-config ENV=local
 make dev
 ```
 
-- Runbook: [aqp_docs/operations/local-setup.md](aqp_docs/operations/local-setup.md)
+- Runbook: [aqp_docs/docs/how-to/operations/local-setup.md](aqp_docs/docs/how-to/operations/local-setup.md)
 - Compose artifact map: [aqp_platform/deployments/README.md](aqp_platform/deployments/README.md)
 
 ### 2) Terraform-managed local k3d (ledgered control-plane path)
@@ -82,12 +82,12 @@ Use Kustomize overlays under [aqp_platform/deployments/kubernetes/](aqp_platform
 kubectl apply -k aqp_platform/deployments/kubernetes/overlays/dev
 ```
 
-- Canonical cluster rollout: [aqp_docs/operations/kubernetes-deploy.md](aqp_docs/operations/kubernetes-deploy.md)
+- Canonical cluster rollout: [aqp_docs/docs/how-to/operations/kubernetes-deploy.md](aqp_docs/docs/how-to/operations/kubernetes-deploy.md)
 
 ### 4) Tower two-node cluster + AQP domain cutover
 
-- Tower target rollout: [aqp_docs/operations/tower-cluster-deploy.md](aqp_docs/operations/tower-cluster-deploy.md)
-- Blue/green cutover for `aqp.fund`: [aqp_docs/operations/aqp-fund-blue-green-cutover.md](aqp_docs/operations/aqp-fund-blue-green-cutover.md)
+- Tower target rollout: [aqp_docs/docs/how-to/operations/tower-cluster-deploy.md](aqp_docs/docs/how-to/operations/tower-cluster-deploy.md)
+- Blue/green cutover for `aqp.fund`: [aqp_docs/docs/how-to/operations/aqp-fund-blue-green-cutover.md](aqp_docs/docs/how-to/operations/aqp-fund-blue-green-cutover.md)
 - Cloudflare tunnel manifests:
   - primary lane: [aqp_platform/deployments/kubernetes/edge/cloudflared-aqp/](aqp_platform/deployments/kubernetes/edge/cloudflared-aqp/)
   - green lane: [aqp_platform/deployments/kubernetes/edge/cloudflared-aqp-green/](aqp_platform/deployments/kubernetes/edge/cloudflared-aqp-green/)
@@ -180,25 +180,25 @@ flowchart LR
 
 | Area | Canonical location | Status |
 | --- | --- | --- |
-| Documentation index | [aqp_docs/index.md](aqp_docs/index.md) | active |
-| System architecture | [aqp_docs/architecture.md](aqp_docs/architecture.md) | active |
-| Local setup | [aqp_docs/operations/local-setup.md](aqp_docs/operations/local-setup.md) | active |
-| Kubernetes rollout | [aqp_docs/operations/kubernetes-deploy.md](aqp_docs/operations/kubernetes-deploy.md) | active |
-| Tower two-node rollout | [aqp_docs/operations/tower-cluster-deploy.md](aqp_docs/operations/tower-cluster-deploy.md) | active |
-| Blue/green cutover | [aqp_docs/operations/aqp-fund-blue-green-cutover.md](aqp_docs/operations/aqp-fund-blue-green-cutover.md) | active |
+| Documentation index | [aqp_docs/docs/intro/index.md](aqp_docs/docs/intro/index.md) | active |
+| System architecture | [aqp_docs/docs/concepts/platform/architecture.md](aqp_docs/docs/concepts/platform/architecture.md) | active |
+| Local setup | [aqp_docs/docs/how-to/operations/local-setup.md](aqp_docs/docs/how-to/operations/local-setup.md) | active |
+| Kubernetes rollout | [aqp_docs/docs/how-to/operations/kubernetes-deploy.md](aqp_docs/docs/how-to/operations/kubernetes-deploy.md) | active |
+| Tower two-node rollout | [aqp_docs/docs/how-to/operations/tower-cluster-deploy.md](aqp_docs/docs/how-to/operations/tower-cluster-deploy.md) | active |
+| Blue/green cutover | [aqp_docs/docs/how-to/operations/aqp-fund-blue-green-cutover.md](aqp_docs/docs/how-to/operations/aqp-fund-blue-green-cutover.md) | active |
 | Deployment asset map | [aqp_platform/deployments/README.md](aqp_platform/deployments/README.md) | active |
-| Repository boundary map | [aqp_docs/repository-split.md](aqp_docs/repository-split.md) | migration |
-| Monorepo path contract | [aqp_docs/aqp-monorepo-paths.md](aqp_docs/aqp-monorepo-paths.md) | active |
-| Legacy Next.js docs | [aqp_docs/webui.md](aqp_docs/webui.md) | rollback-only |
+| Repository boundary map | [aqp_docs/docs/concepts/platform/repository-split.md](aqp_docs/docs/concepts/platform/repository-split.md) | migration |
+| Monorepo path contract | [aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md](aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md) | active |
+| Legacy Next.js docs | [aqp_docs/docs/concepts/trading/webui.md](aqp_docs/docs/concepts/trading/webui.md) | rollback-only |
 | Legacy k8s tree | [aqp_platform/deploy/k8s/README.md](aqp_platform/deploy/k8s/README.md) | legacy |
-| Historical context | [aqp_docs/archive/README.md](aqp_docs/archive/README.md) | archive |
+| Historical context | [aqp_docs/docs/archive/README.md](aqp_docs/docs/archive/README.md) | archive |
 
 ## Useful Links
 
 - Contributor onboarding: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Agent operating contract: [AGENTS.md](AGENTS.md)
 - Workflow governance: [WORKFLOW.md](WORKFLOW.md)
-- Code index governance: [aqp_docs/code-index-governance.md](aqp_docs/code-index-governance.md)
+- Code index governance: [aqp_docs/docs/concepts/platform/code-index-governance.md](aqp_docs/docs/concepts/platform/code-index-governance.md)
 - Active frontend package: [aqp_client/README.md](aqp_client/README.md)
 - Deployment artifacts: [aqp_platform/deployments/README.md](aqp_platform/deployments/README.md)
 - Kubernetes manifests: [aqp_platform/deployments/kubernetes/](aqp_platform/deployments/kubernetes/)
@@ -215,7 +215,7 @@ flowchart LR
   library, and tests moved with the source. Legacy `aqp.rl.*` imports
   are preserved through a deprecation-warning shim under [aqp/rl/](aqp/rl/)
   per the strangler-migration policy in
-  [aqp_docs/repository-split.md](aqp_docs/repository-split.md).
+  [aqp_docs/docs/concepts/platform/repository-split.md](aqp_docs/docs/concepts/platform/repository-split.md).
 - Extracted custom model pulling, building, training, fine-tuning,
   evaluating, and testing out of `aqp/ml/` (and the model-pulling /
   serving slice of `aqp/llm/`) into a new top-level boundary package
@@ -225,10 +225,10 @@ flowchart LR
   [aqp/llm/](aqp/llm/) per Hard Rule 2 in [AGENTS.md](AGENTS.md). Legacy
   imports preserved through deprecation shims.
 - Pruned root-level build artifacts and scratch reports. Archived
-  point-in-time planning material to [aqp_docs/archive/](aqp_docs/archive/).
+  point-in-time planning material to [aqp_docs/docs/archive/](aqp_docs/docs/archive/).
 - Updated [AGENTS.md](AGENTS.md), the `.cursor/rules/` set,
-  [aqp_docs/repository-split.md](aqp_docs/repository-split.md), and
-  [aqp_docs/aqp-monorepo-paths.md](aqp_docs/aqp-monorepo-paths.md) for
+  [aqp_docs/docs/concepts/platform/repository-split.md](aqp_docs/docs/concepts/platform/repository-split.md), and
+  [aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md](aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md) for
   the new boundaries.
 
 ### 2026-05-23
@@ -242,16 +242,16 @@ flowchart LR
 ### 2026-05
 
 - Introduced the tower two-node target and dedicated rollout runbook:
-  [aqp_docs/operations/tower-cluster-deploy.md](aqp_docs/operations/tower-cluster-deploy.md).
+  [aqp_docs/docs/how-to/operations/tower-cluster-deploy.md](aqp_docs/docs/how-to/operations/tower-cluster-deploy.md).
 - Added blue/green `aqp.fund` cutover flow and green lane tunnel artifacts:
-  [aqp_docs/operations/aqp-fund-blue-green-cutover.md](aqp_docs/operations/aqp-fund-blue-green-cutover.md).
+  [aqp_docs/docs/how-to/operations/aqp-fund-blue-green-cutover.md](aqp_docs/docs/how-to/operations/aqp-fund-blue-green-cutover.md).
 - Formalized repository boundary split guidance:
-  [aqp_docs/repository-split.md](aqp_docs/repository-split.md).
+  [aqp_docs/docs/concepts/platform/repository-split.md](aqp_docs/docs/concepts/platform/repository-split.md).
 - Promoted `aqp_client` (Vite) as the active operator UI and moved legacy surfaces
-  to rollback/legacy status in [aqp_docs/index.md](aqp_docs/index.md).
+  to rollback/legacy status in [aqp_docs/docs/intro/index.md](aqp_docs/docs/intro/index.md).
 
 For deeper historical notes and archived planning material, see
-[aqp_docs/archive/README.md](aqp_docs/archive/README.md).
+[aqp_docs/docs/archive/README.md](aqp_docs/docs/archive/README.md).
 
 ## License
 

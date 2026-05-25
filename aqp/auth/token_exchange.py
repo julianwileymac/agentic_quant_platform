@@ -89,7 +89,7 @@ GRANT_TYPE_TOKEN_EXCHANGE: str = "urn:ietf:params:oauth:grant-type:token-exchang
 TOKEN_TYPE_ACCESS_TOKEN: str = "urn:ietf:params:oauth:token-type:access_token"
 TOKEN_TYPE_JWT: str = "urn:ietf:params:oauth:token-type:jwt"
 
-# Auth0 Profile name (matches aqp_docs/auth0-setup.md). Operators MUST
+# Auth0 Profile name (matches aqp_docs/docs/concepts/identity/auth0-setup.md). Operators MUST
 # create this Profile in the Dashboard before enabling
 # ``auth_agent_token_exchange_enabled=true``.
 DEFAULT_PROFILE_NAME: str = "aqp-agent-delegation"

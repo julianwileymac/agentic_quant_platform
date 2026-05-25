@@ -41,5 +41,5 @@ See [DEFERRED.md](DEFERRED.md). The short version: ship Phase B when
 ## See also
 
 - Phase A (this release): [../README.md](../README.md)
-- AQP IDE roadmap: [../../../../aqp_docs/aqp-ide-roadmap.md](../../../../aqp_docs/aqp-ide-roadmap.md)
+- AQP IDE roadmap: [../../../../aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md](../../../../aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md)
 - Theia Cloud upstream: https://theia-cloud.io/

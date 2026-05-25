@@ -18,7 +18,7 @@ abort via the process-wide
 is the embedded HTTP surface for that fan-out.
 
 Authorization: ``workloads:halt`` scope. Granted to every role from
-``aqp-operator`` upward (see ``aqp_docs/scopes.md``).
+``aqp-operator`` upward (see ``aqp_docs/docs/concepts/platform/scopes.md``).
 """
 from __future__ import annotations
 

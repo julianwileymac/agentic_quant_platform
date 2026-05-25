@@ -24,7 +24,7 @@ class AzureProvider(CloudProviderStub):
     provider_alias = "azure"
     cloud_name = "Azure"
     follow_up_pr = "aqp-control-plane#azure-impl"
-    docs_link = "aqp_docs/operations/add-new-provider.md#azure"
+    docs_link = "aqp_docs/docs/how-to/operations/add-new-provider.md#azure"
     delegate_kubernetes_alias = (
         "kubernetes"
         if os.environ.get("AQP_CP_AZURE_DELEGATE_K8S", "").lower() in ("1", "true", "yes")

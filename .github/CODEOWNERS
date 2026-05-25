@@ -71,12 +71,12 @@
 
 # Canonical docs + Cursor rules for the auth surface
 /AGENTS.md                            @julianwiley
-/aqp_docs/auth0-setup.md              @julianwiley
-/aqp_docs/auth0-actions.md            @julianwiley
-/aqp_docs/identity.md                 @julianwiley
-/aqp_docs/credentials.md              @julianwiley
-/aqp_docs/multi-tenancy.md            @julianwiley
-/aqp_docs/account-management.md       @julianwiley
+/aqp_docs/docs/concepts/identity/auth0-setup.md              @julianwiley
+/aqp_docs/docs/concepts/identity/auth0-actions.md            @julianwiley
+/aqp_docs/docs/concepts/identity/identity.md                 @julianwiley
+/aqp_docs/docs/concepts/identity/credentials.md              @julianwiley
+/aqp_docs/docs/concepts/identity/multi-tenancy.md            @julianwiley
+/aqp_docs/docs/concepts/identity/account-management.md       @julianwiley
 /.cursor/rules/identity.mdc           @julianwiley
 /.cursor/rules/auth-stepup-and-byok.mdc @julianwiley
 /.cursor/rules/external-oauth.mdc     @julianwiley

@@ -1,8 +1,13 @@
 # AQP project index
 
-> Last refreshed: 2026-05-24 by aqp-index-curator (trigger: AQP IDE
-> enhancement landing six Theia extensions, `aqp-cli ide` entrypoint,
-> single-pod K8s overlay, Phase A docs + Cursor governance artefacts).
+> Last refreshed: 2026-05-25 by aqp-index-curator (trigger: enterprise
+> docs migration Phase 0 — `aqp_docs/` restructured in place into a
+> Docusaurus 3 package; 171+ markdown files moved to
+> `aqp_docs/docs/<category>/<slug>.md` under a Diátaxis IA. All
+> remaining legacy `aqp_docs/<slug>.md` pointers below were rewritten
+> per the canonical mapping in `aqp_docs/scripts/migrate-content.py`
+> (`CONCEPT_MAPPING`) + `aqp_docs/scripts/sweep-links.py`
+> (`CONCEPT_TARGETS`).
 
 ## Top-level packages
 
@@ -19,8 +24,8 @@
 | [aqp_snippets/](../aqp_snippets/) | Curated external-code knowledge | [../aqp_snippets/AGENTS.md](../aqp_snippets/AGENTS.md) |
 | [aqp_cli/](../aqp_cli/) | Standalone operator CLI. Now also hosts the [`ide`](../aqp_cli/src/aqp_cli/commands/ide.py) command group (`install` / `build` / `start` / `stop` / `status` / `logs` / `open` / `url` / `env` / `detect` / `doctor`). | [../aqp_cli/AGENTS.md](../aqp_cli/AGENTS.md) |
 | [aqp_admin/](../aqp_admin/) | Internal admin (managed services + company accounts) | [../aqp_admin/AGENTS.md](../aqp_admin/AGENTS.md) |
-| [aqp_ide/](../aqp_ide/) | White-labeled Theia 1.72 + **six** AQP compile-time extensions (`aqp`, `aqp-shell`, `aqp-mcp-bridge`, `aqp-research-copilot`, `aqp-notebook-quant`, `aqp-quant`). Canonical operator entrypoint is `aqp-cli ide`. | [../aqp_ide/AGENTS.md](../aqp_ide/AGENTS.md) + [../aqp_docs/aqp-ide.md](../aqp_docs/aqp-ide.md) |
-| [aqp_docs/](../aqp_docs/) | Canonical documentation | [../aqp_docs/index.md](../aqp_docs/index.md) |
+| [aqp_ide/](../aqp_ide/) | White-labeled Theia 1.72 + **six** AQP compile-time extensions (`aqp`, `aqp-shell`, `aqp-mcp-bridge`, `aqp-research-copilot`, `aqp-notebook-quant`, `aqp-quant`). Canonical operator entrypoint is `aqp-cli ide`. | [../aqp_ide/AGENTS.md](../aqp_ide/AGENTS.md) + [../aqp_docs/docs/concepts/infrastructure/aqp-ide.md](../aqp_docs/docs/concepts/infrastructure/aqp-ide.md) |
+| [aqp_docs/](../aqp_docs/) | Canonical documentation (Docusaurus 3) | [../aqp_docs/docs/intro/index.md](../aqp_docs/docs/intro/index.md) |
 | [aqp_index/](./) | **This index** (curator-owned SSoT) | [README.md](README.md) |
 
 ## Index sections

@@ -1,0 +1,59 @@
+---
+title: 'API reference'
+summary: 'Interactive Scalar-rendered reference for the public AQP API at api.aqp.fund. Auto-regenerated on every commit via openapi-export-aqp CI job.'
+owner: platform-team
+last_reviewed: 2026-05-25
+audience: both
+---
+
+# API reference
+
+This page is auto-generated from
+[aqp_docs/openapi/aqp.json](https://github.com/julianwileymac/agentic_quant_platform/blob/main/aqp_docs/openapi/aqp.json),
+which itself is regenerated on every commit via the
+`openapi-export-aqp` job in [.github/workflows/ci.yml](https://github.com/julianwileymac/agentic_quant_platform/blob/main/.github/workflows/ci.yml).
+If the committed spec and the live CI-dumped spec diverge,
+[`oasdiff`](https://github.com/Tufin/oasdiff) blocks the PR.
+
+## Surface
+
+The public AQP API at `api.aqp.fund` exposes:
+
+- **`/health`**, **`/livez`**, **`/readyz`** — liveness probes.
+- **`/strategies/*`** — strategy CRUD + dispatch.
+- **`/backtest/*`** — backtest dispatch, status, cancel.
+- **`/bots/*`** — bot CRUD, snapshot, backtest, paper, deploy.
+- **`/rl/*`** — RL train, replay, walk-forward, halt.
+- **`/agents/*`** — agent dispatch, halt, watchdog.
+- **`/workflows/*`** — workflow runtime endpoints.
+- **`/paper/*`** — paper trading session controls.
+- **`/analytics/*`** — QuantStats portfolio metrics + tearsheet
+  rendering.
+- **`/mcp/data/*`** — the Data MCP server.
+- **`/mcp/codebase/*`** — the Codebase MCP server.
+
+## Interactive playground
+
+The Scalar component below loads `openapi/aqp.json` and renders an
+interactive playground. Authenticate with the `Authorization:
+Bearer <token>` header. Tokens come from the `aqp-cli auth login`
+device-flow path (see
+[Concept: identity](../../concepts/identity/identity.md)).
+
+import { ApiReferenceReact } from '@scalar/api-reference-react';
+
+<ApiReferenceReact configuration={{ spec: { url: '/openapi/aqp.json' } }} />
+
+## SDKs
+
+- TypeScript: `npm install @aqp/sdk` (generated via Fern; see
+  [reference/python](../python/index.mdx)).
+- Python: `pip install aqp-sdk` (Phase 6).
+
+## Versioning
+
+AQP uses Stripe-style date-epoch versioning. The first epoch is
+`2026-06-01`. New epochs preserve old contracts; the
+`Deprecation` + `Sunset` HTTP headers (RFC 8594) signal the
+12-month sunset cycle. Sunsetted epochs freeze on
+`archive.aqp.fund`.

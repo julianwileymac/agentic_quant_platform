@@ -68,8 +68,8 @@ aqp-cli ide doctor
 
 ## See also
 
-- AQP DataMCP boundary: `aqp_docs/data-mcp.md`
-- AQP Codebase MCP: `aqp_docs/codebase-mcp.md`
-- AQP IdentityProvider: `aqp_docs/identity.md`
+- AQP DataMCP boundary: `aqp_docs/docs/concepts/data/data-mcp.md`
+- AQP Codebase MCP: `aqp_docs/docs/concepts/data/codebase-mcp.md`
+- AQP IdentityProvider: `aqp_docs/docs/concepts/identity/identity.md`
 - AQP IDE MCP doc: `aqp_ide/docs/mcp-integration.md`
 - Skill: `aqp_ide/.cursor/skills/aqp-mcp-wiring/SKILL.md`

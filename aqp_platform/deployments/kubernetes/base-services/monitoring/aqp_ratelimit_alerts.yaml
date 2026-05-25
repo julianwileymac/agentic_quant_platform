@@ -34,7 +34,7 @@ spec:
             description: |
               Bucket {{ $labels.user }}/{{ $labels.service }}/{{ $labels.key_id }}
               has dropped below 20% of its expected capacity.
-              Runbook: aqp_docs/runbooks/quota-exhaustion.md
+              Runbook: aqp_docs/docs/how-to/runbooks/quota-exhaustion.md
 
         - alert: AQPRatelimitBucketAt95Percent
           expr: rl_bucket_remaining{} < 0.05 * 60

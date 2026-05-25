@@ -1,0 +1,71 @@
+---
+title: 'Release 2026-06-01 — Docs migration + first API epoch'
+summary: 'docs.aqp.fund launches as the canonical documentation site; first Stripe-style API epoch lands.'
+owner: docs-team
+last_reviewed: 2026-05-25
+audience: customer
+version: '2026-06-01'
+epoch: '2026-06-01'
+---
+
+# Release 2026-06-01 — Docs migration + first API epoch
+
+This release marks two significant changes for AQP customers:
+
+## New
+
+- **docs.aqp.fund is live.** The canonical documentation site
+  replaces the previous GitHub-rendered tree at `aqp_docs/`.
+  Every previous link continues to resolve via 301 redirects in
+  [`aqp_docs/static/_redirects`](https://github.com/julianwileymac/agentic_quant_platform/blob/main/aqp_docs/static/_redirects).
+- **Interactive API playground** at
+  [/reference/api](../reference/api/index.mdx). Token persistence
+  works end-to-end; copy a `Bearer` from `aqp-cli auth login` and
+  every request from the playground inherits it.
+- **AI-native surfaces.** A curated `/llms.txt` index, the full
+  corpus at `/llms-full.txt`, and an RFC 9728 + 8707-compliant
+  MCP server at `/mcp` are now first-class agent entry points.
+- **In-product help panel** in the operator UI — the help drawer
+  reads directly from the docs corpus, so the in-product reference
+  never drifts from the public site.
+
+## Improved
+
+- **Search is local-first.** Pagefind indexes the entire corpus
+  client-side; no documentation content ever leaves the docs site.
+- **Quality gates.** Every PR to `aqp_docs/` runs Vale + alex.js +
+  markdownlint + lychee + Lighthouse + axe-core + executable Python
+  snippets via pytest-markdown-docs.
+- **Hybrid authoring.** Business editors can ship docs through
+  Keystatic at [/keystatic](/keystatic) — the typed schemas commit
+  to the same branch protection rules as engineers.
+
+## API
+
+- **First Stripe-style date epoch:** `2026-06-01`. No surface
+  changes from the prior unversioned API; future epochs will
+  follow the documented 12-month sunset cycle with
+  RFC 8594 `Deprecation` and `Sunset` response headers.
+- **OpenAPI specs committed** at
+  [`aqp_docs/openapi/aqp.json`](https://github.com/julianwileymac/agentic_quant_platform/blob/main/aqp_docs/openapi/aqp.json)
+  and
+  [`aqp_docs/openapi/control-plane.json`](https://github.com/julianwileymac/agentic_quant_platform/blob/main/aqp_docs/openapi/control-plane.json).
+  `oasdiff` PR gates prevent silent drift.
+
+## Internal
+
+- Cloudflare Pages + Cloudflare Access front the docs site as a
+  separate edge property — the cluster tunnel at `aqp.fund` /
+  `api.aqp.fund` / `manage.aqp.fund` continues unchanged.
+- Logpush ships request + Access audit logs to a new R2 bucket
+  (`aqp-docs-access-logs`) with 365-day retention for SOC 2 /
+  ISO 27001 evidence.
+- Instatus at `status.aqp.fund` is now the canonical status page;
+  the docs site renders a live banner via the Instatus JSON API.
+
+## Migration notes
+
+If you have hard-coded references to `aqp_docs/<old-path>.md` in
+your own tooling, both shapes resolve correctly today; the legacy
+shape will return a 410 starting 2027-06-01 (the 12-month sunset
+window applies to URL paths as well as API epochs).

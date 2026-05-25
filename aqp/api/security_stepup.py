@@ -36,7 +36,7 @@ kill-switch defeats the entire purpose. We therefore raise
 :func:`aqp.api.security._violation`.
 
 See AGENTS.md hard rule 52 and the canonical
-``aqp_docs/auth0-setup.md`` Phase 1 walkthrough.
+``aqp_docs/docs/concepts/identity/auth0-setup.md`` Phase 1 walkthrough.
 """
 from __future__ import annotations
 

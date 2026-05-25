@@ -1,0 +1,54 @@
+# wrangler.toml — Cloudflare Workers config for the AQP docs site.
+#
+# Two deploy targets:
+#   1. The static Docusaurus build, with Pages Functions under
+#      aqp_docs/workers/{md-negotiation, page-fragment, feedback}/
+#      — deployed via Cloudflare Pages (Terraform).
+#   2. The stand-alone MCP Worker under workers/mcp/ — deployed
+#      via Wrangler.
+#
+# Hard rules respected:
+#   - AQP rule 26 (CredentialResolver) — every env var here is a
+#     PLACEHOLDER; values come from Vault via ExternalSecret in
+#     production. NEVER commit real tokens.
+
+name = "aqp-docs-mcp"
+main = "workers/mcp/index.ts"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+[env.production]
+routes = [
+  { pattern = "docs.aqp.fund/mcp", custom_domain = true },
+  { pattern = "docs.aqp.fund/.well-known/oauth-protected-resource", custom_domain = true },
+  { pattern = "docs.aqp.fund/.well-known/oauth-protected-resource/mcp", custom_domain = true },
+]
+# Placeholder; values injected from Vault via ExternalSecret.
+vars = { AQP_MCP_DOCS_CANONICAL_URI = "https://docs.aqp.fund/mcp" }
+
+[env.production.secrets]
+# Names only. wrangler reads from the Cloudflare Workers Secret
+# Store, which is populated by the ExternalSecret chain.
+declared = [
+  "AQP_MCP_DOCS_M2M_CLIENT_ID",
+  "AQP_MCP_DOCS_M2M_CLIENT_SECRET",
+  "AQP_MCP_DOCS_JWKS_URI",
+  "AQP_MCP_DOCS_ISSUER",
+]
+
+[env.staging]
+routes = [
+  { pattern = "staging-docs.aqp.fund/mcp", custom_domain = true },
+]
+vars = { AQP_MCP_DOCS_CANONICAL_URI = "https://staging-docs.aqp.fund/mcp" }
+
+[observability]
+enabled = true
+head_sampling_rate = 0.1
+
+[placement]
+mode = "smart"
+
+# Logpush to R2 — defined in Terraform; this is just the toggle.
+[logpush]
+enabled = true

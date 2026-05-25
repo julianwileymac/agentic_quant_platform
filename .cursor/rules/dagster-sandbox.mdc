@@ -8,7 +8,7 @@ This rule scopes
 and the frontend
 [`SandboxConsole`](mdc:aqp_client/src/components/sandbox/SandboxConsole.tsx).
 
-Narrative: [aqp_docs/dagster-sandbox.md](mdc:aqp_docs/dagster-sandbox.md).
+Narrative: [aqp_docs/docs/concepts/data/dagster-sandbox.md](mdc:aqp_docs/docs/concepts/data/dagster-sandbox.md).
 Phase plan:
 [.cursor/plans/data-self-service-phase-3.plan.md](mdc:.cursor/plans/data-self-service-phase-3.plan.md).
 

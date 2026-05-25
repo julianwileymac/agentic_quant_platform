@@ -99,8 +99,8 @@ CI flow (see [.github/workflows/](../.github/workflows/)):
 
 ## Related docs
 
-- [../aqp_docs/management-engine.md](../aqp_docs/management-engine.md) - WorkloadRuntime + InfrastructureProvider design
-- [../aqp_docs/terraform-control-plane.md](../aqp_docs/terraform-control-plane.md) - TerraformRuntime, spec hashing, OPA policy
-- [../aqp_docs/kubernetes-rpi-deployment.md](../aqp_docs/kubernetes-rpi-deployment.md) - Edge cluster topology
-- [../aqp_docs/operations/](../aqp_docs/operations/) - Runbooks for deploy / rollback / incident response
+- [../aqp_docs/docs/concepts/identity/management-engine.md](../aqp_docs/docs/concepts/identity/management-engine.md) - WorkloadRuntime + InfrastructureProvider design
+- [../aqp_docs/docs/concepts/infrastructure/terraform-control-plane.md](../aqp_docs/docs/concepts/infrastructure/terraform-control-plane.md) - TerraformRuntime, spec hashing, OPA policy
+- [../aqp_docs/docs/concepts/infrastructure/kubernetes-rpi-deployment.md](../aqp_docs/docs/concepts/infrastructure/kubernetes-rpi-deployment.md) - Edge cluster topology
+- [../aqp_docs/docs/how-to/operations/](../aqp_docs/docs/how-to/operations/) - Runbooks for deploy / rollback / incident response
 - [../aqp_index/index.md](../aqp_index/index.md) - Curator-owned project index

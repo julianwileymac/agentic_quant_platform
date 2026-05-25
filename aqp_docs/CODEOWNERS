@@ -1,0 +1,64 @@
+# aqp_docs/CODEOWNERS
+#
+# Maps every docs subdirectory to one engineering owner + one docs
+# reviewer. The "Was this helpful?" Cloudflare Worker reads this file
+# to route the resulting GitHub Issue at filing time, and the docs-CI
+# workflow requires a CODEOWNER approval before any merge can land on
+# `main`.
+#
+# Owners listed here MUST match GitHub Teams (case-sensitive).
+# A page's `owner` frontmatter (see src/lib/frontmatterSchema.ts) is
+# the agent-readable equivalent.
+
+# Default — everything not otherwise claimed.
+*                                       @julianwileymac/docs-team
+
+# Configuration + tooling.
+/docusaurus.config.ts                   @julianwileymac/platform-team @julianwileymac/docs-team
+/sidebars.ts                            @julianwileymac/docs-team
+/package.json                           @julianwileymac/platform-team
+/tsconfig.json                          @julianwileymac/platform-team
+/scripts/                               @julianwileymac/platform-team
+/workers/                               @julianwileymac/platform-team @julianwileymac/sre-team
+/src/                                   @julianwileymac/platform-team @julianwileymac/docs-team
+/openapi/                               @julianwileymac/platform-team
+/.vale/                                 @julianwileymac/docs-team
+
+# Get started + tutorials.
+/docs/intro/                            @julianwileymac/docs-team @julianwileymac/platform-team
+/docs/tutorials/                        @julianwileymac/docs-team @julianwileymac/platform-team
+
+# How-to (operations + runbooks + mlops + recipes).
+/docs/how-to/operations/                @julianwileymac/sre-team @julianwileymac/docs-team
+/docs/how-to/runbooks/                  @julianwileymac/sre-team @julianwileymac/docs-team
+/docs/how-to/mlops/                     @julianwileymac/ml-team @julianwileymac/docs-team
+/docs/how-to/recipes/                   @julianwileymac/docs-team
+
+# Concepts.
+/docs/concepts/platform/                @julianwileymac/platform-team @julianwileymac/docs-team
+/docs/concepts/data/                    @julianwileymac/data-team @julianwileymac/docs-team
+/docs/concepts/strategy/                @julianwileymac/strategy-team @julianwileymac/docs-team
+/docs/concepts/rl/                      @julianwileymac/rl-team @julianwileymac/docs-team
+/docs/concepts/agentic/                 @julianwileymac/agentic-team @julianwileymac/docs-team
+/docs/concepts/trading/                 @julianwileymac/trading-team @julianwileymac/docs-team
+/docs/concepts/identity/                @julianwileymac/identity-team @julianwileymac/docs-team
+/docs/concepts/infrastructure/          @julianwileymac/infra-team @julianwileymac/docs-team
+
+# Reference. API/Python references are auto-generated; only the index
+# pages get human edits.
+/docs/reference/api/                    @julianwileymac/platform-team @julianwileymac/docs-team
+/docs/reference/manage-api/             @julianwileymac/platform-team @julianwileymac/docs-team
+/docs/reference/python/                 @julianwileymac/platform-team
+/docs/reference/data-dictionary/        @julianwileymac/data-team @julianwileymac/docs-team
+
+# Architecture decisions — engineering signoff required for new ADRs.
+/docs/architecture/                     @julianwileymac/platform-team @julianwileymac/docs-team
+
+# Release notes — emitted by Changesets; PMs review.
+/docs/release-notes/                    @julianwileymac/docs-team
+
+# Archive — read-only; only the docs lead can move things in or out.
+/docs/archive/                          @julianwileymac/docs-team
+
+# Internal — Cloudflare Access-gated.
+/docs/internal/                         @julianwileymac/sre-team @julianwileymac/platform-team

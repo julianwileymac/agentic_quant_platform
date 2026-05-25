@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 
 _BEARER_METHODS = ["header"]
-_DOCUMENTATION_URL = "https://github.com/julianwileymac/agentic_quant_platform/blob/main/aqp_docs/data-mcp.md"
+_DOCUMENTATION_URL = "https://github.com/julianwileymac/agentic_quant_platform/blob/main/aqp_docs/docs/concepts/data/data-mcp.md"
 
 
 def _safe_origin() -> str:
@@ -85,6 +85,23 @@ def _codebase_mcp_uri() -> str:
     return ""
 
 
+def _docs_mcp_uri() -> str:
+    """Return the canonical URI for the docs.aqp.fund MCP Worker.
+
+    Unlike the data + codebase MCP servers (which live inside the AQP
+    backend), the docs MCP lives on a Cloudflare Worker at
+    ``https://docs.aqp.fund/mcp``. The backend still publishes its
+    Protected Resource Metadata document at
+    ``/.well-known/oauth-protected-resource/mcp/docs`` so internal
+    callers (notably the ``data.docs.*`` DataMCPTools) can discover
+    the matching audience claim. See AGENTS rule 49.
+    """
+    explicit = str(getattr(settings, "mcp_docs_canonical_uri", "") or "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    return "https://docs.aqp.fund/mcp"
+
+
 def _authorization_servers() -> list[str]:
     """Return the configured issuer as a single-entry list when present.
 
@@ -115,6 +132,11 @@ def _scopes_supported_data() -> list[str]:
 
 def _scopes_supported_codebase() -> list[str]:
     return ["code:read", "code:write", "agents:invoke"]
+
+
+def _scopes_supported_docs() -> list[str]:
+    """Scopes the docs MCP Worker recognises."""
+    return ["docs:read", "docs:search"]
 
 
 def _metadata_document(
@@ -180,6 +202,23 @@ def build_well_known_router() -> APIRouter:
             resource=_codebase_mcp_uri(),
             scopes=_scopes_supported_codebase(),
             description="AQP Codebase MCP",
+        )
+
+    @router.get("/oauth-protected-resource/mcp/docs", response_model=None)
+    def docs_mcp_metadata() -> dict[str, Any]:
+        """Documents the docs.aqp.fund MCP Worker.
+
+        The actual server lives on a Cloudflare Worker (see
+        ``aqp_docs/workers/mcp/``). The backend publishes the
+        Protected Resource Metadata here so internal callers — the
+        ``data.docs.*`` DataMCPTools in particular — can mint
+        audience-bound M2M tokens that the Worker will accept (AGENTS
+        rule 49).
+        """
+        return _metadata_document(
+            resource=_docs_mcp_uri(),
+            scopes=_scopes_supported_docs(),
+            description="AQP Docs MCP (Cloudflare Worker)",
         )
 
     return router

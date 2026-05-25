@@ -24,7 +24,7 @@ strategy:
   module_path: aqp.strategies.hft.alphas
   # The following kwargs are *whitelisted* for the
   # data.strategy_config.update DataMCPTool. See
-  # aqp_docs/portfolio-options-mm.md for the closed-form derivation.
+  # aqp_docs/docs/concepts/strategy/portfolio-options-mm.md for the closed-form derivation.
   kwargs:
     gamma_inv: 0.05
     base_spread: 0.05

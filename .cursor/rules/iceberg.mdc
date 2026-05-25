@@ -19,8 +19,8 @@ alwaysApply: false
 
 This rule scopes the Iceberg-write contract that AGENTS.md hard rules
 **3, 18, 21, 23** describe. The narrative walkthroughs are
-[aqp_docs/data-catalog.md](mdc:aqp_docs/data-catalog.md) and
-[aqp_docs/data-layer-unification.md](mdc:aqp_docs/data-layer-unification.md).
+[aqp_docs/docs/concepts/data/data-catalog.md](mdc:aqp_docs/docs/concepts/data/data-catalog.md) and
+[aqp_docs/docs/concepts/data/data-layer-unification.md](mdc:aqp_docs/docs/concepts/data/data-layer-unification.md).
 
 ## Hard rules
 

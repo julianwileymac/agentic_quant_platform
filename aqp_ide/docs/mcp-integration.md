@@ -115,8 +115,8 @@ Outline:
 
 ## AQP-side references
 
-- `aqp_docs/data-mcp.md` (DataMCP boundary)
-- `aqp_docs/codebase-mcp.md` (Codebase MCP)
-- `aqp_docs/identity.md` (IdentityProvider + audiences)
+- `aqp_docs/docs/concepts/data/data-mcp.md` (DataMCP boundary)
+- `aqp_docs/docs/concepts/data/codebase-mcp.md` (Codebase MCP)
+- `aqp_docs/docs/concepts/identity/identity.md` (IdentityProvider + audiences)
 - `aqp/api/well_known.py` (RFC 9728 Protected Resource Metadata endpoints)
 - `aqp/api/mcp_audience.py` (RFC 8707 audience validation)

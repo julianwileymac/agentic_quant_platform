@@ -55,7 +55,7 @@ package imports `aqp.*`.
   [`aqp.config.defaults`](mdc:aqp/config/defaults.py)).
 - Custom-claim namespace is :attr:`Settings.auth_claims_namespace`
   (default ``https://aqp/``). See
-  [aqp_docs/auth0-actions.md](mdc:aqp_docs/auth0-actions.md) for the
+  [aqp_docs/docs/concepts/identity/auth0-actions.md](mdc:aqp_docs/docs/concepts/identity/auth0-actions.md) for the
   Action snippet.
 
 ## Lazy provisioning
@@ -97,5 +97,5 @@ package imports `aqp.*`.
   values from the verified JWT + tenancy headers (see
   [`build_mcp_router`](mdc:aqp/data/mcp/server.py)).
 
-Canonical doc: [aqp_docs/identity.md](mdc:aqp_docs/identity.md) + the new
-[aqp_docs/auth0-actions.md](mdc:aqp_docs/auth0-actions.md).
+Canonical doc: [aqp_docs/docs/concepts/identity/identity.md](mdc:aqp_docs/docs/concepts/identity/identity.md) + the new
+[aqp_docs/docs/concepts/identity/auth0-actions.md](mdc:aqp_docs/docs/concepts/identity/auth0-actions.md).

@@ -6,7 +6,7 @@ This rule scopes
 and the frontend
 [`ConnectorBuilderForm`](mdc:aqp_client/src/components/airbyte/builder/ConnectorBuilderForm.tsx).
 
-Narrative: [aqp_docs/airbyte-builder.md](mdc:aqp_docs/airbyte-builder.md).
+Narrative: [aqp_docs/docs/concepts/data/airbyte-builder.md](mdc:aqp_docs/docs/concepts/data/airbyte-builder.md).
 Phase plan:
 [.cursor/plans/data-self-service-phase-2.plan.md](mdc:.cursor/plans/data-self-service-phase-2.plan.md).
 

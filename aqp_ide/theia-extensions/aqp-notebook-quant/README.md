@@ -52,4 +52,4 @@ NEVER print secret material.
 
 - [../../docs/notebook.md](../../docs/notebook.md)
 - The Python helpers contract: `aqp/notebook/helpers.py`
-- `aqp_docs/data-mcp.md` (DataMCP, AQP rule 22)
+- `aqp_docs/docs/concepts/data/data-mcp.md` (DataMCP, AQP rule 22)

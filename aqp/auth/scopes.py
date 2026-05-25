@@ -82,7 +82,7 @@ class AQPScope:
     Every scope used by the control plane lives here. Do not hand-write
     a scope string in route code — import it from this class so refactors
     stay grep-able and the Terraform Auth0 module + Auth0 dashboard +
-    aqp_docs/scopes.md stay aligned.
+    aqp_docs/docs/concepts/platform/scopes.md stay aligned.
     """
 
     # --- Data plane ---------------------------------------------------------

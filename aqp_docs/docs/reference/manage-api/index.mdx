@@ -1,0 +1,50 @@
+---
+title: 'Control-plane API'
+summary: 'Interactive Scalar-rendered reference for the control plane at manage.aqp.fund. Workload lifecycle, Terraform driver, provider adapters.'
+owner: platform-team
+last_reviewed: 2026-05-25
+audience: both
+---
+
+# Control-plane API
+
+This is the `aqp_control_plane` surface at `manage.aqp.fund`. It is
+deliberately separate from the public AQP API; it owns workload
+lifecycle, the `TerraformRuntime`, provider adapters, and the
+`workload_runs` audit ledger.
+
+The spec lives at
+[aqp_docs/openapi/control-plane.json](https://github.com/julianwileymac/agentic_quant_platform/blob/main/aqp_docs/openapi/control-plane.json),
+auto-dumped by the existing `openapi-export` job in
+[.github/workflows/ci.yml](https://github.com/julianwileymac/agentic_quant_platform/blob/main/.github/workflows/ci.yml).
+
+## Surface
+
+- **`/manage/workloads/*`** — start / stop / scale / restart / exec /
+  tail-logs / apply_config / rotate-secret.
+- **`/manage/topology/*`** — service URL resolution (AGENTS rule 47).
+- **`/manage/terraform/*`** — Terraform plan / apply / destroy through
+  `TerraformRuntime` (AGENTS rules 42, 43).
+- **`/manage/cloudflare/*`** — tunnel + DNS + Access app CRUD.
+- **`/manage/auth/*`** — IdP wiring (Auth0, Entra).
+- **`/manage/tenancy/*`** — `EntraTenantLink` lifecycle (AGENTS rule 44).
+- **`/manage/agents/health`** — agent stall watchdog snapshot.
+- **`/manage/workflows/halt`** — kill-switch fan-out.
+
+## Audit ledger
+
+Every workload action writes a `workload_runs` row BEFORE executing
+through the provider. See
+[Concept: management engine](../../concepts/identity/management-engine.md)
+for the full audit contract.
+
+import { ApiReferenceReact } from '@scalar/api-reference-react';
+
+<ApiReferenceReact configuration={{ spec: { url: '/openapi/control-plane.json' } }} />
+
+## Authentication
+
+Same Auth0 / Entra IdP chain as the public API; access is restricted
+to the `admin:cluster` scope (engineering org) and the per-org
+`admin:org` scope (customer orgs). Cloudflare Access policies in
+front of `manage.aqp.fund` enforce the perimeter at the edge.

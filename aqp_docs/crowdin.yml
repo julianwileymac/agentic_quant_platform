@@ -1,0 +1,60 @@
+# crowdin.yml — Crowdin localisation config for docs.aqp.fund.
+#
+# https://docs.crowdin.com/cli/configuration-file
+#
+# Phase 5: Spanish (`es`) is the first non-English locale. The
+# auto-generated reference trees (api / manage-api / python /
+# data-dictionary) stay English-only — translating Pydantic model
+# field names is anti-value.
+#
+# Hard rules respected:
+#   - AGENTS rule 26 (CredentialResolver): the `api_token` field
+#     is empty. crowdin pulls the token from the CROWDIN_API_TOKEN
+#     env var injected by Vault via ExternalSecret on the runner.
+#   - aqp-management-engine always-on: token never logged.
+
+# Required by Crowdin CLI — but value comes from CROWDIN_API_TOKEN env.
+project_id_env: CROWDIN_PROJECT_ID
+api_token_env: CROWDIN_API_TOKEN
+base_path: '.'
+
+preserve_hierarchy: true
+
+files:
+  # Narrative docs — yes translate.
+  - source: 'docs/intro/**/*.{md,mdx}'
+    translation: 'i18n/%two_letters_code%/docusaurus-plugin-content-docs/current/intro/**/%original_file_name%'
+  - source: 'docs/tutorials/**/*.{md,mdx}'
+    translation: 'i18n/%two_letters_code%/docusaurus-plugin-content-docs/current/tutorials/**/%original_file_name%'
+  - source: 'docs/how-to/**/*.{md,mdx}'
+    translation: 'i18n/%two_letters_code%/docusaurus-plugin-content-docs/current/how-to/**/%original_file_name%'
+  - source: 'docs/concepts/**/*.{md,mdx}'
+    translation: 'i18n/%two_letters_code%/docusaurus-plugin-content-docs/current/concepts/**/%original_file_name%'
+  - source: 'docs/architecture/**/*.{md,mdx}'
+    translation: 'i18n/%two_letters_code%/docusaurus-plugin-content-docs/current/architecture/**/%original_file_name%'
+  - source: 'docs/release-notes/**/*.{md,mdx}'
+    translation: 'i18n/%two_letters_code%/docusaurus-plugin-content-docs/current/release-notes/**/%original_file_name%'
+
+  # UI strings — translation JSON files emitted by `docusaurus write-translations`.
+  - source: 'i18n/en/docusaurus-theme-classic/**/*.json'
+    translation: 'i18n/%two_letters_code%/docusaurus-theme-classic/**/%original_file_name%'
+  - source: 'i18n/en/docusaurus-plugin-content-docs/current.json'
+    translation: 'i18n/%two_letters_code%/docusaurus-plugin-content-docs/current.json'
+
+# Locales — extend the list when adding new ones (Phase 6: zh-CN).
+locales:
+  - es
+
+# Pre-translation: Crowdin's AI Translator does the first pass on
+# new sources; human translators clean up. Per the migration plan's
+# caveat, MDX JSX fragments are fragile in Crowdin so the import
+# rules use strict markdown semantics.
+import_options:
+  format: mdx
+  multi_translations: 1
+
+settings:
+  use_smart_paths: true
+  skip_untranslated_files: false
+  skip_untranslated_strings: true
+  export_only_approved: false

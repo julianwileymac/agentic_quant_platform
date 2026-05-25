@@ -9,7 +9,7 @@ The abstraction lets AQP run fully standalone (no cluster), attach to
 the rpi_kubernetes management API, run inside a cluster with the
 official Kubernetes Python SDK, or treat the local Docker Compose
 stack as the cluster surface. The narrative walk-through lives in
-[aqp_docs/kubernetes-adapter.md](mdc:aqp_docs/kubernetes-adapter.md).
+[aqp_docs/docs/concepts/infrastructure/kubernetes-adapter.md](mdc:aqp_docs/docs/concepts/infrastructure/kubernetes-adapter.md).
 
 ## Hard rules
 

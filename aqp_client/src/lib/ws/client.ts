@@ -20,6 +20,20 @@ export interface WsClientOptions<TIn> {
   maxBackoffMs?: number;
   /** Optional heartbeat ping payload sent every `intervalMs`. */
   heartbeat?: { intervalMs: number; payload: unknown };
+  /**
+   * Phase 3 (WS replay) of the cloud-dash refactor.
+   *
+   * Invoked before every *reconnect* (NOT the initial open) with the
+   * current reconnect attempt index (1-based). The hook MAY fetch a
+   * replay endpoint and synthesise messages by calling `onMessage`
+   * itself BEFORE the live socket opens — that preserves
+   * chronological ordering even when the server keeps producing
+   * frames during the disconnect window. The promise (if any) is
+   * awaited; rejections are caught and logged. The hook is
+   * deliberately NOT called on the very first open so the
+   * happy-path latency is unchanged.
+   */
+  beforeReconnect?: (attempt: number) => Promise<void> | void;
 }
 
 export interface WsClient<TOut> {
@@ -75,6 +89,7 @@ export function createWsClient<TIn = unknown, TOut = unknown>(
     backoffMs = DEFAULT_BACKOFF,
     maxBackoffMs = DEFAULT_MAX_BACKOFF,
     heartbeat,
+    beforeReconnect,
   } = options;
 
   let ws: WebSocket | null = null;
@@ -149,19 +164,46 @@ export function createWsClient<TIn = unknown, TOut = unknown>(
     });
   };
 
+  const runBeforeReconnect = async (): Promise<void> => {
+    if (!beforeReconnect || attempts <= 0) return;
+    try {
+      await beforeReconnect(attempts);
+    } catch (err) {
+      // Replay hook is best-effort. The live socket will still
+      // reopen even if the replay endpoint is unreachable.
+      console.warn("ws beforeReconnect hook failed:", err);
+    }
+  };
+
   const open = () => {
     if (ws && ws.readyState <= WebSocket.OPEN) return;
     manuallyClosed = false;
     authenticated = false;
     setStatus("connecting");
-    let socket: WebSocket;
-    try {
-      socket = new WebSocket(buildUrl());
-    } catch {
-      setStatus("error");
-      return;
-    }
-    ws = socket;
+    // Phase 3 (WS replay): fire beforeReconnect (if any) BEFORE we
+    // attempt the upstream socket so the replay endpoint can hydrate
+    // the UI with the gap the disconnect produced. We deliberately
+    // await asynchronously so the socket open doesn't race the
+    // replay; subscribers tolerate the brief delay on a reconnect.
+    runBeforeReconnect()
+      .catch(() => {
+        /* swallowed inside runBeforeReconnect */
+      })
+      .then(() => {
+        if (manuallyClosed) return;
+        let socket: WebSocket;
+        try {
+          socket = new WebSocket(buildUrl());
+        } catch {
+          setStatus("error");
+          return;
+        }
+        ws = socket;
+        wireSocket(socket);
+      });
+  };
+
+  const wireSocket = (socket: WebSocket): void => {
     socket.onopen = () => {
       attempts = 0;
       // Send the Phase 3a first-frame auth payload BEFORE flipping

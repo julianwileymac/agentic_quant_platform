@@ -385,7 +385,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
 
   // Consolidated strategy authoring + testing umbrella. See
-  // aqp_docs/strategy-development.md. Replaces the fragmented ml-test entry
+  // aqp_docs/docs/concepts/strategy/strategy-development.md. Replaces the fragmented ml-test entry
   // (factor workbench / backtest list / monte carlo / optimizer remain
   // standalone because they are *consumption*, not authoring, surfaces).
   {

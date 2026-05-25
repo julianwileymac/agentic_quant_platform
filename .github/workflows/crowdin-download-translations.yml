@@ -1,0 +1,37 @@
+name: crowdin-download-translations
+
+# Pulls translated bundles from Crowdin daily and opens a single PR.
+
+on:
+  schedule:
+    # 07:00 UTC every day.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crowdin/github-action@v2
+        with:
+          upload_sources: false
+          upload_translations: false
+          download_translations: true
+          create_pull_request: true
+          pull_request_title: "docs(i18n): refresh translations from Crowdin"
+          pull_request_body: |
+            Daily Crowdin translation refresh. Review changes per locale.
+          pull_request_base_branch_name: main
+          localization_branch_name: docs/crowdin-translations
+          source: aqp_docs
+          base_url: https://api.crowdin.com
+          base_path: aqp_docs
+          config: aqp_docs/crowdin.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_API_TOKEN }}

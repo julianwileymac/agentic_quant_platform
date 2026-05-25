@@ -87,8 +87,8 @@ yarn browser start         # connect to http://localhost:3000
 | [docs/retire-vendored-workspace.md](docs/retire-vendored-workspace.md) | operators | Checklist to delete `test_theia/theia-ide` |
 | [docs/aqp-monorepo-paths.md](docs/aqp-monorepo-paths.md) | developers | In-IDE path contract |
 | [docs/code-index.md](docs/code-index.md) | agents | Ownership map (curator-managed) |
-| [../aqp_docs/aqp-ide.md](../aqp_docs/aqp-ide.md) | monorepo readers | SSoT pointer from the AQP docs side |
-| [../aqp_docs/aqp-ide-roadmap.md](../aqp_docs/aqp-ide-roadmap.md) | engineering | Blueprint → AQP phasing |
+| [../aqp_docs/docs/concepts/infrastructure/aqp-ide.md](../aqp_docs/docs/concepts/infrastructure/aqp-ide.md) | monorepo readers | SSoT pointer from the AQP docs side |
+| [../aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md](../aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md) | engineering | Blueprint → AQP phasing |
 
 ## Hard rules + governance
 
@@ -115,7 +115,7 @@ The retirement of the vendored `test_theia/theia-ide` workspace lives at
 | A white-labeled Theia 1.72 distribution + 6 AQP extensions | A fork of Theia |
 | The developer environment for AQP (notebook, MCP copilot, spec authoring) | A replacement for `aqp_client/` (the Vite operator UI) |
 | Driven by `aqp-cli ide` for production use | Driven by `yarn` for production use (yarn is inner-loop dev only) |
-| Aligned with the [AQP IDE blueprint](../aqp_docs/aqp-ide-roadmap.md) | A clone of Bloomberg / Beacon / Numerix / GS Quant |
+| Aligned with the [AQP IDE blueprint](../aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md) | A clone of Bloomberg / Beacon / Numerix / GS Quant |
 
 ---
 

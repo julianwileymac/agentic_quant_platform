@@ -1,0 +1,10 @@
+# overrides.yml — Fern-specific overrides on top of openapi/aqp.json.
+#
+# Use sparingly. The committed openapi.json is the source of truth;
+# overrides here are for SDK-emit-only concerns (e.g., changing a
+# generic Python `Dict[str, Any]` schema to something more typed in
+# the TS SDK, or adding examples that don't belong in the public
+# OpenAPI spec).
+#
+# Phase 1 ships with an empty override map.
+{}

@@ -118,5 +118,5 @@ are preserved through deprecation-warning shims in
 [`../aqp/llm/ollama_client.py`](../aqp/llm/ollama_client.py). Old call
 sites keep working through one release cycle; new code should import
 from `aqp_models.*` directly. See
-[`../aqp_docs/repository-split.md`](../aqp_docs/repository-split.md) for
+[`../aqp_docs/docs/concepts/platform/repository-split.md`](../aqp_docs/docs/concepts/platform/repository-split.md) for
 the full strangler-migration policy.

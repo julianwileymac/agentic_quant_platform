@@ -31,8 +31,8 @@ migration-editing and ORM-pickling.
    - Confirm down-revision points at the previous head.
 4. **Update docs alongside the migration.** Adding a table or column
    means a one-line addition to
-   [aqp_docs/data-dictionary.md](mdc:aqp_docs/data-dictionary.md) and an
-   ERD entry in [aqp_docs/erd.md](mdc:aqp_docs/erd.md) in the same PR.
+   [aqp_docs/docs/reference/data-dictionary/index.mdx](mdc:aqp_docs/docs/reference/data-dictionary/index.mdx) and an
+   ERD entry in [aqp_docs/docs/concepts/platform/erd.md](mdc:aqp_docs/docs/concepts/platform/erd.md) in the same PR.
 5. **All ledger writes go through
    [`LedgerWriter`](mdc:aqp/persistence/ledger.py).** Never insert
    directly into ledger tables from a route, task, or subsystem
@@ -58,8 +58,8 @@ migration-editing and ORM-pickling.
 3. Inspect + fix indexes / constraints / defaults in the generated
    file.
 4. Apply: `docker exec aqp-api alembic upgrade head`.
-5. Update [aqp_docs/data-dictionary.md](mdc:aqp_docs/data-dictionary.md).
-6. Update the per-domain ERD in [aqp_docs/erd.md](mdc:aqp_docs/erd.md).
+5. Update [aqp_docs/docs/reference/data-dictionary/index.mdx](mdc:aqp_docs/docs/reference/data-dictionary/index.mdx).
+6. Update the per-domain ERD in [aqp_docs/docs/concepts/platform/erd.md](mdc:aqp_docs/docs/concepts/platform/erd.md).
 7. If an agent will read it, add a `DataMCPTool` — see
    [data-mcp.mdc](mdc:.cursor/rules/data-mcp.mdc).
 

@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     # IdentityProvider. The multi-tenant default authority
     # ``/organizations`` accepts users from any Entra tenant (B2B / external
     # enterprise clients); pin to ``/{tenant_id}`` for single-tenant.
-    # See aqp_docs/msal-entra-setup.md for the full app-reg walkthrough.
+    # See aqp_docs/docs/concepts/identity/msal-entra-setup.md for the full app-reg walkthrough.
     auth_msal_tenant_id: str = Field(default="")
     auth_msal_client_id: str = Field(default="")
     auth_msal_client_secret: str = Field(default="")
@@ -218,6 +218,32 @@ class Settings(BaseSettings):
     # deployments SHOULD set them explicitly.
     mcp_data_canonical_uri: str = Field(default="")
     mcp_codebase_canonical_uri: str = Field(default="")
+    # ``mcp_docs_canonical_uri`` is the third MCP audience claim, scoped
+    # to the docs site MCP Worker at https://docs.aqp.fund/mcp. The
+    # Worker lives outside the cluster (Cloudflare Pages); the AQP
+    # backend still publishes the Protected Resource Metadata at
+    # /.well-known/oauth-protected-resource/mcp-docs and validates the
+    # audience here so in-cluster callers that delegate to the docs
+    # server get the same RFC 9728 + 8707 guarantees as data + codebase.
+    # See aqp_docs/workers/mcp/index.ts and aqp_docs/concepts/data/data-mcp.
+    mcp_docs_canonical_uri: str = Field(default="")
+    # --- Docs freshness watchdog (Phase 6 of the docs migration) ---
+    # The Celery beat task ``aqp.tasks.docs_freshness_tasks.scan_stale_pages``
+    # opens a GitHub Issue per page whose ``last_reviewed`` frontmatter
+    # is more than ``docs_freshness_threshold_days`` old. Defaults to
+    # 180 days, the value documented in
+    # ``aqp_docs/docs/intro/conventions.md``.
+    docs_freshness_threshold_days: int = Field(default=180)
+    # ``docs_github_repo`` — the slug used by the docs-freshness +
+    # feedback workers when opening issues. Defaults to the main
+    # repo; production deployments MAY override (e.g., when running
+    # the docs site against a fork during a migration).
+    docs_github_repo: str = Field(default="julianwileymac/agentic_quant_platform")
+    # Beat cadence for the docs freshness scan. Defaults to one
+    # week (seconds). The scan itself is cheap (walks the docs
+    # tree + parses frontmatter); the per-page GitHub Issue calls
+    # are de-duped at the GitHub side via the labelling scheme.
+    docs_freshness_scan_period_seconds: int = Field(default=7 * 24 * 3600)
     # ``off`` skips audience enforcement (rollout default). ``permissive``
     # logs would-be denies + tags the OTEL span without rejecting.
     # ``strict`` returns 401 with the RFC 9728 ``WWW-Authenticate``
@@ -348,12 +374,12 @@ class Settings(BaseSettings):
     # Auth0 enforces the lower of this and the API record's token TTL.
     auth_agent_delegation_ttl_seconds: int = Field(default=300)
     # AQP-namespaced custom claim prefix injected by the Auth0 Action.
-    # See ``aqp_docs/auth0-actions.md``. Decoupled from the issuer URL so
+    # See ``aqp_docs/docs/concepts/identity/auth0-actions.md``. Decoupled from the issuer URL so
     # the same Action works against staging / prod tenants without
     # rebuilding the SPA.
     #
     # Canonical namespace as of the refactor is ``https://aqp.internal/``
-    # (per ADR 003 — `aqp_docs/architecture/decisions/003-auth0-zero-trust.md`).
+    # (per ADR 003 — `aqp_docs/docs/architecture/decisions/003-auth0-zero-trust.md`).
     # The legacy ``https://aqp/`` namespace continues to be read for one
     # release via ``auth_claims_namespace_aliases`` so existing tokens
     # validate during the rollout window.
@@ -411,6 +437,16 @@ class Settings(BaseSettings):
     # --- Redis ---
     redis_url: str = Field(default="redis://localhost:6379/0")
     redis_pubsub_url: str = Field(default="redis://localhost:6379/1")
+
+    # --- WebSocket replay stream (Phase 3 of the cloud-dash refactor) ---
+    # Every ``emit(...)`` from :mod:`aqp.tasks._progress` is dual-written to
+    # ``aqp:task:frames:<task_id>`` so a reconnecting WS client can replay
+    # what it missed during the disconnect window. The ``maxlen`` cap is
+    # approximate (Redis ``MAXLEN ~``); ``ttl_seconds`` is the eventual
+    # cleanup floor for streams whose worker exited without calling
+    # :func:`aqp.ws.broker.prune_replay_stream`.
+    task_replay_maxlen: int = Field(default=10_000)
+    task_replay_ttl_seconds: int = Field(default=86_400)
 
     # --- Metadata cache (data fabric phase 0) ---
     # Whitelist-only entity dropdowns (datasets / namespaces / sinks /
@@ -1007,7 +1043,7 @@ class Settings(BaseSettings):
     orchestration_max_debate_rounds: int = Field(default=2)
     # Per-node halt check timeout used by ``WorkflowRuntime`` between
     # adapter transitions. Kept short so a flipped kill switch is
-    # observed inside the SLA from ``aqp_docs/orchestration-refactor-rollout.md``.
+    # observed inside the SLA from ``aqp_docs/docs/concepts/agentic/orchestration-refactor-rollout.md``.
     orchestration_halt_check_timeout_seconds: float = Field(default=1.0)
 
     # --- Assistant Engine (additive layer on top of the orchestration

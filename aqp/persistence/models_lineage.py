@@ -37,7 +37,7 @@ def _uuid() -> str:
 # ``transform_kind`` is intentionally a free-form string so new motion
 # kinds (e.g. dbt-streaming, ksql, vbtpro paper-replay) can be added
 # without an Alembic migration. The canonical values are documented in
-# ``aqp_docs/data-products.md``.
+# ``aqp_docs/docs/concepts/data/data-products.md``.
 LINEAGE_TRANSFORM_KINDS = (
     "iceberg_append",
     "iceberg_create_or_replace",

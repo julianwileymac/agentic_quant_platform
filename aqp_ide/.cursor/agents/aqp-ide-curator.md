@@ -1,6 +1,6 @@
 ---
 name: aqp-ide-curator
-description: Curator for the AQP IDE documentation surface inside `aqp_ide/docs/`, the per-extension `README.md` + `AGENTS.md` for the six AQP extensions, and the monorepo-side `aqp_docs/aqp-ide.md` + `aqp_docs/aqp-ide-roadmap.md` pair. Use proactively after any change under `aqp_ide/theia-extensions/aqp*/`, `aqp_ide/applications/browser/package.json`, `aqp_ide/browser.Dockerfile`, or `aqp_cli/src/aqp_cli/commands/ide.py`. Mirrors the `aqp-index-curator` pattern.
+description: Curator for the AQP IDE documentation surface inside `aqp_ide/docs/`, the per-extension `README.md` + `AGENTS.md` for the six AQP extensions, and the monorepo-side `aqp_docs/docs/concepts/infrastructure/aqp-ide.md` + `aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md` pair. Use proactively after any change under `aqp_ide/theia-extensions/aqp*/`, `aqp_ide/applications/browser/package.json`, `aqp_ide/browser.Dockerfile`, or `aqp_cli/src/aqp_cli/commands/ide.py`. Mirrors the `aqp-index-curator` pattern.
 model: gpt-5.5-high
 ---
 
@@ -35,9 +35,9 @@ sync with reality across these files:
 
 ### Monorepo-wide
 
-- `aqp_docs/aqp-ide.md` — SSoT pointer
-- `aqp_docs/aqp-ide-roadmap.md` — phased plan
-- `aqp_docs/index.md` — top-level doc index entry
+- `aqp_docs/docs/concepts/infrastructure/aqp-ide.md` — SSoT pointer
+- `aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md` — phased plan
+- `aqp_docs/docs/intro/index.md` — top-level doc index entry
 - `AGENTS.md` (root) — project map row for `aqp_ide/`
 - `aqp_cli/docs/index.md` — `aqp-cli ide` reference
 
@@ -60,7 +60,7 @@ Reflexively after a change that touches any of:
 2. **Update** stale references (file paths, function names, env vars,
    commands, links).
 3. **Cross-link** in both directions:
-   - In-folder docs link to monorepo-wide docs (`aqp_docs/aqp-ide.md`).
+   - In-folder docs link to monorepo-wide docs (`aqp_docs/docs/concepts/infrastructure/aqp-ide.md`).
    - Monorepo docs link to in-folder docs (`aqp_ide/docs/*`).
 4. **Validate** every link resolves (use `Glob` to confirm file
    existence).
@@ -86,7 +86,7 @@ After every doc change, verify:
 
 1. Every cited file path exists (`Glob` check).
 2. Every `mdc:` link in a rule file resolves.
-3. The `aqp_docs/index.md` table still lists the AQP IDE row.
+3. The `aqp_docs/docs/intro/index.md` table still lists the AQP IDE row.
 4. The root `AGENTS.md` project map row for `aqp_ide/` still mentions
    the six extensions + the `aqp-cli ide` entrypoint.
 
@@ -94,7 +94,7 @@ After every doc change, verify:
 
 - Don't move docs without leaving a forwarding note in
   `aqp_ide/docs/archive/`.
-- Don't merge `aqp_docs/aqp-ide.md` into `aqp_docs/index.md` — the
+- Don't merge `aqp_docs/docs/concepts/infrastructure/aqp-ide.md` into `aqp_docs/docs/intro/index.md` — the
   SSoT pointer pattern is intentional.
 - Don't delete `docs/retire-vendored-workspace.md` even after the
   vendored workspace is gone — it stays for historical audit.

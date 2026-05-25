@@ -12,6 +12,14 @@
 # currently owns aqp.fund. The Sprint 6 cutover plan retires the
 # aqp-client public Ingress (aqp_client is local-only per its
 # updated CUTOVER.md) and flips aqp.fund to aqp-ui.
+#
+# CDN cache strategy (ADR 011 — CDN-fronted standalone for aqp_ui):
+# /_next/static/*     immutable 1y          (hashed filenames)
+# /public/*, /fonts/* immutable 30d         (rarely change)
+# /api/*              no-store              (BFF, user-bound)
+# everything else     1h + stale-while-revalidate=24h
+# Cloudflare in front of this Ingress honours the upstream
+# Cache-Control header for /_next/static/* aggressively.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -26,6 +34,24 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
     cert-manager.io/cluster-issuer: letsencrypt-prod
+    # ADR 011: emit CDN-friendly Cache-Control headers per path
+    # class. The Next.js standalone server normally only sets
+    # cache-control on /_next/static/* — for the rest we layer
+    # NGINX rules so Cloudflare can cache aggressively. The
+    # /api/* override is critical: BFF responses are user-scoped
+    # and MUST NEVER be cached at the edge (AGENTS rule 4 +
+    # always-on aqp-management-engine.mdc).
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      location ~* ^/_next/static/ {
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+      }
+      location ~* ^/(public|fonts|images)/ {
+        add_header Cache-Control "public, max-age=2592000" always;
+      }
+      location ~* ^/api/ {
+        add_header Cache-Control "no-store" always;
+        add_header Pragma "no-cache" always;
+      }
 spec:
   ingressClassName: nginx
   tls:

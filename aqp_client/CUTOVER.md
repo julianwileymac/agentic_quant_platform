@@ -51,7 +51,7 @@ visualization profile, so the compose-managed frontend is published on
      `aqp_client/`.
    - [`../AGENTS.md`](../AGENTS.md) "Where things live" table — change
      the `webui/` entry to `aqp_client/` and add a `webui-legacy/` row.
-   - [`../aqp_docs/architecture.md`](../aqp_docs/architecture.md) — update the
+   - [`../aqp_docs/docs/concepts/platform/architecture.md`](../aqp_docs/docs/concepts/platform/architecture.md) — update the
      UI reference.
 
 6. **Archive the legacy app.**

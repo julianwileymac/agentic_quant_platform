@@ -66,7 +66,7 @@ notebook MIME renderer, or evolve the `aqp-cli ide` entrypoint.
    entry.
 5. Update `docs/quant-widgets.md` + `docs/extensions.md` + the
    in-folder `README.md`.
-6. Cross-link from `aqp_docs/aqp-ide.md` if it surfaces a new monorepo
+6. Cross-link from `aqp_docs/docs/concepts/infrastructure/aqp-ide.md` if it surfaces a new monorepo
    capability.
 
 Reference skill: `aqp_ide/.cursor/skills/aqp-quant-widget/SKILL.md`.

@@ -2,7 +2,7 @@
 
 Welcome. This file is the **human onboarding guide** — pair with
 [AGENTS.md](AGENTS.md) (the AI-agent rule-set) and
-[aqp_docs/architecture.md](aqp_docs/architecture.md) (the system overview).
+[aqp_docs/docs/concepts/platform/architecture.md](aqp_docs/docs/concepts/platform/architecture.md) (the system overview).
 
 ## Prerequisites
 
@@ -120,7 +120,7 @@ The factory pattern is `class` / `module_path` / `kwargs`.
    lineage tables can FK back to it.
 3. If it produces OHLCV bars, wire it into the `provider_for_*`
    lookups in [aqp/data/](aqp/data/).
-4. Document it in [aqp_docs/data-plane.md](aqp_docs/data-plane.md).
+4. Document it in [aqp_docs/docs/concepts/data/data-plane.md](aqp_docs/docs/concepts/data/data-plane.md).
 
 ### Add an API route
 
@@ -183,10 +183,10 @@ Reference example:
    docker exec aqp-api alembic upgrade head
    ```
 
-5. Update [aqp_docs/data-dictionary.md](aqp_docs/data-dictionary.md) with
+5. Update [aqp_docs/docs/reference/data-dictionary/index.mdx](aqp_docs/docs/reference/data-dictionary/index.mdx) with
    the new table's columns.
 6. Add the table to the relevant per-domain ERD in
-   [aqp_docs/erd.md](aqp_docs/erd.md).
+   [aqp_docs/docs/concepts/platform/erd.md](aqp_docs/docs/concepts/platform/erd.md).
 
 ### Add a strategy
 
@@ -196,7 +196,7 @@ Reference example:
 2. Decorate with `@register("MyStrategy")` from
    [aqp/core/registry.py](aqp/core/registry.py).
 3. YAML config under [configs/strategies/](configs/strategies/).
-4. Document in [aqp_docs/factor-research.md](aqp_docs/factor-research.md)
+4. Document in [aqp_docs/docs/concepts/strategy/factor-research.md](aqp_docs/docs/concepts/strategy/factor-research.md)
    if the strategy introduces a new pattern.
 
 ### Add a backtest engine
@@ -236,14 +236,14 @@ AQP, read these in order before you start:
    flips, broker credentials, migrations, immutable spec
    re-snapshots), and the FREEMODE convention for unstructured
    brainstorming.
-3. [aqp_docs/agentic-development.md](aqp_docs/agentic-development.md) —
+3. [aqp_docs/docs/concepts/agentic/agentic-development.md](aqp_docs/docs/concepts/agentic/agentic-development.md) —
    how AQP's spec-pattern relates to the broader "skill artifact"
    vocabulary, plus the consolidated ADLC security manifesto.
 4. [.cursor/rules/](.cursor/rules) — glob-scoped rules. The slim
    `aqp.mdc` always applies; the rest only fire when the agent
    touches files matching their globs (e.g. `iceberg.mdc` only
    activates when working in `aqp/data/`).
-5. [aqp_docs/multi-agent-patterns.md](aqp_docs/multi-agent-patterns.md) —
+5. [aqp_docs/docs/concepts/agentic/multi-agent-patterns.md](aqp_docs/docs/concepts/agentic/multi-agent-patterns.md) —
    when adding a new agent crew, pick the right topology
    (Sequential / Parallel / Debate / Coordinator / ReAct).
 
@@ -362,11 +362,11 @@ pip install -e ".[dev]"
 pnpm --dir aqp_client install
 ```
 
-Canonical paths: [aqp_docs/aqp-monorepo-paths.md](aqp_docs/aqp-monorepo-paths.md).
+Canonical paths: [aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md](aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md).
 
 ## Help / questions
 
-- **Architecture questions**: read [aqp_docs/architecture.md](aqp_docs/architecture.md).
-- **Terminology**: [aqp_docs/glossary.md](aqp_docs/glossary.md).
+- **Architecture questions**: read [aqp_docs/docs/concepts/platform/architecture.md](aqp_docs/docs/concepts/platform/architecture.md).
+- **Terminology**: [aqp_docs/docs/intro/glossary.md](aqp_docs/docs/intro/glossary.md).
 - **Code search**: `rg "<thing>" aqp/`.
 - **Stuck**: file an issue or ping a maintainer. Don't ship a guess.

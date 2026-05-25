@@ -7,8 +7,8 @@ contracts.
 ## Source of truth priority
 
 1. `AGENTS.md` + `.cursor/rules/*.mdc`
-2. `aqp_docs/architecture/decisions/*.md`
-3. `aqp_docs/operations/*.md`
+2. `aqp_docs/docs/architecture/decisions/*.md`
+3. `aqp_docs/docs/how-to/operations/*.md`
 4. `.cursor/research/*.md` (this folder)
 
 If research findings conflict with architecture decisions or hard rules, follow

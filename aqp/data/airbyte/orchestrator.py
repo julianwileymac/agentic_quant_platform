@@ -31,7 +31,7 @@ class AirbyteOrchestrator:
         """Generate stream config from ``fetcher.CANONICAL_SCHEMA_CLASS``.
 
         Matches the Airbyte stream-definition shape documented in
-        `aqp_docs/airbyte-builder.md` and the data-fabric refactor plan:
+        `aqp_docs/docs/concepts/data/airbyte-builder.md` and the data-fabric refactor plan:
           - stream.name = "<provider_slug>_<CanonicalSchemaClassName>"
           - stream.json_schema.{type, properties}
           - stream.supported_sync_modes = ["full_refresh", "incremental"]

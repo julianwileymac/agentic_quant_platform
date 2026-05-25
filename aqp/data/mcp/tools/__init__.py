@@ -20,6 +20,7 @@ from aqp.data.mcp.tools import (  # noqa: F401  (side-effect imports)
     cloudflare,
     datahub,
     discovery,
+    docs,
     entities,
     experiments,
     futures,

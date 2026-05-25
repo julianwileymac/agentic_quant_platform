@@ -1,8 +1,11 @@
 # Subagent registry
 
-> Last refreshed: 2026-05-24 by aqp-index-curator (trigger: AQP IDE
-> enhancement — registered the new `aqp-ide-quant-author` monorepo-level
-> subagent and the `aqp-ide-curator` IDE-scoped subagent).
+> Last refreshed: 2026-05-25 by aqp-index-curator (trigger: enterprise
+> docs migration Phase 0 — rewrote the `aqp-ide-curator` scope
+> description to reference the new
+> `aqp_docs/docs/concepts/infrastructure/aqp-ide.md` +
+> `aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md` paths
+> per `CONCEPT_MAPPING` in `aqp_docs/scripts/migrate-content.py`).
 
 ## What lives here
 
@@ -37,7 +40,7 @@ The registry is rebuilt on each curator pass.
 | aqp-pgvector-implementer | runtime | pgvector control plane | [../../.cursor/agents/aqp-pgvector-implementer.md](../../.cursor/agents/aqp-pgvector-implementer.md) |
 | aqp-vite-analytics-implementer | client | analytics frontend routes | [../../.cursor/agents/aqp-vite-analytics-implementer.md](../../.cursor/agents/aqp-vite-analytics-implementer.md) |
 | aqp-ide-quant-author | ide | Authors new AQP-specific quant widgets, MCP server wirings, copilot tools, copilot prompts, and notebook MIME renderers inside `aqp_ide/theia-extensions/aqp*/`. Goes through HTTP (`AqpApiService`) and MCP only; never imports `agentic_quant_platform` source into Theia TypeScript. | [../../.cursor/agents/aqp-ide-quant-author.md](../../.cursor/agents/aqp-ide-quant-author.md) |
-| aqp-ide-curator | ide | Curator for the AQP IDE doc surface (`aqp_ide/docs/`, per-extension `README.md` + `AGENTS.md` for all six AQP extensions, plus the monorepo-side `aqp_docs/aqp-ide.md` + `aqp_docs/aqp-ide-roadmap.md`). Doc-only; delegates source changes to `aqp-ide-quant-author`. | [../../aqp_ide/.cursor/agents/aqp-ide-curator.md](../../aqp_ide/.cursor/agents/aqp-ide-curator.md) |
+| aqp-ide-curator | ide | Curator for the AQP IDE doc surface (`aqp_ide/docs/`, per-extension `README.md` + `AGENTS.md` for all six AQP extensions, plus the monorepo-side `aqp_docs/docs/concepts/infrastructure/aqp-ide.md` + `aqp_docs/docs/concepts/infrastructure/aqp-ide-roadmap.md`). Doc-only; delegates source changes to `aqp-ide-quant-author`. | [../../aqp_ide/.cursor/agents/aqp-ide-curator.md](../../aqp_ide/.cursor/agents/aqp-ide-curator.md) |
 
 ## Conventions
 

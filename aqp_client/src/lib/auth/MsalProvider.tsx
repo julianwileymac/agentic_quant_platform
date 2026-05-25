@@ -15,7 +15,7 @@ import { setAccessTokenGetter, setStepUpTokenGetter, type StepUpHint } from "./t
  * MSAL / Entra ID branch of the Vite frontend's auth bootstrap.
  *
  * Per the 2026 multi-IdP pattern documented in
- * `aqp_docs/multi-tenancy.md`, MSAL is preferred when `VITE_MSAL_*` env
+ * `aqp_docs/docs/concepts/identity/multi-tenancy.md`, MSAL is preferred when `VITE_MSAL_*` env
  * vars are present; the AuthProvider component picks this branch over
  * `<Auth0Provider>` automatically.
  *

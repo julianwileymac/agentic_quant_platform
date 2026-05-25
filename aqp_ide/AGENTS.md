@@ -46,8 +46,8 @@ Agent entry point for the AQP-vendored Theia IDE.
 ## Parent-repo entry points
 
 - [../AGENTS.md](../AGENTS.md) — AQP monorepo agent contract
-- [../aqp_docs/index.md](../aqp_docs/index.md) — AQP documentation index
-- [../aqp_docs/aqp-monorepo-paths.md](../aqp_docs/aqp-monorepo-paths.md) —
+- [../aqp_docs/docs/intro/index.md](../aqp_docs/docs/intro/index.md) — AQP documentation index
+- [../aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md](../aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md) —
   canonical monorepo path map (now includes `aqp_ide/`)
 
 ## Scope boundaries
@@ -70,7 +70,7 @@ Agent entry point for the AQP-vendored Theia IDE.
 5. Reference AQP paths through the in-folder
    [docs/aqp-monorepo-paths.md](docs/aqp-monorepo-paths.md). For
    monorepo-wide references, use
-   [../aqp_docs/aqp-monorepo-paths.md](../aqp_docs/aqp-monorepo-paths.md).
+   [../aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md](../aqp_docs/docs/concepts/platform/aqp-monorepo-paths.md).
 6. Don't import from `agentic_quant_platform` source code into Theia
    extension TypeScript — go through HTTP (`AqpApiService`) or the
    DataMCP / CodebaseMCP HTTP surfaces.

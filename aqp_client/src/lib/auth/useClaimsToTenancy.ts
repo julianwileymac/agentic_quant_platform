@@ -6,7 +6,7 @@ import { useTenancyStore } from "@/store/tenancy";
 /**
  * Hydrate the tenancy store from Auth0 custom claims after login.
  *
- * The Auth0 Action (see ``aqp_docs/auth0-actions.md``) injects
+ * The Auth0 Action (see ``aqp_docs/docs/concepts/identity/auth0-actions.md``) injects
  * ``https://aqp.internal/org_id``, ``https://aqp.internal/team_id``,
  * ``https://aqp.internal/workspace_id``, and
  * ``https://aqp.internal/roles`` into the access token (canonical

@@ -135,7 +135,7 @@ AQP rule 4 verbatim.
 2. Update `aqp_ide/docs/extensions.md` with the new file paths.
 3. Update the extension's `README.md`.
 4. If the widget surfaces a new AQP capability that monorepo readers
-   should know about, cross-link from `aqp_docs/aqp-ide.md`.
+   should know about, cross-link from `aqp_docs/docs/concepts/infrastructure/aqp-ide.md`.
 
 ## Step 8 — Validate
 

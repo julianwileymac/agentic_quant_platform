@@ -68,7 +68,7 @@ class CloudProviderStub(InfrastructureProvider):
     # Subclass overrides — name shown in error messages.
     cloud_name: str = "<cloud>"
     follow_up_pr: str = "TBD"
-    docs_link: str = "aqp_docs/operations/add-new-provider.md"
+    docs_link: str = "aqp_docs/docs/how-to/operations/add-new-provider.md"
 
     # When set + the alias is registered, list_deployments + status delegate.
     delegate_kubernetes_alias: str | None = None

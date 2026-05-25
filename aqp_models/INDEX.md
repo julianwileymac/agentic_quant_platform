@@ -17,9 +17,9 @@
 - Persistence models (in monolith): `../aqp/persistence/models_ml.py`,
   `../aqp/persistence/models_alpha_backtest.py`.
 - Spec library: `configs/`.
-- Canonical docs: `../aqp_docs/ml-framework.md`,
-  `../aqp_docs/ml-libraries.md`, `../aqp_docs/ml-flows.md`,
-  `../aqp_docs/ml-alpha-backtest.md`, `../aqp_docs/predictor-hub.md`.
+- Canonical docs: `../aqp_docs/docs/concepts/strategy/ml-framework.md`,
+  `../aqp_docs/docs/concepts/strategy/ml-libraries.md`, `../aqp_docs/docs/concepts/strategy/ml-flows.md`,
+  `../aqp_docs/docs/concepts/strategy/ml-alpha-backtest.md`, `../aqp_docs/docs/concepts/strategy/predictor-hub.md`.
 
 ## Model families
 
@@ -78,4 +78,4 @@ serving primitives, not the gateway.
 
 When all four are met, `aqp_models` is ready to extract into its own
 repository per the Future Repo Split Gate in
-[`../aqp_docs/repository-split.md`](../aqp_docs/repository-split.md).
+[`../aqp_docs/docs/concepts/platform/repository-split.md`](../aqp_docs/docs/concepts/platform/repository-split.md).

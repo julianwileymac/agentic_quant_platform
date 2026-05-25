@@ -138,4 +138,4 @@ if [ -n "${FLINK_SQL}" ]; then
 fi
 
 info "Streaming platform installation complete."
-info "Service URLs (after ingress/DNS): Flink UI, Schema Registry, Kafka Bridge — see aqp_docs/streaming.md"
+info "Service URLs (after ingress/DNS): Flink UI, Schema Registry, Kafka Bridge — see aqp_docs/docs/concepts/data/streaming.md"

@@ -61,7 +61,7 @@ Update the `image` field in `deployment.yaml` to the pinned tag.
 ### Cloudflare tunnel
 
 For a public-facing `ide.aqp.fund`, see the AQP Cloudflare tunnel
-documentation in `aqp_docs/management-engine.md` and the matching
+documentation in `aqp_docs/docs/concepts/identity/management-engine.md` and the matching
 Terraform stack in `aqp_platform/terraform/cloudflare/`. The Cloudflare
 tunnel + DNS entries live in AQP — `rpi_kubernetes` owns ONLY the
 portal's `julianwiley.com` tunnel (per the always-on
@@ -122,7 +122,7 @@ NetworkPolicy in `rpi_kubernetes` continues to deny egress to every
 ## See also
 
 - [cli-entrypoint.md](cli-entrypoint.md) — `aqp-cli ide` reference
-- `aqp_docs/management-engine.md` — AQP cluster + cloudflare ops
-- `aqp_docs/architecture/decisions/004-provider-abstraction.md`
-- `aqp_docs/architecture/decisions/005-separated-control-plane.md`
+- `aqp_docs/docs/concepts/identity/management-engine.md` — AQP cluster + cloudflare ops
+- `aqp_docs/docs/architecture/decisions/004-provider-abstraction.md`
+- `aqp_docs/docs/architecture/decisions/005-separated-control-plane.md`
 - Theia Cloud upstream: https://theia-cloud.io/

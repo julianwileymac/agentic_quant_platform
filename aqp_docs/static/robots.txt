@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /keystatic/
+Disallow: /internal/
+
+# AI / LLM crawlers — explicitly invited to the structured corpora.
+Sitemap: https://docs.aqp.fund/sitemap.xml
+
+# llms.txt + llms-full.txt at the root.
+# https://llmstxt.org/

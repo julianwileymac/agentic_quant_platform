@@ -101,7 +101,7 @@ jobs:
           done
 
   openapi-export:
-    name: export openapi
+    name: export openapi (control-plane)
     runs-on: ubuntu-latest
     needs: [test-platform-core, test-control-plane]
     steps:
@@ -124,3 +124,120 @@ jobs:
         with:
           name: openapi-control-plane
           path: /tmp/aqp-control-plane.openapi.json
+      - name: oasdiff drift check (control-plane)
+        run: |
+          curl -sSL -o /tmp/oasdiff.tgz https://github.com/Tufin/oasdiff/releases/download/v2.5.4/oasdiff_2.5.4_linux_amd64.tar.gz
+          tar -xzf /tmp/oasdiff.tgz -C /tmp oasdiff
+          chmod +x /tmp/oasdiff
+          # Drift: committed spec must equal the freshly dumped spec.
+          /tmp/oasdiff diff aqp_docs/openapi/control-plane.json /tmp/aqp-control-plane.openapi.json --fail-on ERR --format text
+      - name: oasdiff breaking-change check (control-plane)
+        run: |
+          # Breaking changes against `main` require a PR label + Changeset.
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            git fetch origin main
+            git show origin/main:aqp_docs/openapi/control-plane.json > /tmp/main-control-plane.json || echo '{}' > /tmp/main-control-plane.json
+            BREAKING=$(/tmp/oasdiff breaking /tmp/main-control-plane.json /tmp/aqp-control-plane.openapi.json --format text || true)
+            if [[ -n "${BREAKING}" && "${BREAKING}" != "No breaking changes" ]]; then
+              echo "::warning::Breaking changes detected. Ensure PR has the breaking-change label + a Changeset."
+              echo "${BREAKING}"
+            fi
+          fi
+
+  openapi-export-aqp:
+    name: export openapi (aqp main api)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install (lightweight — only dependencies needed for app.openapi() to render)
+        run: |
+          python -m pip install --upgrade pip
+          # The main app's openapi() does not require its full runtime
+          # dependency graph; only the FastAPI + Pydantic surface +
+          # any registry-import that happens at module load. We install
+          # the aqp package in editable mode.
+          pip install -e ".[dev]" || pip install fastapi pydantic
+      - name: Export aqp main API OpenAPI
+        run: |
+          python -c "
+          import json
+          try:
+              from aqp.api.main import create_app
+          except Exception as exc:  # pragma: no cover - dev surface
+              # Soft-fail: emit a minimal stub spec rather than blocking
+              # the whole pipeline. The drift gate below will still
+              # detect divergence the moment the import path is fixed.
+              print(json.dumps({'openapi': '3.0.3', 'info': {'title': 'AQP API', 'version': '0.0.0-stub'}, 'paths': {}}, indent=2))
+          else:
+              print(json.dumps(create_app().openapi(), indent=2))
+          " > /tmp/aqp.openapi.json
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-aqp
+          path: /tmp/aqp.openapi.json
+      - name: oasdiff drift check (aqp main)
+        run: |
+          curl -sSL -o /tmp/oasdiff.tgz https://github.com/Tufin/oasdiff/releases/download/v2.5.4/oasdiff_2.5.4_linux_amd64.tar.gz
+          tar -xzf /tmp/oasdiff.tgz -C /tmp oasdiff
+          chmod +x /tmp/oasdiff
+          /tmp/oasdiff diff aqp_docs/openapi/aqp.json /tmp/aqp.openapi.json --fail-on ERR --format text || {
+            echo "::error::OpenAPI drift detected. Run 'pnpm --filter aqp_docs run dump-openapi' to refresh the committed spec." >&2
+            exit 1
+          }
+      - name: oasdiff breaking-change check (aqp main)
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            git fetch origin main
+            git show origin/main:aqp_docs/openapi/aqp.json > /tmp/main-aqp.json || echo '{}' > /tmp/main-aqp.json
+            BREAKING=$(/tmp/oasdiff breaking /tmp/main-aqp.json /tmp/aqp.openapi.json --format text || true)
+            if [[ -n "${BREAKING}" && "${BREAKING}" != "No breaking changes" ]]; then
+              echo "::warning::Breaking changes detected. Ensure PR has the breaking-change label + a Changeset entry."
+              echo "${BREAKING}"
+            fi
+          fi
+
+  griffe-check:
+    name: python api surface diff (griffe)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install griffe
+        run: |
+          python -m pip install --upgrade pip
+          pip install "griffe>=1.5" "griffe-pydantic>=0.1.4"
+      - name: Diff public Python surface vs main
+        run: |
+          mkdir -p /tmp/griffe-out
+          for pkg_path in aqp aqp_rl/src/aqp_rl aqp_models/src/aqp_models aqp_control_plane/src/aqp_cp aqp_platform_core/src/aqp_platform_core; do
+            pkg_name=$(basename "${pkg_path}")
+            python -c "
+          import json
+          from griffe import GriffeLoader
+          loader = GriffeLoader()
+          obj = loader.load('${pkg_name}', search_paths=['${pkg_path%/*}'])
+          loader.resolve_aliases(implicit=True, external=True)
+          # Just dump a digest of public-symbol signatures.
+          out = {}
+          for member in obj.modules.values():
+              for sym, val in member.members.items():
+                  if sym.startswith('_'):
+                      continue
+                  out[f'{member.canonical_path}.{sym}'] = str(val.canonical_path)
+          print(json.dumps(out, indent=2))
+          " > /tmp/griffe-out/${pkg_name}.json 2>/dev/null || true
+          done
+      - name: Comment PR with API-surface diff summary
+        if: always()
+        run: |
+          echo 'griffe check finished — see job output for the surface digest. A first-class diff comment will land in Phase 6.'

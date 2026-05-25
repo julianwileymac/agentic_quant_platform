@@ -91,4 +91,4 @@ Neo4j is the secondary projection. Hard rules 33-34 in
   [`aqp/graph/events.py`](mdc:aqp/graph/events.py).
 - Don't add a new `*_runs` table without an `experiment_id` FK.
 
-Canonical doc: [aqp_docs/ownership-graph.md](mdc:aqp_docs/ownership-graph.md).
+Canonical doc: [aqp_docs/docs/concepts/platform/ownership-graph.md](mdc:aqp_docs/docs/concepts/platform/ownership-graph.md).

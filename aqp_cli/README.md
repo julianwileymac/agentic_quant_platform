@@ -91,7 +91,7 @@ See [docs/index.md](docs/index.md) for the full operator runbook.
 ## Related
 
 - [aqp_control_plane/](../aqp_control_plane/) — auth + `/manage/*` surface
-- [aqp_docs/management-engine.md](../aqp_docs/management-engine.md) — runtime
+- [aqp_docs/docs/concepts/identity/management-engine.md](../aqp_docs/docs/concepts/identity/management-engine.md) — runtime
   ops architecture
-- [aqp_docs/identity.md](../aqp_docs/identity.md) — IdentityProvider contract
-- [aqp_docs/credentials.md](../aqp_docs/credentials.md) — CredentialResolver
+- [aqp_docs/docs/concepts/identity/identity.md](../aqp_docs/docs/concepts/identity/identity.md) — IdentityProvider contract
+- [aqp_docs/docs/concepts/identity/credentials.md](../aqp_docs/docs/concepts/identity/credentials.md) — CredentialResolver

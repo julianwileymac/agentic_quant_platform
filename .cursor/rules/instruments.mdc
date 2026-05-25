@@ -11,9 +11,9 @@ instrument polymorphic root, the temporal identifier resolver, and the
 continuous futures-curve constructor.
 
 Narrative walkthrough lives in
-[aqp_docs/instrument-taxonomy.md](mdc:aqp_docs/instrument-taxonomy.md),
-[aqp_docs/temporal-identifiers.md](mdc:aqp_docs/temporal-identifiers.md), and
-[aqp_docs/futures-curves.md](mdc:aqp_docs/futures-curves.md).
+[aqp_docs/docs/concepts/platform/instrument-taxonomy.md](mdc:aqp_docs/docs/concepts/platform/instrument-taxonomy.md),
+[aqp_docs/docs/concepts/platform/temporal-identifiers.md](mdc:aqp_docs/docs/concepts/platform/temporal-identifiers.md), and
+[aqp_docs/docs/concepts/data/futures-curves.md](mdc:aqp_docs/docs/concepts/data/futures-curves.md).
 
 ## Hard rules
 

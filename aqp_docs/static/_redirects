@@ -1,0 +1,23 @@
+# Cloudflare Pages — _redirects rules.
+# https://developers.cloudflare.com/pages/configuration/redirects/
+
+# Legacy GitHub-rendered .md paths from before the Docusaurus
+# restructure. Each old top-level subsystem doc resolves to the new
+# Diátaxis path. The mapping mirrors aqp_docs/scripts/migrate-content.py.
+
+/architecture        /concepts/platform/architecture   301
+/erd                 /concepts/platform/erd            301
+/class-diagram       /concepts/platform/class-diagram  301
+/data-dictionary     /reference/data-dictionary        301
+/glossary            /intro/glossary                   301
+/index               /                                 301
+
+# All operations docs.
+/operations/*        /how-to/operations/:splat         301
+/runbooks/*          /how-to/runbooks/:splat           301
+/mlops/*             /how-to/mlops/:splat              301
+
+# Archive preserved.
+/archive/*           /archive/:splat                   301
+
+# Everything else gets the catch-all at the platform concepts root.
