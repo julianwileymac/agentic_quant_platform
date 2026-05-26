@@ -46,3 +46,11 @@ output "github_deployer_role_arn" {
 output "github_deployer_role_name" {
   value = module.github_actions_role.role_name
 }
+
+output "alarm_topic_arn" {
+  value = module.alarms.topic_arn
+}
+
+output "dashboard_name" {
+  value = module.alarms.dashboard_name
+}

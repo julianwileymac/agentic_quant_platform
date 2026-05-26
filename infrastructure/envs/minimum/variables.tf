@@ -50,3 +50,9 @@ variable "github_oidc_provider_arn" {
   type        = string
   description = "ARN of the GitHub OIDC provider created by infrastructure/bootstrap."
 }
+
+variable "environment" {
+  type        = string
+  default     = "minimum"
+  description = "Env slug for SSM publish paths + tags."
+}

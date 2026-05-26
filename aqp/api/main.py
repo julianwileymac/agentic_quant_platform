@@ -318,6 +318,24 @@ def _install_ownership_graph_hooks() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("AQP API starting | env=%s", settings.env)
+    # Phase J — when running on AWS (AQP_DEPLOY_TARGET=aws) hydrate
+    # the Settings instance from /aqp/${env}/* SSM parameters BEFORE
+    # any other bootstrap step reads settings.<knob>. The helper is
+    # a no-op locally + on every non-AWS deployment.
+    try:
+        from aqp.config.aws_bootstrap import hydrate_settings_from_ssm
+
+        hydrate_settings_from_ssm()
+    except Exception:  # noqa: BLE001 - bootstrap is best-effort
+        logger.warning("AWS SSM bootstrap raised; continuing", exc_info=True)
+    # Phase F — augment the OTel pipeline with the AWS exporters when
+    # opted in via AQP_OBS_AWS_ENABLED=true. No-op otherwise.
+    try:
+        from aqp.observability.aws import configure_aws_observability
+
+        configure_aws_observability(service_name="aqp-api")
+    except Exception:  # noqa: BLE001
+        logger.debug("AWS observability bootstrap skipped", exc_info=True)
     _maybe_run_iceberg_bootstrap()
     _maybe_install_m2m_store()
     _maybe_prefetch_metadata_cache()

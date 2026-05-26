@@ -67,13 +67,17 @@ COPY alembic.ini ./
 ###############################################################################
 FROM base AS agent
 
+# ``api`` extra brings FastAPI + uvicorn (the AgentCore HTTP contract
+# expects /ping + /invocations on port 8080).
 RUN uv pip install --system -e ./aqp_platform_core \
-    && uv pip install --system -e ".[auth,otel,cli]"
+    && uv pip install --system -e ".[auth,otel,cli,api]"
 
 RUN chown -R 65532:65532 /app
 USER 65532:65532
 
-EXPOSE 9100
+# AgentCore Runtime invokes via HTTP on port 8080 (the documented
+# runtime contract). ``AQP_AGENTCORE_PORT`` overrides for local dev.
+EXPOSE 8080
 
 ENTRYPOINT []
 CMD ["python", "-m", "aqp.agents.agentcore_entrypoint"]

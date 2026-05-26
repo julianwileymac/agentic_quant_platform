@@ -139,11 +139,6 @@ variable "callback_urls" {
   default = ["https://admin.aqp.fund/oauth/callback"]
 }
 
-variable "kb_sync_lambda_arn" {
-  type    = string
-  default = null
-}
-
 variable "nightly_state_machine_definition_json" {
   type        = string
   default     = "{\"StartAt\": \"NoOp\", \"States\": {\"NoOp\": {\"Type\": \"Succeed\"}}}"
@@ -280,7 +275,25 @@ module "cloudfront" {
 }
 
 ###############################################################################
-# 7. eventbridge_sfn — nightly backtest + KB sync triggers.
+# 7. kb_sync_lambda — lazy Bedrock KB re-ingestion on every S3 PutObject.
+###############################################################################
+
+module "kb_sync_lambda" {
+  source = "../../../../infrastructure/modules/bedrock-kb-sync-lambda"
+
+  environment       = var.environment
+  name_prefix       = var.name_prefix
+  tags              = local.common_tags
+  kms_key_arn       = var.workload_kms_key_arn
+  knowledge_base_id = module.bedrock_kb.kb_id
+  data_source_id    = "default"  # the aws-ia/bedrock/aws module creates a
+                                 # data source named ``default`` when
+                                 # create_default_kb_data_source=true
+  source_bucket_arn = module.bedrock_kb.kb_source_bucket_arn
+}
+
+###############################################################################
+# 8. eventbridge_sfn — nightly backtest cron + S3 -> Lambda KB sync wiring.
 ###############################################################################
 
 module "eventbridge_sfn" {
@@ -292,7 +305,7 @@ module "eventbridge_sfn" {
   kms_key_arn                   = var.workload_kms_key_arn
   state_machine_definition_json = var.nightly_state_machine_definition_json
   kb_source_bucket_name         = module.bedrock_kb.kb_source_bucket
-  kb_sync_lambda_arn            = var.kb_sync_lambda_arn
+  kb_sync_lambda_arn            = module.kb_sync_lambda.lambda_arn
 }
 
 ###############################################################################

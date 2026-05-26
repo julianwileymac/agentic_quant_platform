@@ -234,3 +234,24 @@ resource "aws_ssm_parameter" "bedrock_invoke_policy_arn" {
   type  = "String"
   value = aws_iam_policy.bedrock_invoke_haiku.arn
 }
+
+###############################################################################
+# 8. CloudWatch alarms — RDS + Redis + Bedrock. ALB + ECS alarms wire in
+#    via the application-tier env (which knows the ARN suffixes).
+###############################################################################
+module "alarms" {
+  source = "../../modules/cloudwatch-alarms"
+
+  environment                = var.environment
+  name_prefix                = "aqp"
+  tags                       = { aqp_io_component = "observability" }
+  rds_instance_id            = module.rds.instance_endpoint != null ? split(".", module.rds.instance_endpoint)[0] : null
+  redis_replication_group_id = aws_elasticache_replication_group.redis.id
+  bedrock_alarm_enabled      = true
+}
+
+resource "aws_ssm_parameter" "alarm_topic_arn" {
+  name  = "/aqp/minimum/alarm_topic_arn_resolved"
+  type  = "String"
+  value = module.alarms.topic_arn
+}

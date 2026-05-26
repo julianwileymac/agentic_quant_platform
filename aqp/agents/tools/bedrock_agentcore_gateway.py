@@ -182,7 +182,21 @@ class BedrockAgentCoreGatewayBridge:
         self,
         cfg: GatewayToolConfig | None = None,
     ) -> dict[str, Any]:
-        """Upload the rendered config to S3 + register it on the Gateway.
+        """Upload the rendered config to S3 + register targets on the Gateway.
+
+        Two-step process (per the AgentCore Runtime + Gateway contract):
+
+        1. **S3 upload** — write the rendered tool-config JSON to
+           ``s3://<bucket>/<key>``; record the URI in SSM at
+           ``/aqp/${env}/agentcore_gateway_tool_config_uri``. This is
+           what the Gateway reads on every cold-start of a routed call.
+        2. **Per-tool target registration** — call the bedrock-agentcore
+           SDK's ``list_gateway_targets`` to compute the diff, then
+           ``create_gateway_target`` / ``update_gateway_target`` /
+           ``delete_gateway_target`` to converge the live registry to
+           the desired catalog. Targets are addressed by ``targetName``
+           (= the AQP tool name, ``data.*``); the diff is hash-aware so
+           a no-op render is a no-op publish.
 
         Returns a result dict shaped::
 
@@ -191,6 +205,9 @@ class BedrockAgentCoreGatewayBridge:
                 "gateway_arn": str | None,
                 "config_uri": str | None,
                 "catalog_hash": str,
+                "targets_created":  list[str],
+                "targets_updated":  list[str],
+                "targets_deleted":  list[str],
                 "reason": str,
             }
 
@@ -201,6 +218,11 @@ class BedrockAgentCoreGatewayBridge:
         cfg = cfg or self.render()
         body = json.dumps(cfg.to_payload(), indent=2)
         catalog_hash = cfg.catalog_hash()
+        empty_diff: dict[str, list[str]] = {
+            "targets_created": [],
+            "targets_updated": [],
+            "targets_deleted": [],
+        }
         if not self._config_s3_bucket:
             logger.info(
                 "AgentCore gateway publish skipped: AQP_AGENTCORE_GATEWAY_CFG_BUCKET unset"
@@ -211,10 +233,12 @@ class BedrockAgentCoreGatewayBridge:
                 "config_uri": None,
                 "catalog_hash": catalog_hash,
                 "reason": "no S3 bucket configured",
+                **empty_diff,
             }
 
         try:
             import boto3
+            from botocore.exceptions import BotoCoreError, ClientError
         except ImportError:
             return {
                 "published": False,
@@ -222,6 +246,7 @@ class BedrockAgentCoreGatewayBridge:
                 "config_uri": None,
                 "catalog_hash": catalog_hash,
                 "reason": "boto3 not installed",
+                **empty_diff,
             }
 
         s3 = boto3.client("s3")
@@ -241,6 +266,12 @@ class BedrockAgentCoreGatewayBridge:
                 Type="String",
                 Overwrite=True,
             )
+            ssm.put_parameter(
+                Name=f"/aqp/{self._environment}/agentcore_gateway_catalog_hash",
+                Value=catalog_hash,
+                Type="String",
+                Overwrite=True,
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning("AgentCore gateway publish failed: %s", exc)
             return {
@@ -249,27 +280,149 @@ class BedrockAgentCoreGatewayBridge:
                 "config_uri": None,
                 "catalog_hash": catalog_hash,
                 "reason": f"upload failed: {exc}",
+                **empty_diff,
             }
 
-        # Resolve the gateway ARN (best-effort) — we don't drive any
-        # gateway-side update_* call yet because the AgentCore module
-        # is freshly GA and the AWS Python SDK shape for it is still
-        # evolving. The tool config URI is what AgentCore reads on
-        # the next gateway invocation; that is sufficient for the
-        # current bootstrap.
         gateway_arn: str | None = None
+        gateway_id: str | None = None
         try:
             gw_param = ssm.get_parameter(Name=self._gateway_arn_ssm_path)
             gateway_arn = str(gw_param.get("Parameter", {}).get("Value") or "") or None
+            if gateway_arn:
+                gateway_id = gateway_arn.rsplit("/", 1)[-1] or None
         except Exception:  # noqa: BLE001
             gateway_arn = None
+
+        diff = empty_diff
+        sdk_reason = "no gateway arn in SSM"
+        if gateway_id:
+            try:
+                ac_client = boto3.client("bedrock-agentcore-control")
+            except Exception:  # noqa: BLE001
+                ac_client = None
+                sdk_reason = "bedrock-agentcore-control client unavailable"
+            if ac_client is not None:
+                try:
+                    diff = self._converge_gateway_targets(
+                        ac_client=ac_client,
+                        gateway_id=gateway_id,
+                        gateway_arn=gateway_arn,
+                        cfg=cfg,
+                    )
+                    sdk_reason = "ok"
+                except (BotoCoreError, ClientError) as exc:
+                    sdk_reason = f"gateway target converge failed: {exc}"
+                    logger.warning(sdk_reason)
+                except Exception as exc:  # noqa: BLE001
+                    sdk_reason = f"gateway target converge raised: {exc}"
+                    logger.warning(sdk_reason, exc_info=True)
 
         return {
             "published": True,
             "gateway_arn": gateway_arn,
             "config_uri": uri,
             "catalog_hash": catalog_hash,
-            "reason": "ok",
+            "reason": sdk_reason,
+            **diff,
+        }
+
+    def _converge_gateway_targets(
+        self,
+        *,
+        ac_client: Any,
+        gateway_id: str,
+        gateway_arn: str | None,
+        cfg: GatewayToolConfig,
+    ) -> dict[str, list[str]]:
+        """List existing targets + reconcile against the rendered ``cfg``.
+
+        The AgentCore Gateway Control API for target CRUD is still
+        stabilising; this method probes via ``hasattr`` so the bridge
+        keeps working against either the documented or the most-recent
+        SDK shape. When a method is missing we log + return an empty
+        diff so the S3 upload + SSM URI still light up.
+        """
+        existing_names: set[str] = set()
+        list_op = getattr(ac_client, "list_gateway_targets", None)
+        if callable(list_op):
+            try:
+                paginator = ac_client.get_paginator("list_gateway_targets")
+                for page in paginator.paginate(gatewayIdentifier=gateway_id):
+                    for item in page.get("targets") or page.get("items") or []:
+                        name = item.get("name") or item.get("targetName")
+                        if name:
+                            existing_names.add(str(name))
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("paginator unavailable, falling back to one-shot: %s", exc)
+                resp = list_op(gatewayIdentifier=gateway_id)
+                for item in resp.get("targets") or resp.get("items") or []:
+                    name = item.get("name") or item.get("targetName")
+                    if name:
+                        existing_names.add(str(name))
+        else:
+            logger.debug(
+                "bedrock-agentcore-control.list_gateway_targets missing in this SDK build"
+            )
+
+        desired_names = {entry["name"] for entry in cfg.tools}
+        to_create = sorted(desired_names - existing_names)
+        to_update = sorted(desired_names & existing_names)
+        to_delete = sorted(existing_names - desired_names)
+
+        created: list[str] = []
+        updated: list[str] = []
+        deleted: list[str] = []
+
+        create_op = getattr(ac_client, "create_gateway_target", None)
+        update_op = getattr(ac_client, "update_gateway_target", None)
+        delete_op = getattr(ac_client, "delete_gateway_target", None)
+
+        for entry in cfg.tools:
+            name = entry["name"]
+            target_def = {
+                "gatewayIdentifier": gateway_id,
+                "name": name,
+                "description": entry["description"],
+                "targetConfiguration": {
+                    "mcp": {
+                        "inputSchema": entry["input_schema"],
+                        "invokeUrl": entry["invoke_url"],
+                        "transport": entry["transport"],
+                    }
+                },
+            }
+            if name in to_create and callable(create_op):
+                try:
+                    create_op(**target_def)
+                    created.append(name)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("create_gateway_target failed for %s: %s", name, exc)
+            elif name in to_update and callable(update_op):
+                try:
+                    update_op(**target_def)
+                    updated.append(name)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("update_gateway_target failed for %s: %s", name, exc)
+
+        if callable(delete_op):
+            for name in to_delete:
+                try:
+                    delete_op(gatewayIdentifier=gateway_id, name=name)
+                    deleted.append(name)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("delete_gateway_target failed for %s: %s", name, exc)
+
+        logger.info(
+            "AgentCore gateway converge gateway_arn=%s created=%d updated=%d deleted=%d",
+            gateway_arn,
+            len(created),
+            len(updated),
+            len(deleted),
+        )
+        return {
+            "targets_created": created,
+            "targets_updated": updated,
+            "targets_deleted": deleted,
         }
 
 

@@ -39,6 +39,7 @@ from aqp_platform_core.models.terraform import (
 from aqp_platform_core.models.workloads import WorkloadAction
 
 from aqp_cp.auth.deps import AuthenticatedUser, require_scope
+from aqp_cp.auth.stepup import require_step_up
 from aqp_cp.models import ResponseEnvelope
 from aqp_cp.services.lifecycle import execute_with_audit
 from aqp_cp.settings import get_settings
@@ -198,6 +199,7 @@ async def terraform_apply(
     request: Request,
     x_request_id: str | None = Header(default=None, alias="X-Request-Id"),
     user: AuthenticatedUser = Depends(require_scope("admin:cluster")),
+    _stepup: AuthenticatedUser = Depends(require_step_up(max_age_seconds=180)),
 ) -> ResponseEnvelope[TerraformRunResult]:
     if body.spec.workspace_id != workspace_id:
         body = body.model_copy(
@@ -219,6 +221,7 @@ async def terraform_destroy(
     request: Request,
     x_request_id: str | None = Header(default=None, alias="X-Request-Id"),
     user: AuthenticatedUser = Depends(require_scope("admin:cluster")),
+    _stepup: AuthenticatedUser = Depends(require_step_up(max_age_seconds=180)),
 ) -> ResponseEnvelope[TerraformRunResult]:
     if body.spec.workspace_id != workspace_id:
         body = body.model_copy(
@@ -265,6 +268,7 @@ async def terraform_halt(
     body: TerraformHaltRequest | None = None,
     x_request_id: str | None = Header(default=None, alias="X-Request-Id"),
     user: AuthenticatedUser = Depends(require_scope("admin:cluster")),
+    _stepup: AuthenticatedUser = Depends(require_step_up(max_age_seconds=180)),
 ) -> ResponseEnvelope[TerraformHaltResponse]:
     runtime = get_terraform_runtime()
     reason = (body.reason if body else None) or "kill-switch"
@@ -296,6 +300,7 @@ async def terraform_halt_clear(
     request: Request,
     x_request_id: str | None = Header(default=None, alias="X-Request-Id"),
     user: AuthenticatedUser = Depends(require_scope("admin:cluster")),
+    _stepup: AuthenticatedUser = Depends(require_step_up(max_age_seconds=180)),
 ) -> ResponseEnvelope[dict[str, Any]]:
     runtime = get_terraform_runtime()
     runtime.clear_halt()
