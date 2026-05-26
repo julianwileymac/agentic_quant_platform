@@ -20,6 +20,9 @@ variable "repositories" {
     "aqp-worker",
     "aqp-ingester",
     "aqp-control-plane",
+    # Bedrock AgentCore Runtime image — ARM64-only per the AWS Builders
+    # walkthrough; built via aqp_platform/build/docker/aqp-agent/Dockerfile.
+    "aqp-agent",
   ]
 }
 

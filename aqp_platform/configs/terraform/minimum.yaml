@@ -1,0 +1,64 @@
+# Canonical TerraformStackSpec for the single-account minimum AQP stack.
+#
+# Describes the LOGICAL stack — the rendered HCL lives at
+# ``aqp_platform/terraform/environments/minimum/``. The ``aqp deploy``
+# CLI / ``TerraformRuntime`` use ``prerendered_workspace_dir`` so the
+# executor operates on that directory directly instead of running the
+# Jinja2 codegen path.
+
+name: aqp-minimum
+slug: aqp-minimum
+module_kind: composite
+description: |
+  Single-account, lowest-cost AQP footprint. Cognito + ALB + ECS Fargate
+  (single ``aqp-admin`` task) + Bedrock LLM provider (Claude Haiku 4.5
+  only). Skips EKS / MSK / AgentCore Runtime / Knowledge Base /
+  CloudFront / EventBridge SFN.
+
+  Pairs with the infrastructure-tier stack at
+  ``infrastructure/envs/minimum/`` (VPC + ECR + RDS + ElastiCache +
+  Bedrock invoke IAM). Cost target: ~$140/month fixed + Bedrock token
+  spend.
+
+cloud_provider: aws
+environment: minimum
+
+provider:
+  kind: aws
+  default_region: us-east-1
+  credential_key: aqp_aws_minimum  # CredentialResolver service key
+
+backend:
+  kind: s3
+  config:
+    bucket: hydrate://ssm/aqp/minimum/tfstate_bucket_name
+    key: aqp_platform/minimum/terraform.tfstate
+    region: us-east-1
+    encrypt: true
+    kms_key_id: hydrate://ssm/aqp/minimum/tfstate_kms_key_arn
+    use_lockfile: true
+
+inputs:
+  region: us-east-1
+  environment: minimum
+  name_prefix: aqp
+  account_id: hydrate://settings/aws_account_id
+  external_id: secret://aws_secretsmanager/aqp/minimum/terraform/external_id
+  acm_certificate_arn_alb: hydrate://ssm/aqp/minimum/acm_certificate_arn_alb
+  admin_image_tag: hydrate://ssm/aqp/minimum/admin_image_tag
+  callback_urls:
+    - https://admin.aqp.fund/oauth/callback
+
+outputs_to_topology:
+  alb_dns_name: services.alb.endpoints.default
+  ecs_cluster_name: services.ecs-fargate-cluster.endpoints.cluster_name
+  cognito_user_pool_id: services.cognito-user-pool.endpoints.user_pool_id
+  cognito_user_pool_endpoint: services.cognito-user-pool.endpoints.user_pool_endpoint
+
+annotations:
+  aqp.io/stack-kind: aws-minimum
+  aqp.io/composition: hand-authored
+  aqp.io/target-cost-monthly: "$140"
+  aqp.io/skipped-modules: bedrock-agentcore,bedrock-knowledge-base,opensearch-serverless,cloudfront,eventbridge-stepfunctions,eks,karpenter,msk
+  aqp.io/llm-provider: bedrock
+  aqp.io/allowed-bedrock-models: anthropic.claude-haiku-4-5

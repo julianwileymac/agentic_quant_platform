@@ -940,6 +940,56 @@ targets:
       - datahub
 
   # ---------------------------------------------------------------------------
+  # Single-account minimum deployment target (~$140/mo fixed). Skips
+  # EKS / MSK / AgentCore / KB / CloudFront / EventBridge SFN. Use as a
+  # stepping-stone before promoting to the full ``aws`` target below.
+  # ---------------------------------------------------------------------------
+  aws-minimum:
+    id: aws-minimum
+    label: AWS single-account minimum (~$140/mo)
+    kind: aws
+    environment: minimum
+    cloud_provider: aws
+    namespace: aqp
+    adapter_preference:
+      - aws_eks      # only here so the operator can still attach an EKS
+                     # cluster later without retargeting; the minimum env
+                     # itself doesn't provision one
+      - in_cluster
+    terraform:
+      stack_slug: aqp-minimum
+      spec_path: aqp_platform/configs/terraform/minimum.yaml
+      environment_dir: aqp_platform/terraform/environments/minimum
+      tfvars_path: aqp_platform/terraform/environments/minimum/terraform.tfvars
+      backend_state_path: hydrate://ssm/aqp/minimum/tfstate_bucket_name
+    cluster:
+      name: aqp-min
+      ingress_class: alb
+      ingress_host: hydrate://ssm/aqp/minimum/alb_dns_name
+    endpoints:
+      admin: hydrate://ssm/aqp/minimum/alb_dns_name
+    images:
+      registry: hydrate://ssm/aqp/minimum/ecr_registry
+      app_version: replace-with-immutable-tag
+      build_locally: false
+      services:
+        admin: aqp-admin
+        admin_frontend: aqp-admin-frontend
+        api: aqp-core
+    auth:
+      provider: aws_cognito
+      required: true
+      oidc_issuer: hydrate://ssm/aqp/minimum/cognito_user_pool_endpoint
+      audience: ""
+      scim_enabled: false
+    services:
+      - alb
+      - ecs-fargate-cluster
+      - cognito-user-pool
+      - postgres
+      - redis
+
+  # ---------------------------------------------------------------------------
   # Phase G of the AWS hybrid rollout — AWS-native deployment target.
   # Composes the EKS Karpenter quant runtime (heritage AQP composition) with
   # the new ECS Fargate slice (admin BFF + AgentCore proxy) + the Bedrock

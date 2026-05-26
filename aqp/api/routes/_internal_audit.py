@@ -303,7 +303,7 @@ def ingest_workload_run(
     actor = claims.get("sub") or claims.get("client_id") or "cp"
 
     try:
-        from aqp.persistence.db import get_session
+        from aqp.persistence.db import SessionLocal
         from aqp.persistence.models_workloads import (
             PostgresWorkloadAuditSink,
         )
@@ -314,17 +314,15 @@ def ingest_workload_run(
     payload = body.model_dump(mode="json", exclude_none=True)
     payload.setdefault("run_id", str(uuid.uuid4()))
 
+    sink = PostgresWorkloadAuditSink(SessionLocal)
+    persisted = False
     try:
-        with get_session() as session:
-            sink = PostgresWorkloadAuditSink(session=session)
-            sink.upsert_from_payload(payload)
-            session.commit()
+        persisted = sink.upsert_from_payload(payload)
     except AttributeError:
-        # PostgresWorkloadAuditSink may not yet expose upsert_from_payload
-        # in older builds; degrade gracefully so rollouts can land the
-        # CP side first and the monolith side in a follow-up.
+        # PostgresWorkloadAuditSink older than Phase J — gracefully advertise.
         logger.warning(
-            "workload-runs ingest: PostgresWorkloadAuditSink has no upsert_from_payload; dropping"
+            "workload-runs ingest: PostgresWorkloadAuditSink has no upsert_from_payload; "
+            "rebase to Phase J + redeploy"
         )
         return {"ok": True, "persisted": False, "reason": "sink api mismatch"}
     except Exception as exc:  # noqa: BLE001
@@ -336,7 +334,11 @@ def ingest_workload_run(
         )
         return {"ok": True, "persisted": False, "reason": "persist error"}
 
-    return {"ok": True, "persisted": True, "run_id": payload.get("run_id")}
+    return {
+        "ok": True,
+        "persisted": bool(persisted),
+        "run_id": payload.get("run_id"),
+    }
 
 
 __all__ = ["router"]

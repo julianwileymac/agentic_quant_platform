@@ -1,0 +1,13 @@
+# Render from the bootstrap outputs:
+#
+#   jq -r '.tfstate_bucket_name.value' /tmp/bootstrap.json
+#   jq -r '.tfstate_kms_key_arn.value' /tmp/bootstrap.json
+#
+# Then ``terraform init -backend-config=backend.hcl`` from this directory.
+
+bucket       = "aqp-tfstate-<account-id>"
+key          = "minimum/main.tfstate"
+region       = "us-east-1"
+encrypt      = true
+kms_key_id   = "alias/aqp-tfstate"
+use_lockfile = true

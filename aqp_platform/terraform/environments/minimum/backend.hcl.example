@@ -1,0 +1,13 @@
+# Per-account application-tier state backend — pass via
+#   terraform init -reconfigure -backend-config=backend.hcl
+#
+# The bucket + KMS key + DynamoDB table come from
+# infrastructure/bootstrap (single-account topology shares state infra
+# across both tiers).
+
+bucket       = "aqp-tfstate-<account-id>"
+key          = "aqp_platform/minimum/terraform.tfstate"
+region       = "us-east-1"
+encrypt      = true
+kms_key_id   = "alias/aqp-tfstate"
+use_lockfile = true

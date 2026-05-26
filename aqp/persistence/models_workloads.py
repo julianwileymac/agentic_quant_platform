@@ -236,6 +236,51 @@ class PostgresWorkloadAuditSink:
             "duration_ms": run.duration_ms,
         }
 
+    # ------------------------------------------------------------------
+    # Phase 0.4 (CP maturation) — payload ingest for the HTTP audit sink.
+    # The CP-side :class:`aqp_cp.services.http_audit_sink.HttpAuditSink`
+    # POSTs ``WorkloadRun.model_dump(mode='json')`` PLUS a ``phase``
+    # discriminator to ``/_internal/audit/workload-runs``; the route
+    # calls this helper to coerce the JSON back into a :class:`WorkloadRun`
+    # before upserting. Mirrors :meth:`start_run` / :meth:`finish_run`
+    # except every field comes from the wire payload (not a typed
+    # in-process object). NEVER raises — drops the row + logs warning
+    # when the payload doesn't validate, so a misbehaving CP can't
+    # crash the monolith ingest path.
+    # ------------------------------------------------------------------
+    def upsert_from_payload(self, payload: dict[str, Any]) -> bool:
+        """Persist a ``WorkloadRun`` row from the CP HTTP-sink wire payload.
+
+        Returns ``True`` when the row was upserted; ``False`` on validation
+        or persistence failure. The HTTP route uses the return to decide
+        whether to advertise ``persisted=True`` to the CP caller.
+        """
+        try:
+            data = dict(payload or {})
+        except Exception:  # noqa: BLE001
+            logger.warning("workload_runs ingest: payload not coercible to dict")
+            return False
+        data.pop("phase", None)
+
+        try:
+            run = WorkloadRun.model_validate(data)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "workload_runs ingest: payload failed WorkloadRun validation run_id=%s",
+                data.get("run_id"),
+                exc_info=True,
+            )
+            return False
+
+        try:
+            self._upsert(run)
+            return True
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "workload_runs ingest: persist failed run_id=%s", run.run_id, exc_info=True
+            )
+            return False
+
 
 # Runtime check — duck-typed at boot time, asserted statically here.
 assert isinstance(PostgresWorkloadAuditSink, type)  # mypy hint, no-op

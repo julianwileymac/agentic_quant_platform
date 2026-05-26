@@ -28,6 +28,22 @@ variable "tags" {
   default = {}
 }
 
+# --- NAT topology -----------------------------------------------------------
+# Defaults preserve the prod-shape (one NAT per AZ). The minimum env
+# composition flips ``single_nat_gateway=true`` to collapse to a single
+# ~$32/mo NAT shared across every AZ (the documented dev/preview pattern).
+variable "single_nat_gateway" {
+  type        = bool
+  default     = false
+  description = "When true, route every private subnet through one NAT (cheap)."
+}
+
+variable "enable_interface_endpoints" {
+  type        = bool
+  default     = true
+  description = "Provision the per-AWS-API interface endpoints (chargeable)."
+}
+
 data "aws_availability_zones" "available" { state = "available" }
 
 locals {
@@ -46,9 +62,9 @@ module "vpc" {
   public_subnets   = [for i in range(var.azs_count) : cidrsubnet(var.cidr, 4, i + var.azs_count)]
   intra_subnets    = [for i in range(var.azs_count) : cidrsubnet(var.cidr, 4, i + var.azs_count * 2)]
 
-  enable_nat_gateway   = true
-  single_nat_gateway   = false
-  one_nat_gateway_per_az = true
+  enable_nat_gateway     = true
+  single_nat_gateway     = var.single_nat_gateway
+  one_nat_gateway_per_az = !var.single_nat_gateway
 
   enable_dns_hostnames = true
   enable_dns_support   = true
@@ -132,7 +148,7 @@ resource "aws_security_group" "vpc_endpoints" {
 }
 
 resource "aws_vpc_endpoint" "interfaces" {
-  for_each            = local.interface_endpoints
+  for_each            = var.enable_interface_endpoints ? local.interface_endpoints : toset([])
   vpc_id              = module.vpc.vpc_id
   service_name        = "com.amazonaws.${data.aws_region.current.name}.${each.value}"
   vpc_endpoint_type   = "Interface"

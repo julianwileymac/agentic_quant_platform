@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars and fill in.
+account_id              = "123456789012"
+external_id             = "set-by-bootstrap"
+acm_certificate_arn_alb = "arn:aws:acm:us-east-1:123456789012:certificate/<cert-id>"
+admin_image_tag         = "v0.1.0-min"
+
+# Optional. The default ``https://admin.aqp.fund/oauth/callback`` works
+# once you wire DNS; in pure-ALB mode use the ALB DNS:
+# callback_urls = ["https://<alb-dns>/oauth/callback"]

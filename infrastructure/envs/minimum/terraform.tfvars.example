@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars and fill in.
+account_id               = "123456789012"
+external_id              = "set-by-bootstrap"
+kms_key_arn              = "arn:aws:kms:us-east-1:123456789012:key/<workload-cmk>"
+github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+
+# Optional overrides — defaults are aggressive cheap.
+# rds_instance_class = "db.t4g.small"
+# rds_multi_az       = false
+# redis_node_type    = "cache.t4g.micro"
