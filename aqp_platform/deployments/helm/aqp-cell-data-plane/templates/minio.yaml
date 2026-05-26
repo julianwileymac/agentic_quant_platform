@@ -1,0 +1,180 @@
+{{- if .Values.minio.enabled -}}
+# =============================================================================
+# Phase 6 §9.2 — per-cell MinIO.
+#
+# Phase 6 ships the simple single-replica StatefulSet for dev /
+# `shared-std` cells. Production silo-reg cells should override
+# `minio.replicas: 4` AND swap to the MinIO Operator
+# (`Tenant` CRD) — Phase 6.5 deliverable.
+#
+# A post-bootstrap Job creates the canonical buckets:
+#   - aqp-{cell-id}-warehouse       (Iceberg warehouse — Rule 3)
+#   - aqp-{cell-id}-mlflow          (MLflow artifacts)
+#   - aqp-{cell-id}-backups         (CNPG PITR)
+#   - aqp-{cell-id}-audit           (audit lake — Object Lock COMPLIANCE)
+# =============================================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: aqp-cell-minio
+  labels:
+{{ include "aqp-cell-data-plane.labels" . | indent 4 }}
+    aqp.io/datastore: minio
+spec:
+  serviceName: aqp-cell-minio
+  replicas: {{ .Values.minio.replicas }}
+  selector:
+    matchLabels:
+      app: aqp-cell-minio
+  template:
+    metadata:
+      labels:
+        app: aqp-cell-minio
+{{ include "aqp-cell-data-plane.labels" . | indent 8 }}
+      annotations:
+{{ include "aqp-cell-data-plane.podAnnotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # MinIO image uses 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: minio
+          image: {{ .Values.minio.image | quote }}
+          args: ["server", "/data", "--console-address", ":9001"]
+          ports:
+            - name: api
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          envFrom:
+            - secretRef:
+                name: aqp-cell-minio-credentials
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # MinIO writes its own metadata
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: api
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: api
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.minio.storageClassName }}
+        storageClassName: {{ .Values.minio.storageClassName | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.minio.storage | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aqp-cell-minio
+  labels:
+{{ include "aqp-cell-data-plane.labels" . | indent 4 }}
+    aqp.io/datastore: minio
+spec:
+  type: ClusterIP
+  selector:
+    app: aqp-cell-minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: api
+    - name: console
+      port: 9001
+      targetPort: console
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # Bucket bootstrap Job. Object Lock COMPLIANCE on `audit/` is the
+  # plan §9.2 requirement; the other buckets are standard.
+  name: aqp-cell-minio-bootstrap
+  labels:
+{{ include "aqp-cell-data-plane.labels" . | indent 4 }}
+    aqp.io/datastore: minio
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app: aqp-cell-minio-bootstrap
+{{ include "aqp-cell-data-plane.labels" . | indent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: wait-for-minio
+          image: cgr.dev/chainguard/wait-for-it:latest
+          command: ["/wait-for-it"]
+          args: ["-t", "120", "aqp-cell-minio:9000"]
+      containers:
+        - name: bootstrap
+          image: minio/mc:RELEASE.2024-10-08T09-37-26Z
+          envFrom:
+            - secretRef:
+                name: aqp-cell-minio-credentials
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              mc alias set cell http://aqp-cell-minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+              for bucket in {{ include "aqp-cell-data-plane.bucketPrefix" . }}-warehouse \
+                            {{ include "aqp-cell-data-plane.bucketPrefix" . }}-mlflow \
+                            {{ include "aqp-cell-data-plane.bucketPrefix" . }}-backups \
+                            {{ include "aqp-cell-data-plane.bucketPrefix" . }}-audit; do
+                if ! mc ls "cell/$bucket" >/dev/null 2>&1; then
+                  mc mb --with-lock "cell/$bucket"
+                fi
+              done
+              {{- if .Values.minio.objectLockOnAudit }}
+              # Phase 6 §9.2 + Phase 7 §10.1 — Object Lock COMPLIANCE on the
+              # audit/ prefix. COMPLIANCE mode means even the root user
+              # cannot delete locked objects until retention expires.
+              # Production cells MUST override .Values.minio.objectLockRetention
+              # to ``7y`` per the FINRA / SEC retention guidance.
+              mc retention set --default COMPLIANCE {{ .Values.minio.objectLockRetention | default "30d" }} \
+                "cell/{{ include "aqp-cell-data-plane.bucketPrefix" . }}-audit"
+              {{- end }}
+              echo "MinIO bootstrap complete for {{ .Values.cell_id }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop: ["ALL"]
+{{- end }}

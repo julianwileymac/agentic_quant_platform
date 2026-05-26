@@ -1,0 +1,38 @@
+falco:
+  driver:
+    kind: ebpf       # eBPF, no kernel-module install
+  customRules:
+    aqp_rules.yaml: |-
+      - rule: Unexpected exec into trading namespace
+        desc: Trading + paper-trading namespaces should never see kubectl exec.
+        condition: >
+          ka.target.namespace in ("aqp-trading", "aqp-paper") and
+          ka.verb = "create" and
+          ka.target.subresource = "exec"
+        output: >
+          Unexpected pod exec in trading namespace
+          (user=%ka.user.name verb=%ka.verb target=%ka.target.name)
+        priority: WARNING
+        source: k8s_audit
+        tags: [aqp, trading, exec]
+
+      - rule: Outbound to non-allowlisted broker endpoint
+        desc: Trading namespace must only reach approved broker CIDRs.
+        condition: >
+          k8s_audit and
+          ka.target.namespace in ("aqp-trading") and
+          fd.sip.name != "" and
+          not (fd.sip.name in (allowed_broker_endpoints))
+        output: >
+          Trading pod opened a connection to a non-allowlisted endpoint
+          (sip=%fd.sip.name pod=%k8s.pod.name)
+        priority: CRITICAL
+        source: syscall
+        tags: [aqp, trading, network]
+
+  falcoctl:
+    artifact:
+      install:
+        enabled: true
+      follow:
+        enabled: true

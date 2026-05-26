@@ -1,0 +1,52 @@
+###############################################################################
+# ApplicationSet: AQP services (admin, backend, redis, workers, control-plane).
+###############################################################################
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: aqp-services
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchLabels: { aqp.io/managed: "true" }
+          - list:
+              elements:
+                - name: aqp-admin
+                  namespace: aqp-admin
+                - name: aqp-backend
+                  namespace: aqp-core
+                - name: aqp-redis
+                  namespace: aqp-core
+                - name: aqp-workers
+                  namespace: aqp-core
+                - name: aqp-control-plane
+                  namespace: aqp-admin
+  template:
+    metadata:
+      name: '{{`{{.name}}`}}-{{`{{.values.name}}`}}'
+    spec:
+      project: aqp
+      sources:
+        - repoURL: https://github.com/julianwileymac/agentic_quant_platform
+          targetRevision: main
+          path: 'aqp_platform/deployments/kubernetes/helm/{{`{{.values.name}}`}}'
+          helm:
+            valueFiles:
+              - 'values.yaml'
+              - 'values-{{`{{index .metadata.labels "aqp.io/env"}}`}}.yaml'
+      destination:
+        server: '{{`{{.server}}`}}'
+        namespace: '{{`{{.values.namespace}}`}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ApplyOutOfSyncOnly=true
+      revisionHistoryLimit: 10

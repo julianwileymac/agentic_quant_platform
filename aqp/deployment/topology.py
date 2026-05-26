@@ -13,6 +13,18 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from aqp.config import settings
 
+# Phase 3 §6.2 + Phase 6 §9 — re-export the canonical cell models from
+# aqp_platform_core so both modules stay in lockstep. We deliberately do
+# NOT redefine these classes here.
+from aqp_platform_core.topology.models import (  # noqa: E402
+    Cell,
+    CellDataPlane,
+    CellRoutes,
+    CellState,
+    CellTenancyStrategy,
+    CellTier,
+)
+
 _K8S_NAME_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 
 
@@ -62,7 +74,11 @@ class ServiceDefinition(StrictModel):
     label: str
     role: str
     workload: Literal["deployment", "statefulset", "daemonset", "job", "external"]
-    app_label: str
+    # ``app_label`` is the pod selector for in-cluster workloads;
+    # ``workload: external`` services (Cloudflare-hosted docs / status
+    # pages) have no pods and may omit it. Mirrors the canonical model
+    # in aqp_platform_core.topology.models.
+    app_label: str = ""
     container: str = ""
     image_key: str = ""
     port: int | None = None
@@ -74,6 +90,15 @@ class ServiceDefinition(StrictModel):
     namespace: str = ""
     protocols: dict[str, int] = Field(default_factory=dict)
     endpoints: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_app_label(self) -> ServiceDefinition:
+        if self.workload != "external" and not self.app_label:
+            raise ValueError(
+                f"service {self.id!r}: workload={self.workload!r} requires "
+                f"a non-empty app_label (only ``workload: external`` may omit it)"
+            )
+        return self
 
     def selector(self) -> str:
         return f"app={self.app_label}"
@@ -254,6 +279,15 @@ class DeploymentTopology(StrictModel):
     tooling: Tooling = Field(default_factory=Tooling)
     services: list[ServiceDefinition]
     targets: dict[str, DeploymentTarget]
+    # Phase 3 §6.2 + Phase 6 §9 — cell registry bootstrap seed.
+    cells: list[Cell] = Field(
+        default_factory=list,
+        description=(
+            "Phase 3 §6.2 — bootstrap seed for the cell registry. Live "
+            "updates flow through the control-plane ``/manage/cells/*`` "
+            "routes which mirror to the ``cells`` ORM table (Alembic 0082)."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_references(self) -> DeploymentTopology:
@@ -285,11 +319,37 @@ class DeploymentTopology(StrictModel):
         terraform = self.tooling.terraform
         if terraform.provider_mirror_path == terraform.plugin_cache_path:
             raise ValueError("terraform provider mirror and plugin cache paths must differ")
+        # Phase 3 §6.2 — cell id + namespace uniqueness.
+        cell_ids: set[str] = set()
+        cell_namespaces: set[str] = set()
+        for cell in self.cells:
+            if cell.id in cell_ids:
+                raise ValueError(f"duplicate cell id {cell.id!r}")
+            cell_ids.add(cell.id)
+            if cell.k8s_namespace in cell_namespaces:
+                raise ValueError(
+                    f"cell {cell.id!r}: k8s_namespace {cell.k8s_namespace!r} "
+                    f"already used by another cell"
+                )
+            cell_namespaces.add(cell.k8s_namespace)
         return self
 
     @property
     def service_map(self) -> dict[str, ServiceDefinition]:
         return {service.id: service for service in self.services}
+
+    @property
+    def cell_map(self) -> dict[str, Cell]:
+        """Cell-id keyed view of the cell registry (Phase 3 §6.2)."""
+        return {cell.id: cell for cell in self.cells}
+
+    def cells_for_tier(self, tier: CellTier) -> list[Cell]:
+        """Return every cell on the given tier (Phase 3 §6.2)."""
+        return [cell for cell in self.cells if cell.tier == tier]
+
+    def active_cells(self) -> list[Cell]:
+        """Return every cell with ``state == 'active'``."""
+        return [cell for cell in self.cells if cell.is_active()]
 
     def target(self, target_id: str) -> DeploymentTarget:
         try:
@@ -404,6 +464,12 @@ def list_targets() -> list[DeploymentTarget]:
 
 
 __all__ = [
+    "Cell",
+    "CellDataPlane",
+    "CellRoutes",
+    "CellState",
+    "CellTenancyStrategy",
+    "CellTier",
     "DeploymentTarget",
     "DeploymentTopology",
     "ServiceDefinition",

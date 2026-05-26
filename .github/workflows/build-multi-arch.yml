@@ -39,13 +39,45 @@ on:
       - "aqp/tasks/celery_app.py"
       - "aqp_platform/deployments/kubernetes/base/**"
   workflow_dispatch:
+    inputs:
+      rollback:
+        description: >
+          Build the rollback / legacy-management images under
+          aqp_platform/rollback/ (rpi_k8s_sdk + legacy-management).
+          DEFAULT is 'false' — those Dockerfiles are intentionally NOT
+          part of the canonical Phase 4c multi-arch matrix and only
+          ship under explicit operator dispatch (RESTRUCTURING_PLAN.md
+          Phase 2 §5.5). Flipping this flag does NOT currently rebuild
+          them; that is the follow-up to Phase 2 §5.5 once the
+          rollback Dockerfiles themselves are split into their own
+          job. The flag exists today as the policy-anchor input so
+          reviewers see the gate.
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
+# Phase 2 §5.2 — Cosign keyless OIDC signing + SBOM attestation
+# requires three additional permissions on top of the existing
+# contents: read:
+#   - id-token: write    OIDC token for keyless Sigstore signing
+#   - packages: write    push attestations to the registry alongside
+#                        the image (cosign attaches manifest by digest)
+#   - attestations: write opt-in for SLSA-3 build provenance
+# These mirror the proven pattern in quantbot-bots-image.yml.
 permissions:
   contents: read
+  id-token: write
+  packages: write
+  attestations: write
 
 env:
   REGISTRY: docker.io
   IMAGE_OWNER: julianwiley
+  # Phase 2 §5.2 — pinned cosign release (matches quantbot pattern).
+  COSIGN_VERSION: v2.2.4
 
 concurrency:
   group: build-multi-arch-${{ github.ref }}
@@ -89,6 +121,7 @@ jobs:
           echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
 
       - name: Build + push aqp-api (multi-arch)
+        id: build-api
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -104,6 +137,7 @@ jobs:
           provenance: false
 
       - name: Build + push aqp-worker (uses the same api image at runtime)
+        id: build-worker
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -116,6 +150,96 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/aqp-worker:latest
           cache-from: type=gha,scope=aqp-api
           provenance: false
+
+      # ===================================================================
+      # Phase 2 §5.2 — Supply chain hardening on aqp-api + aqp-worker.
+      #
+      # All sign / attest / scan steps gate on the push events because
+      # Cosign keyless signing requires OIDC, which is unavailable on
+      # PRs from forks. PR-internal builds still run (and load locally
+      # via cache), but they neither push nor sign.
+      # ===================================================================
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      - name: Install syft
+        if: github.event_name != 'pull_request'
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Install grype
+        if: github.event_name != 'pull_request'
+        uses: anchore/scan-action/download-grype@v3
+
+      - name: Generate SBOM for aqp-api (CycloneDX)
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/aqp-api@${{ steps.build-api.outputs.digest }}
+        run: |
+          syft "${IMAGE_REF}" \
+            -o cyclonedx-json=sbom-aqp-api.cdx.json
+
+      - name: Cosign sign aqp-api (keyless via OIDC)
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/aqp-api@${{ steps.build-api.outputs.digest }}
+          COSIGN_YES: "true"
+        run: cosign sign --yes "${IMAGE_REF}"
+
+      - name: Cosign attest SBOM for aqp-api
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/aqp-api@${{ steps.build-api.outputs.digest }}
+          COSIGN_YES: "true"
+        run: |
+          cosign attest --yes \
+            --predicate sbom-aqp-api.cdx.json \
+            --type cyclonedx \
+            "${IMAGE_REF}"
+
+      - name: Grype scan aqp-api (fail on HIGH+)
+        if: github.event_name != 'pull_request'
+        run: grype sbom:./sbom-aqp-api.cdx.json --fail-on high
+
+      - name: Generate SBOM for aqp-worker (CycloneDX)
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/aqp-worker@${{ steps.build-worker.outputs.digest }}
+        run: |
+          syft "${IMAGE_REF}" \
+            -o cyclonedx-json=sbom-aqp-worker.cdx.json
+
+      - name: Cosign sign aqp-worker (keyless via OIDC)
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/aqp-worker@${{ steps.build-worker.outputs.digest }}
+          COSIGN_YES: "true"
+        run: cosign sign --yes "${IMAGE_REF}"
+
+      - name: Cosign attest SBOM for aqp-worker
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/aqp-worker@${{ steps.build-worker.outputs.digest }}
+          COSIGN_YES: "true"
+        run: |
+          cosign attest --yes \
+            --predicate sbom-aqp-worker.cdx.json \
+            --type cyclonedx \
+            "${IMAGE_REF}"
+
+      - name: Grype scan aqp-worker (fail on HIGH+)
+        if: github.event_name != 'pull_request'
+        run: grype sbom:./sbom-aqp-worker.cdx.json --fail-on high
+
+      - name: Upload SBOM artifacts (aqp-api + aqp-worker)
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-api-worker-${{ steps.tag.outputs.short_sha }}
+          path: sbom-aqp-*.cdx.json
+          if-no-files-found: error
 
   client:
     name: aqp-client
@@ -152,8 +276,10 @@ jobs:
             tag="$ref-$short_sha"
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
 
       - name: Build + push aqp-client (multi-arch)
+        id: build-client
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -167,8 +293,64 @@ jobs:
           cache-to: type=gha,mode=max,scope=aqp-client
           provenance: false
 
+      # ===================================================================
+      # Phase 2 §5.2 — Supply chain hardening on aqp-client. Mirrors the
+      # api-and-worker block above.
+      # ===================================================================
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      - name: Install syft
+        if: github.event_name != 'pull_request'
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Install grype
+        if: github.event_name != 'pull_request'
+        uses: anchore/scan-action/download-grype@v3
+
+      - name: Generate SBOM for aqp-client (CycloneDX)
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/aqp-client@${{ steps.build-client.outputs.digest }}
+        run: |
+          syft "${IMAGE_REF}" \
+            -o cyclonedx-json=sbom-aqp-client.cdx.json
+
+      - name: Cosign sign aqp-client (keyless via OIDC)
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/aqp-client@${{ steps.build-client.outputs.digest }}
+          COSIGN_YES: "true"
+        run: cosign sign --yes "${IMAGE_REF}"
+
+      - name: Cosign attest SBOM for aqp-client
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/aqp-client@${{ steps.build-client.outputs.digest }}
+          COSIGN_YES: "true"
+        run: |
+          cosign attest --yes \
+            --predicate sbom-aqp-client.cdx.json \
+            --type cyclonedx \
+            "${IMAGE_REF}"
+
+      - name: Grype scan aqp-client (fail on HIGH+)
+        if: github.event_name != 'pull_request'
+        run: grype sbom:./sbom-aqp-client.cdx.json --fail-on high
+
+      - name: Upload SBOM artifact (aqp-client)
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-client-${{ steps.tag.outputs.short_sha }}
+          path: sbom-aqp-client.cdx.json
+          if-no-files-found: error
+
   inspect:
-    name: Verify multi-arch manifests
+    name: Verify multi-arch manifests + cosign signatures
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: [api-and-worker, client]
@@ -185,4 +367,36 @@ jobs:
           for image in aqp-api aqp-worker aqp-client; do
             echo "=== $image:latest ==="
             docker buildx imagetools inspect "${REGISTRY}/${IMAGE_OWNER}/$image:latest" || true
+          done
+      # Phase 2 §5.2 — verify the cosign keyless signature + the
+      # CycloneDX SBOM attestation actually landed on the registry.
+      # `cosign verify` and `cosign verify-attestation` use Rekor as
+      # the source of truth — a missing entry fails the gate, which
+      # protects against a registry-side replay that overwrites the
+      # signed tag with an unsigned one.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+      - name: Cosign verify (keyless, GHA workflow identity)
+        env:
+          # Subject identity = the GHA workflow file that produced the
+          # signature. Matches sigstore's default keyless workflow.
+          CERT_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/build-multi-arch.yml@refs/heads/main
+          CERT_OIDC_ISSUER: https://token.actions.githubusercontent.com
+        run: |
+          for image in aqp-api aqp-worker aqp-client; do
+            echo "=== verifying $image:latest ==="
+            cosign verify \
+              --certificate-identity-regexp "${CERT_IDENTITY%@*}@.*" \
+              --certificate-oidc-issuer "${CERT_OIDC_ISSUER}" \
+              "${REGISTRY}/${IMAGE_OWNER}/$image:latest" \
+              > /dev/null
+            echo "=== verifying $image:latest SBOM attestation ==="
+            cosign verify-attestation \
+              --certificate-identity-regexp "${CERT_IDENTITY%@*}@.*" \
+              --certificate-oidc-issuer "${CERT_OIDC_ISSUER}" \
+              --type cyclonedx \
+              "${REGISTRY}/${IMAGE_OWNER}/$image:latest" \
+              > /dev/null
           done

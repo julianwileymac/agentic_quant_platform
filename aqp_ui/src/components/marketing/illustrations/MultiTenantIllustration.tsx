@@ -41,7 +41,12 @@ export function MultiTenantIllustration({ className }: { className?: string }) {
         initial="hidden"
         whileInView="show"
         viewport={{ once: true, margin: "-50px" }}
+        role="img"
+        aria-label="Multi-tenant isolation strategies: shared schema with row-level security, schema-per-tenant, and database-per-enterprise."
       >
+        <title>
+          Tenancy strategies: RLS · schema-per-tenant · database-per-enterprise
+        </title>
         {strategies.map((s, i) => (
           <motion.g
             key={s.title}

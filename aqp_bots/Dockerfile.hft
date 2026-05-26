@@ -1,6 +1,18 @@
 # syntax=docker/dockerfile:1.7
 # QuantBot Platform — HFT bot runtime (Debian-slim + kernel-bypass libs).
 #
+# Phase 2 §5.1 EXEMPTION (RESTRUCTURING_PLAN.md, .cursor/plans/
+# aqp-index-debt-phase-2-supply-chain.md):
+# This image cannot migrate to cgr.dev/chainguard/python. The runtime
+# stage needs libnuma1 + linuxptp + ethtool + kmod + linux-headers to
+# link against DPDK / Onload / Mellanox OFED kernel-bypass user-space
+# drivers. Chainguard's nonroot Wolfi runtime image does NOT ship these
+# packages, and the RESTRUCTURING_PLAN footnote at §5.1 explicitly notes
+# that Alpine/musl-style minimalism breaks native-wheel toolchains. The
+# Debian-slim base used here is hardened by other means (read-only root
+# FS, dropped capabilities, non-root UID 65532, no shell available to
+# the runtime user) per ADR 007 (QuantBot Latency Classes).
+#
 # Distroless is incompatible with kernel-bypass user-space libs (DPDK,
 # Solarflare Onload, Mellanox OFED) so HFT bots run on a hardened
 # slim Debian image instead. Still: read-only root FS, non-root UID,

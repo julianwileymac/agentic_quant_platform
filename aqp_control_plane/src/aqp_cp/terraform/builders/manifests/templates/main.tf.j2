@@ -1,0 +1,62 @@
+{# Tenant namespace bundle — main.tf header.
+
+   Renders the ``terraform { ... }`` block + provider configuration +
+   ``locals`` tag block. Pinned ``hashicorp/aws ~> 6.21`` per the
+   AgentCore provider's minimum requirement (see
+   bedrock_agentcore.tf.j2). #}
+
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.21"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.32"
+    }
+  }
+}
+
+provider "aws" {
+  # Credentials resolve through the boto3 chain (IRSA / EKS Pod
+  # Identity / EC2 instance profile / env). NEVER inline them.
+}
+
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.this.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.this.certificate_authority[0].data)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", "{{ cluster_name }}"]
+  }
+}
+
+data "aws_eks_cluster" "this" {
+  name = "{{ cluster_name }}"
+}
+
+data "aws_caller_identity" "current" {}
+
+locals {
+  tenant_id   = "{{ tenant_id }}"
+  environment = "{{ environment }}"
+  namespace   = "{{ namespace }}"
+  common_tags = {
+    tenant      = local.tenant_id
+    environment = local.environment
+    managed-by  = "aqp_cp.terraform"
+    component   = "tenant-bundle"
+  }
+}
+
+variable "tenant_id" {
+  type    = string
+  default = "{{ tenant_id }}"
+}
+
+variable "environment" {
+  type    = string
+  default = "{{ environment }}"
+}

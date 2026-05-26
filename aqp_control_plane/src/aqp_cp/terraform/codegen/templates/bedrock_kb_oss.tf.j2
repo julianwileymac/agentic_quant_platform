@@ -1,0 +1,138 @@
+{# Bedrock Knowledge Base + OpenSearch Serverless (VECTORSEARCH).
+
+   Combines the ``aws-ia/bedrock/aws`` module (Knowledge Base + data
+   source) with ``aws-ia/opensearch-serverless/aws`` (the VECTORSEARCH
+   collection + the matching encryption / network / data access
+   policies).
+
+   Eventual-consistency gotcha (documented by avangards.io): the IAM
+   policy that grants ``aoss:APIAccessAll`` to the KB role takes ~20s
+   to propagate. We insert a ``time_sleep`` between the policy attach
+   and the KB creation so the first plan/apply doesn't fail with
+   ``AccessDeniedException`` on collection access.
+
+   Expected variables:
+   - kb_name                  (str)
+   - kb_source_bucket_name    (str — operator-owned S3 bucket with research docs)
+   - oss_collection_name      (str, default <slug>-kb-collection)
+   - embedding_model_arn      (str, default Titan Embed v2)
+   - kb_role_arn              (str — IAM role the KB assumes)
+-#}
+
+# --- OpenSearch Serverless VECTORSEARCH collection --------------------
+
+module "kb_oss_collection_{{ spec.slug | replace('-', '_') }}" {
+  source  = "aws-ia/opensearch-serverless/aws"
+  version = "~> 0.0.5"
+
+  collection_name = {{ variables.get("oss_collection_name", spec.slug + "-kb-collection") | hcl }}
+  collection_type = "VECTORSEARCH"
+
+  encryption_policy_kms_key_arn = {{ variables.get("encryption_kms_key_arn", null) | hcl }}
+
+  # Network policy: VPC-only (no public endpoint). The KB ingestion
+  # job reaches the collection via the VPC interface endpoint the
+  # consumer composition wires alongside this module.
+  network_policy_public_dashboard = false
+  network_policy_public_collection = false
+
+  tags = local.common_tags
+}
+
+# --- Eventual-consistency guard ----------------------------------------
+# aoss:APIAccessAll takes ~20s to propagate after the policy attach.
+# Without this sleep the first plan/apply hits AccessDeniedException
+# on the very first ingestion job. See avangards.io eventual-consistency
+# write-up for the underlying race.
+
+resource "time_sleep" "wait_for_aoss_policy_{{ spec.slug | replace('-', '_') }}" {
+  depends_on      = [module.kb_oss_collection_{{ spec.slug | replace('-', '_') }}]
+  create_duration = "20s"
+}
+
+# --- S3 source bucket (research docs land here) -----------------------
+
+resource "aws_s3_bucket" "kb_source_{{ spec.slug | replace('-', '_') }}" {
+  bucket = {{ variables.get("kb_source_bucket_name", spec.slug + "-kb-source") | hcl }}
+  tags   = local.common_tags
+}
+
+resource "aws_s3_bucket_versioning" "kb_source_{{ spec.slug | replace('-', '_') }}" {
+  bucket = aws_s3_bucket.kb_source_{{ spec.slug | replace('-', '_') }}.id
+  versioning_configuration { status = "Enabled" }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "kb_source_{{ spec.slug | replace('-', '_') }}" {
+  bucket = aws_s3_bucket.kb_source_{{ spec.slug | replace('-', '_') }}.id
+  rule {
+    apply_server_side_encryption_by_default { sse_algorithm = "aws:kms" }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "kb_source_{{ spec.slug | replace('-', '_') }}" {
+  bucket                  = aws_s3_bucket.kb_source_{{ spec.slug | replace('-', '_') }}.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# --- Bedrock Knowledge Base + data source -----------------------------
+
+module "bedrock_kb_{{ spec.slug | replace('-', '_') }}" {
+  source  = "aws-ia/bedrock/aws"
+  version = ">= 0.0.20"
+
+  create_kb              = true
+  kb_name                = {{ variables.get("kb_name", spec.slug + "-kb") | hcl }}
+  kb_storage_type        = "OPENSEARCH_SERVERLESS"
+  kb_oss_collection_arn  = module.kb_oss_collection_{{ spec.slug | replace('-', '_') }}.collection_arn
+  kb_oss_collection_name = module.kb_oss_collection_{{ spec.slug | replace('-', '_') }}.collection_name
+  kb_embedding_model_arn = {{ variables.get(
+    "embedding_model_arn",
+    "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v2:0",
+  ) | hcl }}
+
+  create_default_kb_data_source = true
+  kb_s3_data_source_bucket_arn  = aws_s3_bucket.kb_source_{{ spec.slug | replace('-', '_') }}.arn
+
+  depends_on = [time_sleep.wait_for_aoss_policy_{{ spec.slug | replace('-', '_') }}]
+
+  tags = local.common_tags
+}
+
+# --- SSM Parameter Store outputs --------------------------------------
+
+resource "aws_ssm_parameter" "kb_collection_arn_{{ spec.slug | replace('-', '_') }}" {
+  name  = "/aqp/{{ spec.environment }}/kb_collection_arn"
+  type  = "String"
+  value = module.kb_oss_collection_{{ spec.slug | replace('-', '_') }}.collection_arn
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "kb_knowledge_base_id_{{ spec.slug | replace('-', '_') }}" {
+  name  = "/aqp/{{ spec.environment }}/kb_knowledge_base_id"
+  type  = "String"
+  value = module.bedrock_kb_{{ spec.slug | replace('-', '_') }}.kb_id
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "kb_source_bucket_{{ spec.slug | replace('-', '_') }}" {
+  name  = "/aqp/{{ spec.environment }}/kb_source_bucket"
+  type  = "String"
+  value = aws_s3_bucket.kb_source_{{ spec.slug | replace('-', '_') }}.bucket
+  tags  = local.common_tags
+}
+
+output "kb_collection_arn" {
+  value = module.kb_oss_collection_{{ spec.slug | replace('-', '_') }}.collection_arn
+}
+
+output "kb_knowledge_base_id" {
+  value = module.bedrock_kb_{{ spec.slug | replace('-', '_') }}.kb_id
+}
+
+output "kb_source_bucket_arn" {
+  value = aws_s3_bucket.kb_source_{{ spec.slug | replace('-', '_') }}.arn
+}

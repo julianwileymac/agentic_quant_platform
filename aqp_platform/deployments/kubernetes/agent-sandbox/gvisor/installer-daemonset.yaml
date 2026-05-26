@@ -1,0 +1,202 @@
+# =============================================================================
+# gVisor installer — node-level DaemonSet that:
+#
+#   1. Downloads the `runsc` + `containerd-shim-runsc-v1` binaries
+#      onto the host node's /usr/local/bin/.
+#   2. Patches the node's containerd config.toml to register the
+#      `runsc` runtime under the `gvisor` runtime class handler.
+#   3. Reloads containerd via `systemctl restart containerd` (signal
+#      handled by the host-PID privileged container).
+#   4. Stamps `aqp.io/gvisor: installed` on the node label so the
+#      RuntimeClass (`runtimeclass.yaml`) can schedule onto it.
+#
+# Phase 5 §8.3 (RESTRUCTURING_PLAN.md). One DaemonSet per cluster;
+# the installer is idempotent — running on an already-patched node
+# is a no-op.
+#
+# This DaemonSet is HEAVY (host-PID privileged) so it lives in its
+# own `gvisor` namespace which the operator carves out as a "trusted
+# infrastructure" zone. The matching Kyverno policy
+# `01-require-pss-restricted` skips it because of the
+# `aqp.io/pss-exception: gvisor-installer-host-binaries` label.
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gvisor
+  labels:
+    app.kubernetes.io/name: gvisor
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    aqp.io/component: gvisor-installer
+    # Phase 2 §5.4 — installer needs host-PID + privileged.
+    aqp.io/pss-exception: "gvisor-installer-host-binaries"
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    project: aqp-mesh
+    cost_center: quant-research-01
+    owner: platform-engineering
+    data_classification: internal
+  annotations:
+    aqp.internal/description: "Phase 5 §8.3 — gVisor (runsc) installer DaemonSet."
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gvisor-installer
+  namespace: gvisor
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gvisor-installer
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gvisor-installer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gvisor-installer
+subjects:
+  - kind: ServiceAccount
+    name: gvisor-installer
+    namespace: gvisor
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gvisor-installer-script
+  namespace: gvisor
+data:
+  install.sh: |
+    #!/usr/bin/env bash
+    # Phase 5 §8.3 — install runsc + register the gVisor runtime
+    # in containerd, then label the node so the RuntimeClass can
+    # schedule onto it. Idempotent.
+    set -euo pipefail
+
+    ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+    GVISOR_VERSION="${GVISOR_VERSION:-release-20240603.0}"
+    INSTALL_DIR="${INSTALL_DIR:-/host/usr/local/bin}"
+    CONFIG_PATH="${CONFIG_PATH:-/host/etc/containerd/config.toml}"
+
+    if [[ -x "${INSTALL_DIR}/runsc" ]]; then
+      echo "[gvisor-installer] runsc already present at ${INSTALL_DIR}/runsc"
+    else
+      echo "[gvisor-installer] downloading runsc ${GVISOR_VERSION} for ${ARCH}"
+      curl -sSL --fail \
+        "https://storage.googleapis.com/gvisor/releases/${GVISOR_VERSION}/${ARCH}/runsc" \
+        -o "${INSTALL_DIR}/runsc"
+      curl -sSL --fail \
+        "https://storage.googleapis.com/gvisor/releases/${GVISOR_VERSION}/${ARCH}/containerd-shim-runsc-v1" \
+        -o "${INSTALL_DIR}/containerd-shim-runsc-v1"
+      chmod +x "${INSTALL_DIR}/runsc" "${INSTALL_DIR}/containerd-shim-runsc-v1"
+    fi
+
+    # containerd config patch — idempotent insert via grep -q.
+    if ! grep -q 'plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc' "${CONFIG_PATH}"; then
+      echo "[gvisor-installer] patching ${CONFIG_PATH}"
+      cat >> "${CONFIG_PATH}" <<'EOF'
+
+    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]
+      runtime_type = "io.containerd.runsc.v1"
+    EOF
+      # Reload containerd via the host's systemd. The container's
+      # /host/run mount lets us send the SIGHUP equivalent.
+      chroot /host systemctl restart containerd
+    else
+      echo "[gvisor-installer] containerd already knows about runsc"
+    fi
+
+    # Label the node so the RuntimeClass schedules onto it.
+    NODE="${NODE_NAME:-$(cat /etc/hostname)}"
+    echo "[gvisor-installer] labelling node ${NODE} with aqp.io/gvisor=installed"
+    kubectl label node "${NODE}" aqp.io/gvisor=installed --overwrite
+
+    echo "[gvisor-installer] done"
+    # Sleep forever — the DaemonSet's purpose is to keep the node
+    # labelled even if the kubelet restarts; exit would trigger a
+    # CrashLoopBackOff.
+    sleep infinity
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: gvisor-installer
+  namespace: gvisor
+  labels:
+    app: gvisor-installer
+    app.kubernetes.io/part-of: aqp
+spec:
+  selector:
+    matchLabels:
+      app: gvisor-installer
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: gvisor-installer
+    spec:
+      serviceAccountName: gvisor-installer
+      hostPID: true
+      hostNetwork: false
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: installer
+          image: alpine/k8s:1.30.5  # Multi-arch, ships kubectl + curl.
+          command: ["/bin/sh", "/scripts/install.sh"]
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: GVISOR_VERSION
+              value: "release-20240603.0"
+          securityContext:
+            privileged: true  # required for chroot /host systemctl
+            allowPrivilegeEscalation: true
+          volumeMounts:
+            - name: host-bin
+              mountPath: /host/usr/local/bin
+            - name: host-etc
+              mountPath: /host/etc
+            - name: host-run
+              mountPath: /host/run
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: host-root
+              mountPath: /host
+      volumes:
+        - name: host-bin
+          hostPath:
+            path: /usr/local/bin
+            type: DirectoryOrCreate
+        - name: host-etc
+          hostPath:
+            path: /etc
+            type: Directory
+        - name: host-run
+          hostPath:
+            path: /run
+            type: Directory
+        - name: scripts
+          configMap:
+            name: gvisor-installer-script
+            defaultMode: 0755
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory

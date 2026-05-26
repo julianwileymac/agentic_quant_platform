@@ -15,7 +15,12 @@ export function RLLoopDiagram({ className }: { className?: string }) {
         initial="hidden"
         whileInView="show"
         viewport={{ once: true, margin: "-50px" }}
+        role="img"
+        aria-label="Reinforcement learning loop: Environment, Policy, and Reward nodes connected in a cycle, with the FinRL-X four-stage pipeline labelled along the bottom."
       >
+        <title>
+          RL loop with FinRL-X pipeline (f_S → f_A → f_T → f_R)
+        </title>
         <defs>
           <linearGradient id="rl-env-grad" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#10b981" stopOpacity={0.18} />

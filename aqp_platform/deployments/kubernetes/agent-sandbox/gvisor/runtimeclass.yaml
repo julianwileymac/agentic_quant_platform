@@ -1,0 +1,46 @@
+# =============================================================================
+# gVisor RuntimeClass — agent-sandbox pool target.
+#
+# Phase 5 §8.3 (RESTRUCTURING_PLAN.md). The RuntimeClass binds a
+# friendly name (``gvisor``) to a containerd handler (``runsc``) so
+# Pods can opt into the gVisor sandbox via:
+#
+#     spec:
+#       runtimeClassName: gvisor
+#
+# Phase 2 §5.3 already shipped the matching Kyverno policy at
+# `aqp_platform/deployments/kubernetes/security/kyverno/cluster-policies/
+# 02-require-runtime-class.yaml` which DENIES admission of any pod
+# pulling `aqp-agent-sandbox` without the matching `runtimeClassName`.
+#
+# The RuntimeClass is cluster-scoped and idempotent — operators can
+# `kubectl apply -f` repeatedly. The matching `runsc` shim is
+# installed by the DaemonSet at `installer-daemonset.yaml`.
+# =============================================================================
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: gvisor
+  labels:
+    app.kubernetes.io/part-of: aqp
+    aqp.io/component: agent-sandbox-runtime
+  annotations:
+    aqp.internal/description: >-
+      gVisor user-space kernel for the agent-sandbox pool.
+      Phase 5 §8.3 of RESTRUCTURING_PLAN.md.
+handler: runsc
+# Pin to nodes labelled `aqp.io/gvisor=installed` — set by the
+# installer DaemonSet once `runsc` is on the node + the matching
+# containerd config has reloaded. Without this constraint, a pod
+# scheduling on a non-installed node would fail with
+# `RunPodSandboxFailed`.
+scheduling:
+  nodeSelector:
+    aqp.io/gvisor: installed
+overhead:
+  podFixed:
+    # gVisor adds ~10MB RAM + ~10m CPU per pod for the user-space
+    # kernel. Operators tune per-cell after observing the actual
+    # overhead in linkerd-viz dashboards.
+    cpu: "10m"
+    memory: "10Mi"

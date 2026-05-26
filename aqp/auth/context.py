@@ -60,6 +60,23 @@ class RequestContext:
     # populate them.
     experiment_id: str | None = None
     test_id: str | None = None
+    # Phase 3 §6.3 (RESTRUCTURING_PLAN.md) — cell-awareness.
+    #
+    # ``cell_id`` is the deployment-cell hosting this request. The ASGI
+    # middleware in :mod:`aqp.api.middleware.tenancy_middleware` sets
+    # it from the ``X-AQP-Cell`` header injected by the
+    # ``aqp-tenant-router`` ext_authz callout (Phase 3 §6.4). When the
+    # header is absent (in-cluster service-to-service traffic that
+    # didn't traverse Envoy, or in tests) it stays ``None`` and the
+    # tenancy strategy falls back to workspace-only routing.
+    #
+    # ``region`` and ``tenancy_strategy_alias`` are denormalised
+    # copies of the cell's metadata so OTEL spans, audit rows, and
+    # the LedgerWriter don't need a second cells-registry lookup
+    # on the hot path.
+    cell_id: str | None = None
+    region: str | None = None
+    tenancy_strategy_alias: str | None = None
     role: str | None = None
     live_control: bool = False
     extras: dict[str, Any] = field(default_factory=dict)
@@ -91,6 +108,9 @@ class RequestContext:
             run_id=rid,
             experiment_id=self.experiment_id,
             test_id=self.test_id,
+            cell_id=self.cell_id,
+            region=self.region,
+            tenancy_strategy_alias=self.tenancy_strategy_alias,
             role=self.role,
             live_control=self.live_control,
             extras=dict(self.extras),
@@ -129,6 +149,11 @@ class RequestContext:
             "run_id": self.run_id,
             "experiment_id": self.experiment_id,
             "test_id": self.test_id,
+            # Phase 3 §6.3 — cell-awareness fields propagate through
+            # ``with_overrides`` round-trips.
+            "cell_id": self.cell_id,
+            "region": self.region,
+            "tenancy_strategy_alias": self.tenancy_strategy_alias,
             "role": self.role,
             "live_control": self.live_control,
             "extras": dict(self.extras),
@@ -147,6 +172,10 @@ class RequestContext:
             ("run_id", self.run_id),
             ("experiment_id", self.experiment_id),
             ("test_id", self.test_id),
+            # Phase 3 §6.3 — cell-awareness in FinOps metric dimensions.
+            ("cell_id", self.cell_id),
+            ("region", self.region),
+            ("tenancy_strategy_alias", self.tenancy_strategy_alias),
         ):
             if value:
                 out[key] = str(value)

@@ -13,6 +13,7 @@ and AQP report into the same Jaeger / collector.  The legacy
 """
 from __future__ import annotations
 
+from aqp.observability.aws import configure_aws_observability
 from aqp.observability.dagster import instrument_dagster
 from aqp.observability.decorators import traced
 from aqp.observability.logging import (
@@ -28,6 +29,7 @@ from aqp.observability.tracing import (
 )
 
 __all__ = [
+    "configure_aws_observability",
     "configure_structured_logging",
     "configure_tracing",
     "get_logger",

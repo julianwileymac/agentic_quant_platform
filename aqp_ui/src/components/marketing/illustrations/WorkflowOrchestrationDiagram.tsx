@@ -33,7 +33,12 @@ export function WorkflowOrchestrationDiagram({
         initial="hidden"
         whileInView="show"
         viewport={{ once: true, margin: "-50px" }}
+        role="img"
+        aria-label="WorkflowRuntime at the center with seven OrchestrationAdapter spokes: graph, crew, debate, fusion, execution, schedule, studio."
       >
+        <title>
+          WorkflowRuntime with seven OrchestrationAdapter spokes
+        </title>
         <defs>
           <radialGradient id="wf-center-grad" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#1677ff" stopOpacity={0.5} />

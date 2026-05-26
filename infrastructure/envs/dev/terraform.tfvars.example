@@ -1,0 +1,14 @@
+# Example values for `envs/dev`. Copy to terraform.tfvars locally
+# (NEVER commit) and fill in real values.
+
+region                = "us-east-1"
+account_id            = "111111111111"           # aqp-dev account id
+external_id           = "REPLACE_ME_WITH_GENERATED_UUID"
+kms_key_arn           = "arn:aws:kms:us-east-1:111111111111:key/REPLACE_ME"
+github_oidc_provider_arn = "arn:aws:iam::111111111111:oidc-provider/token.actions.githubusercontent.com"
+
+argocd_domain         = "argo.dev.aqp.internal"
+argocd_oidc_issuer    = "https://aws-sso.signin.aws.amazon.com"
+argocd_oidc_client_id = "REPLACE_ME"
+
+grafana_admin_password = "REPLACE_ME"

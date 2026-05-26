@@ -1,0 +1,65 @@
+# =============================================================================
+# Phase 2 §5.3 — Pod Security Standards (restricted) label enforcement.
+#
+# Every Namespace whose `aqp.io/component` label is set must also carry
+# the three Pod Security Standards labels for the `restricted` profile:
+#
+#   pod-security.kubernetes.io/enforce: restricted
+#   pod-security.kubernetes.io/audit: restricted
+#   pod-security.kubernetes.io/warn: restricted
+#
+# Exceptions (streaming, edge, observability) carry an explicit
+# `aqp.io/pss-exception: <reason>` label per the Phase 2 §5.4
+# documented-exception list — those Namespaces are NOT matched by the
+# selector below.
+#
+# `validationFailureAction: Audit` for the Phase 2 rollout — violations
+# are logged but not blocked. Flip to Enforce in Phase 2.5 once the
+# audit logs are zero. See ../README.md for the ratchet plan.
+# =============================================================================
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: aqp-require-pss-restricted-on-namespaces
+  annotations:
+    policies.kyverno.io/title: PSS restricted on AQP namespaces
+    policies.kyverno.io/category: Pod Security Standards
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Namespace
+    policies.kyverno.io/description: >-
+      AQP-owned namespaces (any namespace carrying `aqp.io/component`)
+      must label themselves with the PSS restricted enforce/audit/warn
+      triple. Namespaces with `aqp.io/pss-exception` set are skipped
+      (intentional baseline/privileged carve-outs — see ../README.md).
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: pss-restricted-labels-required
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+              selector:
+                matchExpressions:
+                  - key: aqp.io/component
+                    operator: Exists
+                  - key: aqp.io/pss-exception
+                    operator: DoesNotExist
+      validate:
+        message: >-
+          AQP-owned namespaces must carry the three Pod Security
+          Standards labels for the `restricted` profile:
+            pod-security.kubernetes.io/enforce: restricted
+            pod-security.kubernetes.io/audit: restricted
+            pod-security.kubernetes.io/warn: restricted
+          Set `aqp.io/pss-exception: <reason>` for intentional
+          baseline/privileged exceptions (streaming, edge,
+          observability — see Phase 2 §5.4 documentation).
+        pattern:
+          metadata:
+            labels:
+              pod-security.kubernetes.io/enforce: restricted
+              pod-security.kubernetes.io/audit: restricted
+              pod-security.kubernetes.io/warn: restricted

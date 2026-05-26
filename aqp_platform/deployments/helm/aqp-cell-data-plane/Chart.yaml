@@ -1,0 +1,27 @@
+apiVersion: v2
+name: aqp-cell-data-plane
+description: >-
+  Phase 6 §9 (RESTRUCTURING_PLAN.md) — per-cell data plane bundle.
+  One Helm release per cell ships CNPG Postgres, Redis, MinIO,
+  MLflow, and an Iceberg REST catalog scoped to the cell. Argo CD's
+  cells `ApplicationSet` stamps the release with cell-specific
+  values. §9.6 per-cell Kafka is deferred until the first silo-reg
+  tenant requests it.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - aqp
+  - cell-data-plane
+  - cnpg
+  - postgres
+  - redis
+  - minio
+  - mlflow
+  - iceberg
+  - phase-6
+sources:
+  - https://github.com/julianwiley/agentic_quant_platform
+maintainers:
+  - name: AQP Platform Team
+icon: https://aqp.fund/static/logo.svg

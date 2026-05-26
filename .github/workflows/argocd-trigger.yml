@@ -1,0 +1,58 @@
+name: argocd-trigger
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Target environment.
+        type: choice
+        required: true
+        options: [dev, staging, prod]
+        default: dev
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  bump-image-tags:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: resolve-target-env
+        id: env
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            tag="${{ github.event.release.tag_name }}"
+            if [[ "$tag" == *-prod ]]; then
+              echo "env=prod" >> "$GITHUB_OUTPUT"
+            else
+              echo "env=staging" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "env=${{ inputs.env }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: bump-helm-image-tags
+        run: |
+          set -eu
+          target_env="${{ steps.env.outputs.env }}"
+          for chart in aqp-admin aqp-backend aqp-redis aqp-workers aqp-control-plane; do
+            file="aqp_platform/deployments/kubernetes/helm/${chart}/values-${target_env}.yaml"
+            if [ -f "$file" ]; then
+              sed -i "s|^\(  tag:\) .*|\1 \"${GITHUB_SHA}\"|" "$file"
+            fi
+          done
+          git diff --stat
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "ci(gitops): bump ${{ steps.env.outputs.env }} image tags to ${{ github.sha }}"
+          branch: "ci/bump-${{ steps.env.outputs.env }}-${{ github.sha }}"
+          title: "Bump ${{ steps.env.outputs.env }} image tags to ${{ github.sha }}"
+          body: |
+            Automated GitOps PR — ArgoCD ApplicationSet picks the change up via Image Updater.
+
+            Sweep performed by `.github/workflows/argocd-trigger.yml`.

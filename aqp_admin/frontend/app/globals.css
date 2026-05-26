@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 ships its own design tokens via @theme. We mirror the
+ * shadcn/ui palette aliases used by aqp_client/ so the muscle memory
+ * (border, accent, muted, destructive) transfers cleanly.
+ */
+@theme {
+  --color-border: oklch(91% 0.005 250);
+  --color-input: oklch(91% 0.005 250);
+  --color-ring: oklch(72% 0.05 230);
+  --color-background: oklch(99% 0.005 250);
+  --color-foreground: oklch(20% 0.02 250);
+  --color-muted: oklch(96% 0.005 250);
+  --color-muted-foreground: oklch(50% 0.02 250);
+  --color-accent: oklch(96% 0.005 250);
+  --color-accent-foreground: oklch(20% 0.02 250);
+  --color-destructive: oklch(60% 0.18 28);
+  --color-destructive-foreground: oklch(99% 0.005 250);
+  --radius: 0.5rem;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

@@ -1,0 +1,21 @@
+apiVersion: v2
+name: aqp-mcp-tenant
+description: >-
+  Phase 5 §8.1 (RESTRUCTURING_PLAN.md) — per-tenant MCP server
+  bundle. One ``aqp-data-mcp`` + one ``aqp-codebase-mcp``
+  Deployment per (cell, tenant) pair for the ``shared-prem`` and
+  ``silo-reg`` tiers. ``shared-std`` tenants share the cell-pool
+  Deployment instead (different chart, deferred to Phase 5.5).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - aqp
+  - mcp
+  - tenant-isolation
+  - phase-5
+sources:
+  - https://github.com/julianwiley/agentic_quant_platform
+maintainers:
+  - name: AQP Platform Team
+icon: https://aqp.fund/static/logo.svg

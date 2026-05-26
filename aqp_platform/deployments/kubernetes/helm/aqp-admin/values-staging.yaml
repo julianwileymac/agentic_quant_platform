@@ -1,0 +1,22 @@
+global:
+  cluster: aqp-staging
+  env: staging
+
+image:
+  repository: ${ECR_REGISTRY}/aqp-admin
+  tag: ${IMAGE_TAG}
+
+frontendImage:
+  repository: ${ECR_REGISTRY}/aqp-admin-frontend
+  tag: ${IMAGE_TAG}
+
+replicas: 3
+
+ingress:
+  host: admin.staging.aqp.internal
+
+env:
+  AQP_ADMIN_API_URL: "http://aqp-core-api.aqp-core.svc.cluster.local:8000"
+  AQP_ADMIN_CONTROL_PLANE_URL: "http://aqp-control-plane.aqp-admin.svc.cluster.local:9000"
+  AQP_ADMIN_AUTH_REQUIRED: "true"
+  AQP_ADMIN_AUDIT_HTTP_URL: "http://aqp-core-api.aqp-core.svc.cluster.local:8000/_internal/audit/admin-runs"

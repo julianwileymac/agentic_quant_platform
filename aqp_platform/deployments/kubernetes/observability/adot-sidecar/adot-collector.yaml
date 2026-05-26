@@ -1,0 +1,152 @@
+###############################################################################
+# adot-sidecar — AWS Distro for OpenTelemetry sidecar manifest for EKS workloads.
+#
+# Phase F of the AWS hybrid rollout. The EKS Karpenter foundation continues to
+# host the quant runtime workloads (Celery workers, Iceberg writers, MLflow,
+# Strimzi, Flink) per the operator's hybrid topology decision; this manifest
+# wires the ADOT sidecar pattern so those workloads can export traces +
+# metrics into AWS X-Ray + CloudWatch Application Signals + CloudWatch
+# Metrics WITHOUT changing the application-side OTel code (rule 4: app emits
+# OTLP to localhost:4317, sidecar fans out).
+#
+# This is the "Phase 4c control-plane maturation" sidecar — Pods that opt in
+# via the ``otel-injection: aws-adot`` annotation get the sidecar injected
+# at admission time. The OTel Operator picks the right OpenTelemetryCollector
+# CR through the ``targetNamespace`` selector below.
+#
+# DO NOT enable this unconditionally — the X-Ray + CloudWatch egress is
+# billable. Roll out per-namespace by adding the annotation
+# ``sidecar.opentelemetry.io/inject: aqp-adot-sidecar`` to the Pod spec.
+###############################################################################
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: aqp-adot-sidecar
+  namespace: aqp-observability
+  labels:
+    app.kubernetes.io/name: aqp-adot-sidecar
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/component: observability
+    aqp.internal/aws-slice: "true"
+spec:
+  mode: sidecar
+  # IRSA — the sidecar assumes the role attached to the ServiceAccount
+  # in the namespace the Pod runs in. The role MUST allow
+  # xray:PutTraceSegments, cloudwatch:PutMetricData, logs:PutLogEvents,
+  # and applicationsignals:* (the ADOT processor needs the latter).
+  serviceAccount: aqp-adot-sidecar
+  image: public.ecr.aws/aws-observability/aws-otel-collector:v0.40.0
+  imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      # Group spans by trace id so X-Ray segments stay coherent.
+      batch/traces:
+        timeout: 1s
+        send_batch_size: 50
+
+      # Application Signals — auto-derives service.name + operation from
+      # the resource attributes set by aqp/observability/aws.py.
+      awsapplicationsignals:
+        resolvers:
+          - name: ""
+            platform: eks
+
+      # Trim noisy attributes that explode segment size in X-Ray.
+      attributes/redact:
+        actions:
+          - key: http.request.header.authorization
+            action: delete
+          - key: http.request.header.cookie
+            action: delete
+          - key: db.statement
+            action: hash
+
+      # Memory limiter — never let the sidecar OOM the Pod.
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+
+    exporters:
+      # Traces → AWS X-Ray. The ADOT collector converts OTLP spans to
+      # X-Ray segments using the canonical awsxray exporter.
+      awsxray:
+        # Region inherited from the IRSA role's session.
+        index_all_attributes: false
+        indexed_attributes:
+          - aws.local.service
+          - aws.local.operation
+          - aqp.spec.name
+          - aqp.run.id
+
+      # Metrics → CloudWatch Embedded Metric Format (EMF).
+      awsemf/application-signals:
+        namespace: AqpApplicationSignals
+        log_group_name: /aws/application-signals/aqp
+        log_stream_name: "{ServiceName}"
+        dimension_rollup_option: NoDimensionRollup
+        metric_declarations:
+          - dimensions:
+              - [Service, Operation]
+              - [Service]
+            metric_name_selectors:
+              - "Latency"
+              - "Faults"
+              - "Errors"
+              - "Calls"
+
+      # General custom OTel metrics → CloudWatch (separate namespace).
+      awsemf/custom:
+        namespace: AqpCustomMetrics
+        log_group_name: /aws/aqp/metrics
+        log_stream_name: "{ServiceName}"
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, attributes/redact, batch/traces]
+          exporters: [awsxray]
+        metrics/application-signals:
+          receivers: [otlp]
+          processors: [memory_limiter, awsapplicationsignals]
+          exporters: [awsemf/application-signals]
+        metrics/custom:
+          receivers: [otlp]
+          processors: [memory_limiter]
+          exporters: [awsemf/custom]
+      telemetry:
+        logs:
+          level: info
+---
+###############################################################################
+# IRSA ServiceAccount the sidecar assumes. The Pod template references the
+# matching IAM role via the EKS Pod Identity association (preferred) OR the
+# legacy IRSA annotation. The role's policy is owned by
+# ``infrastructure/modules/ecs-fargate-control-plane`` (the execution role
+# extras grant the X-Ray + CloudWatch + Application Signals permissions).
+###############################################################################
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aqp-adot-sidecar
+  namespace: aqp-observability
+  annotations:
+    # Replace <account-id> + <region> with the resolved IAM role ARN.
+    # An ExternalSecret can fill this when the operator deploys per-env.
+    eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/aqp-adot-sidecar"

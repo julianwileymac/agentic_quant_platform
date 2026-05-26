@@ -189,6 +189,74 @@ def _require_pyiceberg() -> None:
         ) from exc
 
 
+def _cell_data_plane() -> Any | None:
+    """Return the active cell's ``CellDataPlane`` block or ``None``.
+
+    Phase 6 §9 (RESTRUCTURING_PLAN.md): when an in-flight request /
+    Celery task is bound to a deployment cell, the per-cell data plane
+    URIs supersede the cluster-wide ``settings.iceberg_*`` values. We
+    look up the active ``cell_id`` via the existing Phase 3 §6.3
+    ``aqp.tenancy.runtime_context`` plumbing and join it against
+    ``DeploymentTopology.cells``.
+
+    Returns ``None`` when:
+      * no request context is bound (CLI / bootstrap path);
+      * the request context has ``cell_id is None`` (legacy un-celled call);
+      * the cell exists but has no ``data_plane`` block (legacy shared cell);
+      * the topology YAML cannot be loaded (returns ``None`` instead of
+        raising — the caller falls back to ``settings.*``).
+    """
+    try:
+        from aqp.tenancy.runtime_context import get_runtime_context
+    except Exception:  # pragma: no cover - defensive
+        return None
+    ctx = get_runtime_context()
+    cell_id = getattr(ctx, "cell_id", None) if ctx is not None else None
+    if not cell_id:
+        return None
+    try:
+        from aqp.deployment.topology import get_deployment_topology
+    except Exception:  # pragma: no cover - defensive
+        return None
+    try:
+        topo = get_deployment_topology()
+    except Exception:  # pragma: no cover - defensive
+        return None
+    cell = topo.cell_map.get(cell_id)
+    if cell is None:
+        return None
+    dp = getattr(cell, "data_plane", None)
+    if dp is None:
+        return None
+    # Treat an empty CellDataPlane (no fields set) as None so the
+    # call site keeps the legacy shared-data-plane behaviour.
+    if not any(
+        (
+            dp.iceberg_rest_uri,
+            dp.iceberg_warehouse_uri,
+            dp.minio_endpoint,
+            dp.minio_bucket_prefix,
+        )
+    ):
+        return None
+    return dp
+
+
+def _active_cell_id() -> str | None:
+    """Return the active ``cell_id`` from the runtime context, or ``None``.
+
+    Used as the cache key for the per-cell PyIceberg ``Catalog`` handle
+    (Phase 6 §9.3). The cluster-wide ``settings.*`` path keys to ``None``;
+    each cell's REST catalog gets its own cached handle keyed by id.
+    """
+    try:
+        from aqp.tenancy.runtime_context import get_runtime_context
+    except Exception:  # pragma: no cover - defensive
+        return None
+    ctx = get_runtime_context()
+    return getattr(ctx, "cell_id", None) if ctx is not None else None
+
+
 def _build_properties() -> dict[str, str]:
     """Translate AQP settings into a PyIceberg ``Catalog`` properties dict.
 
@@ -200,12 +268,25 @@ def _build_properties() -> dict[str, str]:
     """
     from aqp.credentials import CredentialKey, get_resolver
 
-    rest_uri = (settings.iceberg_rest_uri or "").strip()
+    cell_dp = _cell_data_plane()
+    cell_rest_uri = (getattr(cell_dp, "iceberg_rest_uri", "") or "") if cell_dp else ""
+    cell_warehouse = (
+        (getattr(cell_dp, "iceberg_warehouse_uri", "") or "") if cell_dp else ""
+    )
+    cell_s3_endpoint = (
+        (getattr(cell_dp, "minio_endpoint", "") or "") if cell_dp else ""
+    )
+
+    rest_uri = cell_rest_uri.strip() or (settings.iceberg_rest_uri or "").strip()
     warehouse_path = Path(settings.iceberg_warehouse).expanduser().resolve()
     warehouse_path.mkdir(parents=True, exist_ok=True)
 
     if rest_uri:
-        warehouse = (settings.iceberg_s3_warehouse or "").strip() or f"file://{warehouse_path}"
+        warehouse = (
+            cell_warehouse.strip()
+            or (settings.iceberg_s3_warehouse or "").strip()
+            or f"file://{warehouse_path}"
+        )
         props: dict[str, str] = {
             "type": "rest",
             "uri": rest_uri,
@@ -256,8 +337,11 @@ def _build_properties() -> dict[str, str]:
             "init_catalog_tables": "true",
         }
 
-    if settings.s3_endpoint_url:
-        props["s3.endpoint"] = settings.s3_endpoint_url
+    # Phase 6 §9.3 — per-cell MinIO endpoint overrides the
+    # cluster-wide ``settings.s3_endpoint_url`` when set.
+    effective_s3_endpoint = cell_s3_endpoint.strip() or (settings.s3_endpoint_url or "").strip()
+    if effective_s3_endpoint:
+        props["s3.endpoint"] = effective_s3_endpoint
     if settings.s3_access_key:
         props["s3.access-key-id"] = settings.s3_access_key
     if settings.s3_secret_key:
@@ -269,16 +353,41 @@ def _build_properties() -> dict[str, str]:
     return props
 
 
-@lru_cache(maxsize=1)
-def get_catalog() -> Catalog:
-    """Return a cached :class:`pyiceberg.catalog.Catalog` handle."""
+# Phase 6 §9.3 — cell-keyed cache. Cluster-wide path keys to None;
+# each cell-bound request gets its own cached Catalog handle. Capped
+# at 32 entries (cells per worker) — LRU eviction is fine; reload
+# cost is sub-second for the REST client.
+@lru_cache(maxsize=32)
+def _load_catalog_for_cell(cell_id: str | None) -> Catalog:
+    """Inner cell-keyed catalog factory.
+
+    The ``cell_id`` argument is only used as the cache key; the actual
+    catalog properties come from :func:`_build_properties`, which reads
+    the same ``cell_id`` back via ``runtime_context``. We pass it
+    explicitly so the cache cannot conflate two different cells.
+    """
     _require_pyiceberg()
     from pyiceberg.catalog import load_catalog
 
     props = _build_properties()
     name = settings.iceberg_catalog_name or "aqp"
-    logger.debug("Loading Iceberg catalog %s with type=%s", name, props.get("type"))
+    logger.debug(
+        "Loading Iceberg catalog %s for cell=%s with type=%s",
+        name,
+        cell_id or "<none>",
+        props.get("type"),
+    )
     return load_catalog(name, **props)
+
+
+def get_catalog() -> Catalog:
+    """Return a cached :class:`pyiceberg.catalog.Catalog` handle.
+
+    Phase 6 §9.3: when the active ``RequestContext`` carries a
+    ``cell_id``, the handle is cached per ``cell_id``. CLI / bootstrap
+    paths (no request context) share the legacy cluster-wide handle.
+    """
+    return _load_catalog_for_cell(_active_cell_id())
 
 
 def reset_catalog_cache() -> None:
@@ -289,9 +398,15 @@ def reset_catalog_cache() -> None:
     not have an ``lru_cache`` ``cache_clear`` attribute. Skipping silently
     is correct because the patched function has no cache to clear.
     """
-    cache_clear = getattr(get_catalog, "cache_clear", None)
+    # Phase 6 §9.3 — evict every cell-keyed entry.
+    cache_clear = getattr(_load_catalog_for_cell, "cache_clear", None)
     if callable(cache_clear):
         cache_clear()
+    # Back-compat: if a test has wrapped ``get_catalog`` in its own
+    # ``lru_cache``, clear that too.
+    legacy_clear = getattr(get_catalog, "cache_clear", None)
+    if callable(legacy_clear):
+        legacy_clear()
 
 
 def split_identifier(identifier: str | tuple[str, ...]) -> tuple[str, str]:

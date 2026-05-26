@@ -1,0 +1,40 @@
+name: paper-config-validate
+
+on:
+  pull_request:
+    paths: ["configs/paper/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pyyaml jsonschema
+      - name: yaml-schema-validate
+        run: |
+          python <<'PY'
+          import yaml, sys, glob
+          for path in glob.glob("configs/paper/*.yaml"):
+              with open(path) as fh:
+                  data = yaml.safe_load(fh)
+              required = {"strategy", "session"}
+              missing = required - set(data or {})
+              if missing:
+                  print(f"::error file={path}::missing keys: {missing}")
+                  sys.exit(1)
+          PY
+      - name: aqp-paper-dry-run
+        run: |
+          if command -v aqp >/dev/null; then
+            for f in configs/paper/*.yaml; do
+              aqp paper run --dry-run --config "$f" || exit 1
+            done
+          else
+            echo "::warning::aqp CLI not installed in CI runner; skipping dry-run"
+          fi

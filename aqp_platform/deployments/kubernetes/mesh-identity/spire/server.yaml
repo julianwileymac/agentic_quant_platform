@@ -1,0 +1,200 @@
+# =============================================================================
+# SPIRE Server — central SVID issuer for the trust domain.
+#
+# Phase 4 §7.2 (RESTRUCTURING_PLAN.md). Issues JWT-SVIDs and
+# X.509-SVIDs to AQP workloads via the SPIRE Agent's Workload API.
+#
+# Trust domain: ``spiffe://aqp.fund``. Per-cell SPIFFE IDs follow
+# the convention ``spiffe://aqp.fund/cell/<cell-id>/<service-account>``.
+#
+# This file is the minimum-viable SPIRE Server deploy. Production
+# operators will swap the bundled SQLite datastore for Postgres,
+# tune the NodeAttestor / WorkloadAttestor selectors, and configure
+# the OIDC Discovery Provider for federation. Phase 4 ships the
+# spine; Phase 4.5 fills in the production-grade tuning.
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spire-server
+  namespace: spire-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spire-server-trust-role
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/proxy"]
+    verbs: ["get", "list"]
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spire-server-trust-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: spire-server-trust-role
+subjects:
+  - kind: ServiceAccount
+    name: spire-server
+    namespace: spire-system
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-server-config
+  namespace: spire-system
+data:
+  server.conf: |
+    server {
+      bind_address = "0.0.0.0"
+      bind_port = "8081"
+      trust_domain = "aqp.fund"
+      data_dir = "/run/spire/data"
+      log_level = "INFO"
+      ca_ttl = "168h"            # 7 days root CA TTL
+      default_x509_svid_ttl = "1h"
+      default_jwt_svid_ttl  = "5m"
+    }
+
+    plugins {
+      # Phase 4 §7.2: SQLite for the Phase 4 spine. Phase 4.5 swaps
+      # to the per-cell Postgres (Phase 6 §9.1) via the
+      # ``aqp-cell-postgres-credentials`` VaultStaticSecret.
+      DataStore "sql" {
+        plugin_data {
+          database_type = "sqlite3"
+          connection_string = "/run/spire/data/datastore.sqlite3"
+        }
+      }
+      NodeAttestor "k8s_psat" {
+        plugin_data {
+          clusters = {
+            "aqp" = {
+              service_account_allow_list = ["spire-system:spire-agent"]
+            }
+          }
+        }
+      }
+      KeyManager "disk" {
+        plugin_data {
+          keys_path = "/run/spire/data/keys.json"
+        }
+      }
+      Notifier "k8sbundle" {
+        plugin_data {
+          namespace = "spire-system"
+          config_map = "spire-bundle"
+        }
+      }
+    }
+
+    health_checks {
+      listener_enabled = true
+      bind_address = "0.0.0.0"
+      bind_port = "8080"
+      live_path = "/live"
+      ready_path = "/ready"
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-bundle
+  namespace: spire-system
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: spire-server
+  namespace: spire-system
+  labels:
+    app: spire-server
+    app.kubernetes.io/part-of: aqp
+spec:
+  replicas: 1  # Phase 4.5 makes this HA via clustered PostgreSQL DS.
+  selector:
+    matchLabels:
+      app: spire-server
+  serviceName: spire-server
+  template:
+    metadata:
+      labels:
+        app: spire-server
+    spec:
+      serviceAccountName: spire-server
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: spire-server
+          image: ghcr.io/spiffe/spire-server:1.10.4
+          args:
+            - -config
+            - /run/spire/config/server.conf
+          ports:
+            - name: api
+              containerPort: 8081
+              protocol: TCP
+            - name: health
+              containerPort: 8080
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: health
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: config
+              mountPath: /run/spire/config
+              readOnly: true
+            - name: data
+              mountPath: /run/spire/data
+      volumes:
+        - name: config
+          configMap:
+            name: spire-server-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spire-server
+  namespace: spire-system
+spec:
+  type: ClusterIP
+  selector:
+    app: spire-server
+  ports:
+    - name: api
+      port: 8081
+      targetPort: api

@@ -1,0 +1,9 @@
+p, role:platform, applications, *, */*, allow
+p, role:platform, repositories, *, *, allow
+p, role:platform, clusters, *, *, allow
+p, role:operator, applications, get, */*, allow
+p, role:operator, applications, sync, */*, allow
+p, role:operator, applications, action/*, */*, allow
+
+g, AqpPlatformAdmins, role:platform
+g, AqpOperators, role:operator

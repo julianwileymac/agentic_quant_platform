@@ -1,0 +1,63 @@
+# =============================================================================
+# Phase 2 §5.3 — Host network isolation.
+#
+# `hostNetwork: true` shares the node's network namespace with the
+# container, which:
+#   - exposes localhost-bound services on the node interface;
+#   - lets the container read every other Pod's egress (no per-Pod
+#     CNI isolation);
+#   - bypasses NetworkPolicies entirely.
+#
+# Document the legitimate exceptions (cloudflared, certain edge
+# agents that need cap_net_admin) via the namespace label
+# `aqp.io/host-network-allowed: "true"`.
+#
+# `validationFailureAction: Audit` for the Phase 2 rollout — violations
+# are logged but not blocked. Flip to Enforce in Phase 2.5 once the
+# audit logs are zero. See ../README.md for the ratchet plan.
+# =============================================================================
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: aqp-no-host-network
+  annotations:
+    policies.kyverno.io/title: No host network
+    policies.kyverno.io/category: Pod Security Standards
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Pods MUST NOT set hostNetwork: true except in namespaces
+      labeled `aqp.io/host-network-allowed: "true"` (cloudflared,
+      Phase 5 edge agents).
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: deny-host-network-by-default
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              operations:
+                - CREATE
+                - UPDATE
+      # Skip Pods in namespaces explicitly carrying the host-network
+      # exception label. Operators set this label deliberately for
+      # cloudflared, NodeLocal DNS cache, and (Phase 5) edge agents
+      # that need cap_net_admin.
+      exclude:
+        any:
+          - resources:
+              namespaceSelector:
+                matchLabels:
+                  aqp.io/host-network-allowed: "true"
+      validate:
+        message: >-
+          hostNetwork: true is disallowed. Add the label
+          `aqp.io/host-network-allowed: "true"` to the Namespace if
+          this Pod is part of a documented exception (e.g.
+          cloudflared in aqp-edge).
+        pattern:
+          spec:
+            =(hostNetwork): "false"

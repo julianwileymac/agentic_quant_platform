@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# =============================================================================
+# Phase 4 §7 mesh + identity bundle.
+#
+# Apply order matters when bootstrapping a fresh cluster:
+#   1. SPIRE        — workload identity for everything that follows.
+#   2. Linkerd      — mTLS plane that consumes SPIFFE SVIDs.
+#   3. VSO          — secret operator (mTLS via Linkerd; identity via SPIRE).
+#   4. Pomerium     — IAP that fronts /manage/* (depends on Linkerd mTLS).
+# Argo CD's sync waves enforce this; in this kustomization we just
+# list the components and rely on the operator to apply in waves.
+# =============================================================================
+
+resources:
+  - spire/
+  - linkerd/
+  - vault-secrets-operator/
+  - pomerium/

@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Phase 2 §5.3 — Kyverno ClusterPolicy bundle.
+# Every policy in this directory ships with `validationFailureAction: Audit`
+# during the Phase 2 rollout; the ratchet plan in `../../README.md`
+# governs the Phase 2.5 cutover to `Enforce`.
+
+resources:
+  - 00-verify-signatures.yaml
+  - 01-require-pss-restricted.yaml
+  - 02-require-runtime-class.yaml
+  - 03-no-host-network.yaml
+  - 04-no-privilege-escalation.yaml
+  - 05-required-labels.yaml

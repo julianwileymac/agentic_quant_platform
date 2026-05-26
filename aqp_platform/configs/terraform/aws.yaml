@@ -1,0 +1,90 @@
+# Canonical TerraformStackSpec for the AWS hybrid AQP stack.
+#
+# Phase G of the AWS hybrid rollout. Describes the LOGICAL stack — the
+# rendered HCL lives at ``aqp_platform/terraform/environments/live/``.
+# The ``aqp deploy`` CLI / ``TerraformRuntime`` use
+# ``prerendered_workspace_dir`` so the executor operates on that
+# directory directly instead of running the Jinja2 codegen path.
+#
+# Hash-locked semantics from rule 43 still apply: the spec_hash
+# persisted to ``terraform_stack_spec_versions`` includes the inputs
+# below + the resolved environment_dir contents, so a re-rendered
+# bundle produces a new version row automatically.
+
+name: aqp-aws-live
+slug: aqp-aws-live
+module_kind: composite
+description: |
+  AWS hybrid AQP stack — EKS Karpenter for quant runtime workloads
+  (Celery workers, Iceberg writers, MLflow, Strimzi, Flink) +
+  ECS Fargate for the new admin BFF + AgentCore reverse proxy slice +
+  Bedrock AgentCore Runtime/Memory/Gateway + Bedrock Knowledge Base on
+  OpenSearch Serverless + Cognito User Pool fronting an ALB + CloudFront
+  in front of the ALB for admin.aqp.fund and agentcore.aqp.fund +
+  EventBridge / Step Functions for nightly backtests and KB sync.
+
+cloud_provider: aws
+environment: live
+
+provider:
+  kind: aws
+  default_region: us-east-1
+  credential_key: aqp_aws_live  # CredentialResolver service key
+
+# Partial S3 backend; the per-account values come from
+# ``aqp_platform/terraform/environments/live/backend.hcl`` at init time.
+# The shape is read from infrastructure/bootstrap/ outputs.
+backend:
+  kind: s3
+  config:
+    # Hydrated at apply time via ``terraform init -backend-config=backend.hcl``;
+    # the values below are documentation, not the actual init payload.
+    bucket: hydrate://ssm/aqp/${env}/tfstate_bucket_name
+    key: aqp_platform/live/terraform.tfstate
+    region: us-east-1
+    encrypt: true
+    kms_key_id: hydrate://ssm/aqp/${env}/tfstate_kms_key_arn
+    dynamodb_table: hydrate://ssm/aqp/${env}/tfstate_dynamodb_table
+
+# The compositional inputs the operator overrides per account/cell.
+inputs:
+  aws_region: us-east-1
+  environment: live
+  name_prefix: aqp
+  vpc_id: hydrate://ssm/aqp/${env}/vpc_id
+  public_subnet_ids: hydrate://ssm/aqp/${env}/public_subnet_ids
+  private_subnet_ids: hydrate://ssm/aqp/${env}/private_subnet_ids
+  workload_kms_key_arn: hydrate://ssm/aqp/${env}/workload_kms_key_arn
+  acm_certificate_arn_alb: hydrate://ssm/aqp/${env}/acm_certificate_arn_alb
+  acm_certificate_arn_cloudfront: hydrate://ssm/aqp/${env}/acm_certificate_arn_cloudfront
+  agentcore_runtime_image_uri: hydrate://ssm/aqp/${env}/agentcore_runtime_image_uri
+  cloudfront_aliases:
+    - admin.aqp.fund
+    - agentcore.aqp.fund
+  cloudfront_origin_secret: secret://aws_secretsmanager/aqp/${env}/cloudfront/origin_secret
+  alb_access_logs_bucket: hydrate://ssm/aqp/${env}/alb_access_logs_bucket
+  callback_urls:
+    - https://admin.aqp.fund/oauth/callback
+  kb_sync_lambda_arn: hydrate://ssm/aqp/${env}/kb_sync_lambda_arn
+  nightly_state_machine_definition_json: hydrate://configs/strategies/render_sfn
+
+# Outputs that flow back to ``topology.yaml`` via ``outputs_to_topology``.
+outputs_to_topology:
+  alb_dns_name: services.alb.endpoints.default
+  cloudfront_domain: services.cloudfront-distribution.endpoints.default
+  agentcore_runtime_arn: services.bedrock-agentcore-runtime.endpoints.runtime_arn
+  agentcore_gateway_arn: services.bedrock-agentcore-gateway.endpoints.gateway_arn
+  agentcore_memory_id: services.bedrock-agentcore-memory.endpoints.memory_id
+  kb_collection_arn: services.bedrock-kb-collection.endpoints.collection_arn
+  kb_id: services.bedrock-kb-collection.endpoints.kb_id
+  cognito_user_pool_id: services.cognito-user-pool.endpoints.user_pool_id
+  ecs_cluster_name: services.ecs-fargate-cluster.endpoints.cluster_name
+  nightly_sfn_arn: services.eventbridge-stepfunctions.endpoints.state_machine_arn
+
+annotations:
+  aqp.io/stack-kind: aws-hybrid
+  aqp.io/composition: hand-authored
+  aqp.io/eks-tier: quant-runtime
+  aqp.io/fargate-tier: admin-and-agentcore
+  aqp.io/edge-cloudfront: admin.aqp.fund,agentcore.aqp.fund
+  aqp.io/edge-cloudflare: aqp.fund,api.aqp.fund,manage.aqp.fund

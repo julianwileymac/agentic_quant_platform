@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
 
 interface FeatureGridProps {
   children: ReactNode;
-  columns?: 2 | 3 | 4;
+  columns?: 2 | 3 | 4 | 5;
   className?: string;
 }
 
@@ -27,7 +27,9 @@ export function FeatureGrid({
       ? "md:grid-cols-2"
       : columns === 4
         ? "md:grid-cols-2 lg:grid-cols-4"
-        : "md:grid-cols-2 lg:grid-cols-3";
+        : columns === 5
+          ? "md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+          : "md:grid-cols-2 lg:grid-cols-3";
 
   return (
     <motion.div

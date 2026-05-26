@@ -228,3 +228,38 @@ schemas/pdl/
 # secret values. These are rendered locally by
 # `build/scripts/sync_auth0_env_to_k8s.py` and MUST NOT be committed.
 deployments/kubernetes/generated/
+
+# --- Node.js / pnpm / Yarn artifacts ---
+# Every JS/TS subproject installs into ``node_modules/`` (aqp_client,
+# aqp_admin/aqp_admin_ui, aqp_ide/**/node_modules, aqp_docs, aqp_ui,
+# webui, etc.). These are reproducible from package.json + lockfile;
+# they MUST NOT be tracked in git.
+node_modules/
+**/node_modules/
+
+# Common Node logs + caches.
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.yarn-cache/
+.pnpm-store/
+
+# --- Docusaurus build cache ---
+# Docusaurus regenerates this on every ``docusaurus start`` and
+# ``docusaurus build``; never commit.
+.docusaurus/
+**/.docusaurus/
+
+# --- Next.js / Vite build caches ---
+.next/
+**/.next/
+.turbo/
+**/.turbo/
+.vite/
+**/.vite/
+
+# --- TypeScript build info ---
+*.tsbuildinfo
+**/*.tsbuildinfo

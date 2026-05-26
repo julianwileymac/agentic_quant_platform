@@ -32,6 +32,11 @@ const config: Config = {
   url: SITE_URL,
   baseUrl: BASE_URL,
   trailingSlash: false,
+  future: {
+    experimental_faster: {
+      rspackBundler: true,
+    },
+  },
 
   organizationName: 'julianwileymac',
   projectName: 'agentic_quant_platform',
@@ -89,7 +94,9 @@ const config: Config = {
           'docs/architecture/**',
           'docs/release-notes/**',
         ],
-        excludeRoutes: ['/keystatic/**', '/internal/**', '/archive/**'],
+        content: {
+          excludeRoutes: ['/keystatic/**', '/internal/**', '/archive/**'],
+        },
       },
     ],
   ],

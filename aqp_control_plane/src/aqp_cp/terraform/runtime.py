@@ -52,6 +52,11 @@ from aqp_platform_core.runtime.progress import (
     ProgressEmitter,
 )
 
+from aqp_cp.terraform.audit_sink import (
+    NullTerraformAuditSink,
+    TerraformAuditSink,
+)
+
 logger = logging.getLogger(__name__)
 
 _KIND_TO_WORKLOAD_ACTION: dict[TerraformRunKind, WorkloadAction] = {
@@ -209,11 +214,13 @@ class TerraformRuntime:
         *,
         executor: TerraformExecutor,
         progress_emitter: ProgressEmitter | None = None,
+        audit_sink: TerraformAuditSink | None = None,
         kill_switch_path: str | None = None,
         log_excerpt_tail_lines: int = 200,
     ) -> None:
         self._executor = executor
         self._emitter: ProgressEmitter = progress_emitter or NullProgressEmitter()
+        self._audit: TerraformAuditSink = audit_sink or NullTerraformAuditSink()
         self._kill_switch_path = Path(kill_switch_path) if kill_switch_path else None
         self._tail_lines = log_excerpt_tail_lines
 
@@ -224,6 +231,10 @@ class TerraformRuntime:
     @property
     def emitter(self) -> ProgressEmitter:
         return self._emitter
+
+    @property
+    def audit_sink(self) -> TerraformAuditSink:
+        return self._audit
 
     def should_halt(self) -> bool:
         if self._kill_switch_path is None:
@@ -270,6 +281,27 @@ class TerraformRuntime:
             **action_extras,
         )
 
+        try:
+            self._audit.start(
+                run_id=run_id,
+                spec=spec,
+                kind=kind,
+                user_id=ctx.user_id,
+                approver_user_id=ctx.approver_user_id,
+                experiment_id=ctx.experiment_id,
+                test_id=ctx.test_id,
+                request_id=ctx.request_id,
+                org_id=ctx.org_id,
+            )
+        except Exception:  # noqa: BLE001
+            # Audit contract: start MUST NOT raise. A misbehaving sink
+            # gets a structured warning but never blocks the run.
+            logger.warning(
+                "terraform audit start failed for run_id=%s; continuing",
+                run_id,
+                exc_info=True,
+            )
+
         if kind in (TerraformRunKind.APPLY, TerraformRunKind.DESTROY) and self.should_halt():
             self._emitter.emit_error(
                 run_id,
@@ -277,7 +309,7 @@ class TerraformRuntime:
                 context=ctx,
                 **action_extras,
             )
-            return TerraformRunResult(
+            rejected = TerraformRunResult(
                 run_id=run_id,
                 run_kind=kind,
                 status=TerraformRunStatus.REJECTED,
@@ -293,6 +325,19 @@ class TerraformRuntime:
                 spec_hash=spec_hash,
                 halt_reason="kill-switch",
             )
+            try:
+                self._audit.finish(
+                    result=rejected,
+                    request_id=ctx.request_id,
+                    org_id=ctx.org_id,
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "terraform audit finish failed for run_id=%s; continuing",
+                    run_id,
+                    exc_info=True,
+                )
+            return rejected
 
         t0 = time.monotonic()
         rc, stdout, stderr = await asyncio.to_thread(self._execute_sync, spec, kind, extra_args)
@@ -320,7 +365,7 @@ class TerraformRuntime:
             status = TerraformRunStatus.FAILED
             error = f"rc={rc}"
 
-        return TerraformRunResult(
+        result = TerraformRunResult(
             run_id=run_id,
             run_kind=kind,
             status=status,
@@ -338,6 +383,19 @@ class TerraformRuntime:
             test_id=ctx.test_id,
             spec_hash=spec_hash,
         )
+        try:
+            self._audit.finish(
+                result=result,
+                request_id=ctx.request_id,
+                org_id=ctx.org_id,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "terraform audit finish failed for run_id=%s; continuing",
+                run_id,
+                exc_info=True,
+            )
+        return result
 
     def _execute_sync(
         self,

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vault-secrets-operator
+  labels:
+    app.kubernetes.io/name: vault-secrets-operator
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    aqp.io/component: vault-secrets-operator
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    project: aqp-secrets
+    cost_center: quant-research-01
+    owner: platform-engineering
+    data_classification: internal
+  annotations:
+    aqp.internal/description: "Phase 4 §7.6 — HashiCorp vault-secrets-operator. Projects Vault KV v2 paths into Kubernetes Secrets."

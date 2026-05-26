@@ -1,0 +1,9 @@
+output "organization_id" { value = aws_organizations_organization.this.id }
+output "organization_arn" { value = aws_organizations_organization.this.arn }
+output "ou_security_id" { value = aws_organizations_organizational_unit.security.id }
+output "ou_infrastructure_id" { value = aws_organizations_organizational_unit.infrastructure.id }
+output "ou_workloads_id" { value = aws_organizations_organizational_unit.workloads.id }
+output "ou_non_prod_id" { value = aws_organizations_organizational_unit.non_prod.id }
+output "ou_prod_id" { value = aws_organizations_organizational_unit.prod.id }
+output "ou_policy_staging_id" { value = aws_organizations_organizational_unit.policy_staging.id }
+output "ou_sandbox_id" { value = aws_organizations_organizational_unit.sandbox.id }

@@ -1,0 +1,30 @@
+name: kubectl-via-irsa
+description: Configure a kubeconfig context for an EKS cluster via IRSA.
+inputs:
+  cluster-name:
+    description: EKS cluster name.
+    required: true
+  region:
+    description: AWS region.
+    required: false
+    default: us-east-1
+  namespace:
+    description: Default namespace.
+    required: false
+    default: aqp-admin
+runs:
+  using: composite
+  steps:
+    - name: install-kubectl
+      uses: azure/setup-kubectl@v4
+      with:
+        version: v1.32.0
+    - name: aws-eks-update-kubeconfig
+      shell: bash
+      run: |
+        aws eks update-kubeconfig \
+          --name "${{ inputs.cluster-name }}" \
+          --region "${{ inputs.region }}" \
+          --alias "${{ inputs.cluster-name }}"
+        kubectl config set-context --current --namespace="${{ inputs.namespace }}"
+        kubectl version --client=true --output=yaml

@@ -1,0 +1,70 @@
+# =============================================================================
+# aqp-mcp-tenant Helm values.
+#
+# Phase 5 §8.1 (RESTRUCTURING_PLAN.md). One Helm release per (cell,
+# tenant) pair. Argo CD's cells-appset stamps the release name
+# `mcp-{{ .tenant_id }}` in the cell namespace.
+# =============================================================================
+
+# REQUIRED — operators override.
+cell_id: "REPLACE_ME"
+tenant_id: "REPLACE_ME"
+# Per-cell tier per the cells registry (Phase 3 §6.2). Controls
+# the Linkerd inject annotation + the resource ceiling defaults.
+tier: "shared-prem"  # shared-prem | silo-reg
+
+# Image refs come from the Phase 2 §5.2 cosign-signed AQP build.
+images:
+  data:
+    repository: ghcr.io/julianwiley/aqp-data-mcp
+    tag: dev
+    pullPolicy: Always
+  codebase:
+    repository: ghcr.io/julianwiley/aqp-codebase-mcp
+    tag: dev
+    pullPolicy: Always
+
+# Service port — the canonical MCP HTTP port.
+mcpPort: 9100
+
+resources:
+  data:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"
+  codebase:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"
+
+# Phase 4 §7.2 — SPIFFE socket via hostPath. The SPIRE Agent
+# DaemonSet at `mesh-identity/spire/agent.yaml` exposes the socket.
+spiffe:
+  enabled: true
+  socketPath: /run/spire/sockets
+
+# Phase 4 §7.6 — credentials via VaultStaticSecret-projected Secret.
+# The Secret name follows the convention `mcp-credentials-{{tenant_id}}`.
+vaultStaticSecret:
+  enabled: true
+  secretName: "mcp-credentials"  # rendered template appends `-{{tenant_id}}`
+
+# Phase 5 §8.4 — descriptor hash audit toggle. When true the MCP
+# server snapshots its tool catalog into mcp_tool_versions on boot.
+snapshotToolVersionsOnBoot: true
+
+# Phase 4 §7.1 — Linkerd mesh inject. Set to "disabled" only when
+# the cell's namespace already injects.
+linkerdInject: "enabled"
+
+# Standard Kubernetes recommended labels — Phase 2 §5.3 require.
+labels:
+  partOf: aqp
+  managedBy: helm
+  component: aqp-mcp-tenant

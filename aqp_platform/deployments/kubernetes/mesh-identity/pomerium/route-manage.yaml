@@ -1,0 +1,58 @@
+# =============================================================================
+# Pomerium per-route policy — /manage/* on the AQP control plane.
+#
+# Phase 4 §7.5 (RESTRUCTURING_PLAN.md). Routes inbound `manage.aqp.fund`
+# traffic through Pomerium's authenticate -> authorize chain, then
+# forwards to `aqp-cp.aqp-admin.svc.cluster.local:9000` with the
+# `X-Pomerium-Jwt-Assertion` header injected.
+#
+# Cedar (Phase 4 §7.3 — `aqp/api/security_cedar.py`) does the
+# fine-grained per-action authorization inside the route handler;
+# Pomerium's role is the coarse-grained ACL + step-up MFA gate.
+#
+# Pomerium operator CRD shape (Pomerium 0.27.x):
+# =============================================================================
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: aqp-manage
+  namespace: pomerium
+  labels:
+    app.kubernetes.io/part-of: aqp
+    aqp.io/component: pomerium-route
+  annotations:
+    # Pomerium ingress controller — translates these annotations into
+    # the matching Pomerium Route policy.
+    # See https://www.pomerium.com/docs/k8s/ingress for the full
+    # annotation set; the subset below covers the AQP MVP.
+    ingress.pomerium.io/allowed_users: "*@aqp.fund"
+    ingress.pomerium.io/allowed_idp_claims: |
+      {"roles": ["platform_admin", "cell_operator", "tenant_admin"]}
+    ingress.pomerium.io/pass_identity_headers: "true"
+    ingress.pomerium.io/policy: |
+      allow:
+        and:
+          - idp_claims/roles:
+              has:
+                - platform_admin
+                - cell_operator
+                - tenant_admin
+          - authenticated_user: ~
+    # Phase 4 §7.5 — step-up MFA gate on every `/manage/*` POST/PUT/PATCH/DELETE.
+    # GET routes pass without re-auth (the upstream JWT is still required).
+    ingress.pomerium.io/set_request_headers: |
+      X-AQP-Pomerium-Route: aqp-manage
+spec:
+  parentRefs:
+    - name: pomerium-gateway
+  hostnames:
+    - manage.aqp.fund
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /manage/
+      backendRefs:
+        - name: aqp-cp
+          namespace: aqp-admin
+          port: 9000

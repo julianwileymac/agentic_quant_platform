@@ -115,7 +115,7 @@ Every running workflow stops; `agent_runs_v2` rows close with
 - [ ] `workflow_spec_versions` row with a `spec_hash`.
 - [ ] Three `agent_spec_versions` rows (one per node).
 - [ ] One `workflow_runs` row + three `agent_runs_v2` rows.
-- [ ] Total cost in USD <= `per_run_max_usd` from the spec.
+- [ ] Total cost in USD ≤ `per_run_max_usd` from the spec.
 - [ ] Replay produces a new `workflow_runs` row but reuses the
   same spec-version rows.
 

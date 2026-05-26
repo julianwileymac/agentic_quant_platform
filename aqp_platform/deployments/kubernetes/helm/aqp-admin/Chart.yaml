@@ -1,0 +1,16 @@
+apiVersion: v2
+name: aqp-admin
+description: AQP internal admin BFF (FastAPI 0.118 + Next.js 15)
+version: 0.2.0
+appVersion: "0.2.0"
+type: application
+home: https://github.com/julianwileymac/agentic_quant_platform
+sources:
+  - https://github.com/julianwileymac/agentic_quant_platform/tree/main/aqp_admin
+maintainers:
+  - name: AQP Platform Team
+keywords:
+  - aqp
+  - admin
+  - control-plane
+icon: https://aqp.fund/icon.png

@@ -22,6 +22,12 @@ for the decommission timeline.
 """
 from __future__ import annotations
 
+from aqp_cp.terraform.audit_sink import (
+    HttpTerraformAuditSink,
+    NullTerraformAuditSink,
+    TerraformAuditSink,
+)
+from aqp_cp.terraform.policy import PolicyCheckResult, check_plan_against_opa
 from aqp_cp.terraform.runtime import (
     TerraformExecutor,
     TerraformRuntime,
@@ -29,7 +35,12 @@ from aqp_cp.terraform.runtime import (
 )
 
 __all__ = [
+    "HttpTerraformAuditSink",
+    "NullTerraformAuditSink",
+    "PolicyCheckResult",
+    "TerraformAuditSink",
     "TerraformExecutor",
     "TerraformRuntime",
     "TerraformRuntimeError",
+    "check_plan_against_opa",
 ]

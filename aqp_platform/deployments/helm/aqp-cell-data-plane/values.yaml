@@ -1,0 +1,92 @@
+# =============================================================================
+# aqp-cell-data-plane — per-cell data plane values.
+#
+# Phase 6 §9 (RESTRUCTURING_PLAN.md). One Helm release per cell.
+# Argo CD's cells-appset stamps the release name `data-plane` in
+# the cell namespace with these values, overridden per-cell:
+#
+#   helm install data-plane aqp_platform/deployments/helm/aqp-cell-data-plane/ \
+#     --namespace cell-shared-std-us-east-1a \
+#     --set cell_id=cell-shared-std-us-east-1a \
+#     --set tier=shared-std
+# =============================================================================
+
+# REQUIRED — operators override.
+cell_id: "REPLACE_ME"
+tier: "shared-std"  # shared-std | shared-prem | silo-reg | silo-custom
+region: "us-east-1"
+
+# Service toggles — per-cell sizing.
+postgres:
+  enabled: true
+  # CNPG operator must already be installed cluster-wide.
+  # https://cloudnative-pg.io/documentation/current/installation_upgrade/
+  instances: 3  # silo-reg can drop to 1+sync_standby; shared-std uses 3
+  storage: "50Gi"
+  storageClassName: ""  # default cluster storage class
+  # pgvector extension on the cell's postgres (Rule 11 RAG).
+  pgvectorEnabled: true
+  imageName: "ghcr.io/cloudnative-pg/postgresql:16.4"
+  # PITR + per-cell MinIO backup target.
+  backup:
+    enabled: true
+    minioBucket: ""  # default: <minio.bucketPrefix>-backups
+    retentionPolicy: "30d"
+
+redis:
+  enabled: true
+  # Bitnami chart wrapper — operators install Bitnami's chart via
+  # a sibling HelmRelease + reference its Service here, OR use the
+  # in-chart minimal StatefulSet for dev cells.
+  mode: "standalone"  # standalone | sentinel
+  storage: "10Gi"
+  storageClassName: ""
+  image: "bitnami/redis:7.4"
+
+minio:
+  enabled: true
+  # ``replicas: 1`` is the dev path. Production silo-reg cells should
+  # set replicas: 4 + servers: 2 for MinIO erasure-coded mode. The
+  # template only emits the simple StatefulSet today; Phase 6.5 wires
+  # the production MinIO Operator path.
+  replicas: 1
+  storage: "100Gi"
+  storageClassName: ""
+  image: "minio/minio:RELEASE.2024-10-13T13-34-11Z"
+  bucketPrefix: ""  # default: aqp-cell-<cell_id>
+  # Phase 6 §9.2 — Object Lock COMPLIANCE mode on the audit/ prefix.
+  # Set to false ONLY for dev cells; production MUST enable.
+  objectLockOnAudit: true
+  # Phase 7 §10.1 — COMPLIANCE retention period for the audit/ prefix.
+  # 30d is the dev default; production MUST override to "7y" per the
+  # FINRA / SEC retention guidance. ``mc retention set --default``
+  # accepts duration strings like ``30d``, ``1y``, ``7y``.
+  objectLockRetention: "30d"
+
+mlflow:
+  enabled: true
+  # MLflow Tracking Server. Postgres backend points at the per-cell
+  # CNPG; artifact store points at the per-cell MinIO.
+  image: "ghcr.io/mlflow/mlflow:v2.20.0"
+  storage: "20Gi"
+  storageClassName: ""
+
+icebergRest:
+  enabled: true
+  # Iceberg REST catalog. Phase 6 ships the Apache Polaris reference
+  # implementation; operators with Tabular or other REST catalogs
+  # override `image` per cell.
+  image: "ghcr.io/apache/polaris:1.0.0"
+  storage: "5Gi"
+  storageClassName: ""
+
+# Labels propagated to every cell-data-plane object.
+labels:
+  partOf: aqp
+  managedBy: helm
+  component: aqp-cell-data-plane
+
+# Phase 4 §7.1 — every workload in the cell carries Linkerd inject.
+# The namespace inject annotation usually wins; this flag is for
+# operators that want to selectively opt out per workload.
+linkerdInject: "enabled"

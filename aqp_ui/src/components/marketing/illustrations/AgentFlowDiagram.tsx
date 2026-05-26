@@ -30,7 +30,12 @@ export function AgentFlowDiagram({ className }: { className?: string }) {
         initial="hidden"
         whileInView="show"
         viewport={{ once: true, margin: "-50px" }}
+        role="img"
+        aria-label="Agent flow: Researcher to Strategist to Trader, bounded by the DataMCP layer with a kill-switch overlay and the agent_runs_v2 ledger row below."
       >
+        <title>
+          Agent flow: Researcher → Strategist → Trader inside the DataMCP boundary
+        </title>
         <defs>
           <linearGradient id="agent-node-grad" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#1677ff" stopOpacity={0.18} />

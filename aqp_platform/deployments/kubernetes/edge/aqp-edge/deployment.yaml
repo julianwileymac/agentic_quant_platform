@@ -1,0 +1,276 @@
+# =============================================================================
+# aqp-edge — Envoy cell router (replaces the Python FastAPI proxy).
+#
+# Phase 3 §6.4 (RESTRUCTURING_PLAN.md). Cutover happens in §6.4 step
+# 1-5 over weeks 6-10; DNS canary controls the traffic share.
+#
+# The Envoy config is mounted from a ConfigMap rendered from
+# ``aqp_platform/build/docker/aqp-edge/envoy.template.yaml``. Argo CD
+# ApplicationSet stamps the per-cell route + cluster blocks at
+# rollout time.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aqp-edge-config
+  namespace: aqp-edge
+  labels:
+    app.kubernetes.io/name: aqp-edge
+    app.kubernetes.io/part-of: aqp
+data:
+  envoy.yaml: |
+    # See aqp_platform/build/docker/aqp-edge/envoy.template.yaml for
+    # the canonical config. The Argo CD ApplicationSet at
+    # aqp_platform/deployments/argocd/applicationsets/cells-appset.yaml
+    # renders the per-cell route + cluster blocks from the cells
+    # registry on every reconciliation pass.
+    admin:
+      address:
+        socket_address: { address: 0.0.0.0, port_value: 9901 }
+    static_resources:
+      listeners:
+        - name: aqp_edge_listener
+          address:
+            socket_address: { address: 0.0.0.0, port_value: 10000 }
+          filter_chains:
+            - filters:
+                - name: envoy.filters.network.http_connection_manager
+                  typed_config:
+                    "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                    stat_prefix: aqp_edge
+                    codec_type: AUTO
+                    generate_request_id: true
+                    upgrade_configs:
+                      - upgrade_type: websocket
+                    route_config:
+                      name: aqp_edge_routes
+                      virtual_hosts:
+                        - name: default
+                          domains: ["*"]
+                          routes:
+                            - match:
+                                prefix: "/"
+                                headers:
+                                  - name: x-aqp-cell
+                                    string_match: { exact: cell-shared-std-local }
+                              route:
+                                cluster: aqp_cell_shared_std_local
+                                timeout: 30s
+                            - match:
+                                prefix: "/"
+                              direct_response:
+                                status: 503
+                                body:
+                                  inline_string: |
+                                    aqp-edge: no cell matched x-aqp-cell.
+                                    See aqp_docs/docs/how-to/cell-router-cutover.md.
+                    http_filters:
+                      - name: envoy.filters.http.ext_authz
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+                          transport_api_version: V3
+                          http_service:
+                            server_uri:
+                              uri: aqp-tenant-router.aqp-edge.svc.cluster.local
+                              cluster: aqp_tenant_router
+                              timeout: 0.5s
+                            path_prefix: /ext_authz/v3
+                            authorization_response:
+                              allowed_upstream_headers:
+                                patterns:
+                                  - exact: x-aqp-cell
+                                  - exact: x-aqp-cell-region
+                                  - exact: x-aqp-cell-namespace
+                          with_request_body:
+                            max_request_bytes: 65536
+                            allow_partial_message: true
+                          failure_mode_allow: false
+                      - name: envoy.filters.http.router
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+      clusters:
+        - name: aqp_tenant_router
+          connect_timeout: 0.25s
+          type: STRICT_DNS
+          lb_policy: ROUND_ROBIN
+          load_assignment:
+            cluster_name: aqp_tenant_router
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: aqp-tenant-router.aqp-edge.svc.cluster.local
+                          port_value: 8080
+        - name: aqp_cell_shared_std_local
+          connect_timeout: 1s
+          type: STRICT_DNS
+          lb_policy: ROUND_ROBIN
+          load_assignment:
+            cluster_name: aqp_cell_shared_std_local
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: aqp-core.aqp.svc.cluster.local
+                          port_value: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aqp-edge
+  namespace: aqp-edge
+  labels:
+    app: aqp-edge
+    app.kubernetes.io/name: aqp-edge
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/component: edge-router
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: aqp-edge
+  template:
+    metadata:
+      labels:
+        app: aqp-edge
+        app.kubernetes.io/name: aqp-edge
+        app.kubernetes.io/part-of: aqp
+        app.kubernetes.io/component: edge-router
+      annotations:
+        # Force a rolling restart when the ConfigMap changes (kustomize
+        # can compute this hash automatically; the placeholder makes
+        # the trigger explicit).
+        configmap.aqp.io/envoy-yaml-sha: "PLACEHOLDER-replaced-by-kustomize"
+    spec:
+      serviceAccountName: aqp-edge
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: envoy
+          image: ghcr.io/julianwiley/aqp-edge:dev
+          imagePullPolicy: Always
+          ports:
+            - name: ingress
+              containerPort: 10000
+              protocol: TCP
+            - name: admin
+              containerPort: 9901
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 2000m
+              memory: 1Gi
+              ephemeral-storage: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            httpGet:
+              # Envoy's admin /ready endpoint reports LIVE once the
+              # listeners are up; we expose it on the admin port.
+              path: /ready
+              port: admin
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: admin
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: envoy-config
+              mountPath: /etc/envoy
+              readOnly: true
+      volumes:
+        - name: envoy-config
+          configMap:
+            name: aqp-edge-config
+            items:
+              - key: envoy.yaml
+                path: envoy.yaml
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: aqp-edge
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["arm64", "amd64"]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aqp-edge
+  namespace: aqp-edge
+  labels:
+    app.kubernetes.io/name: aqp-edge
+    app.kubernetes.io/part-of: aqp
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aqp-edge
+  namespace: aqp-edge
+  labels:
+    app: aqp-edge
+    app.kubernetes.io/name: aqp-edge
+    app.kubernetes.io/part-of: aqp
+spec:
+  type: ClusterIP
+  selector:
+    app: aqp-edge
+  ports:
+    - name: ingress
+      port: 80
+      targetPort: ingress
+      protocol: TCP
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aqp-edge
+  namespace: aqp-edge
+  labels:
+    app.kubernetes.io/name: aqp-edge
+    app.kubernetes.io/part-of: aqp
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: aqp-edge

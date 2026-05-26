@@ -17,7 +17,7 @@ audience: both
 
 The platform ships two cross-market arbitrage paths:
 
-### A/H share -- mainland China <-> Hong Kong
+### A/H share -- mainland China ↔ Hong Kong
 
 The Chinese company has dual-listed shares: A-shares in CNY on the
 SSE / SZSE, H-shares in HKD on HKEX. Same legal entity, same
@@ -34,7 +34,7 @@ classifies the arbitrage direction.
 Agent surface: ``data.arbitrage.ah_share_basis`` (single-point) and
 the ``arbitrage.ah_share_basis`` AnalysisFlow (time series).
 
-### ADR <-> underlying foreign equity
+### ADR ↔ underlying foreign equity
 
 A foreign company creates an American Depositary Receipt to list
 on a US venue. 1 ADR represents ``conversion_ratio`` shares of the

@@ -1,6 +1,16 @@
 # syntax=docker/dockerfile:1.7
 # QuantBot Platform — standard distroless bot runtime.
 #
+# Phase 2 §5.1 EXEMPTION (RESTRUCTURING_PLAN.md, .cursor/plans/
+# aqp-index-debt-phase-2-supply-chain.md):
+# This image deliberately does NOT migrate to cgr.dev/chainguard/python.
+# Distroless ``gcr.io/distroless/python3-debian12:nonroot`` is already
+# smaller, has no shell, has no apk/apt, and is reachable by the same
+# class of supply-chain attacks Chainguard mitigates — the migration
+# would trade one verified-minimal runtime for another at no benefit.
+# The builder stage is still a slim-bookworm image; future work tracked
+# at aqp-index-debt-phase-2-supply-chain.md can re-evaluate.
+#
 # Multi-stage build with uv. Target image size < 200 MiB; UID 65532
 # (distroless ``nonroot``), read-only root FS, ALL caps dropped.
 # Per blueprint §N.

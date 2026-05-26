@@ -113,4 +113,33 @@ PROVIDERS: dict[str, ProviderSpec] = {
         default_quick_model="allenai/SERA-14B",
         requires_api_key=False,
     ),
+    # Amazon Bedrock — routed through LiteLLM's native ``bedrock/`` adapter.
+    # No API key is required: LiteLLM walks the standard boto3 credential
+    # chain (env vars / IRSA / EKS Pod Identity / ECS task role / EC2
+    # instance profile / ``AWS_PROFILE``). The region + optional
+    # Guardrails id are injected by
+    # :func:`aqp.llm.providers.router._bedrock_extra_kwargs` so the
+    # caller sees an identical surface to every other provider.
+    #
+    # Allowed models are pinned at the IAM layer by the
+    # ``modules/bedrock-agentcore`` runtime role (Claude Sonnet 4.5 +
+    # Claude Haiku 4.5 + Titan Embed v2). The default tier model ids
+    # use the cross-region inference (CRIS) ``arn`` form so a single
+    # InvokeModel call can route to whichever fulfillment region has
+    # capacity; that requires the SCP allow-list to include every
+    # Bedrock-enabled region for those families (see blueprint §5.3).
+    #
+    # Long-term Bedrock API keys are SCP-denied at the org root via
+    # :data:`aws_organizations_policy.deny_bedrock_api_keys` (closes
+    # the Sonrai bypass — blueprint §16.1 risk 7).
+    "bedrock": ProviderSpec(
+        slug="bedrock",
+        litellm_prefix="bedrock/",
+        env_key="",
+        settings_attr="",
+        base_url_attr="",
+        default_deep_model="anthropic.claude-sonnet-4-5-20251022-v1:0",
+        default_quick_model="anthropic.claude-haiku-4-5-20251022-v1:0",
+        requires_api_key=False,
+    ),
 }

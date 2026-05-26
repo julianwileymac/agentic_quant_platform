@@ -20,8 +20,13 @@ classifiers = [
 
 dependencies = [
     # Core service layer.
-    # fastapi pinned <0.116 because Solara 1.x requires starlette<0.46
-    # while newer FastAPI demands starlette>=0.46.
+    # NOTE (aqp_admin overhaul): the upper bound on fastapi/starlette
+    # exists ONLY because Solara 1.x requires starlette<0.46. Once
+    # `aqp/ui/` (Solara legacy) is removed in the
+    # `aqp_admin-overhaul-cleanup` follow-up PR, drop the upper bound:
+    #   "fastapi>=0.118",
+    # New aqp_admin code already targets the modern FastAPI surface;
+    # the pin is held only by the legacy Solara dashboard.
     "fastapi>=0.110,<0.116",
     "starlette<0.46",
     "uvicorn[standard]>=0.27",
@@ -103,6 +108,19 @@ auth = [
     # off cleanly so MFA enroll / session revoke / user delete don't
     # surface flaky errors to the UI.
     "httpx-retries>=0.4",
+    # Phase 4 §7.3 (RESTRUCTURING_PLAN.md) — Cedar policy engine for
+    # application-layer authz. `cedarpy` is the official Python binding
+    # for AWS Cedar; wheels ship for linux/amd64+arm64 and macOS so
+    # the Chainguard Python install path works without a Rust toolchain.
+    # Used by `aqp.api.security_cedar.require_cedar`.
+    "cedarpy>=4.0.0",
+    # Phase 5 §8.2 (RESTRUCTURING_PLAN.md) — biscuit capability tokens
+    # for capability-attenuated agent->MCP delegation. The official
+    # Rust-backed Python binding ships wheels for Linux/macOS;
+    # Windows wheels are NOT published by upstream so the dep is
+    # marker-gated. When the package is missing, the runtime degrades
+    # to TokenExchangeBroker-only delegation (the pre-Phase-5 path).
+    "biscuit-python>=0.4.0; platform_system != 'Windows'",
 ]
 # MSAL / Microsoft Entra ID identity provider (multi-tenant). Pure-Python;
 # enables MsalEntraProvider auto-registration. The SPA-side counterpart is

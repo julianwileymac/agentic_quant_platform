@@ -1,0 +1,63 @@
+# =============================================================================
+# Phase 2 §5.3 — Cosign keyless signature verification.
+#
+# Every container image with a path prefix matched by `imageReferences`
+# must carry a Sigstore keyless signature whose certificate subject
+# matches the GitHub Actions workflow identity at
+# .github/workflows/build-multi-arch.yml (or quantbot-bots-image.yml).
+#
+# `validationFailureAction: Audit` for the Phase 2 rollout — violations
+# are logged but not blocked. Flip to Enforce in Phase 2.5 once the
+# audit logs are zero. See ../README.md for the ratchet plan.
+# =============================================================================
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: aqp-verify-image-signatures
+  annotations:
+    policies.kyverno.io/title: AQP image signatures (cosign keyless)
+    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Every AQP-owned image (ghcr.io/julianwiley/aqp-* or
+      docker.io/julianwiley/aqp-*) must carry a cosign keyless
+      signature produced by the canonical GHA workflow identity.
+      Audit-mode in Phase 2 rollout; ratchets to Enforce in Phase 2.5.
+spec:
+  validationFailureAction: Audit
+  background: false
+  webhookTimeoutSeconds: 30
+  failurePolicy: Fail
+  rules:
+    - name: verify-aqp-image-signatures
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              operations:
+                - CREATE
+                - UPDATE
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/julianwiley/aqp-*"
+            - "ghcr.io/julianwiley/aqp/*"
+            - "docker.io/julianwiley/aqp-*"
+            - "docker.io/julian0215/aqp-*"
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    # Subject pattern = the GHA workflow file that
+                    # produces the signature via OIDC. Matches the
+                    # cosign-installer + cosign sign --yes pattern in
+                    # .github/workflows/build-multi-arch.yml and
+                    # .github/workflows/quantbot-bots-image.yml.
+                    subjectRegExp: >-
+                      ^https://github\.com/julianwiley/agentic_quant_platform/\.github/workflows/(build-multi-arch|quantbot-bots-image|cd-prod|cd-staging)\.yml@refs/.*$
+                    issuer: https://token.actions.githubusercontent.com
+                    rekor:
+                      url: https://rekor.sigstore.dev
+          mutateDigest: false
+          required: true

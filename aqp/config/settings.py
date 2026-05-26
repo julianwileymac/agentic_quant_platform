@@ -332,6 +332,56 @@ class Settings(BaseSettings):
     # session checkout on the same tenant; 30 min (1800 s) is the
     # default — flip lower in dev so DSN rotation propagates faster.
     tenancy_db_per_enterprise_pool_ttl_seconds: int = Field(default=1800)
+    # --- Phase 6 §9 — Per-cell data plane (RESTRUCTURING_PLAN.md) ---
+    # Dual-write switch. When True, application writes go to BOTH the
+    # shared cluster-wide data plane AND the per-cell data plane (the
+    # cell resolved from ``RequestContext.cell_id``). Used during the
+    # silo-reg backfill window so a tenant can be migrated without
+    # downtime: turn this on, backfill historical rows with
+    # ``scripts/cells/dual_write_backfill.py``, verify parity, then
+    # cut the tenant over by mutating ``tenant_cells.cell_id`` and
+    # flipping this flag back off.
+    #
+    # MUST stay False outside the documented migration window — the
+    # dual writes double the write cost and double the audit-row
+    # surface area. The Phase 6 runbook
+    # ``aqp_docs/docs/how-to/cell-data-plane-migration.md`` is the
+    # canonical operating procedure.
+    cell_dual_write: bool = Field(default=False)
+    # Default cell id for callers that have no request-context-bound
+    # cell (Celery beat, scripts/, fast-path bootstrap). Empty falls
+    # back to the legacy shared cluster-wide engine. When a non-empty
+    # value is set the cell-aware engine cache resolves to the
+    # corresponding ``CellDataPlane`` block in ``topology.yaml``.
+    cell_default_id: str = Field(default="")
+    # --- Phase 7 §10.1 — Audit lake + transparency anchors ---
+    # Master switch for the hourly audit-lake flush. When False, the
+    # Celery beat task ``aqp.tasks.audit_lake_tasks.flush`` short-
+    # circuits and emits a ``skipped`` summary. Operators flip this to
+    # True once Iceberg + per-cell MinIO are reachable and at least one
+    # transparency sink is configured.
+    audit_lake_enabled: bool = Field(default=False)
+    # How long each audit-lake segment covers, in minutes. The default
+    # 60 matches the hourly Celery beat schedule. Smaller values make
+    # for finer-grained replay windows but more anchor submissions.
+    audit_lake_segment_minutes: int = Field(default=60)
+    # Hourly Celery beat interval for the flush task. Defaults to 3600 s.
+    audit_lake_flush_interval_seconds: int = Field(default=3600)
+    # Comma-separated list of transparency-anchor sinks to submit to.
+    # Valid kinds: ``rekor``, ``qldb``, ``rfc3161``. Empty means anchor
+    # is disabled (the segment still flushes to Iceberg).
+    audit_transparency_sinks: str = Field(default="")
+    # Rekor base URL. Public sigstore by default; operators can point
+    # at a private Rekor instance for cells that prohibit Internet egress.
+    audit_rekor_url: str = Field(default="https://rekor.sigstore.dev")
+    # AWS QLDB ledger name + region (only used when ``qldb`` is in
+    # ``audit_transparency_sinks``). Empty means QLDB is disabled.
+    audit_qldb_ledger_name: str = Field(default="")
+    audit_qldb_region: str = Field(default="")
+    # RFC 3161 TSA alias + URL. The alias namespaces the
+    # ``CredentialResolver`` lookup so operators can carry multiple TSAs.
+    audit_rfc3161_tsa_alias: str = Field(default="default")
+    audit_rfc3161_tsa_url: str = Field(default="")
     # --- Per-user external OAuth (Workstream D) ---
     # Toggles the entire user-level OAuth wizard. When false, the
     # ``/me/oauth-connections`` routes 404, the ``UserOAuthTokenStore``
@@ -947,6 +997,20 @@ class Settings(BaseSettings):
     terraform_module_registry_dir: Path = Field(default=Path("./aqp_platform/terraform/modules"))
     terraform_drift_scan_period_seconds: int = Field(default=3600)
     terraform_artifact_bucket: str = Field(default="aqp-terraform")
+    # Phase 0.1 (CP maturation) — flip the in-monolith Terraform routes
+    # / Celery tasks / MCP tools from in-process execution to brokered
+    # HTTP calls against the CP-native TerraformRuntime in
+    # ``aqp_control_plane``. Defaults False during rollout. When True,
+    # mutating actions are forwarded to ``<aqp_cp>/manage/terraform/*``
+    # and the canonical ``terraform_runs`` ledger is filled by the
+    # CP-side ``HttpTerraformAuditSink`` posting to
+    # ``/_internal/audit/terraform-runs`` on the monolith.
+    terraform_use_control_plane: bool = Field(default=False)
+    # Audience the monolith expects on the M2M Bearer token attached to
+    # ``/_internal/audit/*`` POSTs from the CP. Empty falls back to
+    # ``settings.auth_oidc_audience``; production deployments pin a
+    # dedicated M2M-only audience so audit traffic stays scoped.
+    terraform_audit_ingest_audience: str = Field(default="")
 
     # --- HCP Terraform (remote workspaces) ---
     # When ``terraform_state_backend == "hcp"`` runs go through the HCP
@@ -977,6 +1041,24 @@ class Settings(BaseSettings):
     aws_account_id: str = Field(default="")
     aws_secretsmanager_prefix: str = Field(default="aqp/")
     aws_eks_cluster_name: str = Field(default="")
+
+    # --- Amazon Bedrock LLM provider (Phase D of AWS hybrid rollout) ----
+    # When ``router_complete`` resolves ``provider="bedrock"`` the call
+    # routes through LiteLLM's native ``bedrock/`` adapter. The boto3
+    # credential chain handles auth (IRSA / EKS Pod Identity / ECS task
+    # role / EC2 instance profile / AWS_PROFILE) — there is no AQP
+    # ``AQP_BEDROCK_API_KEY`` knob by design (long-term Bedrock API
+    # keys are SCP-denied at the org root; see the Sonrai disclosure
+    # in the landing-zone module).
+    #
+    # ``bedrock_region`` falls through to ``aws_region`` then to the
+    # ``AWS_REGION`` env var. ``bedrock_guardrail_id`` + ``_version``
+    # are optional — when set, ``router_complete`` injects them as
+    # ``guardrailConfig`` so every Bedrock InvokeModel call passes
+    # through the configured Bedrock Guardrail.
+    bedrock_region: str = Field(default="")
+    bedrock_guardrail_id: str = Field(default="")
+    bedrock_guardrail_version: str = Field(default="")
 
     # --- GCP cloud anchors (Secret Manager + GKE + GCS) ---
     gcp_project_id: str = Field(default="")

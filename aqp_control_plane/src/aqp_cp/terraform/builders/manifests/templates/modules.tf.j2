@@ -1,0 +1,191 @@
+{# Tenant namespace bundle — per-resource bodies.
+
+   Creates the four resource groups documented in
+   tenant_namespace.py:
+
+   1. kubernetes_namespace — tenant-isolated namespace + NetworkPolicy
+   2. aws_iam_role         — IRSA role for tenant workloads
+   3. aws_secretsmanager_secret — empty container under
+      aqp/<env>/tenants/<tenant_id>/...
+   4. aws_cognito_user_pool_client — per-tenant app client #}
+
+# --- 1. Tenant-isolated K8s namespace ----------------------------------
+
+resource "kubernetes_namespace" "tenant" {
+  metadata {
+    name = local.namespace
+    labels = merge(local.common_tags, {
+      "app.kubernetes.io/managed-by" = "aqp-cp-terraform"
+      "aqp.io/tenant-id"             = local.tenant_id
+    })
+    annotations = {
+      "aqp.io/provisioned-by" = "tenant-namespace-bundle"
+    }
+  }
+}
+
+resource "kubernetes_network_policy" "tenant_deny_cross_tenant" {
+  metadata {
+    name      = "deny-cross-tenant"
+    namespace = kubernetes_namespace.tenant.metadata[0].name
+  }
+  spec {
+    pod_selector {}
+    policy_types = ["Ingress", "Egress"]
+    ingress {
+      from {
+        namespace_selector {
+          match_labels = {
+            "aqp.io/tenant-id" = local.tenant_id
+          }
+        }
+      }
+      from {
+        namespace_selector {
+          match_labels = {
+            "app.kubernetes.io/part-of" = "aqp-shared-infra"
+          }
+        }
+      }
+    }
+    egress {
+      to {
+        namespace_selector {
+          match_labels = {
+            "app.kubernetes.io/part-of" = "aqp-shared-infra"
+          }
+        }
+      }
+      to {
+        ip_block {
+          cidr = "0.0.0.0/0"
+          except = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+        }
+      }
+    }
+  }
+}
+
+# --- 2. IRSA role for tenant workloads ---------------------------------
+
+data "aws_iam_policy_document" "irsa_trust" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${replace(data.aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(data.aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}:sub"
+      values   = ["system:serviceaccount:${local.namespace}:aqp-tenant"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(data.aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "tenant" {
+  name                 = "aqp-tenant-${local.tenant_id}"
+  assume_role_policy   = data.aws_iam_policy_document.irsa_trust.json
+  max_session_duration = 3600
+  tags                 = local.common_tags
+}
+
+data "aws_iam_policy_document" "tenant_inline" {
+  statement {
+    sid       = "ReadOwnSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+    resources = ["arn:aws:secretsmanager:*:${data.aws_caller_identity.current.account_id}:secret:{{ secret_arn_prefix }}/${local.environment}/tenants/${local.tenant_id}/*"]
+  }
+  statement {
+    sid       = "WriteOwnSSMConfig"
+    effect    = "Allow"
+    actions   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
+    resources = ["arn:aws:ssm:*:${data.aws_caller_identity.current.account_id}:parameter/aqp/${local.environment}/tenants/${local.tenant_id}/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "tenant_inline" {
+  role   = aws_iam_role.tenant.id
+  name   = "aqp-tenant-${local.tenant_id}-inline"
+  policy = data.aws_iam_policy_document.tenant_inline.json
+}
+
+# --- 3. Empty Secrets Manager containers (operator fills via put-secret-value) ---
+
+resource "aws_secretsmanager_secret" "tenant_broker" {
+  name        = "{{ secret_arn_prefix }}/${local.environment}/tenants/${local.tenant_id}/broker"
+  description = "Broker credentials for tenant ${local.tenant_id}. Populate via 'aws secretsmanager put-secret-value'."
+  tags        = local.common_tags
+  recovery_window_in_days = 30
+}
+
+resource "aws_secretsmanager_secret" "tenant_db" {
+  name        = "{{ secret_arn_prefix }}/${local.environment}/tenants/${local.tenant_id}/db"
+  description = "DB connection string for tenant ${local.tenant_id}. Rotated via Secrets Manager rotation Lambda."
+  tags        = local.common_tags
+  recovery_window_in_days = 30
+}
+
+# --- 4. Cognito User Pool app client (ALB OIDC integration filters by client_id) ---
+
+resource "aws_cognito_user_pool_client" "tenant" {
+  name                                 = "aqp-tenant-${local.tenant_id}"
+  user_pool_id                         = "{{ cognito_user_pool_id }}"
+  generate_secret                      = true
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_scopes                 = ["openid", "email", "profile"]
+  supported_identity_providers         = ["COGNITO"]
+  callback_urls                        = {{ callback_urls | tojson }}
+  access_token_validity                = 60
+  id_token_validity                    = 60
+  refresh_token_validity               = 30
+  token_validity_units {
+    access_token  = "minutes"
+    id_token      = "minutes"
+    refresh_token = "days"
+  }
+}
+
+# --- SSM Parameter Store outputs (cross-module wiring) -----------------
+
+resource "aws_ssm_parameter" "tenant_role_arn" {
+  name  = "/aqp/${local.environment}/tenants/${local.tenant_id}/role_arn"
+  type  = "String"
+  value = aws_iam_role.tenant.arn
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "tenant_cognito_client_id" {
+  name  = "/aqp/${local.environment}/tenants/${local.tenant_id}/cognito_client_id"
+  type  = "String"
+  value = aws_cognito_user_pool_client.tenant.id
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "tenant_namespace" {
+  name  = "/aqp/${local.environment}/tenants/${local.tenant_id}/k8s_namespace"
+  type  = "String"
+  value = kubernetes_namespace.tenant.metadata[0].name
+  tags  = local.common_tags
+}
+
+output "tenant_role_arn" {
+  value = aws_iam_role.tenant.arn
+}
+
+output "tenant_namespace" {
+  value = kubernetes_namespace.tenant.metadata[0].name
+}
+
+output "tenant_cognito_client_id" {
+  value     = aws_cognito_user_pool_client.tenant.id
+  sensitive = true
+}

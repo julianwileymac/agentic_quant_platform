@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cell-shared-prem-us-east-1a
+  labels:
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    # Phase 3 §6.5 — cell metadata labels (mirrors the cells registry).
+    aqp.io/component: aqp-cell
+    aqp.io/cell-id: cell-shared-prem-us-east-1a
+    aqp.io/cell-tier: shared-prem
+    aqp.io/cell-region: us-east-1
+    aqp.io/cell-availability-zone: us-east-1a
+    aqp.io/tenancy-strategy: schema_per_tenant
+    # Phase 2 §5.4 — PSS restricted with version pins.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    # Phase 2 §5.3 — FinOps governance labels.
+    project: aqp-cell-shared-prem
+    cost_center: quant-research-01
+    owner: platform-engineering
+    data_classification: proprietary-alpha
+  annotations:
+    # Phase 4 §7.1 (RESTRUCTURING_PLAN.md) — enrol every workload
+    # in this namespace into the per-cell Linkerd mesh. Linkerd's
+    # Proxy Injector watches for this annotation; pods inherit.
+    linkerd.io/inject: enabled
+    aqp.internal/description: "Phase 3 §6.5 worked-example cell namespace (shared-prem tier, us-east-1a)."

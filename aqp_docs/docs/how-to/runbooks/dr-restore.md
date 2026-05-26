@@ -1,12 +1,12 @@
 ---
-title: 'Runbook — Disaster Recovery: full restore (<30 min)'
+title: 'Runbook — Disaster Recovery: full restore (under 30 min)'
 summary: '1. The Redis primary in `aqp-system` is gone. The `redis-master.aqp-system.svc` Service points to no pod. 2. Spin a fresh Redis pod:'
 owner: sre-team
 last_reviewed: 2026-05-25
 audience: both
 ---
 
-# Runbook — Disaster Recovery: full restore (<30 min)
+# Runbook — Disaster Recovery: full restore (under 30 min)
 
 Restores the Phase 6 reliability surface from S3 in three layers.
 
@@ -65,7 +65,7 @@ Restores the Phase 6 reliability surface from S3 in three layers.
 
 ## Phase-gate verification
 
-The full DR test must complete in < 30 min wall-clock.
+The full DR test must complete in under 30 min wall-clock.
 `tests/chaos/test_dr_restore.py` orchestrates the three layers
-against a fixture cluster + S3 mock and asserts the < 30 min
+against a fixture cluster + S3 mock and asserts the under-30-min
 deadline.

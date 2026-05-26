@@ -17,6 +17,11 @@ from aqp_platform_core.topology.loader import (
 )
 from aqp_platform_core.topology.models import (
     AuthDefinition,
+    Cell,
+    CellRoutes,
+    CellState,
+    CellTenancyStrategy,
+    CellTier,
     ClusterDefinition,
     DeploymentTarget,
     DeploymentTopology,
@@ -32,6 +37,11 @@ from aqp_platform_core.topology.models import (
 
 __all__ = [
     "AuthDefinition",
+    "Cell",
+    "CellRoutes",
+    "CellState",
+    "CellTenancyStrategy",
+    "CellTier",
     "ClusterDefinition",
     "DeploymentTarget",
     "DeploymentTopology",

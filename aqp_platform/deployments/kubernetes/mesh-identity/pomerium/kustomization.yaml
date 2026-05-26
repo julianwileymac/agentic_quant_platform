@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Phase 4 §7.5 — Pomerium IAP + per-route policies.
+resources:
+  - namespace.yaml
+  - pomerium-config.yaml
+  - route-manage.yaml

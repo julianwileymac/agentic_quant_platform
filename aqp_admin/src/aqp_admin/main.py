@@ -99,6 +99,13 @@ def _register_root(app: FastAPI, settings: AdminSettings) -> None:
                 "kubernetes": "/admin/kubernetes/status",
                 "halt_all": "/admin/halt/all",
                 "audit_runs": "/admin/audit/runs",
+                "secrets": "/admin/secrets",
+                "lineage": "/admin/lineage/datasets",
+                "models": "/admin/models",
+                "paper": "/admin/paper/runs",
+                "rbac_roles": "/admin/rbac/roles",
+                "accounts_mode": "/admin/accounts/mode",
+                "ws": "/admin/ws",
             },
         }
 
@@ -114,6 +121,14 @@ def _register_routers(app: FastAPI) -> None:
 
     app.include_router(health.router)
 
+    # Admin WebSocket gateway (multiplexed channels backed by Redis Streams).
+    try:
+        from aqp_admin.ws import router as ws_router
+
+        app.include_router(ws_router)
+    except ImportError:
+        logger.info("admin WS gateway not yet present; skipping")
+
     for module_name, attr in (
         ("aqp_admin.api.routers.accounts", "router"),
         ("aqp_admin.api.routers.services", "router"),
@@ -127,6 +142,13 @@ def _register_routers(app: FastAPI) -> None:
         ("aqp_admin.api.routers.builds", "router"),
         ("aqp_admin.api.routers.runbooks", "router"),
         ("aqp_admin.api.routers.metrics", "router"),
+        # Phase 1 overhaul — six new module routers.
+        ("aqp_admin.api.routers.secrets", "router"),
+        ("aqp_admin.api.routers.lineage", "router"),
+        ("aqp_admin.api.routers.models", "router"),
+        ("aqp_admin.api.routers.paper", "router"),
+        ("aqp_admin.api.routers.rbac", "router"),
+        ("aqp_admin.api.routers.accounts_mode", "router"),
     ):
         try:
             module = __import__(module_name, fromlist=[attr])

@@ -1,0 +1,45 @@
+name: alembic-immutability
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: alembic-immutability
+        run: |
+          if [ -f scripts/ci/check_migration_immutability.py ]; then
+            python -m scripts.ci.check_migration_immutability --base-ref origin/main
+          else
+            echo "::error::scripts/ci/check_migration_immutability.py missing"
+            exit 1
+          fi
+      - name: alembic-fork-detection
+        run: |
+          # Fail if more than one descendant of any single migration.
+          python <<'PY'
+          import re, sys
+          from pathlib import Path
+          children = {}
+          for path in sorted(Path("alembic/versions").glob("*.py")):
+              text = path.read_text()
+              parent = re.search(r"down_revision\s*=\s*['\"]?([^'\"]+)?['\"]?", text)
+              if parent and parent.group(1) and parent.group(1) != "None":
+                  children.setdefault(parent.group(1), []).append(path.name)
+          forks = {p: cs for p, cs in children.items() if len(cs) > 1}
+          if forks:
+              for parent, names in forks.items():
+                  print(f"::error::migration fork at {parent}: {names}")
+              sys.exit(1)
+          print("no migration forks detected.")
+          PY

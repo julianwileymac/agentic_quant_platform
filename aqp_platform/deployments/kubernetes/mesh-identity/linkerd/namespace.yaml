@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: linkerd
+  labels:
+    app.kubernetes.io/name: linkerd
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    # Phase 2 §5.3 — Kyverno selector key.
+    aqp.io/component: linkerd
+    # Phase 2 §5.4 — Linkerd control plane requires the privileged PSS
+    # profile because the proxy-init container mutates iptables rules.
+    aqp.io/pss-exception: "linkerd-proxy-init-iptables"
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    # Phase 2 §5.3 — FinOps governance labels.
+    project: aqp-mesh
+    cost_center: quant-research-01
+    owner: platform-engineering
+    data_classification: internal
+    # Phase 4 §7.1 — Linkerd injects itself.
+    linkerd.io/is-control-plane: "true"
+    config.linkerd.io/admission-webhooks: disabled
+  annotations:
+    aqp.internal/description: "Phase 4 §7.1 — Linkerd 2.16 control plane namespace."
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: linkerd-viz
+  labels:
+    app.kubernetes.io/name: linkerd-viz
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    aqp.io/component: linkerd-viz
+    aqp.io/pss-exception: "linkerd-viz-tap"
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    project: aqp-mesh
+    cost_center: quant-research-01
+    owner: platform-engineering
+    data_classification: internal
+    linkerd.io/extension: viz
+  annotations:
+    aqp.internal/description: "Phase 4 §7.1 — Linkerd Viz (golden signal dashboards)."

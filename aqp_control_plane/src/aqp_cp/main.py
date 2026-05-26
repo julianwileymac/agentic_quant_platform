@@ -162,6 +162,14 @@ def _register_routers(app: FastAPI) -> None:
         ("aqp_cp.api.routers.tenants", "router"),
         ("aqp_cp.api.routers.builds", "router"),
         ("aqp_cp.api.routers.terraform", "router"),
+        # Phase 3 §6.2 (RESTRUCTURING_PLAN.md) — cell registry CRUD
+        # + state transitions + tenant placement.
+        ("aqp_cp.api.routers.cells", "router"),
+        # Phase 7 §10.4 — regulatory-grade evidence bundle export.
+        # Returns a deterministic .tar.zst archive of audit segments +
+        # transparency anchors + spec snapshots + lineage rows for a
+        # given (tenant, cell, date_range) tuple.
+        ("aqp_cp.api.routers.evidence_bundles", "router"),
     ):
         try:
             module = __import__(module_name, fromlist=[attr])

@@ -1,0 +1,30 @@
+global:
+  cluster: aqp-prod
+  env: prod
+
+image:
+  repository: ${ECR_REGISTRY}/aqp-admin
+  tag: ${IMAGE_TAG}
+
+frontendImage:
+  repository: ${ECR_REGISTRY}/aqp-admin-frontend
+  tag: ${IMAGE_TAG}
+
+replicas: 4
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 1Gi
+
+ingress:
+  host: manage.aqp.fund
+
+env:
+  AQP_ADMIN_API_URL: "http://aqp-core-api.aqp-core.svc.cluster.local:8000"
+  AQP_ADMIN_CONTROL_PLANE_URL: "http://aqp-control-plane.aqp-admin.svc.cluster.local:9000"
+  AQP_ADMIN_AUTH_REQUIRED: "true"
+  AQP_ADMIN_AUDIT_HTTP_URL: "http://aqp-core-api.aqp-core.svc.cluster.local:8000/_internal/audit/admin-runs"

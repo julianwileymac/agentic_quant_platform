@@ -1,0 +1,140 @@
+# =============================================================================
+# Phase 4 §7.1 (RESTRUCTURING_PLAN.md) — Linkerd 2.16 control plane
+# install via the Helm chart shipped at
+# https://helm.linkerd.io/stable.
+#
+# Linkerd ships THREE Helm charts that install in a fixed order:
+#   1. linkerd-crds        — CustomResourceDefinitions only
+#   2. linkerd-control-plane — Identity, Proxy Injector, Destination
+#   3. linkerd-viz         — Prometheus + Grafana dashboards + Tap
+#
+# This file is a HelmRelease (Flux) / Application (Argo CD) hybrid
+# template. Operators using Argo CD wrap it in an Application with
+# `spec.source.helm`; operators using Flux apply it directly. We
+# ship the values file shape and let the operator pick their
+# delivery mechanism.
+#
+# Trust anchor (TLS root) is sourced from a Vault PKI-issued cert
+# via the Phase 4 §7.6 VaultStaticSecret pattern. Linkerd then
+# auto-rotates the per-pod identity certs from there. The cluster
+# operator MUST configure Vault's PKI engine + the
+# `cell-shared-std-us-east-1a/linkerd-trust-anchor` VaultStaticSecret
+# before this control plane is healthy.
+# =============================================================================
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: linkerd-crds
+  namespace: linkerd
+spec:
+  releaseName: linkerd-crds
+  interval: 1h
+  chart:
+    spec:
+      chart: linkerd-crds
+      version: "1.8.x"  # bundled with linkerd-control-plane 2.16.x
+      sourceRef:
+        kind: HelmRepository
+        name: linkerd
+  install:
+    crds: CreateReplace
+  upgrade:
+    crds: CreateReplace
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: linkerd-control-plane
+  namespace: linkerd
+spec:
+  releaseName: linkerd
+  interval: 1h
+  dependsOn:
+    - name: linkerd-crds
+  chart:
+    spec:
+      chart: linkerd-control-plane
+      version: "1.16.x"  # Linkerd 2.16.x
+      sourceRef:
+        kind: HelmRepository
+        name: linkerd
+  values:
+    # ---------------------------------------------------------------
+    # Identity (cluster trust anchor)
+    # ---------------------------------------------------------------
+    identity:
+      issuer:
+        # Phase 4 §7.6 wire-up: the trust anchor + issuer cert come
+        # from a Vault-projected secret instead of being inline. The
+        # operator creates a VaultStaticSecret mapping
+        # `cells/<cell-id>/linkerd-trust-anchor` -> Secret
+        # `linkerd-identity-trust-roots` and a sibling
+        # `linkerd-identity-issuer` for the issuer cert + key.
+        scheme: kubernetes.io/tls
+        tls:
+          # Empty in this template; the operator overrides via
+          # `helm install --set-file ...` or the wrapping Application.
+          # The matching Secret rotates via VaultStaticSecret.
+          crtPEM: ""
+          keyPEM: ""
+    # The trust root bundle (root CA) similarly comes from Vault.
+    identityTrustAnchorsPEM: ""
+
+    # ---------------------------------------------------------------
+    # Proxy injection (per AGENTS rule 4 — every workload gets mTLS).
+    # ---------------------------------------------------------------
+    proxy:
+      logLevel: warn
+      # Linkerd's default UID 2102 sometimes collides with PSS
+      # restricted. AQP Pods run as UID 65532; the proxy gets its own
+      # UID and the Linkerd Proxy Injector enforces this regardless.
+      uid: 2102
+
+    # ---------------------------------------------------------------
+    # Pod Security Standards — Linkerd Identity + Destination need
+    # cap_net_admin / cap_net_raw on init only; mark the namespace
+    # `privileged` (already done in namespace.yaml) and let the
+    # control-plane pods run with the matching exception label set.
+    # ---------------------------------------------------------------
+    podMonitor:
+      enabled: true
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: linkerd-viz
+  namespace: linkerd-viz
+spec:
+  releaseName: linkerd-viz
+  interval: 1h
+  dependsOn:
+    - name: linkerd-control-plane
+      namespace: linkerd
+  chart:
+    spec:
+      chart: linkerd-viz
+      version: "30.16.x"  # paired with Linkerd 2.16.x
+      sourceRef:
+        kind: HelmRepository
+        name: linkerd
+  values:
+    # Disable the bundled Prometheus + Grafana — AQP already runs
+    # kube-prometheus-stack (aqp_platform/deployments/kubernetes/observability/
+    # kube-prometheus-stack/). linkerd-viz scrapes its metrics from
+    # there, not from a private Prometheus.
+    prometheus:
+      enabled: false
+    grafana:
+      enabled: false
+---
+# Source-of-truth Helm repository pointer. Argo CD operators replace
+# this with `spec.source.repoURL: https://helm.linkerd.io/stable` on
+# the wrapping Application.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: linkerd
+  namespace: linkerd
+spec:
+  interval: 1h
+  url: https://helm.linkerd.io/stable

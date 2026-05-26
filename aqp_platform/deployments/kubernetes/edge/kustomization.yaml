@@ -17,3 +17,8 @@ commonLabels:
 
 resources:
   - cloudflared-aqp/
+  # Phase 3 §6.4 (RESTRUCTURING_PLAN.md) — Envoy cell router
+  # + tenant-router decision service. Replaces the Python proxy in
+  # ``aqp_client/`` per §6.6 (the proxy removal is a follow-up PR).
+  - aqp-edge/
+  - aqp-tenant-router/

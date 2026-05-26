@@ -15,7 +15,7 @@ interface Stat {
   /** Label shown below the number. */
   label: string;
   /** Tone for the number color. */
-  tone?: "primary" | "secondary" | "tertiary";
+  tone?: "primary" | "secondary" | "tertiary" | "warn";
 }
 
 interface StatStripProps {
@@ -27,6 +27,7 @@ const TONE_COLORS = {
   primary: "var(--accent-primary)",
   secondary: "var(--accent-secondary)",
   tertiary: "var(--accent-tertiary)",
+  warn: "var(--warn-fg)",
 } as const;
 
 function AnimatedNumber({

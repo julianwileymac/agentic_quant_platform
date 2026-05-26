@@ -1,0 +1,125 @@
+{{- if .Values.mlflow.enabled -}}
+# =============================================================================
+# Phase 6 §9.5 — per-cell MLflow tracking server.
+#
+# Backed by the per-cell CNPG Postgres + per-cell MinIO. The
+# `aqp_models` Predictor Hub reads the tracking URI via the
+# topology service (Rule 47) and caches predictors per cell.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aqp-cell-mlflow
+  labels:
+{{ include "aqp-cell-data-plane.labels" . | indent 4 }}
+    aqp.io/datastore: mlflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aqp-cell-mlflow
+  template:
+    metadata:
+      labels:
+        app: aqp-cell-mlflow
+{{ include "aqp-cell-data-plane.labels" . | indent 8 }}
+      annotations:
+{{ include "aqp-cell-data-plane.podAnnotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: wait-for-deps
+          image: cgr.dev/chainguard/wait-for-it:latest
+          command: ["/wait-for-it"]
+          args: ["-t", "120", "aqp-cell-postgres-rw:5432"]
+      containers:
+        - name: mlflow
+          image: {{ .Values.mlflow.image | quote }}
+          command: ["mlflow", "server"]
+          args:
+            - --host=0.0.0.0
+            - --port=5000
+            - --backend-store-uri=$(MLFLOW_BACKEND_URI)
+            - --default-artifact-root=s3://{{ include "aqp-cell-data-plane.bucketPrefix" . }}-mlflow/
+            - --serve-artifacts
+          ports:
+            - name: http
+              containerPort: 5000
+          env:
+            - name: MLFLOW_BACKEND_URI
+              valueFrom:
+                secretKeyRef:
+                  name: aqp-cell-mlflow-backend
+                  key: dsn
+            # S3 (MinIO) artifact endpoint.
+            - name: MLFLOW_S3_ENDPOINT_URL
+              value: "http://aqp-cell-minio:9000"
+            - name: MLFLOW_S3_IGNORE_TLS
+              value: "true"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aqp-cell-minio-credentials
+                  key: access_key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aqp-cell-minio-credentials
+                  key: secret_key
+            # Phase 3 §6.3 — cell id propagated for OTEL spans.
+            - name: AQP_CELL_ID
+              value: {{ .Values.cell_id | quote }}
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # mlflow writes locally
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aqp-cell-mlflow
+  labels:
+{{ include "aqp-cell-data-plane.labels" . | indent 4 }}
+    aqp.io/datastore: mlflow
+spec:
+  type: ClusterIP
+  selector:
+    app: aqp-cell-mlflow
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
+{{- end }}

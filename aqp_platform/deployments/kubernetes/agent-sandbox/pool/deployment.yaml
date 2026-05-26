@@ -1,0 +1,198 @@
+# =============================================================================
+# aqp-agent-sandbox-pool — gVisor-isolated pool that runs:
+#   1. LLM-emitted Python in the AST sandbox (Rule 39).
+#   2. Notebook kernels for the Dagster sandbox (Rule 32).
+#   3. Agent-emitted strategy code (LEAN translator output, Rule 35).
+#
+# Phase 5 §8.3 (RESTRUCTURING_PLAN.md). The matching Kyverno policy
+# `02-require-runtime-class.yaml` enforces `runtimeClassName: gvisor`
+# at admission; this Deployment also opts in explicitly so the
+# scheduler picks a gVisor-installed node from the start.
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aqp-agent-sandbox
+  namespace: aqp-agent-sandbox
+  labels:
+    app.kubernetes.io/name: aqp-agent-sandbox
+    app.kubernetes.io/part-of: aqp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aqp-agent-sandbox-pool
+  namespace: aqp-agent-sandbox
+  labels:
+    app: aqp-agent-sandbox-pool
+    app.kubernetes.io/name: aqp-agent-sandbox-pool
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/component: agent-sandbox
+    app.kubernetes.io/managed-by: kustomize
+    # Phase 2 §5.3 — Kyverno selector key (matches
+    # 02-require-runtime-class.yaml).
+    aqp.io/sandbox-required: "true"
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: aqp-agent-sandbox-pool
+  template:
+    metadata:
+      labels:
+        app: aqp-agent-sandbox-pool
+        app.kubernetes.io/name: aqp-agent-sandbox-pool
+        app.kubernetes.io/part-of: aqp
+        app.kubernetes.io/component: agent-sandbox
+        # Phase 5 §8.3 — Kyverno gate fires on this label.
+        aqp.io/sandbox-required: "true"
+    spec:
+      serviceAccountName: aqp-agent-sandbox
+      automountServiceAccountToken: false  # SPIFFE socket replaces SA token.
+      # Phase 5 §8.3 — gVisor RuntimeClass binding. Without this the
+      # Kyverno policy `02-require-runtime-class.yaml` denies the Pod.
+      runtimeClassName: gvisor
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sandbox
+          image: ghcr.io/julianwiley/aqp-agent-sandbox:dev
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 9100
+              protocol: TCP
+          env:
+            # Phase 5 §8.1 — agent runtime resolves MCP endpoints via
+            # the per-cell tenant router; the cell id stamps audit rows
+            # for cross-cell call validation (§8.5).
+            - name: AQP_CELL_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['aqp.io/cell-id']
+            - name: AQP_SANDBOX_KIND
+              value: agent-sandbox-pool
+            # Phase 4 §7.2 — SPIFFE workload identity socket. SVID
+            # used for M2M against the per-tenant MCP server.
+            - name: SPIFFE_ENDPOINT_SOCKET
+              value: unix:///run/spire/sockets/agent.sock
+            # Phase 5 §8.2 — biscuit capability validation public key
+            # mounted from the Phase 4 §7.6 VaultStaticSecret-projected
+            # `biscuit-public-key` Secret.
+            - name: AQP_BISCUIT_PUBLIC_KEY_PEM_PATH
+              value: /var/run/aqp/biscuit/public.pem
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+              ephemeral-storage: 128Mi
+            limits:
+              # gVisor's RuntimeClass adds ~10m/10Mi pod-fixed overhead
+              # on top of these limits; the kubelet handles the math.
+              cpu: 2000m
+              memory: 1Gi
+              ephemeral-storage: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: spiffe-socket
+              mountPath: /run/spire/sockets
+              readOnly: true
+            - name: biscuit-public-key
+              mountPath: /var/run/aqp/biscuit
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: spiffe-socket
+          hostPath:
+            path: /run/spire/sockets
+            type: DirectoryOrCreate
+        - name: biscuit-public-key
+          secret:
+            secretName: biscuit-public-key
+            optional: true
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: aqp-agent-sandbox-pool
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["arm64", "amd64"]
+                  # Schedule only onto nodes labelled by the gVisor
+                  # installer DaemonSet (Phase 5 §8.3).
+                  - key: aqp.io/gvisor
+                    operator: In
+                    values: ["installed"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aqp-agent-sandbox-pool
+  namespace: aqp-agent-sandbox
+  labels:
+    app: aqp-agent-sandbox-pool
+    app.kubernetes.io/part-of: aqp
+spec:
+  type: ClusterIP
+  selector:
+    app: aqp-agent-sandbox-pool
+  ports:
+    - name: http
+      port: 9100
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aqp-agent-sandbox-pool
+  namespace: aqp-agent-sandbox
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: aqp-agent-sandbox-pool

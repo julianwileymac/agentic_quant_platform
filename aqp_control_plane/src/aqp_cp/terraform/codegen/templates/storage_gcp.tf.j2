@@ -1,0 +1,84 @@
+{# GCP storage stack — Cloud SQL Postgres + GCS + Memorystore Redis. -#}
+
+locals {
+  common_tags = merge(
+    {{ tags | tfmap }},
+    {
+      stack       = {{ spec.slug | hcl }}
+      environment = {{ spec.environment | hcl }}
+      managed_by  = "aqp-terraform-runtime"
+    }
+  )
+}
+
+provider "google" {
+  project = lookup({{ variables | tfmap }}, "gcp_project_id", "")
+  region  = lookup({{ variables | tfmap }}, "gcp_region", "us-central1")
+}
+
+resource "google_sql_database_instance" "aqp" {
+  name             = "aqp-postgres-{{ spec.slug }}"
+  database_version = lookup({{ variables | tfmap }}, "postgres_version", "POSTGRES_16")
+  region           = lookup({{ variables | tfmap }}, "gcp_region", "us-central1")
+  deletion_protection = lookup({{ variables | tfmap }}, "db_deletion_protection", true)
+
+  settings {
+    tier              = lookup({{ variables | tfmap }}, "db_tier", "db-custom-2-7680")
+    availability_type = lookup({{ variables | tfmap }}, "db_availability", "REGIONAL")
+    backup_configuration {
+      enabled    = true
+      start_time = "02:00"
+    }
+    database_flags {
+      name  = "max_connections"
+      value = "200"
+    }
+    database_flags {
+      name  = "shared_preload_libraries"
+      value = "pg_stat_statements"
+    }
+    user_labels = local.common_tags
+  }
+}
+
+resource "google_storage_bucket" "aqp" {
+  name          = lookup({{ variables | tfmap }}, "bucket_name", "aqp-storage-{{ spec.slug }}")
+  location      = lookup({{ variables | tfmap }}, "gcp_region", "US-CENTRAL1")
+  storage_class = "STANDARD"
+  uniform_bucket_level_access = true
+  versioning {
+    enabled = true
+  }
+  lifecycle_rule {
+    condition {
+      age = 90
+    }
+    action {
+      type          = "SetStorageClass"
+      storage_class = "ARCHIVE"
+    }
+  }
+  labels = local.common_tags
+}
+
+resource "google_redis_instance" "aqp" {
+  name           = "aqp-redis-{{ spec.slug }}"
+  tier           = lookup({{ variables | tfmap }}, "redis_tier", "STANDARD_HA")
+  memory_size_gb = lookup({{ variables | tfmap }}, "redis_memory_gb", 1)
+  region         = lookup({{ variables | tfmap }}, "gcp_region", "us-central1")
+  redis_version  = lookup({{ variables | tfmap }}, "redis_version", "REDIS_7_0")
+  labels         = local.common_tags
+}
+
+output "postgres_connection_name" {
+  value = google_sql_database_instance.aqp.connection_name
+}
+
+output "gcs_bucket_name" {
+  value = google_storage_bucket.aqp.name
+}
+
+output "redis_host" {
+  value     = google_redis_instance.aqp.host
+  sensitive = true
+}

@@ -1,0 +1,111 @@
+# Default values for the aqp-admin chart.
+
+global:
+  cluster: aqp-dev
+  env: dev
+
+image:
+  repository: ""    # set per env (ECR repository URL)
+  tag: ""           # set per env (image SHA tag)
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+frontendImage:
+  repository: ""
+  tag: ""
+
+replicas: 2
+
+service:
+  type: ClusterIP
+  port: 8900
+  frontendPort: 3003
+
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+  host: admin.dev.aqp.internal
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+serviceAccount:
+  name: aqp-admin
+  annotations: {}   # populated with eks.amazonaws.com/role-arn at deploy time
+
+env:
+  AQP_ADMIN_API_URL: ""
+  AQP_ADMIN_CONTROL_PLANE_URL: ""
+  AQP_ADMIN_AUTH_REQUIRED: "true"
+  AQP_ADMIN_AUTH_PROVIDER: "msal_entra"
+  AQP_ADMIN_ENTRA_TENANT: "organizations"
+  AQP_AUTH_OIDC_AUDIENCE: "api://aqp-admin"
+  AQP_ADMIN_AUDIT_SINK: "http"
+
+externalSecrets:
+  enabled: true
+  secretStoreRef: aws-secrets
+  refreshInterval: 1h
+  remoteRefs:
+    - name: aqp-admin-m2m
+      keys:
+        - remote: aqp/admin/m2m/cp-client-id
+          envVar: AQP_ADMIN_M2M_AQP_ADMIN_TO_CP_CLIENT_CREDENTIALS_CLIENT_ID
+        - remote: aqp/admin/m2m/cp-client-secret
+          envVar: AQP_ADMIN_M2M_AQP_ADMIN_TO_CP_CLIENT_CREDENTIALS_CLIENT_SECRET
+
+networkPolicy:
+  enabled: true
+  allowedIngressNamespaces:
+    - aqp-admin
+    - argocd
+    - aqp-observability
+  egressEndpoints:
+    - aqp-control-plane.aqp-admin.svc.cluster.local
+    - kubernetes.default.svc.cluster.local
+    - aqp-core-api.aqp-core.svc.cluster.local
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+healthCheck:
+  liveness:
+    path: /admin/health
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 3
+  readiness:
+    path: /admin/health
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  path: /admin/metrics/prometheus
+
+kyvernoPolicyRef:
+  enabled: true
+  policyName: aqp-admin-image-signing

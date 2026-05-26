@@ -1,0 +1,113 @@
+# =============================================================================
+# Pomerium IAP — identity-aware proxy in front of /manage/* and aqp_admin.
+#
+# Phase 4 §7.5 (RESTRUCTURING_PLAN.md). Validates the user's primary
+# IdP token (Auth0 / Entra), performs the step-up MFA prompt
+# (Rule 52), and forwards with an `X-Pomerium-Jwt-Assertion` header
+# that the backend (`aqp.auth.providers.pomerium.PomeriumAccessProvider`)
+# validates.
+#
+# Pomerium 0.27+ supports two delivery shapes:
+#   1. Helm chart — installs all five Pomerium services
+#      (authenticate, authorize, databroker, proxy, console).
+#   2. Pomerium Operator — CRD-driven; each route is a `Pomerium.Route`
+#      object. Phase 4 uses option 1 (Helm) for the operator install
+#      and option 2 (CRDs) for the per-route policies (Phase 4.5).
+# =============================================================================
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: pomerium
+  namespace: pomerium
+spec:
+  releaseName: pomerium
+  interval: 1h
+  chart:
+    spec:
+      chart: pomerium
+      version: "47.x"  # Pomerium 0.27.x
+      sourceRef:
+        kind: HelmRepository
+        name: pomerium
+  values:
+    # ---------------------------------------------------------------
+    # Authentication — chain Auth0 / Entra as the upstream IdP.
+    # Operators provide the client secret via a VaultStaticSecret
+    # (`pomerium-auth0-client-secret`).
+    # ---------------------------------------------------------------
+    authenticate:
+      idp:
+        provider: auth0  # Phase 4: Auth0 first; Entra wired in Phase 4.5.
+        # AQP namespaced custom claim: see aqp_docs/docs/concepts/identity/index.md.
+        scopes: ["openid", "profile", "email", "offline_access"]
+        url: "https://aqp-fund.us.auth0.com"
+        clientID: "REPLACE_ME"
+        existingSecret: "pomerium-auth0-client-secret"
+        existingCASecret: ""
+      service:
+        # `authenticate.aqp.fund` — operators wire this through the
+        # AQP Cloudflare tunnel (aqp_platform/deployments/kubernetes/
+        # edge/cloudflared-aqp/) on the Phase 4 rollout.
+        type: ClusterIP
+
+    # ---------------------------------------------------------------
+    # Authorize — per-route ALLOW/DENY policy engine. AQP wires this
+    # through `aqp/api/security_cedar.py` (Phase 4 §7.3) for fine-
+    # grained per-action decisions; Pomerium handles the coarse
+    # route-level ACL.
+    # ---------------------------------------------------------------
+    authorize:
+      service:
+        type: ClusterIP
+
+    # ---------------------------------------------------------------
+    # Proxy — the data-plane component that injects
+    # `X-Pomerium-Jwt-Assertion`. PomeriumAccessProvider (Phase 4 §7.5
+    # in `aqp/auth/providers/pomerium.py`) validates this header.
+    # ---------------------------------------------------------------
+    proxy:
+      service:
+        type: ClusterIP
+
+    # ---------------------------------------------------------------
+    # Databroker — backed by Redis (paired with the AQP cell Redis;
+    # falls back to in-memory when unconfigured). Phase 4 ships the
+    # in-memory default; Phase 4.5 wires the per-cell Redis.
+    # ---------------------------------------------------------------
+    databroker:
+      service:
+        type: ClusterIP
+      storage:
+        type: "in-memory"
+
+    # ---------------------------------------------------------------
+    # Step-up MFA gate — Pomerium 0.27 supports per-route step-up
+    # MFA via the `policy[].acme_mfa` field on Route CRDs (Phase 4.5
+    # adds the per-route CRDs). Operators set the global MFA hint
+    # here so every Auth0 flow that touches Pomerium triggers MFA.
+    # ---------------------------------------------------------------
+    config:
+      # Cookie session lifetime + step-up window.
+      cookie_expire: "8h"
+      idp_request_params:
+        # Auth0 step-up gate per AGENTS rule 52.
+        acr_values: "urn:authn:strong"
+        max_age: "60"  # seconds since last MFA
+
+    # ---------------------------------------------------------------
+    # TLS — Pomerium ships per-service cert manager out of the box.
+    # Phase 4 §7.2 (SPIFFE) will replace the cert-manager-issued
+    # certs with SPIFFE SVIDs for service-to-service TLS.
+    # ---------------------------------------------------------------
+    tls:
+      generateTLS: false
+      existingCASecret: pomerium-ca-secret
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: pomerium
+  namespace: pomerium
+spec:
+  interval: 1h
+  url: https://helm.pomerium.io

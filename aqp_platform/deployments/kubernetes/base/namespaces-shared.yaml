@@ -18,6 +18,20 @@ metadata:
     aqp.internal/canonical-owner: agentic_quant_platform
     pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/audit: restricted
+    # Phase 2 §5.3 — Kyverno selector key.
+    aqp.io/component: kafka-strimzi
+    # Phase 2 §5.4 — documented PSS exception. See
+    # aqp_platform/deployments/kubernetes/security/README.md.
+    aqp.io/pss-exception: "kafka-jbod-host-volumes"
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/warn-version: latest
+    # Phase 2 §5.3 — FinOps governance labels.
+    project: kafka-strimzi
+    cost_center: quant-research-01
+    owner: platform-streaming
+    data_classification: proprietary-alpha
   annotations:
     aqp.internal/description: "AQP-owned streaming brokers (Strimzi Kafka + Redpanda side-by-side)."
     aqp.internal/replaces: "rpi_kubernetes/kubernetes/base-services/kafka -> data-services namespace."
@@ -33,6 +47,20 @@ metadata:
     aqp.internal/canonical-owner: agentic_quant_platform
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/audit: restricted
+    # Phase 2 §5.3 — Kyverno selector key.
+    aqp.io/component: questdb
+    # Phase 2 §5.4 — documented PSS exception. See
+    # aqp_platform/deployments/kubernetes/security/README.md.
+    aqp.io/pss-exception: "questdb-sysctl"
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/warn-version: latest
+    # Phase 2 §5.3 — FinOps governance labels.
+    project: questdb
+    cost_center: quant-research-01
+    owner: platform-data
+    data_classification: proprietary-alpha
   annotations:
     aqp.internal/description: "QuestDB high-throughput tick-data + executions store."
 ---
@@ -47,6 +75,20 @@ metadata:
     aqp.internal/canonical-owner: agentic_quant_platform
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/audit: restricted
+    # Phase 2 §5.3 — Kyverno selector key.
+    aqp.io/component: iceberg-hudi
+    # Phase 2 §5.4 — documented PSS exception. See
+    # aqp_platform/deployments/kubernetes/security/README.md.
+    aqp.io/pss-exception: "spark-mlock-capability"
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/warn-version: latest
+    # Phase 2 §5.3 — FinOps governance labels.
+    project: iceberg-hudi
+    cost_center: quant-research-01
+    owner: platform-data
+    data_classification: proprietary-alpha
   annotations:
     aqp.internal/description: "Iceberg (canonical) + Hudi (additive) lakehouse writers + Spark Operator + Polaris catalog."
 ---
@@ -61,6 +103,20 @@ metadata:
     aqp.internal/canonical-owner: agentic_quant_platform
     pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/audit: restricted
+    # Phase 2 §5.3 — Kyverno selector key.
+    aqp.io/component: otel-prometheus
+    # Phase 2 §5.4 — documented PSS exception. See
+    # aqp_platform/deployments/kubernetes/security/README.md.
+    aqp.io/pss-exception: "otel-collector-host-metrics"
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/warn-version: latest
+    # Phase 2 §5.3 — FinOps governance labels.
+    project: otel-prometheus
+    cost_center: quant-research-01
+    owner: platform-observability
+    data_classification: internal
   annotations:
     aqp.internal/description: "kube-prometheus-stack + OpenTelemetry Operator + Tempo + Loki + Phoenix + Vector."
     aqp.internal/replaces: "rpi_kubernetes/kubernetes/observability/* (Phase 5 cleanup)."
@@ -76,6 +132,20 @@ metadata:
     aqp.internal/canonical-owner: agentic_quant_platform
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/audit: restricted
+    # Phase 2 §5.3 — Kyverno selector key.
+    aqp.io/component: postgres-shared
+    # Phase 2 §5.4 — documented PSS exception. See
+    # aqp_platform/deployments/kubernetes/security/README.md.
+    aqp.io/pss-exception: "cnpg-fsgroup-policy"
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/warn-version: latest
+    # Phase 2 §5.3 — FinOps governance labels.
+    project: postgres-shared
+    cost_center: quant-research-01
+    owner: platform-data
+    data_classification: proprietary-alpha
   annotations:
     aqp.internal/description: "PostgreSQL + Redis + MinIO + ChromaDB + Milvus + Schema Registry + DataHub canonical instances."
     aqp.internal/replaces: "rpi_kubernetes/kubernetes/base-services/{postgresql,redis,minio,chromadb,milvus,schema-registry,datahub} (Phase 5 cleanup)."
@@ -91,6 +161,20 @@ metadata:
     aqp.internal/canonical-owner: agentic_quant_platform
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/audit: restricted
+    # Phase 2 §5.3 — Kyverno selector key.
+    aqp.io/component: argo-mlflow-kserve
+    # Phase 2 §5.4 — documented PSS exception. See
+    # aqp_platform/deployments/kubernetes/security/README.md.
+    aqp.io/pss-exception: "argo-emptydir-size"
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/warn-version: latest
+    # Phase 2 §5.3 — FinOps governance labels.
+    project: argo-mlflow-kserve
+    cost_center: quant-research-01
+    owner: platform-mlops
+    data_classification: proprietary-alpha
   annotations:
     aqp.internal/description: "MLflow + Argo Workflows/Events + BentoML/Yatai + KServe + Dagster + AQP bots."
     aqp.internal/replaces: "rpi_kubernetes/kubernetes/{base-services/mlflow, mlops/*} (Phase 5 cleanup)."
@@ -106,6 +190,20 @@ metadata:
     aqp.internal/canonical-owner: agentic_quant_platform
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/audit: restricted
+    # Phase 2 §5.3 — Kyverno selector key.
+    aqp.io/component: airbyte-jupyter
+    # Phase 2 §5.4 — documented PSS exception. See
+    # aqp_platform/deployments/kubernetes/security/README.md.
+    aqp.io/pss-exception: "airbyte-userland-connectors"
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/warn-version: latest
+    # Phase 2 §5.3 — FinOps governance labels.
+    project: airbyte-jupyter
+    cost_center: quant-research-01
+    owner: platform-elt
+    data_classification: customer-pii
   annotations:
     aqp.internal/description: "Airbyte (visual builder + workspace) + RAGFlow + JupyterHub + Dask/Ray notebook compute."
     aqp.internal/replaces: "rpi_kubernetes/kubernetes/base-services/{airbyte,ragflow,jupyterhub,dask-ray} (Phase 5 cleanup)."
@@ -121,6 +219,22 @@ metadata:
     aqp.internal/canonical-owner: agentic_quant_platform
     pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/audit: restricted
+    # Phase 2 §5.3 — Kyverno selector key.
+    aqp.io/component: cloudflared
+    # Phase 2 §5.4 — documented PSS exception. See
+    # aqp_platform/deployments/kubernetes/security/README.md.
+    aqp.io/pss-exception: "cloudflared-cap-net-admin"
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/warn-version: latest
+    # Phase 2 §5.3 — FinOps governance labels.
+    project: cloudflared
+    cost_center: quant-research-01
+    owner: platform-edge
+    data_classification: internal
+    # Phase 2 §5.3 — opt-in for the 03-no-host-network policy.
+    aqp.io/host-network-allowed: "true"
   annotations:
     aqp.internal/description: "AQP-owned Cloudflare tunnel (cloudflared-aqp). Portal keeps its separate tunnel in rpi_kubernetes/edge."
 ---
@@ -136,5 +250,18 @@ metadata:
     aqp.io/component: bots
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/warn-version: latest
+    # Phase 2 §5.3 — FinOps governance labels.
+    project: quantbot-runtime
+    cost_center: quant-research-01
+    owner: platform-bots
+    data_classification: proprietary-alpha
+    # Phase 2 §5.4 — bot runtime pods need a writable working dir +
+    # may exec subprocess for Cython-built HFT extensions; baseline is
+    # the minimum profile that lets ADR 007 HFT pods schedule.
+    aqp.io/pss-exception: "hft-cython-subprocess"
   annotations:
     aqp.internal/description: "Default namespace for AQP bot Deployments + ConfigMaps applied by aqp.bots.deploy.KubernetesTarget and the aqp-bot-deploy Argo WorkflowTemplate."

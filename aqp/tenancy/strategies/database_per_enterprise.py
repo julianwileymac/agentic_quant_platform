@@ -40,6 +40,27 @@ class DatabasePerEnterpriseStrategy(TenancyStrategy):
     strategy_kind = "database_per_enterprise"
     strategy_alias = "DatabasePerEnterpriseStrategy"
 
+    def get_engine(self, org_id: str | None) -> Any:
+        """Return the per-cell engine (Phase 6 §9.4).
+
+        ``silo-reg`` cells host a single tenant whose dedicated database
+        runs in the per-cell CNPG cluster. We honour the per-cell
+        ``RequestContext.cell_id`` binding by delegating to
+        ``aqp.persistence.db._sync_engine()``, which already keys on
+        the active cell id. For un-bound (no ``cell_id``) callers we
+        still need a tenant DSN — those callers MUST set the
+        runtime context before reaching this strategy.
+        """
+        from aqp.persistence.db import _sync_engine
+
+        return _sync_engine()
+
+    def get_async_engine(self, org_id: str | None) -> Any:
+        """Return the per-cell async engine (Phase 6 §9.4)."""
+        from aqp.persistence.db import _async_engine
+
+        return _async_engine()
+
     def session(self, org_id: str | None) -> AsyncContextManager[Any]:
         if not org_id:
             raise TenancyStrategyError(

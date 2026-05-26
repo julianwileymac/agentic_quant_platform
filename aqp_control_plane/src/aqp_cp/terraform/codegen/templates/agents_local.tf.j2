@@ -1,0 +1,169 @@
+{# Agent pods — bot Deployment with `aqp-agent` + `aqp-data-mcp` sidecar pair,
+   tmpfs-mounted kill-switch secret, zero-egress NetworkPolicy on the agent
+   container. Variables:
+   - namespace
+   - bot_specs               (list of { name, image_tag, dry_run, config_path })
+   - mcp_image_tag
+   - redis_address           (used by the MCP sidecar)
+   - kill_switch_key
+-#}
+
+locals {
+  common_tags = {{ tags | tfmap }}
+  namespace_name = lookup({{ variables | tfmap }}, "namespace", "aqp-{{ spec.environment }}")
+  bots = lookup({{ variables | tfmap }}, "bot_specs", [])
+  mcp_image_tag = lookup({{ variables | tfmap }}, "mcp_image_tag", "latest")
+}
+
+resource "kubernetes_secret" "kill_switch_config" {
+  metadata {
+    name      = "aqp-kill-switch"
+    namespace = local.namespace_name
+  }
+  type = "Opaque"
+  data = {
+    redis_url       = lookup({{ variables | tfmap }}, "redis_address", "redis://redis:6379")
+    kill_switch_key = lookup({{ variables | tfmap }}, "kill_switch_key", "aqp:kill_switch")
+  }
+}
+
+resource "kubernetes_deployment" "agent" {
+  for_each = { for b in local.bots : b.name => b }
+
+  metadata {
+    name      = "aqp-bot-${each.value.name}"
+    namespace = local.namespace_name
+    labels = merge(local.common_tags, {
+      "app.kubernetes.io/name"      = "aqp-bot-${each.value.name}"
+      "app.kubernetes.io/part-of"   = "aqp"
+      "app.kubernetes.io/component" = "agent"
+    })
+  }
+
+  spec {
+    replicas = lookup(each.value, "replicas", 1)
+    strategy {
+      type = "RollingUpdate"
+      rolling_update {
+        max_unavailable = "0"
+        max_surge       = "1"
+      }
+    }
+    selector {
+      match_labels = {
+        "app.kubernetes.io/name" = "aqp-bot-${each.value.name}"
+      }
+    }
+    template {
+      metadata {
+        labels = merge(local.common_tags, {
+          "app.kubernetes.io/name" = "aqp-bot-${each.value.name}"
+        })
+        annotations = {
+          "aqp.io/spec-name" = each.value.name
+          "aqp.io/dry-run"   = tostring(lookup(each.value, "dry_run", true))
+        }
+      }
+      spec {
+        service_account_name = lookup(each.value, "service_account", "aqp-agent")
+        automount_service_account_token = true
+
+        volume {
+          name = "kill-switch-secret"
+          secret {
+            secret_name = kubernetes_secret.kill_switch_config.metadata[0].name
+          }
+        }
+
+        container {
+          name  = "aqp-agent"
+          image = "${lookup({{ variables | tfmap }}, "agent_image", "aqp-agent")}:${each.value.image_tag}"
+
+          env {
+            name  = "AQP_BOT_SPEC_NAME"
+            value = each.value.name
+          }
+          env {
+            name  = "AQP_BOT_CONFIG_PATH"
+            value = lookup(each.value, "config_path", "/etc/aqp/bot.yaml")
+          }
+          env {
+            name  = "AQP_AGENT_MCP_URL"
+            value = "http://127.0.0.1:8800"
+          }
+          env {
+            name  = "AQP_SESSION_DRY_RUN"
+            value = tostring(lookup(each.value, "dry_run", true))
+          }
+
+          volume_mount {
+            name       = "kill-switch-secret"
+            mount_path = "/run/secrets/kill_switch"
+            read_only  = true
+          }
+
+          resources {
+            requests = {
+              cpu    = lookup(each.value, "cpu_request", "250m")
+              memory = lookup(each.value, "memory_request", "256Mi")
+            }
+            limits = {
+              cpu    = lookup(each.value, "cpu_limit", "1000m")
+              memory = lookup(each.value, "memory_limit", "1Gi")
+            }
+          }
+        }
+
+        container {
+          name  = "aqp-data-mcp"
+          image = "${lookup({{ variables | tfmap }}, "mcp_image", "aqp-data-mcp")}:${local.mcp_image_tag}"
+          args  = ["--transport", "stdio", "--http-port", "8800"]
+          env {
+            name  = "AQP_REDIS_URL"
+            value = lookup({{ variables | tfmap }}, "redis_address", "redis://redis:6379/0")
+          }
+          resources {
+            requests = {
+              cpu    = "100m"
+              memory = "128Mi"
+            }
+            limits = {
+              cpu    = "500m"
+              memory = "512Mi"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_network_policy" "agent_zero_egress" {
+  for_each = { for b in local.bots : b.name => b }
+
+  metadata {
+    name      = "aqp-bot-${each.value.name}-zero-egress"
+    namespace = local.namespace_name
+  }
+  spec {
+    pod_selector {
+      match_labels = {
+        "app.kubernetes.io/name" = "aqp-bot-${each.value.name}"
+      }
+    }
+    policy_types = ["Egress", "Ingress"]
+    ingress {
+      from {
+        namespace_selector {
+          match_labels = {
+            "kubernetes.io/metadata.name" = local.namespace_name
+          }
+        }
+      }
+    }
+  }
+}
+
+output "deployed_bots" {
+  value = [for k in keys(kubernetes_deployment.agent) : k]
+}

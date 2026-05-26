@@ -1,0 +1,88 @@
+name: build-publish
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+  attestations: write
+
+env:
+  ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}     # populated per env via repo vars
+
+jobs:
+  build:
+    name: build-${{ matrix.service }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: aqp-admin
+            platforms: linux/amd64,linux/arm64
+          - service: aqp-admin-frontend
+            platforms: linux/amd64,linux/arm64
+          - service: aqp-core
+            platforms: linux/amd64,linux/arm64
+          - service: aqp-ml
+            platforms: linux/amd64,linux/arm64
+          - service: aqp-worker
+            platforms: linux/amd64,linux/arm64
+          - service: aqp-ingester
+            platforms: linux/amd64,linux/arm64
+          - service: aqp-control-plane
+            platforms: linux/amd64,linux/arm64
+          # AWS Bedrock AgentCore Runtime is ARM64-only (per the
+          # AWS Builders dev.to walkthrough). Building amd64 would
+          # waste CI minutes and still ship the wrong slice.
+          - service: aqp-agent
+            platforms: linux/arm64
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/aws-oidc-assume
+        with:
+          role-arn: ${{ vars.ECR_PUSH_ROLE }}
+          region: us-east-1
+      - uses: ./.github/actions/build-sign-push
+        id: build
+        with:
+          service: ${{ matrix.service }}
+          registry: ${{ env.ECR_REGISTRY }}
+          dockerfile: aqp_platform/build/docker/${{ matrix.service }}/Dockerfile
+          context: .
+          platforms: ${{ matrix.platforms }}
+          tag: ${{ github.sha }}
+      - name: build-summary
+        run: |
+          echo "### ${{ matrix.service }} (${{ matrix.platforms }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "image: \`${{ steps.build.outputs.image-uri }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "digest: \`${{ steps.build.outputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  slsa:
+    name: slsa-${{ matrix.service }}
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - aqp-admin
+          - aqp-admin-frontend
+          - aqp-core
+          - aqp-ml
+          - aqp-worker
+          - aqp-ingester
+          - aqp-control-plane
+          - aqp-agent
+    permissions:
+      id-token: write
+      packages: write
+      contents: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0
+    with:
+      image: ${{ vars.ECR_REGISTRY }}/${{ matrix.service }}
+      digest: ${{ github.sha }}    # build job replaces with the actual digest via outputs
+      registry-username: AWS

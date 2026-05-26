@@ -1,10 +1,16 @@
 # =============================================================================
 # AQP unified client image — Vite + Solara + FastAPI gateway in ONE container.
 #
+# Phase 2 §5.1 (RESTRUCTURING_PLAN.md) — Chainguard Wolfi migration.
 # Three stages:
-#   1. ui-builder      — node:20-alpine, builds the Vite SPA -> /app/out/
-#   2. solara-builder  — python:3.11-slim, pre-warms Solara legacy UI deps
-#   3. production      — python:3.11-slim, FastAPI runtime; NO Node, NO npm
+#   1. ui-builder      — cgr.dev/chainguard/node:20-dev, builds Vite SPA -> /app/out/
+#   2. solara-builder  — cgr.dev/chainguard/python:3.11-dev, pre-warms Solara legacy UI
+#   3. production      — cgr.dev/chainguard/python:3.11, FastAPI runtime; no Node, no npm
+#
+# Runtime stage runs as UID 65532 (Chainguard ``nonroot``). The
+# matching Pod spec at
+# ``aqp_platform/deployments/kubernetes/base/aqp-client/deployment.yaml``
+# sets ``runAsUser: 65532`` (Phase 2 §5.4 PSS backfill).
 #
 # See:
 #   docs/architecture/decisions/001-static-export-over-ssr.md
@@ -18,14 +24,19 @@
 #     .
 # Build context is the AQP repo root so we can COPY from aqp_client/, aqp/, etc.
 # =============================================================================
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
 
 # -----------------------------------------------------------------------------
-# Stage 1 — Vite UI bundle
+# Stage 1 — Vite UI bundle (Chainguard Node 20 with corepack + apk).
 # -----------------------------------------------------------------------------
-FROM node:20-alpine AS ui-builder
+FROM --platform=$TARGETPLATFORM cgr.dev/chainguard/node:20-dev AS ui-builder
 
 WORKDIR /app
+USER root
 
+# Chainguard Node ships corepack (bundled with Node >= 16.10). Activate
+# pnpm at the version the lockfile expects.
 ENV PNPM_HOME=/usr/local/share/pnpm \
     PATH=/usr/local/share/pnpm:$PATH
 
@@ -55,18 +66,18 @@ RUN pnpm build
 RUN mkdir -p /app/out && cp -r dist/* /app/out/
 
 # -----------------------------------------------------------------------------
-# Stage 2 — Solara legacy UI cache
+# Stage 2 — Solara legacy UI cache (Chainguard Python 3.11-dev).
 # -----------------------------------------------------------------------------
-FROM python:3.11-slim AS solara-builder
+FROM --platform=$TARGETPLATFORM cgr.dev/chainguard/python:3.11-dev AS solara-builder
 
 WORKDIR /build
+USER root
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
-RUN apt-get update \
- && apt-get install -y --no-install-recommends build-essential \
- && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache build-base
 
 # Install Solara and a minimum stub of AQP so the legacy UI module is importable.
 # We do NOT install the full AQP runtime here — the production stage handles that.
@@ -79,9 +90,48 @@ RUN mkdir -p /opt/solara-cache \
  && SOLARA_TEMP_DIR=/opt/solara-cache python -c "import solara; print('solara import OK')"
 
 # -----------------------------------------------------------------------------
-# Stage 3 — Production runtime (FastAPI gateway)
+# Stage 3a — Production-deps builder (Chainguard Python 3.11-dev).
+#
+# We split the install + runtime into separate stages so the final
+# image stays lean (no apk, no compiler toolchain, no curl-as-init).
 # -----------------------------------------------------------------------------
-FROM python:3.11-slim AS production
+FROM --platform=$TARGETPLATFORM cgr.dev/chainguard/python:3.11-dev AS production-builder
+
+WORKDIR /app
+USER root
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    UV_PYTHON_DOWNLOADS=never
+
+RUN apk add --no-cache build-base curl
+
+COPY --from=ghcr.io/astral-sh/uv:0.6.0 /uv /usr/local/bin/uv
+
+COPY aqp_platform_core/ /app/aqp_platform_core/
+COPY aqp/ /app/aqp/
+COPY aqp_bots/ /app/aqp_bots/
+COPY pyproject.toml /app/pyproject.toml
+
+# Install into an isolated venv that we COPY into the runtime stage.
+RUN python -m venv /opt/aqp-client-venv \
+ && /opt/aqp-client-venv/bin/uv pip install --python /opt/aqp-client-venv/bin/python \
+        -e /app/aqp_platform_core \
+ && /opt/aqp-client-venv/bin/uv pip install --python /opt/aqp-client-venv/bin/python \
+        "fastapi>=0.115,<1" \
+        "uvicorn[standard]>=0.27,<1" \
+        "httpx>=0.27,<1" \
+        "websockets>=12,<14" \
+        "python-jose[cryptography]>=3.3,<4" \
+        "PyYAML>=6,<7"
+
+# -----------------------------------------------------------------------------
+# Stage 3b — Production runtime (Chainguard Python 3.11, nonroot UID 65532).
+# -----------------------------------------------------------------------------
+FROM --platform=$TARGETPLATFORM cgr.dev/chainguard/python:3.11 AS production
 
 LABEL org.opencontainers.image.title="aqp-client" \
       org.opencontainers.image.description="Unified AQP client — Vite SPA + Solara legacy + FastAPI gateway" \
@@ -90,8 +140,7 @@ LABEL org.opencontainers.image.title="aqp-client" \
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1 \
+    PATH=/opt/aqp-client-venv/bin:$PATH \
     AQP_CLIENT_MODE=true \
     AQP_CLIENT_STATIC_DIR=/app/static \
     AQP_CLIENT_LEGACY_DIR=/app/legacy_ui \
@@ -99,31 +148,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Slim runtime deps. The gateway is HTTP/WS only — no SQLAlchemy / Celery /
-# numerical stack required, those live in aqp_worker / aqp_core images.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-        curl \
-        ca-certificates \
-        tini \
- && rm -rf /var/lib/apt/lists/*
-
-# aqp_platform_core supplies ConnectivityConfig + JWT validator. We need
-# enough of aqp/ to mount the FastAPI app + proxy + ws_proxy modules.
-COPY aqp_platform_core/ /app/aqp_platform_core/
-COPY aqp/ /app/aqp/
-COPY aqp_bots/ /app/aqp_bots/
-COPY pyproject.toml /app/pyproject.toml
-
-RUN pip install --upgrade pip \
- && pip install -e /app/aqp_platform_core \
- && pip install \
-        "fastapi>=0.115,<1" \
-        "uvicorn[standard]>=0.27,<1" \
-        "httpx>=0.27,<1" \
-        "websockets>=12,<14" \
-        "python-jose[cryptography]>=3.3,<4" \
-        "PyYAML>=6,<7"
+# Bring in the venv + the application source from the builder.
+COPY --from=production-builder /opt/aqp-client-venv /opt/aqp-client-venv
+COPY --from=production-builder /app/aqp_platform_core /app/aqp_platform_core
+COPY --from=production-builder /app/aqp /app/aqp
+COPY --from=production-builder /app/aqp_bots /app/aqp_bots
+COPY --from=production-builder /app/pyproject.toml /app/pyproject.toml
 
 # Static assets — Vite output from stage 1.
 COPY --from=ui-builder /app/out/ /app/static/
@@ -132,20 +162,23 @@ COPY --from=ui-builder /app/out/ /app/static/
 # so this is the same Python package the production worker uses.
 COPY --from=solara-builder /opt/solara-cache /opt/solara-cache
 
-# Non-root user (Pod Security Standards "restricted").
-RUN groupadd -r aqp --gid 1000 \
- && useradd -r -g aqp --uid 1000 --home /app --shell /sbin/nologin aqp \
- && chown -R aqp:aqp /app /opt/solara-cache
-
-USER 1000
+# Chainguard's ``nonroot`` user is already UID 65532; no useradd/groupadd
+# needed. Drop a process tree owned by the same UID.
+USER 65532:65532
 
 EXPOSE 8080
 
+# Note: Chainguard's runtime image omits tini. Kubernetes handles PID 1
+# signal forwarding via terminationGracePeriodSeconds + shareProcessNamespace.
+# For standalone ``docker run`` use ``docker run --init`` to inject a
+# tini-equivalent init process.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD curl -fsS http://localhost:8080/health || exit 1
+  CMD ["/opt/aqp-client-venv/bin/python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).read(); sys.exit(0)"]
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["uvicorn", "aqp.api.main:app", \
+# Chainguard's ``cgr.dev/chainguard/python:3.11`` defaults ENTRYPOINT to
+# /usr/bin/python; override to use the venv's uvicorn binary directly.
+ENTRYPOINT ["/opt/aqp-client-venv/bin/uvicorn"]
+CMD ["aqp.api.main:app", \
      "--host", "0.0.0.0", \
      "--port", "8080", \
      "--proxy-headers", \

@@ -2,211 +2,46 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",
-    ":semanticCommits",
     ":dependencyDashboard",
-    ":maintainLockFilesWeekly",
+    ":semanticCommits",
+    "schedule:weekdays",
     "group:monorepos"
   ],
-  "timezone": "America/New_York",
-  "schedule": ["before 7am on monday"],
-  "labels": ["dependencies", "phase-1-renovate"],
-  "prHourlyLimit": 4,
-  "prConcurrentLimit": 12,
+  "timezone": "UTC",
+  "labels": ["renovate"],
   "rangeStrategy": "auto",
-  "lockFileMaintenance": {
-    "enabled": true,
-    "schedule": ["before 5am on monday"],
-    "automerge": false
-  },
-  "vulnerabilityAlerts": {
-    "labels": ["security", "vulnerability"],
-    "automerge": false,
-    "addLabels": ["needs-review"]
-  },
-  "osvVulnerabilityAlerts": true,
-  "pip-compile": { "enabled": true },
-  "pip_requirements": { "enabled": true },
-  "poetry": { "enabled": true },
-  "pep621": { "enabled": true },
-  "pre-commit": { "enabled": true },
-  "github-actions": {
-    "enabled": false,
-    "commitMessageTopic": "(handled by Dependabot — see .github/dependabot.yml)"
-  },
+  "lockFileMaintenance": { "enabled": true, "schedule": ["before 5am on monday"] },
+  "vulnerabilityAlerts": { "enabled": true, "labels": ["security", "renovate"] },
   "packageRules": [
     {
-      "description": "Group ML / LLM / training-stack transitive deps so a single PR touches the whole graph.",
-      "matchPackagePatterns": [
-        "^crewai",
-        "^litellm",
-        "^langchain",
-        "^transformers",
-        "^huggingface",
-        "^accelerate$",
-        "^peft$",
-        "^bitsandbytes$",
-        "^trl$",
-        "^datasets$",
-        "^tokenizers$",
-        "^sentence-transformers$",
-        "^torch",
-        "^vllm",
-        "^ollama",
-        "^xformers$",
-        "^flash-attn",
-        "^onnxruntime",
-        "^scikit-learn$",
-        "^xgboost$",
-        "^lightgbm$",
-        "^catboost$",
-        "^optuna$",
-        "^mlflow$",
-        "^ray",
-        "^stable-baselines3$",
-        "^gymnasium$"
-      ],
-      "groupName": "ml-llm-stack",
-      "groupSlug": "ml-llm-stack",
-      "labels": ["dependencies", "ml-llm"],
-      "reviewers": ["team:aqp-ml"],
-      "schedule": ["before 7am on monday"]
-    },
-    {
-      "description": "Group infrastructure / IaC / observability deps.",
-      "matchPackagePatterns": [
-        "^kubernetes$",
-        "^kubernetes-asyncio$",
-        "^pyhelm",
-        "^python-terraform$",
-        "^pulumi",
-        "^dagster",
-        "^argo-workflows$",
-        "^opentelemetry",
-        "^otel-",
-        "^prometheus",
-        "^grafana",
-        "^pyiceberg$",
-        "^trino$",
-        "^minio$",
-        "^kafka-python$",
-        "^confluent-kafka$",
-        "^redis$",
-        "^celery$",
-        "^docker$",
-        "^docker-compose$"
-      ],
-      "groupName": "infra-stack",
-      "groupSlug": "infra-stack",
-      "labels": ["dependencies", "infra"],
-      "reviewers": ["team:aqp-infra"]
-    },
-    {
-      "description": "Group frontend deps for aqp_client and aqp_ui (Next.js + Vite trees).",
-      "matchManagers": ["npm"],
-      "matchPaths": ["aqp_client/**", "aqp_ui/**", "aqp_ide/**"],
-      "matchPackagePatterns": [
-        "^react",
-        "^@types/react",
-        "^vite",
-        "^vitest",
-        "^@vitest/",
-        "^@playwright/",
-        "^next$",
-        "^next-",
-        "^@radix-ui/",
-        "^@tanstack/",
-        "^@auth0/",
-        "^@azure/msal-",
-        "^@xterm/",
-        "^@codemirror/",
-        "^tailwindcss$",
-        "^@tailwindcss/",
-        "^typescript$"
-      ],
-      "groupName": "frontend-stack",
-      "groupSlug": "frontend-stack",
-      "labels": ["dependencies", "frontend"],
-      "reviewers": ["team:aqp-frontend"]
-    },
-    {
-      "description": "Auto-merge patch bumps on aqp_platform_core after matrix CI is green.",
-      "matchPaths": ["aqp_platform_core/**"],
-      "matchUpdateTypes": ["patch"],
+      "description": "auto-merge minor + patch updates only on aqp-dev",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "matchBaseBranches": ["main"],
       "automerge": true,
-      "automergeType": "pr",
+      "automergeType": "branch",
       "platformAutomerge": true,
-      "automergeStrategy": "squash",
-      "labels": ["dependencies", "automerge", "aqp_platform_core"]
+      "matchPackagePatterns": ["^.*"],
+      "matchManagers": ["dockerfile", "github-actions", "npm", "pip_requirements", "pep621", "terraform"],
+      "schedule": ["before 5am on monday"]
     },
     {
-      "description": "Auto-merge patch bumps on aqp_cli after matrix CI is green.",
-      "matchPaths": ["aqp_cli/**"],
-      "matchUpdateTypes": ["patch"],
-      "automerge": true,
-      "automergeType": "pr",
-      "platformAutomerge": true,
-      "automergeStrategy": "squash",
-      "labels": ["dependencies", "automerge", "aqp_cli"]
-    },
-    {
-      "description": "High-trust libraries — every bump requires manual review per Phase 1 §4.7. Auto-merge is explicitly disabled even for patch bumps.",
-      "matchPackageNames": [
-        "cryptography",
-        "litellm",
-        "pyiceberg",
-        "sqlalchemy",
-        "alembic",
-        "fastapi",
-        "pydantic",
-        "pydantic-core",
-        "pydantic-settings"
-      ],
-      "automerge": false,
-      "labels": ["dependencies", "needs-review", "high-trust"],
-      "reviewers": ["team:aqp-platform-leads"],
-      "addLabels": ["security-review-required"],
-      "prCreation": "immediate",
-      "rebaseWhen": "behind-base-branch"
-    },
-    {
-      "description": "Major version bumps always require manual review.",
+      "description": "never auto-merge major bumps",
       "matchUpdateTypes": ["major"],
-      "automerge": false,
-      "labels": ["dependencies", "major-bump", "needs-review"],
-      "minimumReleaseAge": "7 days"
+      "automerge": false
     },
     {
-      "description": "Pin minor / patch updates to a 3-day soak so brand-new releases don't auto-merge into main.",
-      "matchUpdateTypes": ["minor", "patch"],
-      "minimumReleaseAge": "3 days"
+      "description": "pin Next.js >=14.2.25 / >=15.2.3 (CVE-2025-29927)",
+      "matchPackageNames": ["next"],
+      "allowedVersions": ">=15.2.3"
     },
     {
-      "description": "Pin Python target version metadata; do not bump python_requires automatically.",
-      "matchPackageNames": ["python"],
-      "enabled": false
-    },
-    {
-      "description": "Skip Renovate on the legacy webui directory — it is being retired in Phase 3.",
-      "matchPaths": ["webui/**"],
-      "enabled": false
-    },
-    {
-      "description": "Skip Renovate on rollback / vendored snapshots that we deliberately freeze.",
-      "matchPaths": [
-        "aqp_platform/rollback/**",
-        "aqp_snippets/**",
-        "**/vendor/**"
-      ],
-      "enabled": false
+      "description": "pin FastAPI >=0.118 once Solara legacy is removed (Phase 0 cleanup follow-up)",
+      "matchPackageNames": ["fastapi"],
+      "matchPaths": ["aqp_admin/**"],
+      "allowedVersions": ">=0.118.0"
     }
   ],
-  "ignorePaths": [
-    "**/node_modules/**",
-    "**/__pycache__/**",
-    "**/site-packages/**",
-    "**/dist/**",
-    "**/build/**",
-    "aqp_platform/rollback/**",
-    "webui/**"
-  ]
+  "terraform": {
+    "rangeStrategy": "pin"
+  }
 }

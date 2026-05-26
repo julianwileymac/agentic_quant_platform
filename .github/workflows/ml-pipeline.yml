@@ -1,0 +1,59 @@
+name: ml-pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "aqp_models/**"
+      - "configs/strategies/**"
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Promote model alias.
+        type: choice
+        required: true
+        options: [promote_to_staging, promote_to_prod]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  train-evaluate-register:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ./aqp_models[dev]
+      - run: pytest -ra aqp_models
+      - name: register-model
+        run: |
+          python -m aqp_models.cli register --tag "${GITHUB_SHA}"
+
+  distill:
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'model_promote_to_staging')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ./aqp_models[distill]
+      - run: python -m aqp_models.cli distill --teacher staging --student staging-distilled
+
+  promote:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.action == 'promote_to_prod' && 'prod' || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "Promotion action=${{ inputs.action }}"
+          # Real promotion brokers through the admin BFF's /admin/models/{name}/aliases/{alias} PUT
+          # endpoint with step-up MFA — operator runs the promotion from the UI.

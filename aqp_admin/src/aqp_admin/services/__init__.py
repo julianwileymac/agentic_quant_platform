@@ -1,4 +1,6 @@
-"""Managed-service orchestration domain."""
-from __future__ import annotations
+"""Domain services for the admin BFF.
 
-__all__: list[str] = []
+Long-running orchestration logic that does not fit cleanly into a
+single API route. Each service is stateless and brokers persistence
+to the monolith / control plane.
+"""

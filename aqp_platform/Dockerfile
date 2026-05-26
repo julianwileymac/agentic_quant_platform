@@ -1,35 +1,76 @@
 ###############################################################################
-# Stage 1: shared base with system deps.
+# AQP master Dockerfile (Chainguard Wolfi + uv).
 #
-# Phase 4c control-plane maturation: the base image is multi-arch
-# (linux/amd64 + linux/arm64) so the same Dockerfile can be built for
-# both the standard x86_64 cloud nodes and the Raspberry Pi 5 ARM64
-# edge cluster. Build via:
+# Phase 2 §5.1 (RESTRUCTURING_PLAN.md) Chainguard Wolfi migration. The
+# base layer pins ``cgr.dev/chainguard/python:3.11-dev`` (Wolfi-based
+# glibc Python distribution; required for native numpy / pyarrow / torch
+# wheels), and every install step routes through ``uv pip install``
+# instead of bare pip for reproducibility + cache hit rate. The
+# matching ``uv sync --frozen`` migration (RESTRUCTURING_PLAN.md
+# §5.1 recommendation) requires a committed ``uv.lock`` at the repo
+# root, which is captured as a Phase 2.5 follow-up in
+# ``.cursor/plans/aqp-index-debt-phase-2-supply-chain.md``.
+#
+# Phase 4c control-plane maturation: multi-arch (linux/amd64 +
+# linux/arm64) build via:
 #   docker buildx build --platform linux/amd64,linux/arm64 \
 #     --target api --tag docker.io/julianwiley/aqp-api:<tag> --push .
 # The ``$BUILDPLATFORM`` ARG is auto-populated by buildx when running
 # under buildx; falls back to the build host's native arch otherwise.
+#
+# Phase 2 §5.4 — every final stage runs as UID 65532 (Chainguard's
+# canonical ``nonroot`` UID). Matching Pod-spec ``runAsUser: 65532``
+# is wired in the Phase 2 PSS backfill at
+# ``aqp_platform/deployments/kubernetes/base/<service>/deployment.yaml``.
 ###############################################################################
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
-FROM --platform=$TARGETPLATFORM python:3.11-slim AS base
+
+###############################################################################
+# Stage 1: shared base with system deps.
+#
+# ``-dev`` variant ships apk + bash + build-base + linux-headers so
+# native wheels (numpy, pyarrow, torch, psycopg2) compile cleanly. The
+# image is Wolfi-glibc, not Alpine-musl, so the native-wheel
+# compatibility caveat from the RESTRUCTURING_PLAN footnote applies.
+###############################################################################
+FROM --platform=$TARGETPLATFORM cgr.dev/chainguard/python:3.11-dev AS base
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    UV_PYTHON_DOWNLOADS=never
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    docker.io \
-    docker-compose \
-    git \
-    libpq-dev \
-    postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
+# Chainguard ``-dev`` images run as root by default so apk works; the
+# final runtime ``USER 65532`` directive in each target stage drops
+# privileges. apk add equivalents for the prior Debian set
+# (build-essential, curl, docker.io, docker-compose, git, libpq-dev,
+# postgresql-client). ``docker-cli`` + ``docker-compose`` are required
+# by ``aqp/cli/deploy_cmd.py`` and ``aqp/kubernetes/adapters/local_compose.py``
+# at runtime — keep them in the base image until those CLIs move
+# behind a feature-flagged extra.
+USER root
+RUN apk add --no-cache \
+        build-base \
+        gcc \
+        gfortran \
+        linux-headers \
+        curl \
+        git \
+        docker-cli \
+        docker-compose \
+        postgresql-dev \
+        postgresql-client
+
+# uv ships as a standalone static binary; pull from the official
+# image and drop into /usr/local/bin so every subsequent stage picks
+# it up via ``$PATH``.
+COPY --from=ghcr.io/astral-sh/uv:0.6.0 /uv /usr/local/bin/uv
 
 COPY pyproject.toml ./
 COPY README.md ./
@@ -47,17 +88,16 @@ COPY alembic.ini ./
 ###############################################################################
 FROM base AS paper
 
-RUN pip install --upgrade pip \
-    && pip install -e ./aqp_platform_core \
-    && pip install -e ".[alpaca,ibkr,tradier,otel,cli,paper,streaming]"
+RUN uv pip install --system -e ./aqp_platform_core \
+    && uv pip install --system -e ".[alpaca,ibkr,tradier,otel,cli,paper,streaming]"
 
-RUN useradd --system --uid 1001 aqp \
-    && mkdir -p /app/data \
-    && chown -R aqp:aqp /app
-USER aqp
+RUN mkdir -p /app/data \
+    && chown -R 65532:65532 /app
+USER 65532:65532
 
 EXPOSE 9100
 
+ENTRYPOINT []
 CMD ["aqp", "paper", "run", "--config", "/etc/aqp/paper.yaml"]
 
 
@@ -68,17 +108,16 @@ CMD ["aqp", "paper", "run", "--config", "/etc/aqp/paper.yaml"]
 ###############################################################################
 FROM base AS ingester
 
-RUN pip install --upgrade pip \
-    && pip install -e ./aqp_platform_core \
-    && pip install -e ".[alpaca,ibkr,streaming,otel]"
+RUN uv pip install --system -e ./aqp_platform_core \
+    && uv pip install --system -e ".[alpaca,ibkr,streaming,otel]"
 
-RUN useradd --system --uid 1001 aqp \
-    && chown -R aqp:aqp /app
-USER aqp
+RUN chown -R 65532:65532 /app
+USER 65532:65532
 
 # 9300 = Prometheus metrics, 9301 = /healthz (aiohttp)
 EXPOSE 9300 9301
 
+ENTRYPOINT []
 CMD ["aqp-stream-ingest", "--venue", "all"]
 
 
@@ -94,12 +133,15 @@ FROM base AS api
 # (for MinIO uploads) comes in transitively via [iceberg] -> s3fs ->
 # botocore; the DatasetManager has a local-fs fallback when neither
 # boto3 nor MinIO endpoints are configured.
-RUN pip install --upgrade pip \
-    && pip install -e ./aqp_platform_core \
-    && pip install -e ".[auth,dev,otel,cli,iceberg,visualization,entity-graph,dagster-aqp,compute-dask,compute-ray]"
+RUN uv pip install --system -e ./aqp_platform_core \
+    && uv pip install --system -e ".[auth,dev,otel,cli,iceberg,visualization,entity-graph,dagster-aqp,compute-dask,compute-ray]"
+
+RUN chown -R 65532:65532 /app
+USER 65532:65532
 
 EXPOSE 8000 8765
 
+ENTRYPOINT []
 CMD ["uvicorn", "aqp.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 
@@ -110,18 +152,17 @@ CMD ["uvicorn", "aqp.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ###############################################################################
 FROM base AS serving
 
-RUN pip install --upgrade pip \
-    && pip install -e ".[ml,ml-torch,ml-forecast,ml-anomaly,portfolio,serving-mlflow,serving-ray,otel,cli]"
+RUN uv pip install --system -e ".[ml,ml-torch,ml-forecast,ml-anomaly,portfolio,serving-mlflow,serving-ray,otel,cli]"
 
-RUN useradd --system --uid 1001 aqp \
-    && mkdir -p /app/data /app/models \
-    && chown -R aqp:aqp /app
-USER aqp
+RUN mkdir -p /app/data /app/models \
+    && chown -R 65532:65532 /app
+USER 65532:65532
 
 # 8000 = Ray Serve HTTP, 8080 = TorchServe inference, 8081 = TorchServe mgmt,
 # 5001 = MLflow Serve default.
 EXPOSE 5001 8000 8080 8081
 
+ENTRYPOINT []
 CMD ["aqp", "serve", "mlflow", "--help"]
 
 
@@ -131,11 +172,11 @@ CMD ["aqp", "serve", "mlflow", "--help"]
 ###############################################################################
 FROM base AS ml-train
 
-RUN pip install --upgrade pip && pip install -e ".[ml,ml-torch,ml-forecast,ml-anomaly,portfolio,otel,cli,iceberg,entity-graph,dagster-aqp]"
+RUN uv pip install --system -e ".[ml,ml-torch,ml-forecast,ml-anomaly,portfolio,otel,cli,iceberg,entity-graph,dagster-aqp]"
 
-RUN useradd --system --uid 1001 aqp \
-    && mkdir -p /app/data \
-    && chown -R aqp:aqp /app
-USER aqp
+RUN mkdir -p /app/data \
+    && chown -R 65532:65532 /app
+USER 65532:65532
 
+ENTRYPOINT []
 CMD ["aqp-train", "--help"]

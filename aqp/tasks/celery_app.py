@@ -122,6 +122,12 @@ celery_app = Celery(
         # Workstream B (OpenLineage relay) — Celery beat task that
         # drains ``lineage_openlineage_outbox`` to Marquez.
         "aqp.tasks.openlineage_relay_tasks",
+        # Phase 7 §10.1 — Audit lake flush + transparency anchor.
+        # Materialises closed audit_log segments to Iceberg + the
+        # per-cell MinIO ``audit/`` prefix with Object Lock COMPLIANCE
+        # then submits the segment tip-hash to every configured
+        # transparency sink (Rekor / QLDB / RFC 3161 TSA).
+        "aqp.tasks.audit_lake_tasks",
         # Workstream D (per-user OAuth) — Celery beat task that
         # refreshes external OAuth tokens nearing expiry.
         "aqp.tasks.token_refresh_tasks",
@@ -259,6 +265,16 @@ celery_app.conf.update(
         "rag-refresh-l0-alpha-base": {
             "task": "aqp.tasks.rag_tasks.refresh_l0_alpha_base",
             "schedule": 6 * 3600.0,
+        },
+        # Phase 7 §10.1 — Audit lake hourly flush + transparency anchor.
+        # Runs at minute=5 so the closed segment is fully sealed before
+        # the flush job picks it up. Settings AQP_AUDIT_LAKE_ENABLED
+        # gates the body; the task is a no-op when disabled.
+        "audit-lake-flush": {
+            "task": "aqp.tasks.audit_lake_tasks.flush",
+            "schedule": float(
+                getattr(settings, "audit_lake_flush_interval_seconds", 3600) or 3600
+            ),
         },
         # Phase 5 — FinOps governance audit. Scans the cluster for any
         # workload missing the mandatory project / cost_center / owner /

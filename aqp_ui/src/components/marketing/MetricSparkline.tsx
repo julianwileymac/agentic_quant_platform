@@ -43,8 +43,8 @@ export function MetricSparkline({
 }: MetricSparklineProps) {
   const colors = TONE_COLORS[tone];
   const series = data.map((y, x) => ({ x, y }));
-  const first = data[0];
-  const last = data[data.length - 1];
+  const first = data[0] ?? 0;
+  const last = data[data.length - 1] ?? 0;
   const delta = last - first;
   const deltaPct = first !== 0 ? (delta / Math.abs(first)) * 100 : 0;
   const positive = delta >= 0;

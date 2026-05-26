@@ -1,0 +1,10 @@
+apiVersion: v2
+name: linkerd-control-plane-aqp
+description: AQP wrapper around the Linkerd 2.x stable control plane.
+version: 0.1.0
+appVersion: "edge-25.1.1"
+type: application
+dependencies:
+  - name: linkerd-control-plane
+    version: "2024.10.4"
+    repository: https://helm.linkerd.io/edge

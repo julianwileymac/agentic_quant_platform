@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aqp-agent-sandbox
+  labels:
+    app.kubernetes.io/name: aqp-agent-sandbox
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    aqp.io/component: agent-sandbox
+    # Phase 2 §5.4 — sandbox runs untrusted agent code; PSS restricted
+    # at the namespace level is non-negotiable. The gVisor runtime
+    # provides the second layer of isolation.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    project: aqp-agents
+    cost_center: quant-research-01
+    owner: platform-engineering
+    data_classification: proprietary-alpha
+  annotations:
+    aqp.internal/description: "Phase 5 §8.3 — agent-sandbox pool. gVisor RuntimeClass + restricted PSS."
+    # Phase 4 §7.1 — Linkerd mesh inject for mTLS to MCP.
+    linkerd.io/inject: enabled

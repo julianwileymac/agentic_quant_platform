@@ -1,0 +1,89 @@
+{# FaaS — KEDA + per-queue ScaledObject. Cloud-agnostic; consumes the
+   `kubernetes` and `helm` providers already initialised by the root
+   composition. Variables:
+   - namespace
+   - redis_address           (default redis://redis:6379)
+   - redis_password_secret   (k8s secret + key, e.g. "aqp-redis/password")
+   - queues                  (list of { name, max_replicas, list_length })
+                             default: 5 queues (celery / backtest / agents / ml / terraform)
+-#}
+
+locals {
+  common_tags = {{ tags | tfmap }}
+  default_queues = [
+    { name = "celery",    max_replicas = 50,  list_length = 5 },
+    { name = "backtest",  max_replicas = 100, list_length = 5 },
+    { name = "agents",    max_replicas = 20,  list_length = 3 },
+    { name = "ml",        max_replicas = 50,  list_length = 5 },
+    { name = "terraform", max_replicas = 5,   list_length = 1 },
+  ]
+  queues = length(lookup({{ variables | tfmap }}, "queues", [])) > 0 ? lookup({{ variables | tfmap }}, "queues", []) : local.default_queues
+  namespace_name = lookup({{ variables | tfmap }}, "namespace", "aqp-{{ spec.environment }}")
+  redis_address  = lookup({{ variables | tfmap }}, "redis_address", "redis://redis:6379")
+}
+
+resource "kubernetes_namespace" "keda" {
+  metadata {
+    name = "keda-system"
+    labels = {
+      "app.kubernetes.io/part-of" = "aqp"
+    }
+  }
+}
+
+resource "helm_release" "keda" {
+  name       = "keda"
+  repository = "https://kedacore.github.io/charts"
+  chart      = "keda"
+  version    = lookup({{ variables | tfmap }}, "keda_version", "2.16.0")
+  namespace  = kubernetes_namespace.keda.metadata[0].name
+  create_namespace = false
+
+  values = [
+    yamlencode({
+      prometheus = {
+        metricServer = { enabled = true }
+        operator     = { enabled = true }
+      }
+    })
+  ]
+}
+
+resource "kubernetes_manifest" "scaledobject" {
+  for_each = { for q in local.queues : q.name => q }
+  manifest = {
+    apiVersion = "keda.sh/v1alpha1"
+    kind       = "ScaledObject"
+    metadata = {
+      name      = "aqp-celery-${each.value.name}-scaler"
+      namespace = local.namespace_name
+      labels    = local.common_tags
+    }
+    spec = {
+      scaleTargetRef  = { name = "aqp-celery-${each.value.name}-worker" }
+      minReplicaCount = lookup(each.value, "min_replicas", 0)
+      maxReplicaCount = each.value.max_replicas
+      pollingInterval = lookup(each.value, "polling_interval", 30)
+      cooldownPeriod  = lookup(each.value, "cooldown_period", 300)
+      triggers = [{
+        type = "redis"
+        metadata = {
+          address       = local.redis_address
+          listName      = each.value.name
+          listLength    = tostring(each.value.list_length)
+          databaseIndex = "0"
+        }
+      }]
+    }
+  }
+
+  depends_on = [helm_release.keda]
+}
+
+output "keda_namespace" {
+  value = kubernetes_namespace.keda.metadata[0].name
+}
+
+output "scaled_queues" {
+  value = [for q in local.queues : q.name]
+}

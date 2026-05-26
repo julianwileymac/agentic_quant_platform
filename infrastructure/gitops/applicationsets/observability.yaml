@@ -1,0 +1,39 @@
+###############################################################################
+# ApplicationSet: observability stack — kube-prometheus-stack + Loki + Tempo.
+###############################################################################
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: observability
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+    - clusters:
+        selector:
+          matchLabels: { aqp.io/managed: "true" }
+  template:
+    metadata:
+      name: 'observability-{{`{{.name}}`}}'
+    spec:
+      project: aqp
+      source:
+        repoURL: https://prometheus-community.github.io/helm-charts
+        targetRevision: 65.1.1
+        chart: kube-prometheus-stack
+        helm:
+          values: |
+            grafana:
+              adminPassword: $(GRAFANA_ADMIN_PASSWORD)
+            prometheus:
+              prometheusSpec:
+                retention: 15d
+      destination:
+        server: '{{`{{.server}}`}}'
+        namespace: aqp-observability
+      syncPolicy:
+        automated:
+          prune: false   # heavy CRDs — manual prune for first 30 days
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

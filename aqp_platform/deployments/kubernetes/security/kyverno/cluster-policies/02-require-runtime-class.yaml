@@ -1,0 +1,91 @@
+# =============================================================================
+# Phase 2 §5.3 — RuntimeClass enforcement for the agent sandbox pool.
+#
+# Any Pod that pulls the canonical `aqp-agent-sandbox` image
+# (RESTRUCTURING_PLAN.md §5.1 — Phase 5 §8.3 target) MUST set
+# `spec.runtimeClassName: gvisor`. The gVisor RuntimeClass object
+# itself is a Phase 5 §8.3 deliverable; this policy is the
+# admission-time gate that ensures the image is never scheduled on
+# the standard runc runtime.
+#
+# `validationFailureAction: Audit` for the Phase 2 rollout — violations
+# are logged but not blocked. Flip to Enforce in Phase 2.5 once the
+# audit logs are zero. See ../README.md for the ratchet plan.
+# =============================================================================
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: aqp-require-gvisor-for-agent-sandbox
+  annotations:
+    policies.kyverno.io/title: gVisor RuntimeClass for agent sandbox
+    policies.kyverno.io/category: Workload Isolation
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Any Pod pulling ghcr.io/julianwiley/aqp-agent-sandbox or labeled
+      `aqp.io/sandbox-required: "true"` must set
+      `spec.runtimeClassName: gvisor`. The RuntimeClass object is a
+      Phase 5 §8.3 deliverable; this policy is the static admission
+      gate that prevents agent-generated code from ever running on
+      the standard runc runtime.
+spec:
+  validationFailureAction: Audit
+  background: false
+  rules:
+    - name: agent-sandbox-image-needs-gvisor
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              operations:
+                - CREATE
+                - UPDATE
+      preconditions:
+        any:
+          - key: "{{ images.containers.*.registry || `` }}"
+            operator: AnyIn
+            value:
+              - ghcr.io
+              - docker.io
+            # Image-name preconditions evaluated below
+      validate:
+        message: >-
+          Pods pulling aqp-agent-sandbox MUST set
+          `spec.runtimeClassName: gvisor`. The gVisor runtime is
+          installed by Phase 5 §8.3 (
+          aqp_platform/scripts/cluster_install/install-gvisor.sh).
+        deny:
+          conditions:
+            all:
+              # Image references the agent sandbox image
+              - key: "{{ images.containers.*.name[] }}"
+                operator: AnyIn
+                value:
+                  - aqp/aqp-agent-sandbox
+                  - julianwiley/aqp-agent-sandbox
+                  - julianwiley/aqp/aqp-agent-sandbox
+              # AND runtimeClassName is NOT gvisor
+              - key: "{{ request.object.spec.runtimeClassName || `` }}"
+                operator: NotEquals
+                value: gvisor
+
+    - name: sandbox-required-label-needs-gvisor
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              operations:
+                - CREATE
+                - UPDATE
+              selector:
+                matchLabels:
+                  aqp.io/sandbox-required: "true"
+      validate:
+        message: >-
+          Pods labeled `aqp.io/sandbox-required: "true"` MUST set
+          `spec.runtimeClassName: gvisor`.
+        pattern:
+          spec:
+            runtimeClassName: gvisor

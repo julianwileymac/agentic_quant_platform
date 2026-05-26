@@ -1,0 +1,91 @@
+# =============================================================================
+# Phase 2 §5.3 — Required labels (Kubernetes + FinOps governance).
+#
+# Two complementary requirements:
+#
+#   1. Every Pod/Deployment/StatefulSet/Job/CronJob in an AQP-owned
+#      namespace must carry the standard Kubernetes recommended-label
+#      pair:
+#        app.kubernetes.io/part-of: aqp
+#        app.kubernetes.io/managed-by: <kustomize|helm|argocd|aqp-platform>
+#
+#   2. Every Namespace flagged with `aqp.io/component` must carry the
+#      four FinOps governance labels (mirrors the existing
+#      `aqp_platform/deployments/kubernetes/base/aqp-ui/namespace.yaml`
+#      pattern):
+#        project: <slug>
+#        cost_center: <slug>
+#        owner: <slug>
+#        data_classification: <customer-pii|proprietary-alpha|internal|public>
+#
+# `validationFailureAction: Audit` for the Phase 2 rollout — violations
+# are logged but not blocked. Flip to Enforce in Phase 2.5 once the
+# audit logs are zero. See ../README.md for the ratchet plan.
+# =============================================================================
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: aqp-required-labels
+  annotations:
+    policies.kyverno.io/title: Required labels (k8s + FinOps)
+    policies.kyverno.io/category: Governance
+    policies.kyverno.io/severity: low
+    policies.kyverno.io/subject: Pod, Namespace
+    policies.kyverno.io/description: >-
+      AQP-owned workloads must carry app.kubernetes.io/part-of +
+      app.kubernetes.io/managed-by. AQP-owned namespaces must carry
+      project + cost_center + owner + data_classification.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: workloads-need-aqp-labels
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - StatefulSet
+                - Job
+                - CronJob
+              namespaceSelector:
+                matchExpressions:
+                  - key: aqp.io/component
+                    operator: Exists
+      validate:
+        message: >-
+          AQP-owned workloads must carry the Kubernetes recommended
+          labels: app.kubernetes.io/part-of=aqp and
+          app.kubernetes.io/managed-by=<kustomize|helm|argocd|aqp-platform>.
+        pattern:
+          metadata:
+            labels:
+              app.kubernetes.io/part-of: aqp
+              app.kubernetes.io/managed-by: "?*"
+
+    - name: namespaces-need-finops-labels
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+              selector:
+                matchExpressions:
+                  - key: aqp.io/component
+                    operator: Exists
+      validate:
+        message: >-
+          AQP-owned Namespaces (those carrying `aqp.io/component`)
+          must carry the four FinOps governance labels: project,
+          cost_center, owner, data_classification. Mirrors the
+          aqp_platform/deployments/kubernetes/base/aqp-ui/namespace.yaml
+          pattern from Phase 5 (FinOps Governance) of the
+          rpi_kubernetes plan.
+        pattern:
+          metadata:
+            labels:
+              project: "?*"
+              cost_center: "?*"
+              owner: "?*"
+              data_classification: "?*"

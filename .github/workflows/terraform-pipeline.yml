@@ -1,0 +1,133 @@
+name: terraform-pipeline
+
+on:
+  pull_request:
+    paths:
+      - "infrastructure/**"
+      - "aqp_platform/terraform/**"
+      - "aqp_platform/configs/terraform/**"
+  push:
+    branches: [main]
+    paths:
+      - "infrastructure/**"
+      - "aqp_platform/terraform/**"
+      - "aqp_platform/configs/terraform/**"
+  workflow_dispatch:
+    inputs:
+      tree:
+        description: Terraform tree.
+        type: choice
+        required: true
+        options:
+          - infrastructure
+          - aqp_platform
+        default: infrastructure
+      env:
+        description: Target environment.
+        type: choice
+        required: true
+        options: [dev, staging, prod, shared-services, paper, live]
+        default: dev
+      action:
+        description: Terraform action.
+        type: choice
+        required: true
+        options: [plan, apply]
+        default: plan
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  ###############################################################################
+  # plan — runs on PRs + pushes to main. Two matrix dimensions:
+  #
+  #   1. infrastructure tree (landing zone, EKS, ECR, MSK, observability)
+  #      — paths: infrastructure/envs/{env}
+  #   2. aqp_platform tree (workload-level IaC, AWS hybrid composition)
+  #      — paths: aqp_platform/terraform/environments/{env}
+  #
+  # PRs only run the dev/live PR-readable variant. Apply is dispatch-only.
+  ###############################################################################
+  plan:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tree: infrastructure
+            env: dev
+            working_dir: infrastructure/envs/dev
+            backend_config: backend.hcl
+          - tree: aqp_platform
+            env: live
+            working_dir: aqp_platform/terraform/environments/live
+            backend_config: backend.hcl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.0"
+      - uses: ./.github/actions/aws-oidc-assume
+        with:
+          role-arn: ${{ vars.TF_PLAN_READONLY_ROLE_DEV }}
+          region: us-east-1
+      - working-directory: ${{ matrix.working_dir }}
+        run: |
+          set -euo pipefail
+          if [[ -f "${{ matrix.backend_config }}" ]]; then
+            terraform init -backend-config="${{ matrix.backend_config }}"
+          else
+            # No backend.hcl committed — let terraform init read defaults.
+            # The aqp_platform tree ships a backend.hcl.example as
+            # documentation; CI replaces ${env} -> 'dev' for the plan-only path.
+            terraform init -backend-config=key=${{ matrix.tree }}/${{ matrix.env }}/terraform.tfstate
+          fi
+          terraform plan -no-color -out=tfplan
+      - if: matrix.tree == 'infrastructure'
+        name: opa-conftest
+        working-directory: infrastructure
+        run: |
+          curl -sSL -o conftest.tar.gz https://github.com/open-policy-agent/conftest/releases/download/v0.55.0/conftest_0.55.0_Linux_x86_64.tar.gz
+          tar -xzf conftest.tar.gz
+          ./conftest test envs/${{ matrix.env }}/tfplan --policy policies/rego --output github
+
+  ###############################################################################
+  # apply — dispatch-only. Two trees + six environments (dev/staging/prod for
+  # infrastructure, dev/staging/prod/paper/live for aqp_platform). GitHub
+  # Environments gate the apply on required reviewers per env protection
+  # rules (staging needs one reviewer, prod needs two per the blueprint).
+  ###############################################################################
+  apply:
+    if: github.event_name == 'workflow_dispatch'
+    environment: ${{ inputs.env }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.0"
+      - uses: ./.github/actions/aws-oidc-assume
+        with:
+          role-arn: ${{ vars[format('TF_APPLY_ROLE_{0}', inputs.env)] }}
+          region: us-east-1
+      - name: resolve-working-dir
+        id: dir
+        run: |
+          if [[ "${{ inputs.tree }}" == "infrastructure" ]]; then
+            echo "path=infrastructure/envs/${{ inputs.env }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=aqp_platform/terraform/environments/${{ inputs.env }}" >> "$GITHUB_OUTPUT"
+          fi
+      - working-directory: ${{ steps.dir.outputs.path }}
+        run: |
+          set -euo pipefail
+          if [[ -f backend.hcl ]]; then
+            terraform init -backend-config=backend.hcl
+          else
+            terraform init -backend-config=key=${{ inputs.tree }}/${{ inputs.env }}/terraform.tfstate
+          fi
+          terraform ${{ inputs.action }} -auto-approve

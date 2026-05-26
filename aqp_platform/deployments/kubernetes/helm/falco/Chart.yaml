@@ -1,0 +1,10 @@
+apiVersion: v2
+name: falco-aqp
+description: AQP wrapper around the Falco runtime security DaemonSet + custom rules.
+version: 0.1.0
+appVersion: "0.39.2"
+type: application
+dependencies:
+  - name: falco
+    version: "4.10.0"
+    repository: https://falcosecurity.github.io/charts

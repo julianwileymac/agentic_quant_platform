@@ -1,0 +1,103 @@
+name: pr-validate
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+  id-token: write
+
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ./aqp_platform_core
+      - run: pip install -e ./aqp_admin[dev]
+      - name: ruff
+        run: ruff check aqp_admin/src aqp_admin/tests
+      - name: mypy
+        run: mypy aqp_admin/src
+      - name: pytest
+        run: pytest -ra aqp_admin
+      - name: boundary-check
+        run: |
+          if rg --type py "^from aqp(\\.|$)|^import aqp(\\.|$)" aqp_admin/src; then
+            echo "::error::aqp_admin/src must not import aqp.*"
+            exit 1
+          fi
+
+  frontend:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: aqp_admin/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+
+  terraform:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.0"
+      - run: |
+          for d in $(find infrastructure -type d -mindepth 2 -maxdepth 4 -not -path '*/\.*'); do
+            if compgen -G "$d/*.tf" > /dev/null; then
+              echo "::group::$d"
+              ( cd "$d" && terraform fmt -check && terraform init -backend=false && terraform validate ) || exit 1
+              echo "::endgroup::"
+            fi
+          done
+      - uses: aquasecurity/tfsec-pr-commenter-action@v1.3.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  security:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+  alembic-immutability:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: alembic-immutability
+        run: |
+          if [ -f scripts/ci/check_migration_immutability.py ]; then
+            python -m scripts.ci.check_migration_immutability --base-ref origin/main
+          else
+            echo "scripts/ci/check_migration_immutability.py missing — failing closed"
+            exit 1
+          fi

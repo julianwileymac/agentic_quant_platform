@@ -163,11 +163,27 @@ class AgentRuntime:
         session_id: str | None = None,
         context: Any | None = None,
         user_access_token: str | None = None,
+        agentcore_runtime_alias: str | None = None,
     ) -> None:
         self.spec = spec
         self.run_id = run_id or str(uuid.uuid4())
         self.task_id = task_id
         self.session_id = session_id
+        # Phase E (AWS hybrid) — when set, ``run`` dispatches via
+        # ``boto3.client('bedrock-agentcore').invoke_agent_runtime``
+        # instead of the in-process CrewAI loop. The alias resolves to
+        # the runtime ARN from SSM ``/aqp/${env}/agentcore_runtime_arn``
+        # (or whichever path the alias names).
+        self.agentcore_runtime_alias = agentcore_runtime_alias
+        # Populated on successful AgentCore dispatch — persisted onto
+        # ``agent_runs_v2`` in :meth:`_finalise`.
+        self._agentcore_session_id: str | None = None
+        self._agentcore_runtime_arn: str | None = None
+        self._agentcore_memory_id: str | None = None
+        # Phase 5 §8.4 — set of descriptor_hash values for MCP tools
+        # invoked during the run. Persisted onto the agent_runs_v2 row
+        # via :meth:`_finalise`; the replay harness uses it.
+        self._mcp_tool_hashes: set[str] = set()
         # Tenancy context — stamped onto every persisted agent_runs_v2 /
         # agent_run_steps / agent_run_artifacts row so downstream pages can
         # filter by workspace/project. Fall back to the local-first default
@@ -302,9 +318,17 @@ class AgentRuntime:
 
         Errors do not raise; they're captured into ``status="error"`` so
         the caller can persist a partial trace and surface it in the UI.
+
+        When ``agentcore_runtime_alias`` was set on the constructor the
+        execution is delegated to Amazon Bedrock AgentCore Runtime via
+        :meth:`_run_via_agentcore` instead of the in-process CrewAI
+        loop. Spec versioning + audit ledger semantics are unchanged
+        (rule 13) — only the inference path moves.
         """
         spec_version_id = self._snapshot_spec()
         self._open_run(inputs=dict(inputs), spec_version_id=spec_version_id)
+        if self.agentcore_runtime_alias:
+            return self._run_via_agentcore(dict(inputs))
         try:
             user_prompt = self._render_user_prompt(inputs)
             rag_context = self._gather_rag_context(user_prompt)
@@ -329,6 +353,131 @@ class AgentRuntime:
             logger.exception("AgentRuntime failed for %s", self.spec.name)
             result = self._finalise(status="error", output={}, error=str(exc))
         return result
+
+    # ------------------------------------------------------------------ AgentCore dispatch
+    def _run_via_agentcore(self, inputs: dict[str, Any]) -> AgentRunResult:
+        """Dispatch the run through Bedrock AgentCore Runtime.
+
+        Resolves the runtime ARN from SSM via the alias, calls
+        ``boto3.client('bedrock-agentcore').invoke_agent_runtime`` and
+        normalises the streaming response into the same
+        :class:`AgentRunResult` shape the in-process path emits. The
+        ``agentcore_session_id`` / ``agentcore_runtime_arn`` /
+        ``agentcore_memory_id`` columns are stamped onto
+        ``agent_runs_v2`` in :meth:`_finalise`.
+
+        Failure modes:
+
+        - boto3 missing → return ``status='error'`` with a clear
+          message so the operator knows to install ``aqp[bedrock]``.
+        - SSM lookup fails / alias unknown → ``status='error'``.
+        - AgentCore returns a non-200 → ``status='error'``.
+
+        Spec versioning + the immutable ``agent_spec_versions`` row
+        are unchanged — only the inference path moves to AgentCore.
+        """
+        try:
+            import boto3
+            from botocore.exceptions import BotoCoreError, ClientError
+        except ImportError:
+            logger.warning(
+                "AgentCore dispatch requested but boto3 is not installed."
+            )
+            return self._finalise(
+                status="error",
+                output={},
+                error="boto3 missing; install aqp[bedrock]",
+            )
+
+        ssm_path = self._agentcore_runtime_ssm_path()
+        try:
+            ssm = boto3.client("ssm")
+            param = ssm.get_parameter(Name=ssm_path)
+            runtime_arn = str(param.get("Parameter", {}).get("Value") or "")
+        except (BotoCoreError, ClientError, Exception) as exc:  # noqa: BLE001
+            logger.warning(
+                "AgentCore SSM resolution failed for alias=%s path=%s: %s",
+                self.agentcore_runtime_alias,
+                ssm_path,
+                exc,
+            )
+            return self._finalise(
+                status="error",
+                output={},
+                error=f"AgentCore runtime alias unknown: {self.agentcore_runtime_alias!r}",
+            )
+        if not runtime_arn:
+            return self._finalise(
+                status="error",
+                output={},
+                error=f"AgentCore SSM parameter {ssm_path!r} is empty",
+            )
+        self._agentcore_runtime_arn = runtime_arn
+
+        try:
+            agentcore = boto3.client("bedrock-agentcore")
+        except Exception as exc:  # noqa: BLE001
+            return self._finalise(
+                status="error",
+                output={},
+                error=f"bedrock-agentcore client init failed: {exc}",
+            )
+
+        payload = {
+            "inputs": dict(inputs),
+            "spec_name": self.spec.name,
+            "run_id": self.run_id,
+            "session_id": self.session_id,
+        }
+        try:
+            invoke_kwargs: dict[str, Any] = {
+                "agentRuntimeArn": runtime_arn,
+                "payload": json.dumps(payload),
+            }
+            if self.session_id:
+                invoke_kwargs["runtimeSessionId"] = self.session_id
+            response = agentcore.invoke_agent_runtime(**invoke_kwargs)
+        except (BotoCoreError, ClientError) as exc:
+            return self._finalise(
+                status="error",
+                output={},
+                error=f"invoke_agent_runtime failed: {exc}",
+            )
+
+        # AgentCore Runtime returns the session id in the response
+        # metadata; the streaming body lives under ``response['response']``.
+        self._agentcore_session_id = str(
+            response.get("runtimeSessionId") or self.session_id or ""
+        ) or None
+        # AgentCore Memory id (when Memory is composed with the
+        # runtime) surfaces under the standard envelope. NULL when the
+        # runtime is Memory-less.
+        self._agentcore_memory_id = str(
+            response.get("memoryId") or ""
+        ) or None
+        try:
+            body = response.get("response")
+            output = _decode_agentcore_payload(body)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "AgentCore response decode failed for run_id=%s", self.run_id, exc_info=True
+            )
+            output = {"raw": str(response.get("response") or "")}
+        return self._finalise(status="completed", output=output)
+
+    def _agentcore_runtime_ssm_path(self) -> str:
+        alias = (self.agentcore_runtime_alias or "default").strip()
+        env = ""
+        try:
+            from aqp.config import settings as _s
+
+            env = str(getattr(_s, "environment", "") or "")
+        except Exception:
+            env = ""
+        env = env or "dev"
+        if alias in ("default", "primary", ""):
+            return f"/aqp/{env}/agentcore_runtime_arn"
+        return f"/aqp/{env}/agentcore_runtimes/{alias}/arn"
 
     # ------------------------------------------------------------------ DB plumbing
     def _snapshot_spec(self) -> str | None:
@@ -397,6 +546,23 @@ class AgentRuntime:
         except Exception:  # noqa: BLE001
             logger.debug("Could not persist agent_run_step", exc_info=True)
 
+    def record_mcp_tool_hash(self, tool_name: str) -> None:
+        """Phase 5 §8.4 — note the descriptor hash of an invoked MCP tool.
+
+        Called by the MCP bridge / tenant_router on every tool
+        invocation. The hash set persists onto the agent_runs_v2 row
+        in :meth:`_finalise` so the replay harness can verify the
+        live catalog matches the recorded set.
+        """
+        try:
+            from aqp.data.mcp.registry import descriptor_hash_for
+
+            digest = descriptor_hash_for(tool_name)
+        except Exception:  # noqa: BLE001 - never break a run on a hash lookup
+            digest = None
+        if digest:
+            self._mcp_tool_hashes.add(digest)
+
     def _finalise(self, *, status: str, output: dict[str, Any], error: str | None = None) -> AgentRunResult:
         try:
             from aqp.persistence.db import SessionLocal
@@ -413,6 +579,22 @@ class AgentRuntime:
                     row.n_tool_calls = self._tool_calls
                     row.n_rag_hits = self._rag_hits
                     row.completed_at = datetime.utcnow()
+                    # Phase 5 §8.4 — persist the seen MCP tool descriptor
+                    # hashes if the column was added by Alembic 0084. Use
+                    # hasattr so a partial-schema test fixture without the
+                    # column doesn't crash the finalise.
+                    if hasattr(row, "mcp_tool_descriptor_hashes"):
+                        row.mcp_tool_descriptor_hashes = sorted(self._mcp_tool_hashes)
+                    # Phase E (AWS hybrid) — persist AgentCore session
+                    # provenance when the column set is present
+                    # (Alembic 0087). Existing test fixtures without
+                    # the column skip the write cleanly.
+                    if hasattr(row, "agentcore_session_id"):
+                        row.agentcore_session_id = self._agentcore_session_id
+                    if hasattr(row, "agentcore_runtime_arn"):
+                        row.agentcore_runtime_arn = self._agentcore_runtime_arn
+                    if hasattr(row, "agentcore_memory_id"):
+                        row.agentcore_memory_id = self._agentcore_memory_id
                     session.commit()
         except Exception:  # noqa: BLE001
             logger.debug("Could not finalise agent_runs_v2 row", exc_info=True)
@@ -971,6 +1153,38 @@ def _safe_json(value: Any) -> Any:
         return value
     except Exception:
         return {"_unserialisable": str(value)[:1000]}
+
+
+def _decode_agentcore_payload(body: Any) -> dict[str, Any]:
+    """Translate the AgentCore Runtime response body to a dict.
+
+    AgentCore Runtime returns the agent's response as either a JSON
+    payload, a streaming-body iterator, or bytes. We coerce all three
+    into a dict so the calling code (and the persisted output
+    column) always sees a structured value.
+    """
+    if body is None:
+        return {}
+    if isinstance(body, dict):
+        return body
+    if hasattr(body, "read"):
+        try:
+            raw = body.read()
+        except Exception:  # noqa: BLE001
+            raw = b""
+        return _decode_agentcore_payload(raw)
+    if isinstance(body, (bytes, bytearray)):
+        try:
+            text = body.decode("utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            text = ""
+        return _decode_agentcore_payload(text)
+    if isinstance(body, str):
+        try:
+            return _try_json(body)
+        except Exception:
+            return {"text": body}
+    return {"raw": str(body)}
 
 
 def runtime_for(spec_name: str, **kwargs: Any) -> AgentRuntime:

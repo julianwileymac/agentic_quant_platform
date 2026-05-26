@@ -336,7 +336,7 @@ ax.grid(True, alpha=0.3)
 buf = io.BytesIO()
 fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
 print(f"Rendered {len(buf.getvalue())} bytes")
-print(f"Final equity: ${equity[-1]:,.0f}")
+print(f"Final equity: \${equity[-1]:,.0f}")
 print(f"Sharpe (annualised): {returns.mean() / returns.std() * np.sqrt(252):.2f}")
 `} />
 

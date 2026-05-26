@@ -1,0 +1,55 @@
+# =============================================================================
+# Phase 2 §5.3 — Disallow privilege escalation.
+#
+# Every container MUST set
+# `securityContext.allowPrivilegeEscalation: false`. This is a subset
+# of the PSS `restricted` profile but enforced via a dedicated Kyverno
+# policy so failures show up with a useful error message rather than
+# the generic PSS denial.
+#
+# `validationFailureAction: Audit` for the Phase 2 rollout — violations
+# are logged but not blocked. Flip to Enforce in Phase 2.5 once the
+# audit logs are zero. See ../README.md for the ratchet plan.
+# =============================================================================
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: aqp-disallow-privilege-escalation
+  annotations:
+    policies.kyverno.io/title: Disallow privilege escalation
+    policies.kyverno.io/category: Pod Security Standards
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Every container in the Pod must explicitly set
+      `securityContext.allowPrivilegeEscalation: false`. Even if PSS
+      restricted is enforced at the namespace level, this policy
+      enforces explicit, audited declaration at the container level.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: containers-must-set-no-allow-priv-escalation
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              operations:
+                - CREATE
+                - UPDATE
+      validate:
+        message: >-
+          Every container must set
+          `securityContext.allowPrivilegeEscalation: false`.
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  allowPrivilegeEscalation: false
+            =(initContainers):
+              - securityContext:
+                  allowPrivilegeEscalation: false
+            =(ephemeralContainers):
+              - securityContext:
+                  allowPrivilegeEscalation: false

@@ -22,7 +22,7 @@ list of why:
 | Event | Impact |
 | --- | --- |
 | Ticker change (M&A, rebranding) | ``FB`` -> ``META`` 2022-06-09 |
-| Symbol change (re-listing) | ``ABEV3`` <-> ``AMBV4`` on B3 |
+| Symbol change (re-listing) | ``ABEV3`` ↔ ``AMBV4`` on B3 |
 | CUSIP / ISIN re-issue (corporate action) | Stock split issuance may mint a new CUSIP |
 | Index reconstitution | Russell add/drops change tracker constituents |
 | ADR sponsorship upgrade | Conversion ratio may change |

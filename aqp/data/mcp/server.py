@@ -482,6 +482,62 @@ async def _stdio_loop() -> None:
             logger.exception("stdio response write failed")
 
 
+
+def _snapshot_mcp_tool_versions() -> int:
+    """Persist the live tool catalog to ``mcp_tool_versions``.
+
+    Phase 5 §8.4. Returns the number of NEW rows inserted (0 on a no-op
+    boot). Idempotent: re-running with no descriptor changes inserts
+    zero rows because the unique ``(tool_name, descriptor_hash)``
+    constraint short-circuits the insert.
+    """
+    from aqp.data.mcp.registry import snapshot_catalog
+    from aqp.persistence.db import _sync_session_local
+
+    snapshot = snapshot_catalog()
+    if not snapshot:
+        return 0
+    try:
+        from aqp.persistence.models_mcp_tools import MCPToolVersion
+    except ImportError:
+        logger.warning("models_mcp_tools missing; skipping mcp_tool_versions snapshot")
+        return 0
+
+    inserted = 0
+    session = _sync_session_local()()
+    try:
+        # Read existing (tool_name, descriptor_hash) pairs once so we
+        # don't issue an INSERT round-trip per row when the catalog is
+        # unchanged. Postgres has UNIQUE-constraint protection too,
+        # but the explicit pre-filter keeps the boot path cheap.
+        existing = {
+            (row.tool_name, row.descriptor_hash)
+            for row in session.query(MCPToolVersion.tool_name, MCPToolVersion.descriptor_hash).all()
+        }
+        for name, fields in snapshot.items():
+            key = (name, fields["descriptor_hash"])
+            if key in existing:
+                continue
+            session.add(
+                MCPToolVersion(
+                    tool_name=name,
+                    descriptor_hash=fields["descriptor_hash"],
+                    descriptor_json=fields["descriptor_json"],
+                )
+            )
+            inserted += 1
+        if inserted:
+            session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+    if inserted:
+        logger.info("mcp_tool_versions: persisted %d new descriptor(s)", inserted)
+    return inserted
+
+
 def run_stdio() -> int:
     """Console-script entry point — runs the stdio MCP transport.
 
@@ -504,6 +560,17 @@ def run_stdio() -> int:
         )
         return 2
     refreshed = _refresh_feed_tool_catalog(DATA_MCP_TOOLS)
+    # Phase 5 §8.4 (RESTRUCTURING_PLAN.md) — snapshot the live tool
+    # catalog into ``mcp_tool_versions`` so AgentRuntime can record
+    # the seen-hash set on every run and the replay harness can
+    # reconstruct the exact tool surface at the time of the run. The
+    # snapshot is best-effort: a DB hiccup logs a warning but does
+    # NOT block the MCP server boot — the server still serves with
+    # live registry hashes; persistence catches up next boot.
+    try:
+        _snapshot_mcp_tool_versions()
+    except Exception:  # noqa: BLE001
+        logger.warning("mcp_tool_versions snapshot failed", exc_info=True)
     logger.info(
         "aqp-data-mcp stdio server starting; %d tools registered (actor=%s, dynamic_feeds=%d)",
         len(DATA_MCP_TOOLS),
@@ -517,4 +584,4 @@ def run_stdio() -> int:
     return 0
 
 
-__all__ = ["build_mcp_router", "run_stdio"]
+__all__ = ["build_mcp_router", "run_stdio", "_snapshot_mcp_tool_versions"]

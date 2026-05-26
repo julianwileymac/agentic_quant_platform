@@ -1,0 +1,17 @@
+import "tfplan/v2" as tfplan
+
+# Sentinel policy — every resource must carry the standard tag set.
+
+required_tags = ["managed_by", "env", "repo"]
+
+resources_missing_tags = filter tfplan.resource_changes as _, rc {
+  rc.change.actions contains "create" and
+  rc.change.after.tags is not null and
+  any required_tags as t {
+    rc.change.after.tags[t] is undefined
+  }
+}
+
+main = rule {
+  length(resources_missing_tags) is 0
+}

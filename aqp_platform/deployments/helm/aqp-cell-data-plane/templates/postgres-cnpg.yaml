@@ -1,0 +1,83 @@
+{{- if .Values.postgres.enabled -}}
+# =============================================================================
+# Phase 6 §9.1 — per-cell CNPG cluster.
+#
+# CloudNativePG Cluster CRD. The CNPG operator must already be
+# installed cluster-wide (aqp_platform/deployments/kubernetes/
+# base-services/postgres-cnpg-operator/ — Phase 6.5 deliverable).
+# Phase 6 ships the per-cell Cluster CR; the operator install
+# itself lives outside this chart so multiple cells can share the
+# controller without re-installing it.
+#
+# The cluster carries:
+#   - pgvector extension (Rule 11 RAG, Alembic 0045)
+#   - PITR backup to per-cell MinIO
+#   - per-cell streaming replication (CNPG manages the standbys)
+# =============================================================================
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: aqp-cell-postgres
+  labels:
+{{ include "aqp-cell-data-plane.labels" . | indent 4 }}
+    aqp.io/datastore: postgres
+  annotations:
+{{ include "aqp-cell-data-plane.podAnnotations" . | indent 4 }}
+spec:
+  instances: {{ .Values.postgres.instances }}
+  imageName: {{ .Values.postgres.imageName | quote }}
+  # Bootstrap a fresh cluster with the AQP schema. The Alembic
+  # migrations land separately via the standard `alembic upgrade
+  # head` Job (Phase 6.5 — per-cell Job CR).
+  bootstrap:
+    initdb:
+      database: aqp
+      owner: aqp_runtime
+      postInitSQL:
+        - "CREATE ROLE aqp_migrator BYPASSRLS NOINHERIT;"
+        - "GRANT aqp_runtime TO aqp_migrator;"
+        {{- if .Values.postgres.pgvectorEnabled }}
+        - "CREATE EXTENSION IF NOT EXISTS vector;"
+        - "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
+        - "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+        {{- end }}
+  postgresql:
+    parameters:
+      max_connections: "200"
+      shared_buffers: "256MB"
+      # Phase 6 §9.4 — pgvector tuning.
+      max_worker_processes: "16"
+      max_parallel_workers: "8"
+      # RLS-related GUCs (Rule 51) are SET LOCAL at request time;
+      # nothing to bake in here.
+  storage:
+    size: {{ .Values.postgres.storage | quote }}
+    {{- if .Values.postgres.storageClassName }}
+    storageClass: {{ .Values.postgres.storageClassName | quote }}
+    {{- end }}
+  {{- if .Values.postgres.backup.enabled }}
+  backup:
+    barmanObjectStore:
+      destinationPath: "s3://{{ default (printf "%s-backups" (include "aqp-cell-data-plane.bucketPrefix" .)) .Values.postgres.backup.minioBucket }}/postgres-pitr"
+      endpointURL: "http://aqp-cell-minio:9000"
+      s3Credentials:
+        accessKeyId:
+          name: aqp-cell-minio-credentials
+          key: access_key
+        secretAccessKey:
+          name: aqp-cell-minio-credentials
+          key: secret_key
+      wal:
+        compression: gzip
+        encryption: AES256
+      data:
+        compression: gzip
+        encryption: AES256
+    retentionPolicy: {{ .Values.postgres.backup.retentionPolicy | quote }}
+  {{- end }}
+  # Phase 4 §7.6 — DB credentials hydrated from VaultStaticSecret.
+  superuserSecret:
+    name: aqp-cell-postgres-credentials
+  monitoring:
+    enablePodMonitor: true
+{{- end }}

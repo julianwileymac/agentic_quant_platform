@@ -1,10 +1,3 @@
----
-description: Boundary rule for the internal admin (managed services + company accounts) at aqp_admin/. Audit-first; never imports aqp.*; mirrors aqp_control_plane boundary; frontend follows aqp_client patterns.
-globs:
-  - "aqp_admin/**"
-alwaysApply: false
----
-
 # AQP Admin
 
 - `aqp_admin/` is the internal admin surface for AQP's **managed
@@ -20,12 +13,23 @@ alwaysApply: false
   call vendor SDKs (Auth0, MSAL) directly from route handlers.
 - **Credentials** resolve through `CredentialResolver` (AQP rule 26).
   Never read `settings.*_secret` directly.
+- **Step-up MFA** on every destructive admin route per AGENTS rule 52.
+  Use `aqp_admin.deps.stepup.require_admin_step_up(*scopes)`. The
+  legacy allowlist for `aqp_admin/halt.py` is closed.
+- **No Casbin.** The RBAC admin module wraps the canonical 4-role
+  lattice in
+  [`aqp_platform_core.auth.rbac`](mdc:aqp_platform_core/src/aqp_platform_core/auth/rbac.py)
+  plus the existing `Membership` table. Don't introduce a parallel
+  policy engine.
 - **Never print or return raw tokens, kubeconfigs, or secret payloads.**
   Enforces the always-on rule at
   [aqp-management-engine.mdc](mdc:.cursor/rules/aqp-management-engine.mdc).
-- **Frontend** (`aqp_admin/aqp_admin_ui/`) follows the same throttled-WS,
-  kill-switch, sandbox-indicator, and typed-confirmation contracts as
-  `aqp_client/`. See
+- **Frontend** (`aqp_admin/frontend/`) is the canonical Next.js 15
+  App Router surface. The legacy Vite SPA at
+  `aqp_admin/aqp_admin_ui/` stays deployable behind a feature flag
+  for a 30-day rollback window during the cutover. Both follow the
+  same throttled-WS, kill-switch, sandbox-indicator, and
+  typed-confirmation contracts as `aqp_client/`. See
   [frontend.mdc](mdc:.cursor/rules/frontend.mdc).
 
 ## Where changes go
@@ -36,10 +40,13 @@ alwaysApply: false
 | New account flow | `aqp_admin/src/aqp_admin/accounts/` |
 | New managed-service action | `aqp_admin/src/aqp_admin/services/` |
 | New billing provider | `aqp_admin/src/aqp_admin/providers/` |
+| New broker method | `aqp_admin/src/aqp_admin/integrations/broker.py` |
+| New WS channel | `aqp_admin/src/aqp_admin/ws/gateway.py` |
+| Step-up gate | `aqp_admin/src/aqp_admin/deps/stepup.py` |
 | Shared type with AQP runtime | `aqp_platform_core/src/aqp_platform_core/` |
-| Frontend route | `aqp_admin/aqp_admin_ui/src/routes/` |
-| Typed API wrapper | `aqp_admin/aqp_admin_ui/src/lib/api.ts` |
-| Shared admin UI component | `aqp_admin/aqp_admin_ui/src/components/` |
+| Frontend route | `aqp_admin/frontend/app/(admin)/<name>/page.tsx` |
+| Typed API wrapper | regenerated into `aqp_admin/frontend/lib/api/generated/` |
+| Shared admin UI component | `aqp_admin/frontend/components/` |
 
 ## Validation
 
@@ -53,10 +60,11 @@ ruff check src tests
 mypy src
 rg --type py "^from aqp(\.|$)|^import aqp(\.|$)" src   # must return nothing
 
-# Frontend
-cd aqp_admin_ui
+# Frontend (canonical Next.js 15)
+cd frontend
 pnpm install
 pnpm typecheck
+pnpm lint
 pnpm test
 pnpm build
 ```

@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spire-system
+  labels:
+    app.kubernetes.io/name: spire-system
+    app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    aqp.io/component: spire
+    # Phase 4 §7.2 — SPIRE Server + Agent need privileged PSS:
+    # - SPIRE Agent runs as a DaemonSet that mounts the host /run dir
+    #   to expose the Workload API on a UNIX socket every pod can reach.
+    # - SPIRE Agent's Workload Attestor reads node-level cgroup state
+    #   to attest workload identity.
+    aqp.io/pss-exception: "spire-host-paths-and-workload-attestor"
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    project: aqp-mesh
+    cost_center: quant-research-01
+    owner: platform-engineering
+    data_classification: internal
+  annotations:
+    aqp.internal/description: "Phase 4 §7.2 — SPIRE Server + Agent. Issues SPIFFE SVIDs to AQP workloads."

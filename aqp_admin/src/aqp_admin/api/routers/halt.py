@@ -24,7 +24,8 @@ from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, Field
 
 from aqp_admin.deps.audit import AuditContext, audit_context_dep
-from aqp_admin.deps.identity import AdminUser, require_admin_scope
+from aqp_admin.deps.identity import AdminUser
+from aqp_admin.deps.stepup import require_admin_step_up
 from aqp_admin.integrations import get_brokers
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,9 @@ def _bearer_from_header(header_value: str | None) -> str | None:
 )
 async def halt_all(
     body: HaltAllBody | None = None,
-    user: AdminUser = Depends(require_admin_scope("workloads:halt")),
+    user: AdminUser = Depends(
+        require_admin_step_up("workloads:halt", max_age_seconds=180),
+    ),
     audit: AuditContext = Depends(audit_context_dep("admin.halt.all")),
     authorization: str | None = Header(default=None, alias="Authorization"),
 ) -> HaltAllResponse:

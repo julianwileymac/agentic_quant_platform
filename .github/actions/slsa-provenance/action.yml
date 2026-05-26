@@ -1,0 +1,25 @@
+name: slsa-provenance
+description: SLSA Build Level 3 provenance via slsa-framework/slsa-github-generator.
+inputs:
+  image:
+    description: Container image URI (registry/repo:tag@digest).
+    required: true
+  digest:
+    description: Image digest.
+    required: true
+  registry-username:
+    description: ECR username (typically AWS).
+    required: true
+  registry-password:
+    description: ECR password (token from amazon-ecr-login).
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        echo "::notice::SLSA L3 provenance generation is delegated to the"
+        echo "::notice::reusable workflow slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0"
+        echo "::notice::Invoke that workflow from a separate job; this composite documents the wiring."
+        echo "image=${{ inputs.image }}"
+        echo "digest=${{ inputs.digest }}"

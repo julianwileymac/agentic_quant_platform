@@ -1,0 +1,16 @@
+# Per-account Terraform state backend config — pass via
+#   terraform init -reconfigure -backend-config=backend.hcl
+#
+# Every value here is published by ``infrastructure/bootstrap/`` to SSM
+# so an operator can render this file from the bootstrap outputs:
+#
+#   aws ssm get-parameter --name /aqp/${env}/tfstate_bucket_name        --query 'Parameter.Value' --output text
+#   aws ssm get-parameter --name /aqp/${env}/tfstate_dynamodb_table     --query 'Parameter.Value' --output text
+#   aws ssm get-parameter --name /aqp/${env}/tfstate_kms_key_arn        --query 'Parameter.Value' --output text
+
+bucket         = "aqp-tfstate-prod-123456789012"
+key            = "aqp_platform/live/terraform.tfstate"
+region         = "us-east-1"
+encrypt        = true
+kms_key_id     = "arn:aws:kms:us-east-1:123456789012:key/<state-kms-key-id>"
+dynamodb_table = "aqp-tflock-prod"

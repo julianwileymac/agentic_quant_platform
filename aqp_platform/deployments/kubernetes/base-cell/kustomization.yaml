@@ -1,0 +1,60 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# =============================================================================
+# Phase 3 §6.5 (RESTRUCTURING_PLAN.md) — cell-scoped base kustomization.
+#
+# This base lists only the per-cell workload manifests. The
+# cluster-wide namespace declarations
+# (``../base/namespace.yaml`` + ``../base/namespaces-shared.yaml``) and
+# the cross-namespace aggregators (``../base-services``,
+# ``../observability``, ``../mlops``, ``../edge``) are intentionally
+# excluded because cells live in their own dedicated namespace and
+# do not share the shared-infra namespaces.
+#
+# Cell overlays at ``../cells/<cell-id>/`` import this base via
+# ``- ../../base-cell`` and add ``namespace: <cell-id>`` so every
+# workload lands in the cell's own namespace.
+#
+# Build NOTE: cell overlays must be built with the kustomize
+# ``--load-restrictor=LoadRestrictionsNone`` flag because this
+# kustomization references files in the sibling ``../base/`` tree.
+# The cells README (``../cells/README.md``) documents the canonical
+# build commands. Argo CD's ApplicationSet at
+# ``../../argocd/applicationsets/cells-appset.yaml`` enables the
+# same flag via ``spec.source.kustomize.commonOptions``.
+#
+# Phase 6 §9.1 will add per-cell datastores (Postgres / Redis /
+# MinIO) to this base; Phase 3 ships only the canonical workload
+# set so the cell overlays can be exercised end-to-end against
+# shared infrastructure.
+# =============================================================================
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: aqp
+      app.kubernetes.io/managed-by: kustomize
+
+resources:
+  - ../base/rbac/service-accounts.yaml
+  - ../base/configmaps/aqp-config.yaml
+  - ../base/secrets/aqp-secrets.yaml.template
+  # aqp-client
+  - ../base/aqp-client/deployment.yaml
+  - ../base/aqp-client/service.yaml
+  - ../base/aqp-client/hpa.yaml
+  - ../base/aqp-client/pdb.yaml
+  # aqp-core
+  - ../base/aqp-core/deployment.yaml
+  - ../base/aqp-core/service.yaml
+  - ../base/aqp-core/hpa.yaml
+  - ../base/aqp-core/pdb.yaml
+  # aqp-worker
+  - ../base/aqp-worker/deployment.yaml
+  - ../base/aqp-worker/hpa.yaml
+  - ../base/aqp-worker/pdb.yaml
+  # Redis Stack (cache + HierarchicalRAG store)
+  - ../base/redis-master/statefulset.yaml
+  # Per-cell ingress
+  - ../base/ingress.yaml

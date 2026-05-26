@@ -15,8 +15,8 @@ import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import clsx from 'clsx';
 
-import StatusBanner from '@aqp-docs/components/StatusBanner';
-import HomepageFeatures from '@aqp-docs/components/HomepageFeatures';
+import StatusBanner from '../components/StatusBanner';
+import HomepageFeatures from '../components/HomepageFeatures';
 
 export default function Home(): React.ReactElement {
   const { siteConfig } = useDocusaurusContext();

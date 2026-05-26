@@ -65,6 +65,61 @@ def _vault_enabled() -> bool:
     return True
 
 
+def _active_cell_transit_key() -> str | None:
+    """Return the per-cell Vault Transit key id, or ``None``.
+
+    Phase 6 §9.7 (RESTRUCTURING_PLAN.md): silo-reg cells get a
+    dedicated Vault Transit key so a leaked KEK in one cell cannot
+    decrypt ciphertexts from another. The resolver consults
+    ``RequestContext.cell_id`` → ``CellDataPlane.vault_transit_key``.
+
+    Returns ``None`` when:
+      * no request context is bound;
+      * the bound cell has no ``vault_transit_key`` set (the default
+        for shared-std / shared-prem cells — they share the
+        cluster-wide per-tenant keys);
+      * the topology cannot be loaded.
+    """
+    try:
+        from aqp.tenancy.runtime_context import get_runtime_context
+    except Exception:  # pragma: no cover - defensive
+        return None
+    ctx = get_runtime_context()
+    cell_id = getattr(ctx, "cell_id", None) if ctx is not None else None
+    if not cell_id:
+        return None
+    try:
+        from aqp.deployment.topology import get_deployment_topology
+    except Exception:  # pragma: no cover - defensive
+        return None
+    try:
+        topo = get_deployment_topology()
+    except Exception:  # pragma: no cover - defensive
+        return None
+    cell = topo.cell_map.get(cell_id)
+    if cell is None:
+        return None
+    dp = getattr(cell, "data_plane", None)
+    if dp is None:
+        return None
+    key_id = (getattr(dp, "vault_transit_key", "") or "").strip()
+    return key_id or None
+
+
+def _resolve_transit_key_name(tenant: str) -> str:
+    """Return the canonical Vault Transit key name for the current call.
+
+    Phase 6 §9.7 — if the active ``RequestContext`` is bound to a
+    cell whose ``CellDataPlane.vault_transit_key`` is set, the cell's
+    key takes precedence over the per-tenant key. This is the
+    cryptographic data-plane separation lever for silo-reg cells.
+    """
+    cell_key = _active_cell_transit_key()
+    if cell_key:
+        return cell_key
+    return f"aqp-tenant-{tenant}"
+
+
 def encrypt(plaintext: bytes, *, tenant: str = "default") -> str:
     """Return a serialised ciphertext for ``plaintext``.
 
@@ -101,7 +156,7 @@ def _vault_encrypt(plaintext: bytes, *, tenant: str) -> str:
     client = hvac.Client(url=os.environ.get("VAULT_ADDR", ""), token=os.environ.get("VAULT_TOKEN"))
     if not client.is_authenticated():
         raise RuntimeError("Vault client failed to authenticate")
-    key_name = f"aqp-tenant-{tenant}"
+    key_name = _resolve_transit_key_name(tenant)
     # Idempotent ensure_transit_key. The Transit secrets engine MUST be
     # enabled at the ``transit/`` mount; operators do this once at
     # bootstrap.
@@ -122,7 +177,7 @@ def _vault_decrypt(ciphertext: str, *, tenant: str) -> bytes:
 
     _, _, payload = ciphertext.split(":", 2)
     client = hvac.Client(url=os.environ.get("VAULT_ADDR", ""), token=os.environ.get("VAULT_TOKEN"))
-    key_name = f"aqp-tenant-{tenant}"
+    key_name = _resolve_transit_key_name(tenant)
     response = client.secrets.transit.decrypt_data(name=key_name, ciphertext=payload)
     return base64.b64decode(response["data"]["plaintext"])
 

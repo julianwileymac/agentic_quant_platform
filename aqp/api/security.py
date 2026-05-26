@@ -72,6 +72,11 @@ PUBLIC_ROUTERS: frozenset[str] = frozenset(
         # Phase 4 — Auth0 Action sync endpoint authenticated via M2M
         # token (verified inside the route by ``require_m2m_token``).
         "auth0-sync",
+        # Phase 0.4 (CP maturation) — /_internal/audit/* ingest from the
+        # CP-side HttpAuditSink + HttpTerraformAuditSink. M2M-only:
+        # the route bodies validate the Bearer token via the active
+        # OIDC provider (rule 27).
+        "internal-audit",
     }
 )
 

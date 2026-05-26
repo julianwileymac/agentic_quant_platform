@@ -1,0 +1,353 @@
+# =============================================================================
+# aqp-edge — Envoy cell-router config.
+#
+# Phase 3 §6.4 (RESTRUCTURING_PLAN.md). This config wires the cell
+# topology established in Phase 3 §6.2 into the actual data path:
+#
+# Request flow:
+#   Cloudflare Tunnel ─▶ aqp-edge (this Envoy) ──▶ aqp-tenant-router
+#                                                  (ext_authz check)
+#                                                  injects x-aqp-cell
+#                                                  header
+#   aqp-edge then routes to the cluster matching x-aqp-cell:
+#   cell-shared-std-us-east-1a ──▶ aqp-cell-shared-std-us-east-1a-api
+#   cell-silo-reg-acme         ──▶ aqp-cell-silo-reg-acme-api
+#   ...
+#
+# Operators MUST customise this template before applying:
+#   - upstream cluster definitions (one per cell);
+#   - the per-cell ``x-aqp-cell`` route match values;
+#   - TLS material (certs come from an ExternalSecret + SDS in
+#     Phase 4 §7.2 — SPIRE / SPIFFE workload identity).
+#
+# This template is intentionally a stub for the per-cell clusters
+# (the canonical list will come from Argo CD ApplicationSet in
+# Phase 3 §6.5). The single explicit cluster ``aqp-tenant-router``
+# is the only hard-coded dependency.
+#
+# Replace via the ConfigMap at
+# ``aqp_platform/deployments/kubernetes/edge/aqp-edge/configmap.yaml``;
+# the Dockerfile bundles this template only for offline smoke tests.
+# =============================================================================
+admin:
+  address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 9901
+
+static_resources:
+  listeners:
+    - name: aqp_edge_listener
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 10000
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: aqp_edge
+                codec_type: AUTO
+                # Phase 3 §6.4 — request-id propagation. Forward the
+                # operator's X-Request-Id; mint one if absent. The
+                # control-plane audit ledger correlates on this id.
+                generate_request_id: true
+                preserve_external_request_id: true
+                upgrade_configs:
+                  - upgrade_type: websocket
+                route_config:
+                  name: aqp_edge_routes
+                  virtual_hosts:
+                    - name: aqp_edge_default
+                      domains: ["*"]
+                      routes:
+                        # ---------------------------------------------
+                        # Phase 4 §7.5 — /manage/* routes traverse
+                        # Pomerium first. Pomerium validates the IdP
+                        # token, performs the step-up MFA prompt, and
+                        # forwards to aqp-cp with the
+                        # `X-Pomerium-Jwt-Assertion` header that
+                        # `aqp.auth.providers.pomerium.PomeriumAccessProvider`
+                        # validates. The match is BEFORE the
+                        # x-aqp-cell routes so /manage/* never reaches
+                        # a per-cell upstream — control-plane traffic
+                        # stays in the aqp-admin namespace.
+                        # ---------------------------------------------
+                        - name: pomerium_manage
+                          match:
+                            prefix: /manage/
+                          route:
+                            cluster: aqp_pomerium_proxy
+                            timeout: 30s
+                        # ---------------------------------------------
+                        # The actual cell routing decision lives in
+                        # the ``x-aqp-cell`` header injected by the
+                        # ext_authz filter below. Each per-cell route
+                        # is a ``header_match`` on that header. The
+                        # Argo CD ApplicationSet stamps one route
+                        # block per active cell (Phase 3 §6.5).
+                        # ---------------------------------------------
+                        - name: cell_shared_std_local
+                          match:
+                            prefix: "/"
+                            headers:
+                              - name: x-aqp-cell
+                                string_match:
+                                  exact: cell-shared-std-local
+                          route:
+                            cluster: aqp_cell_shared_std_local
+                            timeout: 30s
+                        - name: cell_shared_std_us_east_1a
+                          match:
+                            prefix: "/"
+                            headers:
+                              - name: x-aqp-cell
+                                string_match:
+                                  exact: cell-shared-std-us-east-1a
+                          route:
+                            cluster: aqp_cell_shared_std_us_east_1a
+                            timeout: 30s
+                        - name: cell_shared_prem_us_east_1a
+                          match:
+                            prefix: "/"
+                            headers:
+                              - name: x-aqp-cell
+                                string_match:
+                                  exact: cell-shared-prem-us-east-1a
+                          route:
+                            cluster: aqp_cell_shared_prem_us_east_1a
+                            timeout: 30s
+                        - name: cell_silo_reg_acme
+                          match:
+                            prefix: "/"
+                            headers:
+                              - name: x-aqp-cell
+                                string_match:
+                                  exact: cell-silo-reg-acme
+                          route:
+                            cluster: aqp_cell_silo_reg_acme
+                            timeout: 30s
+                        # ---------------------------------------------
+                        # Catch-all when ext_authz failed to inject
+                        # x-aqp-cell. Returns 503 with a body the
+                        # operator can grep for.
+                        # ---------------------------------------------
+                        - match:
+                            prefix: "/"
+                          direct_response:
+                            status: 503
+                            body:
+                              inline_string: |
+                                aqp-edge: no cell matched x-aqp-cell header.
+                                The ext_authz filter at aqp-tenant-router did not
+                                inject a valid cell id. See
+                                aqp_docs/docs/how-to/cell-router-cutover.md.
+                http_filters:
+                  # Phase 5 §8.5 (RESTRUCTURING_PLAN.md) — Cell-Bound-
+                  # Authorization gate. Cross-cell requests carry a
+                  # ``Cell-Bound-Authorization`` JWT signed by the
+                  # source cell's SPIFFE workload SVID (Phase 4 §7.2).
+                  # This ext_authz step validates iss=cell-<src>,
+                  # aud=cell-<this-cell>, nbf<=now<=exp (60s window),
+                  # and the sub matches a known source-cell workload.
+                  # In-cluster (same-cell) calls have no CBA header
+                  # and pass through; cross-cell calls without a
+                  # valid CBA get 403 ``cell_bound_invalid``.
+                  - name: envoy.filters.http.ext_authz
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+                      transport_api_version: V3
+                      http_service:
+                        server_uri:
+                          uri: aqp-cell-bound-validator.aqp-edge.svc.cluster.local
+                          cluster: aqp_cell_bound_validator
+                          timeout: 0.3s
+                        path_prefix: /cell_bound/v1
+                        authorization_request:
+                          allowed_headers:
+                            patterns:
+                              - exact: cell-bound-authorization
+                              - exact: x-aqp-cell
+                              - exact: x-request-id
+                        authorization_response:
+                          allowed_upstream_headers:
+                            patterns:
+                              - exact: x-aqp-cell-source
+                              - exact: x-aqp-cell-source-workload
+                      with_request_body:
+                        max_request_bytes: 8192
+                        allow_partial_message: true
+                      failure_mode_allow: false
+
+                  # Phase 3 §6.4 — ext_authz callout to
+                  # ``aqp-tenant-router``. The filter forwards the
+                  # request body up to 64 KiB so the tenant-router
+                  # can read JWT claims; the cell decision lands on
+                  # the ``x-aqp-cell`` request header.
+                  - name: envoy.filters.http.ext_authz
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+                      transport_api_version: V3
+                      http_service:
+                        server_uri:
+                          uri: aqp-tenant-router.aqp-edge.svc.cluster.local
+                          cluster: aqp_tenant_router
+                          timeout: 0.5s
+                        path_prefix: /ext_authz/v3
+                        authorization_request:
+                          allowed_headers:
+                            patterns:
+                              - exact: authorization
+                              - exact: cookie
+                              - exact: x-request-id
+                              - exact: x-aqp-tenant
+                              - exact: x-aqp-workspace
+                        authorization_response:
+                          allowed_upstream_headers:
+                            patterns:
+                              - exact: x-aqp-cell
+                              - exact: x-aqp-cell-region
+                              - exact: x-aqp-cell-namespace
+                      with_request_body:
+                        max_request_bytes: 65536
+                        allow_partial_message: true
+                      failure_mode_allow: false
+                      include_peer_certificate: true
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+    # -------------------------------------------------------------
+    # The ext_authz target. STRICT_DNS so Kubernetes Service DNS
+    # round-robins between aqp-tenant-router replicas.
+    # -------------------------------------------------------------
+    - name: aqp_tenant_router
+      connect_timeout: 0.25s
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: aqp_tenant_router
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: aqp-tenant-router.aqp-edge.svc.cluster.local
+                      port_value: 8080
+      health_checks:
+        - timeout: 0.5s
+          interval: 10s
+          unhealthy_threshold: 3
+          healthy_threshold: 1
+          http_health_check:
+            path: /readyz
+
+    # -------------------------------------------------------------
+    # Per-cell upstream clusters. The Service name convention is
+    # ``aqp-core.<cell_namespace>.svc.cluster.local`` — every
+    # cell's ``aqp-core`` Deployment is reachable via its own
+    # namespace-scoped Service. Argo CD ApplicationSet stamps one
+    # cluster block per active cell (Phase 3 §6.5).
+    # -------------------------------------------------------------
+    - name: aqp_cell_shared_std_local
+      connect_timeout: 1s
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: aqp_cell_shared_std_local
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: aqp-core.aqp.svc.cluster.local
+                      port_value: 8000
+    - name: aqp_cell_shared_std_us_east_1a
+      connect_timeout: 1s
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: aqp_cell_shared_std_us_east_1a
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: aqp-core.cell-shared-std-us-east-1a.svc.cluster.local
+                      port_value: 8000
+    - name: aqp_cell_shared_prem_us_east_1a
+      connect_timeout: 1s
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: aqp_cell_shared_prem_us_east_1a
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: aqp-core.cell-shared-prem-us-east-1a.svc.cluster.local
+                      port_value: 8000
+    - name: aqp_cell_silo_reg_acme
+      connect_timeout: 1s
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: aqp_cell_silo_reg_acme
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: aqp-core.cell-silo-reg-acme.svc.cluster.local
+                      port_value: 8000
+
+    # -------------------------------------------------------------
+    # Phase 4 §7.5 — Pomerium identity-aware proxy in front of
+    # /manage/*. Pomerium handles authentication, step-up MFA, and
+    # then forwards to aqp-cp.aqp-admin. The cluster name matches
+    # the route's `cluster:` field above.
+    # -------------------------------------------------------------
+    - name: aqp_pomerium_proxy
+      connect_timeout: 1s
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: aqp_pomerium_proxy
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: pomerium-proxy.pomerium.svc.cluster.local
+                      port_value: 80
+
+    # -------------------------------------------------------------
+    # Phase 5 §8.5 — Cell-Bound-Authorization validator sidecar.
+    # Small HTTP service (planned to be co-located with the
+    # tenant-router) that exposes /cell_bound/v1/check; returns
+    # 200 + x-aqp-cell-source header on valid CBA, 403 otherwise.
+    # The same-cell path returns 200 without the header so in-
+    # cluster traffic doesn't need a CBA.
+    # -------------------------------------------------------------
+    - name: aqp_cell_bound_validator
+      connect_timeout: 0.25s
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: aqp_cell_bound_validator
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: aqp-cell-bound-validator.aqp-edge.svc.cluster.local
+                      port_value: 8080
+      health_checks:
+        - timeout: 0.3s
+          interval: 10s
+          unhealthy_threshold: 3
+          healthy_threshold: 1
+          http_health_check:
+            path: /readyz

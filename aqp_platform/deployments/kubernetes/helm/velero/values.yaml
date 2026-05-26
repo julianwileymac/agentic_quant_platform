@@ -1,0 +1,30 @@
+velero:
+  configuration:
+    backupStorageLocation:
+      - name: default
+        provider: aws
+        bucket: aqp-velero-${ACCOUNT_ID}
+        config:
+          region: us-east-1
+    volumeSnapshotLocation:
+      - name: default
+        provider: aws
+        config:
+          region: us-east-1
+  initContainers:
+    - name: velero-plugin-for-aws
+      image: velero/velero-plugin-for-aws:v1.10.0
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+  schedules:
+    daily-full:
+      schedule: "0 4 * * *"
+      template:
+        ttl: 168h        # 7 days
+        includedNamespaces: ["*"]
+    hourly-incremental:
+      schedule: "0 * * * *"
+      template:
+        ttl: 48h
+        includedNamespaces: ["aqp-core", "aqp-admin", "aqp-paper", "aqp-trading"]

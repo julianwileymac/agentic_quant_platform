@@ -936,6 +936,483 @@ class MonolithBroker(_BaseBroker):
         )
         return response.json()
 
+    # ------------------------------------------------------------------
+    # Secrets manager (admin overhaul Phase 1)
+    # ------------------------------------------------------------------
+
+    async def list_secrets(
+        self,
+        *,
+        backend: str | None = None,
+        namespace: str | None = None,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if backend:
+            params["backend"] = backend
+        if namespace:
+            params["namespace"] = namespace
+        response = await self._request(
+            "GET",
+            "/admin/secrets",
+            params=params or None,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def describe_secret(
+        self,
+        ref: str,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            f"/admin/secrets/{ref}",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def list_secret_consumers(
+        self,
+        ref: str,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            f"/admin/secrets/{ref}/consumers",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def rotate_secret(
+        self,
+        ref: str,
+        *,
+        reason: str,
+        notify_consumers: bool,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            f"/admin/secrets/{ref}/rotate",
+            json_body={"reason": reason, "notify_consumers": notify_consumers},
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    # ------------------------------------------------------------------
+    # Lineage explorer (admin overhaul Phase 1)
+    # ------------------------------------------------------------------
+
+    async def list_lineage_datasets(
+        self,
+        *,
+        namespace: str | None = None,
+        medallion_layer: str | None = None,
+        limit: int = 100,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"limit": limit}
+        if namespace:
+            body["namespace"] = namespace
+        if medallion_layer:
+            body["medallion_layer"] = medallion_layer
+        response = await self._request(
+            "POST",
+            "/mcp/data/tools/data.lineage.list_datasets/invoke",
+            json_body=body,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def describe_lineage_dataset(
+        self,
+        urn: str,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            "/mcp/data/tools/data.lineage.describe_dataset/invoke",
+            json_body={"urn": urn},
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def lineage_ancestry(
+        self,
+        urn: str,
+        *,
+        depth: int = 3,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            "/mcp/data/tools/data.lineage.ancestry/invoke",
+            json_body={"urn": urn, "depth": depth},
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def lineage_impact(
+        self,
+        urn: str,
+        *,
+        depth: int = 3,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            "/mcp/data/tools/data.lineage.impact/invoke",
+            json_body={"urn": urn, "depth": depth},
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def list_lineage_transforms(
+        self,
+        *,
+        transform_kind: str | None = None,
+        limit: int = 100,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"limit": limit}
+        if transform_kind:
+            body["transform_kind"] = transform_kind
+        response = await self._request(
+            "POST",
+            "/mcp/data/tools/data.lineage.list_transforms/invoke",
+            json_body=body,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def describe_lineage_transform(
+        self,
+        transform_id: str,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            "/mcp/data/tools/data.lineage.describe_transform/invoke",
+            json_body={"transform_id": transform_id},
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    # ------------------------------------------------------------------
+    # MLflow model registry (admin overhaul Phase 1)
+    # ------------------------------------------------------------------
+
+    async def list_mlflow_models(
+        self,
+        *,
+        namespace: str | None = None,
+        limit: int = 100,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit}
+        if namespace:
+            params["namespace"] = namespace
+        response = await self._request(
+            "GET",
+            "/ml/models",
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def describe_mlflow_model(
+        self,
+        name: str,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            f"/ml/models/{name}",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def list_mlflow_versions(
+        self,
+        name: str,
+        *,
+        limit: int = 50,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            f"/ml/models/{name}/versions",
+            params={"limit": limit},
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def describe_mlflow_version(
+        self,
+        name: str,
+        version: int,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            f"/ml/models/{name}/versions/{version}",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def set_mlflow_alias(
+        self,
+        name: str,
+        *,
+        alias: str,
+        version: int,
+        reason: str,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "PUT",
+            f"/ml/models/{name}/aliases/{alias}",
+            json_body={"version": version, "reason": reason},
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def delete_mlflow_alias(
+        self,
+        name: str,
+        *,
+        alias: str,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "DELETE",
+            f"/ml/models/{name}/aliases/{alias}",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    # ------------------------------------------------------------------
+    # Paper trading (admin overhaul Phase 1)
+    # ------------------------------------------------------------------
+
+    async def list_paper_runs(
+        self,
+        *,
+        organization_id: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit}
+        if organization_id:
+            params["organization_id"] = organization_id
+        if status:
+            params["status"] = status
+        response = await self._request(
+            "GET",
+            "/paper/runs",
+            params=params,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def get_paper_run(
+        self,
+        run_id: str,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            f"/paper/runs/{run_id}",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def start_paper_run(
+        self,
+        *,
+        config_name: str,
+        dry_run: bool,
+        reason: str,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            "/paper/runs",
+            json_body={
+                "config_name": config_name,
+                "dry_run": dry_run,
+                "reason": reason,
+            },
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def stop_paper_run(
+        self,
+        run_id: str,
+        *,
+        reason: str,
+        cancel_open_orders: bool,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            f"/paper/runs/{run_id}/stop",
+            json_body={
+                "reason": reason,
+                "cancel_open_orders": cancel_open_orders,
+            },
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    # ------------------------------------------------------------------
+    # RBAC (admin overhaul Phase 1)
+    # ------------------------------------------------------------------
+
+    async def list_memberships(
+        self,
+        *,
+        organization_id: str | None = None,
+        workspace_id: str | None = None,
+        role: str | None = None,
+        limit: int = 200,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"limit": limit}
+        if organization_id:
+            body["organization_id"] = organization_id
+        if workspace_id:
+            body["workspace_id"] = workspace_id
+        if role:
+            body["role"] = role
+        response = await self._request(
+            "POST",
+            "/mcp/data/tools/data.tenancy.list_memberships/invoke",
+            json_body=body,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def preview_effective_permissions(
+        self,
+        *,
+        user_id: str,
+        org_id: str | None = None,
+        workspace_id: str | None = None,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"user_id": user_id}
+        if org_id:
+            body["org_id"] = org_id
+        if workspace_id:
+            body["workspace_id"] = workspace_id
+        response = await self._request(
+            "POST",
+            "/admin/rbac/effective",
+            json_body=body,
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def grant_membership(
+        self,
+        *,
+        user_id: str,
+        role: str,
+        scope_kind: str,
+        scope_id: str,
+        reason: str,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            "/admin/rbac/memberships",
+            json_body={
+                "user_id": user_id,
+                "role": role,
+                "scope_kind": scope_kind,
+                "scope_id": scope_id,
+                "reason": reason,
+            },
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def revoke_membership(
+        self,
+        membership_id: str,
+        *,
+        reason: str,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "DELETE",
+            f"/admin/rbac/memberships/{membership_id}",
+            params={"reason": reason},
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    # ------------------------------------------------------------------
+    # Account mode (admin overhaul Phase 1)
+    # ------------------------------------------------------------------
+
+    async def get_account_mode(
+        self,
+        *,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            "/admin/accounts/mode",
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def set_account_mode(
+        self,
+        *,
+        mode: str,
+        reason: str,
+        operator_pinned: bool,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            "/admin/accounts/mode",
+            json_body={
+                "mode": mode,
+                "reason": reason,
+                "operator_pinned": operator_pinned,
+            },
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
+    async def clear_account_mode_pin(
+        self,
+        *,
+        reason: str,
+        bearer_passthrough: str | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "DELETE",
+            "/admin/accounts/mode/pin",
+            params={"reason": reason},
+            bearer_passthrough=bearer_passthrough,
+        )
+        return response.json()
+
 
 class HaltBroker:
     """Fan-out helper that hits every halt endpoint in parallel."""

@@ -583,6 +583,115 @@ services:
     endpoints:
       gms: http://datahub-datahub-gms.aqp-data-services.svc.cluster.local:8080
 
+  # ---------------------------------------------------------------------------
+  # Phase G of the AWS hybrid rollout — AWS-native managed services that
+  # are NOT cluster-resident. The seven entries below are referenced from
+  # the ``aws`` target below and the ``cell-shared-std-us-east-1a`` cell.
+  # ---------------------------------------------------------------------------
+  - id: bedrock-agentcore-runtime
+    label: Bedrock AgentCore Runtime
+    component: agentic
+    cluster: aws
+    namespace: aws-managed
+    protocols: [https]
+    restartable: false
+    logs_enabled: true
+    endpoints:
+      runtime_arn: hydrate://ssm/aqp/${env}/agentcore_runtime_arn
+    annotations:
+      aqp.io/managed-by: aws-bedrock
+      aqp.io/cpu-architecture: arm64
+      aqp.io/session_max_seconds: "28800"
+
+  - id: bedrock-agentcore-gateway
+    label: Bedrock AgentCore Gateway
+    component: agentic
+    cluster: aws
+    namespace: aws-managed
+    protocols: [https]
+    restartable: false
+    logs_enabled: true
+    endpoints:
+      gateway_arn: hydrate://ssm/aqp/${env}/agentcore_gateway_arn
+      tool_config_uri: hydrate://ssm/aqp/${env}/agentcore_gateway_tool_config_uri
+
+  - id: bedrock-agentcore-memory
+    label: Bedrock AgentCore Memory
+    component: agentic
+    cluster: aws
+    namespace: aws-managed
+    protocols: [https]
+    endpoints:
+      memory_id: hydrate://ssm/aqp/${env}/agentcore_memory_id
+
+  - id: bedrock-kb-collection
+    label: Bedrock Knowledge Base (OpenSearch Serverless)
+    component: rag
+    cluster: aws
+    namespace: aws-managed
+    protocols: [https]
+    endpoints:
+      collection_arn: hydrate://ssm/aqp/${env}/kb_collection_arn
+      kb_id: hydrate://ssm/aqp/${env}/kb_knowledge_base_id
+      source_bucket: hydrate://ssm/aqp/${env}/kb_source_bucket
+
+  - id: cognito-user-pool
+    label: Cognito User Pool
+    component: identity
+    cluster: aws
+    namespace: aws-managed
+    protocols: [https]
+    endpoints:
+      user_pool_id: hydrate://ssm/aqp/${env}/cognito_user_pool_id
+      user_pool_endpoint: hydrate://ssm/aqp/${env}/cognito_user_pool_endpoint
+      user_pool_domain: hydrate://ssm/aqp/${env}/cognito_user_pool_domain
+
+  - id: cloudfront-distribution
+    label: CloudFront (admin + AgentCore edge)
+    component: edge
+    cluster: aws
+    namespace: aws-managed
+    protocols: [https]
+    endpoints:
+      domain: hydrate://ssm/aqp/${env}/cloudfront_domain
+      distribution_id: hydrate://ssm/aqp/${env}/cloudfront_distribution_id
+    annotations:
+      aqp.io/aliases: admin.aqp.fund,agentcore.aqp.fund
+      aqp.io/cloudflare-edge: aqp.fund,api.aqp.fund,manage.aqp.fund
+
+  - id: ecs-fargate-cluster
+    label: ECS Fargate (admin BFF + AgentCore proxy)
+    component: compute
+    cluster: aws
+    namespace: aws-managed
+    protocols: [https]
+    restartable: true
+    logs_enabled: true
+    endpoints:
+      cluster_name: hydrate://ssm/aqp/${env}/ecs_cluster_name
+      cluster_arn: hydrate://ssm/aqp/${env}/ecs_cluster_arn
+      service_names: hydrate://ssm/aqp/${env}/ecs_service_names
+
+  - id: alb
+    label: Application Load Balancer
+    component: edge
+    cluster: aws
+    namespace: aws-managed
+    protocols: [https]
+    endpoints:
+      default: hydrate://ssm/aqp/${env}/alb_dns_name
+      zone_id: hydrate://ssm/aqp/${env}/alb_zone_id
+
+  - id: eventbridge-stepfunctions
+    label: EventBridge + Step Functions
+    component: orchestration
+    cluster: aws
+    namespace: aws-managed
+    protocols: [https]
+    endpoints:
+      state_machine_arn: hydrate://ssm/aqp/${env}/nightly_sfn_arn
+      nightly_rule_arn: hydrate://ssm/aqp/${env}/nightly_rule_arn
+
 targets:
   local:
     id: local
@@ -829,3 +938,247 @@ targets:
       - dagster
       - airbyte
       - datahub
+
+  # ---------------------------------------------------------------------------
+  # Phase G of the AWS hybrid rollout — AWS-native deployment target.
+  # Composes the EKS Karpenter quant runtime (heritage AQP composition) with
+  # the new ECS Fargate slice (admin BFF + AgentCore proxy) + the Bedrock
+  # AgentCore + Knowledge Base + Cognito + CloudFront + EventBridge SFN
+  # surfaces. The matching TerraformStackSpec lives at
+  # ``aqp_platform/configs/terraform/aws.yaml`` and the rendered HCL bundle
+  # at ``aqp_platform/terraform/environments/live/``.
+  # ---------------------------------------------------------------------------
+  aws:
+    id: aws
+    label: AWS hybrid (EKS Karpenter + ECS Fargate + Bedrock)
+    kind: aws
+    environment: live
+    cloud_provider: aws
+    namespace: aqp
+    adapter_preference:
+      - aws_eks      # primary — EKS Karpenter quant runtime
+      - in_cluster   # fallback inside the EKS pod
+    terraform:
+      stack_slug: aqp-aws-live
+      spec_path: aqp_platform/configs/terraform/aws.yaml
+      environment_dir: aqp_platform/terraform/environments/live
+      tfvars_path: aqp_platform/terraform/environments/live/terraform.tfvars
+      backend_state_path: hydrate://ssm/aqp/${env}/tfstate_bucket_name
+    cluster:
+      name: hydrate://ssm/aqp/${env}/eks_cluster_name
+      kubeconfig_path: ~/.kube/config
+      kube_context: ""
+      ingress_class: nginx
+      ingress_host: aqp.fund
+    endpoints:
+      # Public marketing site + tenant API stay on the Cloudflare tunnel
+      # (heritage edge) — admin + AgentCore land on CloudFront.
+      frontend: https://aqp.fund
+      api: https://api.aqp.fund
+      manage: https://manage.aqp.fund
+      admin: https://admin.aqp.fund
+      agentcore: https://agentcore.aqp.fund
+    images:
+      registry: hydrate://ssm/aqp/${env}/ecr_registry
+      app_version: replace-with-immutable-tag
+      build_locally: false
+      services:
+        api: aqp-core
+        worker: aqp-worker
+        beat: aqp-beat
+        frontend: aqp-client
+        cp: aqp-cp
+        agent: aqp-agent       # ARM64-only AgentCore runtime image
+        admin: aqp-admin
+        admin_frontend: aqp-admin-frontend
+        ingester: aqp-ingester
+        ml: aqp-ml
+    auth:
+      provider: aws_cognito
+      required: true
+      oidc_issuer: hydrate://ssm/aqp/${env}/cognito_user_pool_endpoint
+      audience: hydrate://ssm/aqp/${env}/cognito_shared_client_id
+      scim_enabled: false
+      secret_refs:
+        cognito_client_secret: hydrate://ssm/aqp/${env}/cognito_shared_client_secret
+    services:
+      # EKS Karpenter — quant runtime tier (unchanged from rpi composition).
+      - aqp-core
+      - aqp-worker
+      - aqp-beat
+      - aqp-client
+      - aqp-cp
+      - postgres
+      - redis
+      - neo4j
+      - chromadb
+      - mlflow
+      - otel-collector
+      - jaeger
+      - kafka
+      - schema-registry
+      - redpanda
+      - flink
+      - questdb
+      - polaris
+      - hudi
+      - spark-operator
+      - prometheus
+      - grafana
+      - tempo
+      - loki
+      - phoenix
+      - postgres-shared
+      - redis-shared
+      - minio
+      - dagster
+      - airbyte
+      - datahub
+      # ECS Fargate + Bedrock + Edge — new Phase G entries.
+      - alb
+      - ecs-fargate-cluster
+      - cloudfront-distribution
+      - cognito-user-pool
+      - bedrock-agentcore-runtime
+      - bedrock-agentcore-gateway
+      - bedrock-agentcore-memory
+      - bedrock-kb-collection
+      - eventbridge-stepfunctions
+
+# =============================================================================
+# Phase 3 §6.2 (RESTRUCTURING_PLAN.md) — Cell registry bootstrap seed.
+#
+# A "cell" is the deployment-layer unit that composes with the
+# application-layer ``TenancyStrategy``. The mapping (from §6.1):
+#
+#   shared-std    -> shared_schema_rls         (one ns, many tenants, RLS)
+#   shared-prem   -> schema_per_tenant         (one ns, one schema/tenant)
+#   silo-reg      -> database_per_enterprise   (one ns, one tenant, own DB)
+#   silo-custom   -> hybrid                    (per-contract)
+#
+# This list is the BOOTSTRAP SEED. Once the control plane has the
+# ``cells`` table populated via Alembic 0082, live updates flow
+# through the ``/manage/cells/*`` routes. Reseeding the YAML is the
+# disaster-recovery path; the ORM table is the source of truth in
+# normal operation.
+#
+# Cells in ``provisioning`` state are visible to the cell-router for
+# health checks but not for tenant placement. ``active`` cells accept
+# new tenants up to ``capacity_max_tenants``. ``draining`` cells stop
+# accepting new tenants and migrate existing ones to a sibling cell.
+# =============================================================================
+cells:
+  # Default development cell — runs the existing single-namespace
+  # shared deployment as the canonical ``cell-shared-std-local`` so
+  # everything you build today is already cell-addressable.
+  - id: cell-shared-std-local
+    tier: shared-std
+    tenancy_strategy: shared_schema_rls
+    region: local
+    availability_zone: local-1
+    k8s_namespace: aqp
+    capacity_max_tenants: 100
+    state: active
+    routes:
+      api: http://localhost:8000
+      ws: ws://localhost:8000/ws
+    labels:
+      aqp.io/cell-tier: shared-std
+      aqp.io/cell-region: local
+    annotations:
+      aqp.internal/description: "Default local-dev cell mapped to the existing 'aqp' namespace."
+
+  # Phase 3 §6.5 worked example: AWS us-east-1a shared-std cell.
+  # Not yet provisioned in any environment — defined here so the
+  # ``aqp_platform/deployments/kubernetes/cells/shared-std-us-east-1a/``
+  # overlay tree has a referent.
+  - id: cell-shared-std-us-east-1a
+    tier: shared-std
+    tenancy_strategy: shared_schema_rls
+    region: us-east-1
+    availability_zone: us-east-1a
+    k8s_namespace: cell-shared-std-us-east-1a
+    capacity_max_tenants: 5000
+    # Phase G of the AWS hybrid rollout — promoted from
+    # ``provisioning`` to ``active`` once the matching
+    # ``aqp_platform/terraform/environments/live/`` apply landed and
+    # the EKS cluster + ECS Fargate + Bedrock AgentCore stacks reported
+    # healthy. The annotation below tracks the matching commit.
+    state: active
+    target: aws  # binds the cell to the ``targets.aws`` entry
+    routes:
+      api: https://us-east-1a.shared-std.aqp.fund
+      ws: wss://us-east-1a.shared-std.aqp.fund/ws
+    # Phase 6 §9 — per-cell data plane. The cell-data-plane Helm chart
+    # stamps these endpoints; the application reads them via
+    # RequestContext.cell_id.
+    data_plane:
+      postgres_dsn_secret: secret/aqp/cells/cell-shared-std-us-east-1a/postgres
+      redis_url: redis://aqp-cell-redis.cell-shared-std-us-east-1a.svc.cluster.local:6379/0
+      minio_endpoint: http://aqp-cell-minio.cell-shared-std-us-east-1a.svc.cluster.local:9000
+      minio_bucket_prefix: aqp-cell-shared-std-us-east-1a
+      mlflow_tracking_uri: http://aqp-cell-mlflow.cell-shared-std-us-east-1a.svc.cluster.local:5000
+      iceberg_rest_uri: http://aqp-cell-iceberg-rest.cell-shared-std-us-east-1a.svc.cluster.local:8181
+      iceberg_warehouse_uri: s3://aqp-cell-shared-std-us-east-1a-warehouse/
+      vault_transit_key: aqp-cell-shared-std-us-east-1a
+    labels:
+      aqp.io/cell-tier: shared-std
+      aqp.io/cell-region: us-east-1
+    annotations:
+      aqp.internal/description: "AWS us-east-1a shared-std cell (Phase 3 worked example, not yet active)."
+
+  - id: cell-shared-prem-us-east-1a
+    tier: shared-prem
+    tenancy_strategy: schema_per_tenant
+    region: us-east-1
+    availability_zone: us-east-1a
+    k8s_namespace: cell-shared-prem-us-east-1a
+    capacity_max_tenants: 200
+    state: provisioning
+    routes:
+      api: https://us-east-1a.shared-prem.aqp.fund
+      ws: wss://us-east-1a.shared-prem.aqp.fund/ws
+    data_plane:
+      postgres_dsn_secret: secret/aqp/cells/cell-shared-prem-us-east-1a/postgres
+      redis_url: redis://aqp-cell-redis.cell-shared-prem-us-east-1a.svc.cluster.local:6379/0
+      minio_endpoint: http://aqp-cell-minio.cell-shared-prem-us-east-1a.svc.cluster.local:9000
+      minio_bucket_prefix: aqp-cell-shared-prem-us-east-1a
+      mlflow_tracking_uri: http://aqp-cell-mlflow.cell-shared-prem-us-east-1a.svc.cluster.local:5000
+      iceberg_rest_uri: http://aqp-cell-iceberg-rest.cell-shared-prem-us-east-1a.svc.cluster.local:8181
+      iceberg_warehouse_uri: s3://aqp-cell-shared-prem-us-east-1a-warehouse/
+      vault_transit_key: aqp-cell-shared-prem-us-east-1a
+    labels:
+      aqp.io/cell-tier: shared-prem
+      aqp.io/cell-region: us-east-1
+    annotations:
+      aqp.internal/description: "AWS us-east-1a shared-prem cell (Phase 3 worked example)."
+
+  - id: cell-silo-reg-acme
+    tier: silo-reg
+    tenancy_strategy: database_per_enterprise
+    region: us-east-1
+    availability_zone: us-east-1a
+    k8s_namespace: cell-silo-reg-acme
+    capacity_max_tenants: 1
+    state: provisioning
+    pinned_tenants:
+      - tenant_acme
+    routes:
+      api: https://acme.silo-reg.aqp.fund
+      ws: wss://acme.silo-reg.aqp.fund/ws
+    # silo-reg cells MUST set vault_transit_key per Phase 6 §9.7 — the
+    # cryptographic data-plane separation is the FINRA / ISO 27001 lever.
+    data_plane:
+      postgres_dsn_secret: secret/aqp/cells/cell-silo-reg-acme/postgres
+      redis_url: redis://aqp-cell-redis.cell-silo-reg-acme.svc.cluster.local:6379/0
+      minio_endpoint: http://aqp-cell-minio.cell-silo-reg-acme.svc.cluster.local:9000
+      minio_bucket_prefix: aqp-cell-silo-reg-acme
+      mlflow_tracking_uri: http://aqp-cell-mlflow.cell-silo-reg-acme.svc.cluster.local:5000
+      iceberg_rest_uri: http://aqp-cell-iceberg-rest.cell-silo-reg-acme.svc.cluster.local:8181
+      iceberg_warehouse_uri: s3://aqp-cell-silo-reg-acme-warehouse/
+      vault_transit_key: aqp-cell-silo-reg-acme
+    labels:
+      aqp.io/cell-tier: silo-reg
+      aqp.io/cell-region: us-east-1
+    annotations:
+      aqp.internal/description: "Dedicated silo-reg cell for the Acme tenant (Phase 3 worked example; FINRA / ISO 27001 posture)."

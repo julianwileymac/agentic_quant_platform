@@ -92,6 +92,13 @@ class AgentRunV2(Base, ProjectScopedMixin):
     n_rag_hits = Column(Integer, nullable=False, default=0)
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
+    # Phase E (AWS hybrid) — populated when the run was dispatched via
+    # bedrock-agentcore.invoke_agent_runtime instead of the in-process
+    # CrewAI loop. All three columns are NULL on legacy CrewAI runs.
+    # Migration: 0087_agentcore_session_columns.
+    agentcore_session_id = Column(String(128), nullable=True, index=True)
+    agentcore_runtime_arn = Column(String(512), nullable=True)
+    agentcore_memory_id = Column(String(128), nullable=True)
 
 
 class AgentRunStep(Base, ProjectScopedMixin):

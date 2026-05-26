@@ -74,6 +74,43 @@ class _DefaultProvider(LLMProvider):
 _INSTANCES: dict[str, LLMProvider] = {}
 
 
+def _bedrock_extra_kwargs() -> dict[str, Any]:
+    """Build the per-call kwargs LiteLLM expects for the ``bedrock/`` adapter.
+
+    Pulls region + optional Guardrails config from :class:`Settings`:
+
+    - ``aws_region_name``: ``bedrock_region`` -> ``aws_region`` ->
+      ``AWS_REGION`` env -> ``us-east-1``.
+    - ``guardrailConfig``: only emitted when ``bedrock_guardrail_id``
+      is set; mirrors the AWS Bedrock Runtime API field exactly so
+      LiteLLM forwards it verbatim.
+
+    No credentials are read here — LiteLLM walks the boto3 chain so
+    IRSA / EKS Pod Identity / ECS task role / EC2 instance profile /
+    ``AWS_PROFILE`` all just work. Long-term Bedrock API keys are
+    SCP-denied at the org root (Sonrai bypass, blueprint §16.1).
+    """
+    region = (
+        str(getattr(settings, "bedrock_region", "") or "").strip()
+        or str(getattr(settings, "aws_region", "") or "").strip()
+        or os.environ.get("AWS_REGION", "").strip()
+        or "us-east-1"
+    )
+    extra: dict[str, Any] = {"aws_region_name": region}
+    guardrail_id = str(getattr(settings, "bedrock_guardrail_id", "") or "").strip()
+    if guardrail_id:
+        guardrail_version = (
+            str(getattr(settings, "bedrock_guardrail_version", "") or "").strip()
+            or "DRAFT"
+        )
+        extra["guardrailConfig"] = {
+            "guardrailIdentifier": guardrail_id,
+            "guardrailVersion": guardrail_version,
+            "trace": "enabled",
+        }
+    return extra
+
+
 def list_providers() -> list[str]:
     """Return slugs for every registered provider."""
     return sorted(PROVIDERS)
@@ -220,6 +257,14 @@ def router_complete(
         # API key. LiteLLM's ``openai/`` adapter still validates the key
         # is present, so pass a placeholder so calls go through.
         call_kwargs.setdefault("api_key", "EMPTY")
+    elif handle.spec.slug == "bedrock":
+        # LiteLLM's native ``bedrock/`` adapter expects ``aws_region_name``
+        # + optional ``guardrailConfig``; credentials come from the boto3
+        # chain (IRSA / Pod Identity / instance profile / env). NEVER
+        # set ``api_key`` on the Bedrock path — the SCP-denied long-term
+        # API keys would surface as a misleading 401 from LiteLLM.
+        for key, value in _bedrock_extra_kwargs().items():
+            call_kwargs.setdefault(key, value)
 
     # Phase 5 — Semantic LLM completion cache. Disabled by default;
     # opt-in via AQP_LLM_SEMANTIC_CACHE_ENABLED=true. When a hit is

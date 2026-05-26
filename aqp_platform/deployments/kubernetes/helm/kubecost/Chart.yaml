@@ -1,0 +1,10 @@
+apiVersion: v2
+name: kubecost-aqp
+description: AQP wrapper around the upstream Kubecost (OpenCost-backed) chart.
+version: 0.1.0
+appVersion: "2.5.0"
+type: application
+dependencies:
+  - name: cost-analyzer
+    version: "2.5.0"
+    repository: https://kubecost.github.io/cost-analyzer

@@ -6,13 +6,27 @@ metadata:
     app.kubernetes.io/name: aqp
     app.kubernetes.io/part-of: aqp
     app.kubernetes.io/managed-by: kustomize
+    # AQP topology label (Phase 2 §5.3 — Kyverno selector key).
+    aqp.io/component: aqp-core
     # Pod Security Standards (PSS) "restricted" — refuses pods that
     # run as root, mount the host network, or otherwise break the
     # least-privilege contract. Every aqp pod sets the matching
     # securityContext in its Deployment manifest.
+    #
+    # Phase 2 §5.4 — `enforce-version: latest` pins the PSS version
+    # to the kubelet's currently-supported max so new restrictions
+    # ratchet in automatically as Kubernetes upgrades.
     pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
     pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
     pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    # FinOps governance labels (Phase 2 §5.3 Kyverno require-finops-tags).
+    project: aqp-core
+    cost_center: quant-research-01
+    owner: platform-engineering
+    data_classification: proprietary-alpha
   annotations:
     aqp.internal/description: "Primary namespace for AQP workloads (aqp-core, aqp-worker, aqp-client, aqp-cp, redis-master)."
 ---
@@ -24,11 +38,21 @@ metadata:
     app.kubernetes.io/name: aqp-admin
     app.kubernetes.io/part-of: aqp
     app.kubernetes.io/managed-by: kustomize
+    # AQP topology label (Phase 2 §5.3 — Kyverno selector key).
+    aqp.io/component: aqp-control-plane
     # The admin namespace is strictly separated from `aqp` so the
     # control plane can manage workloads in `aqp` without sharing
     # network identity or RBAC with them (ADR 005).
     pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
     pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
     pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    # FinOps governance labels (Phase 2 §5.3 Kyverno require-finops-tags).
+    project: aqp-control-plane
+    cost_center: quant-research-01
+    owner: platform-engineering
+    data_classification: proprietary-alpha
   annotations:
     aqp.internal/description: "Isolated namespace for aqp_control_plane (separate from `aqp` per ADR 005)."

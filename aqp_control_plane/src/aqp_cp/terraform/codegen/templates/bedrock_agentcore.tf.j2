@@ -1,0 +1,139 @@
+{# Amazon Bedrock AgentCore Runtime + Memory + Gateway.
+
+   Renders an ``aws-ia/agentcore/aws`` module block + the least-privilege
+   IAM execution role per blueprint §8.3.
+
+   Module version is pinned to ``0.0.2`` (the current Terraform Registry
+   pin); the matching aws provider must be ``hashicorp/aws ~> 6.21`` per
+   the LuisOsuna117/agentcore/aws docs (the
+   ``aws_bedrockagentcore_*`` resource types were introduced in aws 6.x).
+
+   Expected variables:
+   - runtime_name              (str)
+   - runtime_network_mode      ("VPC" | "PUBLIC", default "VPC")
+   - subnet_ids                (list of subnet ids — required when VPC mode)
+   - security_group_ids        (list — required when VPC mode)
+   - runtime_image_uri         (str — ARM64 image URI from ECR)
+   - memory_event_expiry_days  (int, default 90)
+   - gateway_authorizer_type   ("CUSTOM_JWT" | "NONE", default "CUSTOM_JWT")
+   - allowed_model_arns        (list — IAM allow-list, defaults to Claude 4.5 + Titan Embed v2)
+   - kb_source_bucket_arn      (optional, str — S3 KB source bucket to GetObject from)
+   - broker_secret_arns        (optional, list — Secrets Manager ARNs for broker creds)
+-#}
+
+# --- Bedrock AgentCore Runtime + Memory + Gateway ----------------------
+
+module "agentcore_{{ spec.slug | replace('-', '_') }}" {
+  source  = "aws-ia/agentcore/aws"
+  version = "0.0.2"
+
+  create_runtime                 = true
+  runtime_name                   = {{ variables.get("runtime_name", spec.slug + "-runtime") | hcl }}
+  runtime_network_mode           = {{ variables.get("runtime_network_mode", "VPC") | hcl }}
+  runtime_vpc_subnet_ids         = {{ variables.get("subnet_ids", []) | hcl }}
+  runtime_vpc_security_group_ids = {{ variables.get("security_group_ids", []) | hcl }}
+  runtime_image_uri              = {{ variables.get("runtime_image_uri", "") | hcl }}
+
+  create_memory                = true
+  memory_name                  = {{ variables.get("memory_name", spec.slug + "-memory") | hcl }}
+  memory_event_expiry_duration = {{ variables.get("memory_event_expiry_days", 90) | hcl }}
+
+  create_gateway          = true
+  gateway_name            = {{ variables.get("gateway_name", spec.slug + "-gateway") | hcl }}
+  gateway_authorizer_type = {{ variables.get("gateway_authorizer_type", "CUSTOM_JWT") | hcl }}
+
+  tags = local.common_tags
+}
+
+# --- Least-privilege execution role (blueprint §8.3) -------------------
+
+data "aws_iam_policy_document" "agentcore_runtime_inline_{{ spec.slug | replace('-', '_') }}" {
+  statement {
+    sid       = "InvokeAllowedModels"
+    effect    = "Allow"
+    actions   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+    resources = {{ variables.get("allowed_model_arns", [
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-5-*",
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-*",
+      "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v2:0",
+    ]) | hcl }}
+  }
+
+{% if variables.get("broker_secret_arns") %}
+  statement {
+    sid       = "ReadBrokerSecrets"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = {{ variables.get("broker_secret_arns") | hcl }}
+  }
+{% endif %}
+
+{% if variables.get("kb_source_bucket_arn") %}
+  statement {
+    sid       = "ReadKBSource"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:ListBucket"]
+    resources = [
+      {{ variables.get("kb_source_bucket_arn") | hcl }},
+      "${{{ variables.get("kb_source_bucket_arn") | hcl }}}/*",
+    ]
+  }
+{% endif %}
+
+  statement {
+    sid       = "EmitLogs"
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["arn:aws:logs:*:*:log-group:/aws/bedrock-agentcore/{{ spec.slug }}:*"]
+  }
+}
+
+resource "aws_iam_policy" "agentcore_runtime_{{ spec.slug | replace('-', '_') }}" {
+  name        = "agentcore-runtime-{{ spec.slug }}"
+  description = "Least-privilege Bedrock AgentCore runtime policy for {{ spec.slug }}."
+  policy      = data.aws_iam_policy_document.agentcore_runtime_inline_{{ spec.slug | replace('-', '_') }}.json
+  tags        = local.common_tags
+}
+
+# --- SSM Parameter Store outputs (cross-module wiring contract) ---------
+# Per the AGENTS-rule-45 module contract: every module exports its
+# canonical resource handles into SSM under ``/aqp/${environment}/<name>``
+# so the in-monolith FastAPI gateway + AgentRuntime.delegated invoke
+# path can resolve the runtime ARN without remote-state reads.
+
+resource "aws_ssm_parameter" "agentcore_runtime_arn_{{ spec.slug | replace('-', '_') }}" {
+  name  = "/aqp/{{ spec.environment }}/agentcore_runtime_arn"
+  type  = "String"
+  value = module.agentcore_{{ spec.slug | replace('-', '_') }}.runtime_arn
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "agentcore_gateway_arn_{{ spec.slug | replace('-', '_') }}" {
+  name  = "/aqp/{{ spec.environment }}/agentcore_gateway_arn"
+  type  = "String"
+  value = module.agentcore_{{ spec.slug | replace('-', '_') }}.gateway_arn
+  tags  = local.common_tags
+}
+
+resource "aws_ssm_parameter" "agentcore_memory_id_{{ spec.slug | replace('-', '_') }}" {
+  name  = "/aqp/{{ spec.environment }}/agentcore_memory_id"
+  type  = "String"
+  value = module.agentcore_{{ spec.slug | replace('-', '_') }}.memory_id
+  tags  = local.common_tags
+}
+
+output "agentcore_runtime_arn" {
+  value = module.agentcore_{{ spec.slug | replace('-', '_') }}.runtime_arn
+}
+
+output "agentcore_gateway_arn" {
+  value = module.agentcore_{{ spec.slug | replace('-', '_') }}.gateway_arn
+}
+
+output "agentcore_memory_id" {
+  value = module.agentcore_{{ spec.slug | replace('-', '_') }}.memory_id
+}
+
+output "agentcore_runtime_policy_arn" {
+  value = aws_iam_policy.agentcore_runtime_{{ spec.slug | replace('-', '_') }}.arn
+}

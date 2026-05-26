@@ -41,7 +41,10 @@ export function MedallionLayers({ className }: { className?: string }) {
         initial="hidden"
         whileInView="show"
         viewport={{ once: true, margin: "-50px" }}
+        role="img"
+        aria-label="Medallion lakehouse layers: Bronze raw, Silver normalised, Gold products — stacked cylinders with promotion arrows."
       >
+        <title>Medallion lakehouse: Bronze → Silver → Gold</title>
         {/* Faint Iceberg "lake" base */}
         <ellipse
           cx={240}

@@ -54,6 +54,21 @@ class WorkloadAction(str, Enum):
     TERRAFORM_STATE_PULL = "terraform_state_pull"
     TERRAFORM_VALIDATE = "terraform_validate"
     TERRAFORM_UNLOCK = "terraform_unlock"
+    # Phase 3 §6.2 (RESTRUCTURING_PLAN.md) — cell-registry actions.
+    # All routed through ``WorkloadRuntime`` so the action lands in the
+    # ``workload_runs`` audit ledger before the cells table mutation
+    # commits.
+    REGISTER_CELL = "register_cell"
+    UPDATE_CELL_STATE = "update_cell_state"
+    DRAIN_CELL = "drain_cell"
+    DECOMMISSION_CELL = "decommission_cell"
+    PLACE_TENANT_IN_CELL = "place_tenant_in_cell"
+    MIGRATE_TENANT_TO_CELL = "migrate_tenant_to_cell"
+    # Phase 7 §10.4 (RESTRUCTURING_PLAN.md) — regulatory-grade evidence
+    # bundle export. Routed through ``WorkloadRuntime`` so the bundle
+    # request lands in ``workload_runs`` BEFORE the bytes leave the
+    # process (AGENTS rule 45).
+    EVIDENCE_BUNDLE_EXPORT = "evidence_bundle_export"
 
 
 class WorkloadRunStatus(str, Enum):

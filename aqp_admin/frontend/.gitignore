@@ -1,0 +1,25 @@
+# Next.js
+.next/
+out/
+next-env.d.ts.bak
+
+# Build artifacts
+dist/
+build/
+
+# Dependencies
+node_modules/
+.pnpm-debug.log*
+
+# Editor + OS
+.idea/
+.vscode/
+.DS_Store
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Generated typed API
+lib/api/generated/schema.ts

@@ -1,0 +1,98 @@
+{# Cloudflare Zero Trust edge — Jinja2 codegen for TerraformRuntime.
+
+   Rendered by aqp_cp.terraform.codegen when a TerraformStackSpec carries
+   ``module = "cloudflare_edge"``. Mirrors terraform/modules/cloudflare_edge
+   so operators can opt in to either the static module or the codegen
+   path per stack.
+
+   Expected variables (resolved from the spec's ``variables`` block):
+
+   - tunnel_name (str)
+   - account_id  (str, sensitive)
+   - zone_id     (str)
+   - ingress_rules (list of {hostname, service})
+   - enable_access_app (bool, default false)
+   - access_app_name (str)
+   - access_app_session_duration (str, default "24h")
+   - access_policies (list)
+#}
+
+terraform {
+  required_providers {
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.6"
+    }
+  }
+}
+
+provider "cloudflare" {
+  # API token resolved by the runner pod via the AQP CredentialResolver
+  # (env var CLOUDFLARE_API_TOKEN). Never inlined into rendered HCL.
+}
+
+variable "tunnel_name" {
+  type    = string
+  default = {{ variables.get("tunnel_name", "aqp-edge") | tojson }}
+}
+
+variable "account_id" {
+  type      = string
+  sensitive = true
+  default   = {{ variables.get("account_id", "") | tojson }}
+}
+
+variable "zone_id" {
+  type    = string
+  default = {{ variables.get("zone_id", "") | tojson }}
+}
+
+variable "ingress_rules" {
+  type    = list(object({ hostname = string, service = string }))
+  default = {{ variables.get("ingress_rules", []) | tojson }}
+}
+
+variable "enable_access_app" {
+  type    = bool
+  default = {{ variables.get("enable_access_app", false) | tojson }}
+}
+
+variable "access_app_name" {
+  type    = string
+  default = {{ variables.get("access_app_name", "") | tojson }}
+}
+
+variable "access_app_session_duration" {
+  type    = string
+  default = {{ variables.get("access_app_session_duration", "24h") | tojson }}
+}
+
+variable "access_policies" {
+  type    = any
+  default = {{ variables.get("access_policies", []) | tojson }}
+}
+
+module "cloudflare_edge" {
+  source = "{{ variables.get('module_source', '../../modules/cloudflare_edge') }}"
+
+  tunnel_name                 = var.tunnel_name
+  account_id                  = var.account_id
+  zone_id                     = var.zone_id
+  ingress_rules               = var.ingress_rules
+  enable_access_app           = var.enable_access_app
+  access_app_name             = var.access_app_name
+  access_app_session_duration = var.access_app_session_duration
+  access_policies             = var.access_policies
+}
+
+output "tunnel_id" {
+  value = module.cloudflare_edge.tunnel_id
+}
+
+output "tunnel_cname_target" {
+  value = module.cloudflare_edge.tunnel_cname_target
+}
+
+output "access_app_id" {
+  value = module.cloudflare_edge.access_app_id
+}

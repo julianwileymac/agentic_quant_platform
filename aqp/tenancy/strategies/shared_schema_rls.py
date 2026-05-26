@@ -76,9 +76,15 @@ async def _rls_session_cm(org_id: str | None) -> Any:
     from aqp.persistence.db import _async_session_local
 
     workspace_id = _current_workspace_id()
+    cell_id = _current_cell_id()
     async with _async_session_local()() as session:
         try:
-            await _set_session_context(session, org_id=org_id, workspace_id=workspace_id)
+            await _set_session_context(
+                session,
+                org_id=org_id,
+                workspace_id=workspace_id,
+                cell_id=cell_id,
+            )
             yield session
             await session.commit()
         except Exception:
@@ -91,8 +97,14 @@ async def _set_session_context(
     *,
     org_id: str | None,
     workspace_id: str | None,
+    cell_id: str | None = None,
 ) -> None:
     """Issue ``SET LOCAL`` for the GUCs the RLS policies reference.
+
+    Phase 3 §6.3 — ``cell_id`` joins ``org_id`` and ``workspace_id`` as
+    a tenancy GUC. The audit-log hash chain in Alembic 0083 reads
+    ``NEW.cell_id``; per-cell RLS policies (Phase 6 §9.1) read
+    ``current_setting('app.current_cell_id', true)``.
 
     On SQLite this is a no-op (SQLite doesn't recognise
     ``current_setting``). We detect the dialect from the bound engine
@@ -114,6 +126,11 @@ async def _set_session_context(
             text("SELECT set_config('app.current_workspace_id', :v, true)"),
             {"v": str(workspace_id)},
         )
+    if cell_id:
+        await session.execute(
+            text("SELECT set_config('app.current_cell_id', :v, true)"),
+            {"v": str(cell_id)},
+        )
 
 
 def _current_workspace_id() -> str | None:
@@ -131,6 +148,27 @@ def _current_workspace_id() -> str | None:
         if ctx is None:
             return None
         return getattr(ctx, "workspace_id", None)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _current_cell_id() -> str | None:
+    """Read the cell id from the active :class:`RequestContext`.
+
+    Phase 3 §6.3 — when the request arrived through the cell-router
+    (``aqp-edge`` Envoy + ``aqp-tenant-router`` ext_authz callout) the
+    middleware populates ``RequestContext.cell_id`` from the
+    ``X-AQP-Cell`` header. Background tasks that didn't traverse the
+    router (Celery workers, migrations, smoke scripts) get ``None``,
+    which the strategy treats as the legacy single-cell path.
+    """
+    try:
+        from aqp.tenancy.runtime_context import get_runtime_context
+
+        ctx = get_runtime_context()
+        if ctx is None:
+            return None
+        return getattr(ctx, "cell_id", None)
     except Exception:  # noqa: BLE001
         return None
 

@@ -1,0 +1,54 @@
+###############################################################################
+# ApplicationSet: cluster addons (ESO, cert-manager, AWS LB controller,
+# ExternalDNS, Cilium, Falco, Velero, Kubecost, Linkerd).
+#
+# `Cluster` generator — generates one Application per cluster registered
+# with ArgoCD that carries the `aqp.io/managed=true` label.
+###############################################################################
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: addons
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchLabels: { aqp.io/managed: "true" }
+          - list:
+              elements:
+                - name: external-secrets
+                  path: aqp_platform/deployments/kubernetes/helm/external-secrets-bridge
+                - name: falco
+                  path: aqp_platform/deployments/kubernetes/helm/falco
+                - name: velero
+                  path: aqp_platform/deployments/kubernetes/helm/velero
+                - name: kubecost
+                  path: aqp_platform/deployments/kubernetes/helm/kubecost
+                - name: linkerd-control-plane
+                  path: aqp_platform/deployments/kubernetes/helm/linkerd-control-plane
+  template:
+    metadata:
+      name: '{{`{{.values.name}}`}}-{{`{{.name}}`}}'
+    spec:
+      project: aqp
+      sources:
+        - repoURL: https://github.com/julianwileymac/agentic_quant_platform
+          targetRevision: main
+          path: '{{`{{.values.path}}`}}'
+          helm:
+            valueFiles:
+              - 'values.yaml'
+      destination:
+        server: '{{`{{.server}}`}}'
+        namespace: '{{`{{.values.name}}`}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ApplyOutOfSyncOnly=true

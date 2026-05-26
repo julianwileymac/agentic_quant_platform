@@ -1,0 +1,117 @@
+# =============================================================================
+# cells-appset — Argo CD ApplicationSet for per-cell deployments.
+#
+# Phase 3 §6.5 (RESTRUCTURING_PLAN.md). Stamps one Argo CD
+# ``Application`` per directory under
+# ``aqp_platform/deployments/kubernetes/cells/<cell-id>/`` so the
+# cell-registry's bootstrap seed (``topology.yaml::cells``) maps
+# directly to running deployments.
+#
+# Each generated Application:
+#
+# 1. Points at the cell overlay directory (e.g.
+#    ``aqp_platform/deployments/kubernetes/cells/shared-std-us-east-1a/``).
+# 2. Renders with the kustomize ``--load-restrictor=LoadRestrictionsNone``
+#    flag because the cell overlays import from the sibling
+#    ``../base-cell/`` which references ``../base/`` files (the
+#    deliberate Phase 3 §6.5 design).
+# 3. Syncs to the cluster's in-cluster API server.
+# 4. Targets the cell's own namespace (the cell overlay's
+#    ``namespace:`` directive).
+#
+# When a new cell row lands in the ``cells`` registry via
+# ``POST /manage/cells``, the operator follows the rollout sequence
+# in ``aqp_docs/docs/how-to/cell-router-cutover.md`` to:
+#   (a) add a cell overlay directory in this tree,
+#   (b) commit + push,
+#   (c) Argo CD detects the new directory on the next
+#       ApplicationSet reconciliation and stamps the matching
+#       ``Application``.
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: aqp-cells
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: aqp
+    aqp.io/component: cell-fleet
+  annotations:
+    aqp.internal/description: >-
+      Per-cell deployment stamper. One Argo CD Application per
+      directory under aqp_platform/deployments/kubernetes/cells/.
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/julianwiley/agentic_quant_platform.git
+        revision: main
+        directories:
+          - path: aqp_platform/deployments/kubernetes/cells/*
+          - path: aqp_platform/deployments/kubernetes/cells/README.md
+            exclude: true
+  template:
+    metadata:
+      # path.basename = the cell-id suffix (e.g. shared-std-us-east-1a)
+      name: 'aqp-cell-{{.path.basename}}'
+      namespace: argocd
+      labels:
+        app.kubernetes.io/managed-by: argocd
+        app.kubernetes.io/part-of: aqp
+        aqp.io/component: aqp-cell
+        aqp.io/cell-id: 'cell-{{.path.basename}}'
+    spec:
+      project: aqp
+      source:
+        repoURL: https://github.com/julianwiley/agentic_quant_platform.git
+        targetRevision: main
+        path: '{{.path.path}}'
+        kustomize:
+          # Phase 3 §6.5 — the cell overlay's base-cell references
+          # files in the sibling ../base/ tree; the load-restrictor
+          # must be relaxed for the build to succeed.
+          commonAnnotations:
+            aqp.io/cell-id: 'cell-{{.path.basename}}'
+          # `LoadRestrictionsNone` is the Argo CD-friendly knob
+          # documented at https://argo-cd.readthedocs.io/en/stable/operator-manual/kustomize/
+          # (the kustomization is single-tenant against the AQP repo,
+          # so the relaxation is bounded).
+          options:
+            - --load-restrictor=LoadRestrictionsNone
+      destination:
+        # The cell namespace is set by the cell overlay's
+        # `namespace:` directive; Argo CD applies into the in-cluster
+        # API server. Multi-cluster cell topology is Phase 8 §11.2.
+        server: https://kubernetes.default.svc
+        namespace: 'cell-{{.path.basename}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - PrunePropagationPolicy=foreground
+          - PruneLast=true
+          - ApplyOutOfSyncOnly=true
+          - RespectIgnoreDifferences=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+      ignoreDifferences:
+        # Phase 3 §6.5 — replicas may be tuned in-cluster by the HPA;
+        # don't fight the autoscaler.
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas
+        # Argo Rollouts may temporarily own replicas during canary
+        # progressions (Phase 5 §8.x deliverable).
+        - group: argoproj.io
+          kind: Rollout
+          jsonPointers:
+            - /spec/replicas

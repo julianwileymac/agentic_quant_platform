@@ -80,5 +80,11 @@
   "0078_replay_cache_entries.py": "85ef80b5b71ec0fa6e33db6404312aaea3b9fc73a1124c094276987f602edf2a",
   "0079_audit_log_hash_chain.py": "e8d7b142f1f244fad9650fe87eb755895f04b31e8d4e5a86cbd7837c62111578",
   "0080_team_airbyte_workspaces.py": "1ff16b28187d4e87578a80cd89143bbf1350a3a959e3c530b99b7b46dd53dda9",
-  "0081_mlops_skills_and_artifacts.py": "e86d46d02d3299a8a0dab6e337176fc89f20bae9c843e35c8f7df65a69d0517e"
+  "0081_mlops_skills_and_artifacts.py": "e86d46d02d3299a8a0dab6e337176fc89f20bae9c843e35c8f7df65a69d0517e",
+  "0082_cell_registry.py": "6228ee8e860d047d9ec8c1127b3c114e2fb38c19177873be973526dcad8b4631",
+  "0083_audit_cell_id_column.py": "14686f551fbb1b07dd841297fbb928a81cb041e56d0686f489051452944056a9",
+  "0084_mcp_tool_versioning.py": "55bbfc5ff520cd263c1a33cee6bc4e6b8eff07df28f6b3c366dfb8d2098b66ee",
+  "0085_audit_lake_anchors.py": "5454be1c49b5d34732b34c7402a0e96e51f3aa66e95db4ab634ed451b090a125",
+  "0086_lineage_cell_id.py": "3f1231dfa7ac26b3864a30d5ada14f2e01fa321a71f3206aa7b94a1bb1736c95",
+  "0087_agentcore_session_columns.py": "41692a44fbd54ef60bdab8f4ad556ac843155999c7a820b612774943dbcbd282"
 }

@@ -20,6 +20,8 @@ The provider is the seam Milestone 3 uses for both user authentication
 from __future__ import annotations
 
 from aqp.auth.providers.auth0 import Auth0Provider
+from aqp.auth.providers.aws_cognito import AwsCognitoProvider
+from aqp.auth.providers.aws_iam_identity_center import AwsIamIdentityCenterProvider
 from aqp.auth.providers.generic_oidc import GenericOidcProvider
 from aqp.auth.providers.mock import MockProvider
 from aqp.auth.providers.protocol import (
@@ -59,6 +61,8 @@ except Exception:  # noqa: BLE001
 
 __all__ = [
     "Auth0Provider",
+    "AwsCognitoProvider",
+    "AwsIamIdentityCenterProvider",
     "CloudflareAccessProvider",
     "GenericOidcProvider",
     "IDENTITY_PROVIDER_KIND",

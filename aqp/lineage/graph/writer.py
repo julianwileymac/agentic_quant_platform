@@ -330,6 +330,42 @@ def _split_identifier(table_id: str) -> tuple[str, str]:
     return (parts[0], parts[1])
 
 
+def _resolve_cell_id_from_event(event: Any) -> str | None:
+    """Resolve ``cell_id`` for a lineage event (Phase 7 §10.3).
+
+    Order of precedence:
+      1. An explicit ``cell_id`` attribute on the event (when the
+         emitter has already stamped it).
+      2. The active :class:`RequestContext.cell_id` via
+         :mod:`aqp.tenancy.runtime_context` (the Phase 3 §6.3 path).
+      3. ``settings.cell_default_id`` for non-request callers
+         (Celery beat, scripts) that never set a context.
+
+    Returns ``None`` when no cell binding is available; the
+    ``lineage_*.cell_id`` column is nullable (Alembic 0086) so the
+    write still succeeds.
+    """
+    explicit = getattr(event, "cell_id", None)
+    if explicit:
+        return str(explicit)
+    try:
+        from aqp.tenancy.runtime_context import get_runtime_context
+
+        ctx = get_runtime_context()
+        ctx_cell = getattr(ctx, "cell_id", None) if ctx is not None else None
+        if ctx_cell:
+            return str(ctx_cell)
+    except Exception:  # noqa: BLE001 - defensive
+        pass
+    try:
+        from aqp.config import settings
+
+        default = str(getattr(settings, "cell_default_id", "") or "").strip()
+        return default or None
+    except Exception:  # noqa: BLE001 - defensive
+        return None
+
+
 def _stamp_tenancy(row: Any, event: Any) -> None:
     """Copy tenancy fields from ``event`` to the new ``row``.
 
@@ -337,11 +373,21 @@ def _stamp_tenancy(row: Any, event: Any) -> None:
     :mod:`aqp.persistence.ledger`. We duck-type on the event so the
     same writer accepts both :class:`LineageEvent` (which has these
     fields) and other lightweight shapes.
+
+    Phase 7 §10.3 — also stamps ``cell_id`` from the active runtime
+    context when the column exists (lineage_dataset_vertex /
+    lineage_transform_vertex / lineage_edge gained ``cell_id`` in
+    Alembic 0086).
     """
     for field in ("owner_user_id", "workspace_id", "project_id"):
         value = getattr(event, field, None)
         if value and hasattr(row, field) and getattr(row, field, None) in (None, ""):
             setattr(row, field, value)
+    # Phase 7 §10.3 — cell_id stamping.
+    if hasattr(row, "cell_id") and getattr(row, "cell_id", None) in (None, ""):
+        cell_id = _resolve_cell_id_from_event(event)
+        if cell_id:
+            row.cell_id = cell_id
 
 
 __all__ = [

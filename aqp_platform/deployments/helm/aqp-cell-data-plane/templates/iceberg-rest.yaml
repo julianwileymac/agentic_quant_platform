@@ -1,0 +1,139 @@
+{{- if .Values.icebergRest.enabled -}}
+# =============================================================================
+# Phase 6 §9.3 — per-cell Iceberg REST catalog.
+#
+# We use the Apache Iceberg REST reference image (Tabular/iceberg-rest)
+# in Phase 6.0. Phase 6.5 will swap to Apache Polaris once GA wheels
+# are pinned in our supply chain. Both speak the same REST spec, so
+# the Python client config does not change.
+#
+# The catalog's metadata lives in the per-cell CNPG Postgres
+# (separate database `iceberg_catalog`); the table data lives in
+# `s3://aqp-{cell-id}-warehouse/`.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aqp-cell-iceberg-rest
+  labels:
+{{ include "aqp-cell-data-plane.labels" . | indent 4 }}
+    aqp.io/datastore: iceberg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aqp-cell-iceberg-rest
+  template:
+    metadata:
+      labels:
+        app: aqp-cell-iceberg-rest
+{{ include "aqp-cell-data-plane.labels" . | indent 8 }}
+      annotations:
+{{ include "aqp-cell-data-plane.podAnnotations" . | indent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: wait-for-deps
+          image: cgr.dev/chainguard/wait-for-it:latest
+          command: ["/wait-for-it"]
+          args: ["-t", "120", "aqp-cell-postgres-rw:5432"]
+      containers:
+        - name: iceberg-rest
+          image: {{ .Values.icebergRest.image | quote }}
+          ports:
+            - name: http
+              containerPort: 8181
+          env:
+            # JDBC URI — per-cell Postgres.
+            - name: CATALOG_URI
+              valueFrom:
+                secretKeyRef:
+                  name: aqp-cell-iceberg-backend
+                  key: jdbc_uri
+            - name: CATALOG_JDBC_USER
+              valueFrom:
+                secretKeyRef:
+                  name: aqp-cell-iceberg-backend
+                  key: username
+            - name: CATALOG_JDBC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aqp-cell-iceberg-backend
+                  key: password
+            # Warehouse on per-cell MinIO.
+            - name: CATALOG_WAREHOUSE
+              value: s3://{{ include "aqp-cell-data-plane.bucketPrefix" . }}-warehouse/
+            - name: CATALOG_IO__IMPL
+              value: org.apache.iceberg.aws.s3.S3FileIO
+            - name: CATALOG_S3_ENDPOINT
+              value: "http://aqp-cell-minio:9000"
+            - name: CATALOG_S3_PATH__STYLE__ACCESS
+              value: "true"
+            - name: AWS_REGION
+              value: "us-east-1"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aqp-cell-minio-credentials
+                  key: access_key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aqp-cell-minio-credentials
+                  key: secret_key
+            - name: AQP_CELL_ID
+              value: {{ .Values.cell_id | quote }}
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /v1/config
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /v1/config
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aqp-cell-iceberg-rest
+  labels:
+{{ include "aqp-cell-data-plane.labels" . | indent 4 }}
+    aqp.io/datastore: iceberg
+spec:
+  type: ClusterIP
+  selector:
+    app: aqp-cell-iceberg-rest
+  ports:
+    - name: http
+      port: 8181
+      targetPort: http
+{{- end }}

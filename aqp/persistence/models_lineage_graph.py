@@ -87,6 +87,8 @@ class DatasetVertex(Base, ProjectScopedMixin):
     medallion_layer = Column(String(16), nullable=True, index=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    # Phase 7 §10.3 (Alembic 0086) — cell-aware lineage.
+    cell_id = Column(String(120), nullable=True, index=True)
 
     __table_args__ = (
         UniqueConstraint(
@@ -135,6 +137,8 @@ class TransformVertex(Base, ProjectScopedMixin):
 
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     finished_at = Column(DateTime, nullable=True)
+    # Phase 7 §10.3 (Alembic 0086) — cell-aware lineage.
+    cell_id = Column(String(120), nullable=True, index=True)
 
     __table_args__ = (
         Index("ix_lineage_transform_vertex_kind_started", "transform_kind", "started_at"),
@@ -166,6 +170,8 @@ class LineageEdge(Base, ProjectScopedMixin):
     edge_type = Column(String(16), nullable=False, index=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    # Phase 7 §10.3 (Alembic 0086) — cell-aware lineage.
+    cell_id = Column(String(120), nullable=True, index=True)
 
     __table_args__ = (
         UniqueConstraint(

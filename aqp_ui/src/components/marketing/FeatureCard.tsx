@@ -1,12 +1,10 @@
-"use client";
-
-import { motion } from "framer-motion";
-import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { cn } from "@/lib/cn";
+import {
+  FeatureCardClient,
+  type FeatureCardTone,
+} from "./FeatureCardClient";
 
 interface FeatureCardProps {
   icon: LucideIcon;
@@ -17,23 +15,41 @@ interface FeatureCardProps {
   /** Optional href turns the card into a link with hover affordance. */
   href?: string;
   /** Color of the icon glow ring. */
-  tone?: "primary" | "secondary" | "tertiary" | "warn";
+  tone?: FeatureCardTone;
   className?: string;
 }
 
 const TONE_COLORS = {
-  primary: { bg: "var(--accent-primary)", glow: "var(--shadow-glow-primary)" },
+  primary: {
+    bg: "var(--accent-primary)",
+    accent: "#1677ff",
+    glow: "var(--shadow-glow-primary)",
+  },
   secondary: {
     bg: "var(--accent-secondary)",
+    accent: "#722ed1",
     glow: "var(--shadow-glow-secondary)",
   },
   tertiary: {
     bg: "var(--accent-tertiary)",
+    accent: "#10b981",
     glow: "var(--shadow-glow-success)",
   },
-  warn: { bg: "var(--warn-fg)", glow: "0 0 60px -10px rgba(245,158,11,0.4)" },
+  warn: {
+    bg: "var(--warn-fg)",
+    accent: "#f59e0b",
+    glow: "0 0 60px -10px rgba(245,158,11,0.4)",
+  },
 } as const;
 
+/**
+ * Server-side facade for the feature card.
+ *
+ * Pre-renders the icon inside a gradient-tinted circle so the icon
+ * constructor never crosses the React Server Component → Client
+ * Component boundary. The actual animated card body lives in
+ * `FeatureCardClient`.
+ */
 export function FeatureCard({
   icon: Icon,
   title,
@@ -44,85 +60,27 @@ export function FeatureCard({
   className,
 }: FeatureCardProps) {
   const colors = TONE_COLORS[tone];
-  const inner = (
-    <motion.div
-      whileHover={{ y: -4 }}
-      transition={{ duration: 0.2 }}
-      className={cn(
-        "group relative h-full overflow-hidden rounded-xl p-6 transition-colors",
-        className,
-      )}
+  const iconSlot = (
+    <div
+      className="inline-flex h-11 w-11 items-center justify-center rounded-lg"
       style={{
-        background: "var(--glass-bg)",
-        border: "1px solid var(--glass-border)",
-        backdropFilter: "blur(var(--glass-blur))",
-        boxShadow: "var(--shadow-card)",
+        background: `linear-gradient(135deg, ${colors.bg}, ${colors.bg}80)`,
+        boxShadow: colors.glow,
       }}
     >
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-10 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
-        style={{
-          background: `radial-gradient(circle at 0% 0%, ${colors.bg}22, transparent 60%)`,
-        }}
-      />
-
-      <div className="flex items-start justify-between">
-        <div
-          className="inline-flex h-11 w-11 items-center justify-center rounded-lg"
-          style={{
-            background: `linear-gradient(135deg, ${colors.bg}, ${colors.bg}80)`,
-            boxShadow: colors.glow,
-          }}
-        >
-          <Icon size={20} color="white" strokeWidth={2} />
-        </div>
-        {badge ? (
-          <div
-            className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-            style={{
-              background: "var(--glass-bg-strong)",
-              border: "1px solid var(--glass-border-strong)",
-              color: "var(--accent-tertiary)",
-            }}
-          >
-            {badge}
-          </div>
-        ) : null}
-      </div>
-
-      <h3
-        className="mt-5 text-lg font-semibold tracking-tight"
-        style={{ color: "var(--text-primary)" }}
-      >
-        {title}
-      </h3>
-      <div
-        className="mt-2 text-sm leading-relaxed"
-        style={{ color: "var(--text-secondary)" }}
-      >
-        {body}
-      </div>
-
-      {href ? (
-        <div
-          className="mt-5 inline-flex items-center gap-1 text-sm font-semibold"
-          style={{ color: "var(--accent-primary)" }}
-        >
-          Learn more
-          <ArrowUpRight
-            size={14}
-            className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-          />
-        </div>
-      ) : null}
-    </motion.div>
+      <Icon size={20} color="white" strokeWidth={2} />
+    </div>
   );
-
-  if (!href) return inner;
   return (
-    <Link href={href} className="block h-full no-underline">
-      {inner}
-    </Link>
+    <FeatureCardClient
+      iconSlot={iconSlot}
+      title={title}
+      body={body}
+      badge={badge}
+      href={href}
+      tone={tone}
+      toneAccent={colors.accent}
+      className={className}
+    />
   );
 }

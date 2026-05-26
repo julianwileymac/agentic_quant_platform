@@ -550,6 +550,20 @@ app.include_router(resources_routes.router)
 app.include_router(auth0_sync_routes.router)
 # --- AGENTS rule 53 — Auth0 log-stream sink + session-revocation cleanup
 app.include_router(auth0_log_stream_routes.router)
+# --- Phase 0.4 (CP maturation) — /_internal/audit/* sink for the
+# out-of-process CP HttpAuditSink + HttpTerraformAuditSink. Both
+# routes are M2M-only (validated inside the route body); the router
+# tag ``internal-audit`` is on the PUBLIC_ROUTERS allowlist so the
+# global secure_router doesn't double-gate it.
+try:
+    from aqp.api.routes import _internal_audit as _internal_audit_routes  # noqa: E402
+
+    app.include_router(_internal_audit_routes.router)
+except Exception as exc:  # noqa: BLE001
+    logging.getLogger(__name__).warning(
+        "_internal_audit router unavailable (%s); CP audit POSTs will fail",
+        exc,
+    )
 # --- AGENTS rule 55 — BYOK broker credentials (B2C local + B2B vault)
 try:
     from aqp.api.routes import (  # noqa: E402

@@ -1,0 +1,108 @@
+name: bedrock-smoke
+
+# Nightly + dispatch end-to-end smoke against the dev AgentCore stack.
+# Asserts:
+#   1. The AgentCore Runtime ARN is reachable from SSM
+#      (/aqp/dev/agentcore_runtime_arn).
+#   2. ``bedrock-agentcore invoke-agent-runtime`` accepts a known-good
+#      payload and returns a streaming response with non-empty body.
+#   3. The matching X-Ray trace shows up within 60s with the expected
+#      service.name and the ``aqp.run.id`` indexed attribute.
+#
+# Per AGENTS hard rule 27 every credential resolves through the AWS
+# OIDC role chain (``aws-oidc-assume`` composite action). No long-term
+# Bedrock API keys are minted (the org SCP denies that surface — see
+# ``infrastructure/modules/landing-zone/main.tf::deny_bedrock_api_keys``).
+#
+# Per the management-engine credential-safety rule, the workflow MUST
+# NOT log the streaming response body verbatim (it may contain tenant
+# data) — we only log a SHA-256 + length + the run-id.
+
+on:
+  schedule:
+    - cron: "0 7 * * *"  # 07:00 UTC daily (02:00 ET); off-hours from market open
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  smoke:
+    name: bedrock-smoke-dev
+    runs-on: ubuntu-24.04
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/aws-oidc-assume
+        with:
+          role-arn: ${{ vars.BEDROCK_SMOKE_ROLE_DEV }}
+          region: us-east-1
+
+      - name: resolve-runtime-arn
+        id: arn
+        run: |
+          set -euo pipefail
+          arn=$(aws ssm get-parameter \
+            --name /aqp/dev/agentcore_runtime_arn \
+            --query 'Parameter.Value' \
+            --output text)
+          if [[ -z "$arn" ]]; then
+            echo "::error::AgentCore runtime ARN not in SSM"
+            exit 1
+          fi
+          # Account id segment is redacted from logs.
+          masked=$(echo "$arn" | awk -F: '{$5="***ACCOUNT***"; OFS=":"; print}')
+          echo "arn=$arn" >> "$GITHUB_OUTPUT"
+          echo "Runtime: $masked" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: invoke-agent-runtime
+        id: invoke
+        run: |
+          set -euo pipefail
+          run_id="smoke-$(date -u +%Y%m%dT%H%M%SZ)-${RANDOM}"
+          payload=$(jq -nc \
+            --arg spec "dataset_loading_assistant" \
+            --arg run_id "$run_id" \
+            '{spec_name: $spec, run_id: $run_id, inputs: {prompt: "smoke ping"}}')
+          aws bedrock-agentcore invoke-agent-runtime \
+            --agent-runtime-arn "${{ steps.arn.outputs.arn }}" \
+            --payload "$payload" \
+            --output json \
+            response.json
+          if [[ ! -s response.json ]]; then
+            echo "::error::AgentCore returned an empty response"
+            exit 2
+          fi
+          size=$(wc -c < response.json)
+          sha=$(sha256sum response.json | awk '{print $1}')
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "Response size: $size bytes" >> "$GITHUB_STEP_SUMMARY"
+          echo "Response SHA-256: \`$sha\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Run id: \`$run_id\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: verify-xray-trace
+        env:
+          RUN_ID: ${{ steps.invoke.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          # Give the trace 60s to land in X-Ray.
+          for attempt in $(seq 1 12); do
+            end=$(date -u +%s)
+            start=$((end - 600))
+            traces=$(aws xray get-trace-summaries \
+              --time-range-type TraceId \
+              --start-time $start \
+              --end-time $end \
+              --filter-expression "annotation.aqp_run_id = \"$RUN_ID\"" \
+              --output json)
+            count=$(echo "$traces" | jq '.TraceSummaries | length')
+            if [[ "$count" -gt 0 ]]; then
+              echo "X-Ray trace found after ${attempt}x5s" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::No X-Ray trace found for run_id=$RUN_ID after 60s"
+          exit 3

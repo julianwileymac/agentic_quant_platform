@@ -5,8 +5,24 @@ metadata:
   labels:
     app.kubernetes.io/name: aqp-ide
     app.kubernetes.io/part-of: aqp
+    app.kubernetes.io/managed-by: kustomize
+    # Phase 2 §5.3 — Kyverno selector key.
+    aqp.io/component: aqp-ide
+    # Phase 2 §5.4 — `baseline` profile (writable home dir + Theia
+    # needs broader securityContext than restricted permits). Marked
+    # as a documented exception per security/README.md.
+    aqp.io/pss-exception: "theia-writable-home"
     pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
     pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    # FinOps governance labels (Phase 2 §5.3 Kyverno require-finops-tags).
+    project: aqp-ide
+    cost_center: quant-research-01
+    owner: platform-engineering
+    data_classification: proprietary-alpha
   annotations:
     aqp.fund/owner: "platform-engineering"
     aqp.fund/domain: "ide.aqp.fund"

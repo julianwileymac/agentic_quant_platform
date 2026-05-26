@@ -60,9 +60,9 @@ This brings up:
 
 Once everything is `Up (healthy)`:
 
-- Operator UI: <http://localhost:3000>
-- Legacy Solara UI: <http://localhost:3000/legacy>
-- OpenAPI: <http://localhost:3000/api/docs>
+- Operator UI: [http://localhost:3000](http://localhost:3000)
+- Legacy Solara UI: [http://localhost:3000/legacy](http://localhost:3000/legacy)
+- OpenAPI: [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
 
 ### Option B — Terraform + k3d (canonical, hard rule 42)
 

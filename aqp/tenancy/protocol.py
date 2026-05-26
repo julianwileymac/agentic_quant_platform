@@ -127,6 +127,37 @@ class TenancyStrategy(metaclass=TenancyStrategyMeta):
             "alias": self.strategy_alias or self.__class__.__name__,
         }
 
+    # ------------------------------------------------------------------
+    # Phase 6 §9.4 — cell-aware engine accessors.
+    #
+    # Strategies that target the per-cell data plane override these to
+    # return the cell's engine (looked up via ``RequestContext.cell_id``
+    # → ``aqp/persistence/db.py``). The default implementations
+    # delegate to the cluster-wide engine for backwards compatibility
+    # with the shared-data-plane path.
+    # ------------------------------------------------------------------
+
+    def get_engine(self, org_id: str | None) -> Any:
+        """Return the sync SQLAlchemy engine for ``org_id`` (Phase 6 §9.4).
+
+        Default: delegates to ``aqp.persistence.db._sync_engine()``, which
+        is cell-keyed. Strategies that need finer control (e.g.
+        ``DatabasePerEnterpriseStrategy``) override this to return a
+        dedicated engine.
+        """
+        from aqp.persistence.db import _sync_engine
+
+        return _sync_engine()
+
+    def get_async_engine(self, org_id: str | None) -> Any:
+        """Return the async SQLAlchemy engine for ``org_id`` (Phase 6 §9.4).
+
+        Default: delegates to ``aqp.persistence.db._async_engine()``.
+        """
+        from aqp.persistence.db import _async_engine
+
+        return _async_engine()
+
 
 def list_tenancy_strategy_classes() -> dict[str, type[TenancyStrategy]]:
     """Return ``{alias: class}`` for every registered tenancy strategy."""

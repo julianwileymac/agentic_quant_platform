@@ -1,0 +1,96 @@
+{# Azure storage stack — PostgreSQL Flexible Server + ADLS Gen2 + Azure Cache for Redis. -#}
+
+locals {
+  common_tags = merge(
+    {{ tags | tfmap }},
+    {
+      stack       = {{ spec.slug | hcl }}
+      environment = {{ spec.environment | hcl }}
+      managed_by  = "aqp-terraform-runtime"
+    }
+  )
+}
+
+provider "azurerm" {
+  features {}
+  subscription_id = lookup({{ variables | tfmap }}, "azure_subscription_id", "")
+  tenant_id       = lookup({{ variables | tfmap }}, "azure_tenant_id", "")
+}
+
+resource "azurerm_postgresql_flexible_server" "aqp" {
+  name                   = "aqp-postgres-{{ spec.slug }}"
+  resource_group_name    = lookup({{ variables | tfmap }}, "azure_resource_group", "")
+  location               = lookup({{ variables | tfmap }}, "azure_location", "eastus")
+  version                = lookup({{ variables | tfmap }}, "postgres_version", "16")
+  administrator_login    = lookup({{ variables | tfmap }}, "db_username", "aqp")
+  administrator_password = lookup({{ variables | tfmap }}, "db_password", "")
+  sku_name               = lookup({{ variables | tfmap }}, "db_sku", "GP_Standard_D2s_v3")
+  storage_mb             = lookup({{ variables | tfmap }}, "db_storage_mb", 65536)
+  zone                   = "1"
+  high_availability {
+    mode = "ZoneRedundant"
+  }
+  backup_retention_days = 7
+  tags                  = local.common_tags
+}
+
+resource "azurerm_postgresql_flexible_server_configuration" "extensions" {
+  name      = "shared_preload_libraries"
+  server_id = azurerm_postgresql_flexible_server.aqp.id
+  value     = "pg_stat_statements"
+}
+
+resource "azurerm_storage_account" "aqp" {
+  name                     = lookup({{ variables | tfmap }}, "storage_account_name", "aqp{{ spec.slug | replace('-', '') }}")
+  resource_group_name      = lookup({{ variables | tfmap }}, "azure_resource_group", "")
+  location                 = lookup({{ variables | tfmap }}, "azure_location", "eastus")
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  is_hns_enabled           = true  # ADLS Gen2
+  blob_properties {
+    versioning_enabled = true
+  }
+  tags = local.common_tags
+}
+
+resource "azurerm_storage_management_policy" "aqp" {
+  storage_account_id = azurerm_storage_account.aqp.id
+  rule {
+    name    = "archive-after-90-days"
+    enabled = true
+    filters {
+      blob_types = ["blockBlob"]
+    }
+    actions {
+      base_blob {
+        tier_to_archive_after_days_since_modification_greater_than = 90
+      }
+    }
+  }
+}
+
+resource "azurerm_redis_cache" "aqp" {
+  name                 = "aqp-redis-{{ spec.slug }}"
+  location             = lookup({{ variables | tfmap }}, "azure_location", "eastus")
+  resource_group_name  = lookup({{ variables | tfmap }}, "azure_resource_group", "")
+  capacity             = lookup({{ variables | tfmap }}, "redis_capacity", 1)
+  family               = "C"
+  sku_name             = lookup({{ variables | tfmap }}, "redis_sku", "Standard")
+  non_ssl_port_enabled = false
+  minimum_tls_version  = "1.2"
+  tags                 = local.common_tags
+}
+
+output "postgres_fqdn" {
+  value     = azurerm_postgresql_flexible_server.aqp.fqdn
+  sensitive = true
+}
+
+output "storage_account_name" {
+  value = azurerm_storage_account.aqp.name
+}
+
+output "redis_hostname" {
+  value     = azurerm_redis_cache.aqp.hostname
+  sensitive = true
+}

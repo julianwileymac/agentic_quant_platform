@@ -1,0 +1,101 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# =============================================================================
+# Cell overlay — cell-silo-reg-acme
+#
+# Phase 3 §6.5 (RESTRUCTURING_PLAN.md). Composes with
+# ``aqp_platform_core.topology.Cell(tier='silo-reg',
+# tenancy_strategy='database_per_enterprise', region='us-east-1',
+# k8s_namespace='cell-silo-reg-acme')`` from
+# ``aqp_platform/configs/deployment/topology.yaml``.
+#
+# Once the cell row in the ``cells`` registry transitions to
+# ``active`` and Argo CD's ApplicationSet syncs, the result of
+# ``kubectl kustomize ...`` here is applied to the cell's namespace.
+#
+# Imports ``../../base-cell`` which lists only the per-cell
+# workload manifests; the cluster-wide namespace declarations
+# and the cross-namespace shared-infra aggregators are excluded.
+# Cell builds REQUIRE the kustomize
+# ``--load-restrictor=LoadRestrictionsNone`` flag because
+# ``../../base-cell/`` references files in the sibling
+# ``../../base/`` tree. See README.md for the build command.
+# =============================================================================
+
+resources:
+  - ../../base-cell
+  - namespace.yaml
+
+namespace: cell-silo-reg-acme
+
+# Phase 3 §6.5 — every workload in this cell carries the cell metadata
+# labels so OTEL, FinOps dashboards, and audit-ledger queries can
+# filter by cell. PSS + FinOps labels also apply to the cell namespace.
+labels:
+  - includeSelectors: false
+    pairs:
+      aqp.io/cell-id: cell-silo-reg-acme
+      aqp.io/cell-tier: silo-reg
+      aqp.io/cell-region: us-east-1
+      aqp.io/cell-availability-zone: us-east-1a
+      aqp.io/tenancy-strategy: database_per_enterprise
+      aqp.io/component: aqp-cell
+      aqp.io/pinned-tenant: tenant_acme
+
+patches:
+  # ----------------------------------------------------------------
+  # Tier-specific replica sizing.
+  # ----------------------------------------------------------------
+  - target:
+      kind: Deployment
+      name: aqp-core
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      kind: Deployment
+      name: aqp-worker
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 4
+  - target:
+      kind: Deployment
+      name: aqp-client
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+
+  # ----------------------------------------------------------------
+  # Stamp the cell id as env vars on the API container so the
+  # runtime can populate RequestContext.cell_id without depending
+  # on the X-AQP-Cell header (used by Celery beat + cron-style jobs
+  # that don't traverse the cell router).
+  # ----------------------------------------------------------------
+  - target:
+      kind: Deployment
+      name: aqp-core
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: aqp-core
+      spec:
+        template:
+          spec:
+            containers:
+              - name: api
+                env:
+                  - name: AQP_CELL_ID
+                    value: cell-silo-reg-acme
+                  - name: AQP_CELL_TIER
+                    value: silo-reg
+                  - name: AQP_CELL_REGION
+                    value: us-east-1
+                  - name: AQP_TENANCY_STRATEGY
+                    value: database_per_enterprise
+                  - name: AQP_PINNED_TENANT_ID
+                    value: tenant_acme

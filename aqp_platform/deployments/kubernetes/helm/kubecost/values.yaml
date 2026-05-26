@@ -1,0 +1,12 @@
+cost-analyzer:
+  global:
+    prometheus:
+      enabled: false   # reuse the cluster's kube-prometheus-stack
+      fqdn: http://kube-prometheus-stack-prometheus.aqp-observability.svc:9090
+  ingress:
+    enabled: false      # accessed only via aqp_admin proxy
+  persistentVolume:
+    size: 32Gi
+  kubecostProductConfigs:
+    clusterName: ${CLUSTER_NAME}
+    awsServiceKeyName: kubecost-aws-key

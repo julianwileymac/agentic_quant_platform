@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from aqp.data.mcp.tools import (  # noqa: F401  (side-effect imports)
     account,
+    agentcore,
     agents,
     alphas,
     arbitrage,

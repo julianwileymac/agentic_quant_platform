@@ -1,10 +1,12 @@
 # Dedicated namespace for the cloud-hosted customer-facing UI.
 #
-# FinOps labels are required by the Kyverno require-finops-tags
+# FinOps labels are required by both the Kyverno require-finops-tags
 # ClusterPolicy that runs in the sibling rpi_kubernetes/policies tree
-# (see aqp_platform/deploy/k8s/base/namespace.yaml for the legacy
-# example). Without all four labels the admission webhook denies any
-# workload creation in the namespace.
+# AND by the AQP `05-required-labels.yaml` Kyverno policy at
+# aqp_platform/deployments/kubernetes/security/kyverno/cluster-policies/.
+# Without all four labels (project / cost_center / owner /
+# data_classification) the admission webhook denies any workload
+# creation in the namespace.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -14,6 +16,17 @@ metadata:
     app.kubernetes.io/part-of: aqp
     app.kubernetes.io/managed-by: aqp-platform
     app.kubernetes.io/environment: production
+    # Phase 2 §5.3 — Kyverno selector key.
+    aqp.io/component: aqp-ui
+    # Phase 2 §5.4 — Pod Security Standards (restricted) with the
+    # `enforce-version: latest` pin so new restrictions ratchet in as
+    # Kubernetes upgrades.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
     # FinOps governance labels (Kyverno-enforced)
     project: aqp-ui
     cost_center: quant-research-01

@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Phase 2 §5.3 — AQP security overlay.
+# Includes the Kyverno cluster-policy bundle. Apply via:
+#   kubectl apply -k aqp_platform/deployments/kubernetes/security/
+# Kyverno itself (the admission webhook) is installed separately —
+# see `../../../scripts/cluster_install/install-kyverno.sh`
+# (Phase 2.5 deliverable, not yet shipped).
+
+resources:
+  - kyverno

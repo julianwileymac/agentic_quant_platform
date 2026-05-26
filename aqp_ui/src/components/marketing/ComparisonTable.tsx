@@ -138,7 +138,8 @@ export function ComparisonTable({
             <tbody>
               {rows.map((row, rowIdx) => {
                 const showGroup =
-                  row.group && (rowIdx === 0 || rows[rowIdx - 1].group !== row.group);
+                  row.group &&
+                  (rowIdx === 0 || rows[rowIdx - 1]?.group !== row.group);
                 return (
                   <>
                     {showGroup ? (

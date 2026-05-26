@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aqp-tenant-router"
+version = "0.1.0"
+description = "Cell-routing decision service for the Agentic Quant Platform — resolves (jwt.sub, workspace_id) to (cell_id, region, k8s_namespace, routes) on the hot path. Phase 3 §6.4 of RESTRUCTURING_PLAN.md."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "AQP Platform Team" }]
+keywords = ["aqp", "cell-router", "envoy", "ext-authz", "tenancy"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    # Web stack — Starlette + uvicorn[standard] gives us uvloop +
+    # httptools, which the user explicitly preferred when they
+    # selected "Python + uvloop" for the cell router language
+    # (see RESTRUCTURING_PLAN.md Phase 3 §6.4 implementation note).
+    "starlette>=0.36,<1",
+    "uvicorn[standard]>=0.27,<1",
+    # JWT extraction. python-jose is already in the broader AQP
+    # extra; the cell router uses the same package so JWT parsing
+    # behaves identically to aqp/auth/oidc.py.
+    "python-jose[cryptography]>=3.3,<4",
+    "httpx>=0.27,<1",
+    "pydantic>=2.5,<3",
+    "structlog>=24.1,<25",
+    "PyYAML>=6,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+    "ruff>=0.6",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+aqp-tenant-router = "aqp_tenant_router.main:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aqp_tenant_router"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/AGENTS.md",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "T20"]
+ignore = []
