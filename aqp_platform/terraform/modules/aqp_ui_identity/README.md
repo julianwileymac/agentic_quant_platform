@@ -1,8 +1,20 @@
 # aqp_ui_identity
 
-Terraform module that provisions the Auth0 Regular Web Application (and
-optionally the Microsoft Entra ID Application Registration) backing the
-`aqp_ui` cloud frontend.
+Terraform module that provisions the Auth0 Regular Web Application
+backing the `aqp_ui` cloud frontend (B2C / customer pool).
+
+> **Note**: the Microsoft Entra ID surface that used to be sketched here
+> as a commented-out block has moved to its own module
+> [`aqp_entra_directory`](../aqp_entra_directory/README.md). That module
+> covers the AQP **internal** staff tenant (rule 27 / rule 44 / rule 42)
+> and is the **first user pool** for `manage.aqp.fund`. Customer-tenant
+> Entra integration continues to flow through the `EntraTenantLink` B2B
+> approval wizard at runtime.
+>
+> See `docs/plans/entra-internal-tenant-rollout.md` for the
+> long-form rollout plan and
+> `aqp_docs/docs/architecture/decisions/011-entra-as-first-pool.md` for
+> the ADR.
 
 ## When to use
 

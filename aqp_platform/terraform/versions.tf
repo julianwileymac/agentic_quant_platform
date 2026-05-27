@@ -55,6 +55,16 @@ terraform {
       source  = "auth0/auth0"
       version = "~> 1.11"
     }
+    # Microsoft Entra ID (Azure AD) — Workstream "Entra internal tenant"
+    # (docs/plans/entra-internal-tenant-rollout.md). The aqp_entra_directory
+    # module lands every staff app registration, service principal,
+    # group, app-role assignment, federated credential, and named-location
+    # under Terraform control. CA policies are read by data source only;
+    # creation requires manual P2 review by Security.
+    azuread = {
+      source  = "hashicorp/azuread"
+      version = "~> 3.0"
+    }
     # Management Engine Phase D — Cloudflare Zero Trust edge (tunnels,
     # DNS, Access apps). 5.6+ ships zero_trust_tunnel_cloudflared +
     # zero_trust_access_application + dns_record as first-class

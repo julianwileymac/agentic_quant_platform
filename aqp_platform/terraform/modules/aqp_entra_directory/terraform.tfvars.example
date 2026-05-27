@@ -1,0 +1,82 @@
+# aqp_entra_directory — example tfvars
+#
+# Copy to ``terraform.tfvars`` in the consuming environment (typically
+# ``aqp_platform/terraform/environments/wiley-tech/``) and fill in the
+# blanks. NEVER commit a real ``terraform.tfvars`` — only the
+# ``.example`` template lives in source control.
+
+enabled = true
+
+# Sourced from Vault via TF_VAR_tenant_id in CI; the tfvars file
+# itself does NOT carry the tenant id in checked-in environments.
+# tenant_id = ""
+
+tenant_primary_domain = "wiley-tech.onmicrosoft.com"
+display_name_prefix   = "AQP"
+
+staff_app = {
+  name        = "aqp-staff"
+  description = "AQP staff login app for manage.aqp.fund."
+  redirect_uris = [
+    "https://manage.aqp.fund/api/auth/entra/callback",
+    "http://localhost:3001/api/auth/entra/callback",
+  ]
+  logout_urls = [
+    "https://manage.aqp.fund",
+    "http://localhost:3001",
+  ]
+  web_origins = [
+    "https://manage.aqp.fund",
+  ]
+  sign_in_audience = "AzureADMyOrg"
+}
+
+manage_api_app = {
+  name             = "aqp-manage-api"
+  description      = "AQP manage API Resource Server."
+  identifier_uri   = "api://aqp-manage-api"
+  sign_in_audience = "AzureADMyOrg"
+}
+
+ci_app = {
+  name             = "aqp-ci-github"
+  description      = "Federated-credential-only app for GitHub Actions OIDC."
+  sign_in_audience = "AzureADMyOrg"
+}
+
+ci_federated_credentials = [
+  {
+    name        = "github-main-push"
+    description = "GitHub Actions push to main."
+    subject     = "repo:julianwileymac/agentic_quant_platform:ref:refs/heads/main"
+  },
+  {
+    name        = "github-prod-environment"
+    description = "GitHub Actions deploy to prod environment."
+    subject     = "repo:julianwileymac/agentic_quant_platform:environment:prod"
+  },
+  {
+    name        = "github-pull-request"
+    description = "GitHub Actions PR plan-only validations."
+    subject     = "repo:julianwileymac/agentic_quant_platform:pull_request"
+  },
+]
+
+named_locations = [
+  {
+    display_name = "AQP-Corp-VPN"
+    ip_ranges    = ["10.10.0.0/16"]
+    is_trusted   = true
+  },
+]
+
+ca_policy_references = [
+  {
+    display_name = "AQP-Admins-MFA-Required"
+    purpose      = "Step-up MFA + FIDO2 on every Admin role token request."
+  },
+  {
+    display_name = "AQP-Block-Risky-Sign-Ins"
+    purpose      = "Blocks sign-ins flagged Medium+ by Identity Protection."
+  },
+]

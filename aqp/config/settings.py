@@ -98,6 +98,50 @@ class Settings(BaseSettings):
         ),
     )
     auth_msal_known_tenants: str = Field(default="")  # CSV of tenant_ids
+    # --- AQP staff Entra tenant (Workstream "Entra internal tenant") ---
+    # Pinned to a single Entra tenant so AQP staff bypass the B2B
+    # approval wizard. Tokens whose ``iss`` claim matches
+    # ``https://login.microsoftonline.com/{auth_msal_internal_tenant_id}/v2.0``
+    # are routed to MsalEntraIdentityProvider before any other provider.
+    # Customer-tenant tokens still flow through the EntraTenantLink B2B
+    # path (rule 44).
+    #
+    # See docs/plans/entra-internal-tenant-rollout.md and
+    # aqp_platform/terraform/modules/aqp_entra_directory/.
+    auth_msal_internal_tenant_id: str = Field(default="")
+    auth_msal_internal_app_id: str = Field(default="")
+    auth_msal_internal_authority: str = Field(default="")
+    # Audience the manage API expects on staff access tokens.
+    auth_msal_internal_audience: str = Field(default="api://aqp-manage-api")
+    # Provider chain priority. Lower = earlier; MSAL=100 / Auth0=200 /
+    # local=1000 is the canonical order. Set to a high value (9999) to
+    # demote MSAL during a rollback (see rollout plan §5.1).
+    auth_msal_priority: int = Field(default=100)
+    # Name of the role claim minted by the manage API. The Entra
+    # default is ``roles``; override only if a custom claims-mapping
+    # policy is in place.
+    auth_msal_app_role_claim: str = Field(default="roles")
+    # The display-name list of CA policies the operator promises
+    # exist out-of-band (mirrors the Terraform module's
+    # ``ca_policy_references`` input). The verify_entra_login helper
+    # reads this to confirm at smoke-test time.
+    auth_msal_required_ca_policies: str = Field(
+        default="AQP-Admins-MFA-Required,AQP-Block-Risky-Sign-Ins"
+    )
+    # Pre-seeded internal-tenant link metadata. The seed script reads
+    # these to upsert the canonical entra_tenant_links row with
+    # ``meta.kind = 'internal'`` (rule 44).
+    auth_msal_internal_tenant_domain: str = Field(
+        default="wiley-tech.onmicrosoft.com",
+        description=(
+            "Primary domain of the AQP staff Entra tenant. Echoed in "
+            "EntraTenantLink.primary_domain so the audit trail shows "
+            "the human-readable handle alongside the GUID."
+        ),
+    )
+    auth_msal_internal_display_name: str = Field(
+        default="AQP Internal (wiley-tech)",
+    )
     # --- Auth0 Management API (account management, MFA, sessions) ---
     # The Management API M2M Application in the Auth0 tenant is the
     # ingress for /me/* mutations that have no user-facing auth code

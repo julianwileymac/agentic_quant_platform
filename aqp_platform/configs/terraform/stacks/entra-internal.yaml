@@ -1,0 +1,59 @@
+# TerraformStackSpec for the AQP staff Entra ID internal tenant.
+#
+# Workstream "Entra internal tenant"
+# (docs/plans/entra-internal-tenant-rollout.md). Brings the AQP staff
+# Entra tenant under Terraform control as the FIRST user pool for
+# manage.aqp.fund.
+#
+# AGENTS rules respected:
+#   - 27 (IdentityProvider): runtime auth flows through MSALEntraIdentityProvider.
+#   - 42 (TerraformRuntime): every apply lands a terraform_runs row.
+#   - 43 (hash-locked specs): content changes mint a new spec version.
+#   - 44 (EntraTenantLink): customer-tenant onboarding is unaffected;
+#     this stack manages the AQP-internal tenant only.
+#   - 26 (CredentialResolver): every `secret://` ref resolves at apply
+#     time, never embedded in source.
+
+name: entra-internal
+slug: entra-internal
+module_kind: composite
+description: |
+  AQP staff Microsoft Entra ID tenant. Three app registrations
+  (aqp-staff / aqp-manage-api / aqp-ci-github), seven directory
+  groups, seven app roles on the manage API, GitHub Actions OIDC
+  federated credentials, and named-location references for CA
+  policies.
+
+owner: platform-identity-team
+cloud_provider: azure
+environment: wiley-tech
+module: aqp_entra_directory
+
+# Re-use the wiley-tech environment's prerendered workspace
+# (modules/aqp_entra_directory wired in via environments/wiley-tech/entra.tf).
+prerendered_workspace_dir: aqp_platform/terraform/environments/wiley-tech
+
+backend:
+  kind: local
+  config:
+    path: ../../../data/terraform/state/entra-internal.tfstate
+
+inputs:
+  entra_enabled:
+    value: true
+  entra_tenant_id:
+    value: secret://vault/kv/data/aqp/entra/internal_tenant_id
+  entra_tenant_primary_domain:
+    value: wiley-tech.onmicrosoft.com
+
+outputs_to_topology:
+  staff_app_client_id: aqp-entra-internal.endpoints.staff_client_id
+  manage_api_client_id: aqp-entra-internal.endpoints.manage_api_client_id
+  manage_api_identifier_uri: aqp-entra-internal.endpoints.manage_api_audience
+  ci_app_client_id: aqp-entra-internal.endpoints.ci_client_id
+
+annotations:
+  aqp.io/stack-kind: identity
+  aqp.io/composition: hand-authored
+  aqp.io/sensitivity: high
+  aqp.io/related-rfcs: docs/plans/entra-internal-tenant-rollout.md

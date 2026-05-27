@@ -1,0 +1,191 @@
+# =============================================================================
+# Workstream "Entra internal tenant" — CI workflow.
+#
+# Plan-on-PR + apply-on-main for the aqp_entra_directory Terraform
+# module. The apply path routes through TerraformRuntime via the AQP
+# helper script so every change lands a ``terraform_runs`` audit row
+# (AGENTS rule 42).
+#
+# Authentication uses GitHub Actions OIDC + Workload Identity
+# Federation against the ``aqp-ci-github`` app the module itself
+# provisions. There are NO static client secrets in this workflow.
+# =============================================================================
+
+name: entra-terraform
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "aqp_platform/terraform/modules/aqp_entra_directory/**"
+      - "aqp_platform/terraform/environments/wiley-tech/**"
+      - "aqp_platform/terraform/versions.tf"
+      - "aqp_platform/configs/terraform/stacks/entra-internal.yaml"
+      - ".github/workflows/entra-terraform.yml"
+      - "scripts/identity/entra_terraform_plan.sh"
+      - "scripts/identity/entra_terraform_apply_via_runtime.py"
+  push:
+    branches: [main]
+    paths:
+      - "aqp_platform/terraform/modules/aqp_entra_directory/**"
+      - "aqp_platform/terraform/environments/wiley-tech/**"
+      - "aqp_platform/configs/terraform/stacks/entra-internal.yaml"
+      - "scripts/identity/entra_terraform_apply_via_runtime.py"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Free-text reason persisted to terraform_runs.metadata"
+        required: true
+      action:
+        description: "plan-only or apply"
+        type: choice
+        options: ["plan-only", "apply"]
+        default: "plan-only"
+
+permissions:
+  id-token: write   # required for OIDC token mint
+  contents: read
+  pull-requests: write  # for the PR comment
+  actions: read
+
+concurrency:
+  group: entra-terraform-${{ github.ref }}
+  cancel-in-progress: false  # NEVER cancel a mid-flight Entra apply
+
+env:
+  TF_VAR_entra_enabled: "true"
+  # The module reads TF_VAR_entra_tenant_id; the workflow sets it from
+  # the OIDC-bound Azure context below.
+  AQP_TF_WORKSPACE: "wiley-tech"
+
+jobs:
+  plan:
+    name: Plan + validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.0
+          terraform_wrapper: false
+
+      - name: Azure login via OIDC
+        uses: azure/login@v2
+        with:
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Export TF_VAR_entra_tenant_id
+        run: |
+          echo "TF_VAR_entra_tenant_id=${{ vars.AZURE_TENANT_ID }}" >> "$GITHUB_ENV"
+
+      - name: Terraform fmt + validate (module)
+        run: |
+          terraform -chdir=aqp_platform/terraform/modules/aqp_entra_directory fmt -check -recursive
+          terraform -chdir=aqp_platform/terraform/modules/aqp_entra_directory init -backend=false -upgrade
+          terraform -chdir=aqp_platform/terraform/modules/aqp_entra_directory validate
+
+      - name: Terraform plan (env)
+        id: plan
+        run: |
+          terraform -chdir=aqp_platform/terraform/environments/wiley-tech init -backend=false -upgrade
+          terraform -chdir=aqp_platform/terraform/environments/wiley-tech plan \
+            -target=module.aqp_entra_directory \
+            -no-color \
+            -out=entra.plan \
+            | tee plan.txt
+          echo "plan_size=$(wc -c < plan.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Comment plan on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('plan.txt', 'utf8');
+            const truncated = plan.length > 60000
+              ? plan.slice(0, 60000) + '\n\n... (truncated; see workflow logs for full plan)'
+              : plan;
+            const body = [
+              '## Entra Terraform plan',
+              '',
+              '```hcl',
+              truncated,
+              '```',
+              '',
+              'Workflow: `${{ github.workflow }}` run `${{ github.run_id }}`.',
+              '',
+              'Apply path: merge to `main` then the apply job below routes',
+              'through `TerraformRuntime` (rule 42).',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: entra-terraform-plan
+          path: |
+            aqp_platform/terraform/environments/wiley-tech/entra.plan
+            plan.txt
+          retention-days: 14
+
+  apply:
+    name: Apply via TerraformRuntime
+    needs: plan
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.action == 'apply')
+    environment: prod  # GH environment with required reviewers
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.0
+          terraform_wrapper: false
+
+      - name: Azure login via OIDC
+        uses: azure/login@v2
+        with:
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Install AQP runtime (editable)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Apply via TerraformRuntime
+        env:
+          TF_VAR_entra_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+        run: |
+          python scripts/identity/entra_terraform_apply_via_runtime.py \
+            --workspace wiley-tech \
+            --apply \
+            --yes \
+            --reason "CI ${{ github.run_id }} :: ${{ github.event_name }} :: ${{ github.sha }}"
+
+      - name: Seed EntraTenantLink (idempotent)
+        env:
+          AQP_AUTH_MSAL_INTERNAL_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AQP_AUTH_MSAL_INTERNAL_TENANT_DOMAIN: ${{ vars.AQP_AUTH_MSAL_INTERNAL_TENANT_DOMAIN }}
+          AQP_AUTH_MSAL_INTERNAL_DISPLAY_NAME: "AQP Internal (CI)"
+        run: |
+          python scripts/identity/seed_entra_internal_tenant.py --apply
+
+      - name: Smoke test the role-assignment surface
+        run: |
+          python scripts/identity/list_entra_app_role_assignments.py --format=json | head -200
