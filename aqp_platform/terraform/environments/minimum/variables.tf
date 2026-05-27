@@ -8,8 +8,15 @@ variable "account_id" {
   description = "AWS account id (must match the bootstrap state account)."
 }
 
+variable "assume_role_arn" {
+  type        = string
+  default     = ""
+  description = "Optional STS role ARN — leave empty to use the caller's session."
+}
+
 variable "external_id" {
   type      = string
+  default   = ""
   sensitive = true
 }
 

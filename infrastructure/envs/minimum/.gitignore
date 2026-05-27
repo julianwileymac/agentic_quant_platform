@@ -1,0 +1,16 @@
+# Operator-rendered files; never commit.
+backend.hcl
+terraform.tfvars
+*.tfplan
+tfplan
+tfplan.*
+
+# Per-deploy snapshots — live history of what was deployed when.
+# Keep on the operator's disk for forensics; never push.
+.snapshots/
+
+# Deploy/destroy logs (tee'd by the scripts).
+.deploy.log
+.destroy.log
+.preflight.log
+.deploy-app.log

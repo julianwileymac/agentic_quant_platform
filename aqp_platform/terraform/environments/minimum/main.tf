@@ -21,10 +21,15 @@
 provider "aws" {
   region = var.region
 
-  assume_role {
-    role_arn     = "arn:aws:iam::${var.account_id}:role/AqpTerraformExecutionRole"
-    session_name = "aqp-terraform-minimum-app"
-    external_id  = var.external_id
+  # Single-account minimum tier — see infrastructure/envs/minimum/providers.tf
+  # for the rationale (no assume-role hop by default).
+  dynamic "assume_role" {
+    for_each = var.assume_role_arn != "" ? [1] : []
+    content {
+      role_arn     = var.assume_role_arn
+      session_name = "aqp-terraform-minimum-app"
+      external_id  = var.external_id != "" ? var.external_id : null
+    }
   }
 
   default_tags {

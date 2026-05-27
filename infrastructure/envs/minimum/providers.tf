@@ -17,10 +17,19 @@ terraform {
 provider "aws" {
   region = var.region
 
-  assume_role {
-    role_arn     = "arn:aws:iam::${var.account_id}:role/AqpTerraformExecutionRole"
-    session_name = "aqp-terraform-minimum"
-    external_id  = var.external_id
+  # Single-account minimum tier — uses the caller's default session
+  # directly (no assume-role hop). For multi-account topologies, the
+  # full envs/dev|staging|prod composition uses the
+  # ``AqpTerraformExecutionRole`` indirection instead.
+  # When ``AQP_TF_ASSUME_ROLE_ARN`` is set, assume that role; otherwise
+  # the default credential chain is used as-is.
+  dynamic "assume_role" {
+    for_each = var.assume_role_arn != "" ? [1] : []
+    content {
+      role_arn     = var.assume_role_arn
+      session_name = "aqp-terraform-minimum"
+      external_id  = var.external_id != "" ? var.external_id : null
+    }
   }
 
   default_tags {

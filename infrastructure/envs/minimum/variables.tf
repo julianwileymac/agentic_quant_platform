@@ -8,10 +8,17 @@ variable "account_id" {
   description = "AWS account id (must match the bootstrap state bucket account)."
 }
 
+variable "assume_role_arn" {
+  type        = string
+  default     = ""
+  description = "Optional STS role ARN — leave empty to use the caller's session."
+}
+
 variable "external_id" {
   type        = string
+  default     = ""
   sensitive   = true
-  description = "STS external_id required by AqpTerraformExecutionRole."
+  description = "STS external_id (only honoured when assume_role_arn is set)."
 }
 
 variable "kms_key_arn" {
