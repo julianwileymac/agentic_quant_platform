@@ -130,6 +130,9 @@ def _register_routers(app: FastAPI) -> None:
         logger.info("admin WS gateway not yet present; skipping")
 
     for module_name, attr in (
+        # Workstream "Entra internal tenant" — unauthenticated
+        # discovery + health endpoints powering the SPA's MSAL bootstrap.
+        ("aqp_admin.api.routers.auth_setup", "router"),
         ("aqp_admin.api.routers.accounts", "router"),
         ("aqp_admin.api.routers.services", "router"),
         ("aqp_admin.api.routers.settings", "router"),

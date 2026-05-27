@@ -88,9 +88,14 @@ class AdminSettings(BaseSettings):
         ),
     )
     auth_oidc_audience: str = Field(
-        default="api://aqp-admin",
+        default="api://aqp-manage-api",
         alias="AQP_AUTH_OIDC_AUDIENCE",
-        description="API resource identifier configured on the IdP.",
+        description=(
+            "API resource identifier configured on the IdP. Defaults to "
+            "the canonical ``api://aqp-manage-api`` audience minted by "
+            "the aqp_entra_directory Terraform module. Override only "
+            "when running the admin behind a separate Resource Server."
+        ),
     )
     auth_claims_namespace: str = Field(
         default="https://aqp.internal/",
@@ -110,6 +115,49 @@ class AdminSettings(BaseSettings):
         alias="AQP_ADMIN_AUTH_LEEWAY_SECONDS",
         ge=0,
         le=300,
+    )
+
+    # --- AQP staff Entra tenant (Workstream "Entra internal tenant") ---
+    # When the env vars below are set, the admin BFF pins token validation
+    # to the AQP staff Entra tenant id (single-tenant) instead of the
+    # multi-tenant ``organizations`` authority. Mirrors the monolith
+    # settings landed by the Entra-internal-tenant rollout. See
+    # docs/plans/entra-internal-tenant-rollout.md.
+    auth_msal_internal_tenant_id: str = Field(
+        default="",
+        alias="AQP_AUTH_MSAL_INTERNAL_TENANT_ID",
+        description=(
+            "AQP staff Entra tenant id (UUID). When set, the admin "
+            "validator pins the issuer to "
+            "``https://login.microsoftonline.com/{tenant_id}/v2.0`` and "
+            "ignores ``auth_entra_tenant``."
+        ),
+    )
+    auth_msal_staff_app_id: str = Field(
+        default="",
+        alias="AQP_AUTH_MSAL_INTERNAL_APP_ID",
+        description=(
+            "Application (client) id of the aqp-staff Terraform-managed "
+            "app registration. Plumbed into the frontend MSAL "
+            "PublicClientApplication so the admin SPA can mint tokens."
+        ),
+    )
+    auth_msal_internal_audience: str = Field(
+        default="",
+        alias="AQP_AUTH_MSAL_INTERNAL_AUDIENCE",
+        description=(
+            "Optional override for the manage-API audience. Empty falls "
+            "back to ``auth_oidc_audience`` (default ``api://aqp-manage-api``)."
+        ),
+    )
+    auth_msal_redirect_path: str = Field(
+        default="/api/auth/entra/callback",
+        alias="AQP_ADMIN_ENTRA_REDIRECT_PATH",
+        description=(
+            "Path on the admin SPA the MSAL redirect lands on. Combined "
+            "with the deployed origin to form the full redirect URI; "
+            "MUST match a redirect URI registered on the staff app."
+        ),
     )
 
     # --- M2M broker (admin -> control plane) ---------------------------

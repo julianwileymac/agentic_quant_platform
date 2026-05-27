@@ -74,17 +74,30 @@ def _validator_config(settings: AdminSettings) -> JwtValidatorConfig:
         )
         if ns
     )
+    # Audience: the internal_audience override wins when set; otherwise
+    # fall back to the canonical ``auth_oidc_audience`` (defaults to
+    # ``api://aqp-manage-api`` from the Terraform module).
+    audience = (
+        settings.auth_msal_internal_audience
+        or settings.auth_oidc_audience
+    )
+    # Tenant: the internal_tenant_id override wins when set; otherwise
+    # fall back to the multi-tenant ``auth_entra_tenant`` segment.
+    entra_tenant = (
+        settings.auth_msal_internal_tenant_id
+        or settings.auth_entra_tenant
+    )
     if settings.auth_oidc_issuer:
         return JwtValidatorConfig(
             issuer=settings.auth_oidc_issuer,
-            audience=settings.auth_oidc_audience,
+            audience=audience,
             leeway_seconds=settings.auth_leeway_seconds,
             jwks_ttl_seconds=settings.auth_jwks_ttl_seconds,
             expected_claim_namespaces=namespaces,
         )
     return msal_entra_jwt_validator_config(
-        tenant=settings.auth_entra_tenant,
-        audience=settings.auth_oidc_audience,
+        tenant=entra_tenant,
+        audience=audience,
         leeway_seconds=settings.auth_leeway_seconds,
         jwks_ttl_seconds=settings.auth_jwks_ttl_seconds,
         expected_claim_namespaces=namespaces,
