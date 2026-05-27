@@ -263,3 +263,22 @@ pnpm-debug.log*
 # --- TypeScript build info ---
 *.tsbuildinfo
 **/*.tsbuildinfo
+
+# --- Terraform local artifacts ---
+# ``terraform init`` populates these per-module / per-env. Provider
+# binaries can be 50 MB+ each, so they MUST stay out of git. The
+# canonical lock files (.terraform.lock.hcl) and HCL stay tracked;
+# the cache + state + plan files do NOT.
+.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+*.tfplan
+*.tfplan.backup
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
